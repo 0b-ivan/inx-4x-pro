@@ -140,6 +140,7 @@ class SettingsDrawer {
 
     Hyphenation,        ///< Hyphenation toggle
     BionicReading,      ///< Bionic Reading toggle
+    ReadingGuideLines,  ///< Reading-guide overlay style: Off / Grid (vertical thirds) / Notebook (ruled lines)
     AntiAliasing,       ///< Text anti-aliasing toggle
     RefreshRate,        ///< Display refresh frequency
     ReaderPowerButton,  ///< Reader short power button behavior
