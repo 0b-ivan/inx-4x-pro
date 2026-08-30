@@ -11,16 +11,15 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "state/ReaderSetting.h"
+#include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
+#include "system/X4ProQuickPrefs.h"
 
-/**
- * CrossPoint-style top-edge quick settings sheet.
- *
- * The active Activity is deliberately left alive while the sheet is open.
- * A PSRAM framebuffer snapshot lets the drawer restore the exact underlying
- * screen instead of recreating the Activity and losing reader/list state.
- */
+extern HalDisplay display;
+
+/** CrossPoint-style top-edge quick settings sheet for X4 Pro. */
 class QuickSettingsDrawer {
  public:
   QuickSettingsDrawer(GfxRenderer& renderer, MappedInputManager& input) : renderer(renderer), input(input) {}
@@ -55,7 +54,6 @@ class QuickSettingsDrawer {
     return true;
   }
 
-  /** Returns true while the drawer owns the current input frame. */
   bool loop() {
     if (!open_) return false;
 
@@ -126,6 +124,21 @@ class QuickSettingsDrawer {
 
   static bool inRect(const int x, const int y, const int rx, const int ry, const int rw, const int rh) {
     return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
+  }
+
+  static const char* orientationLabel(const uint8_t orientation) {
+    switch (orientation) {
+      case SystemSetting::PORTRAIT:
+        return "Hochformat";
+      case SystemSetting::LANDSCAPE_CW:
+        return "Querformat";
+      case SystemSetting::INVERTED:
+        return "Kopfueber";
+      case SystemSetting::LANDSCAPE_CCW:
+        return "Quer links";
+      default:
+        return "Drehen";
+    }
   }
 
   void releaseSnapshot() {
@@ -221,24 +234,30 @@ class QuickSettingsDrawer {
     }
 
     const int tileW = (width - 2 * side_ - tileGap_) / 2;
+    const int rightX = side_ + tileW + tileGap_;
     const int row2 = tileTop_ + tileH_ + tileGap_;
+
+    // Same four tiles as CrossPoint's X4 Pro frontlight panel.
     if (inRect(x, y, side_, tileTop_, tileW, tileH_)) {
-      frontlight.toggle();
-      render();
+      const bool next = !X4ProQuickPrefs::nightMode();
+      X4ProQuickPrefs::setNightMode(next);
+      display.setInverted(next);
+      render(HalDisplay::FULL_REFRESH);
       return;
     }
-    if (inRect(x, y, side_ + tileW + tileGap_, tileTop_, tileW, tileH_)) {
+    if (inRect(x, y, rightX, tileTop_, tileW, tileH_)) {
       close(true);
       return;
     }
     if (inRect(x, y, side_, row2, tileW, tileH_)) {
-      setBrightness(50);
-      setWarmth(50);
+      READER_SETTINGS.orientation = static_cast<uint8_t>((READER_SETTINGS.orientation + 1) % SystemSetting::ORIENTATION_COUNT);
+      READER_SETTINGS.saveToFile();
       render();
       return;
     }
-    if (inRect(x, y, side_ + tileW + tileGap_, row2, tileW, tileH_)) {
-      close(false);
+    if (inRect(x, y, rightX, row2, tileW, tileH_)) {
+      X4ProQuickPrefs::setReaderTouchEnabled(!X4ProQuickPrefs::readerTouchEnabled());
+      render();
     }
   }
 
@@ -297,7 +316,7 @@ class QuickSettingsDrawer {
                          EpdFontFamily::BOLD);
   }
 
-  void render() const {
+  void render(const HalDisplay::RefreshMode mode = HalDisplay::FAST_REFRESH) const {
     if (!open_) return;
     restoreSnapshot();
 
@@ -321,17 +340,19 @@ class QuickSettingsDrawer {
     const int tileW = (width - 2 * side_ - tileGap_) / 2;
     const int rightX = side_ + tileW + tileGap_;
     const int row2 = tileTop_ + tileH_ + tileGap_;
-    drawTile(side_, tileTop_, tileW, tileH_, frontlight.isOn() ? "Licht aus" : "Licht an", nullptr, frontlight.isOn());
+    drawTile(side_, tileTop_, tileW, tileH_, "Nachtmodus", X4ProQuickPrefs::nightMode() ? "An" : "Aus",
+             X4ProQuickPrefs::nightMode());
     drawTile(rightX, tileTop_, tileW, tileH_, "Bildschirm", "regenerieren");
-    drawTile(side_, row2, tileW, tileH_, "Licht 50%", "Warm 50%");
-    drawTile(rightX, row2, tileW, tileH_, "Schliessen");
+    drawTile(side_, row2, tileW, tileH_, "Ausrichtung", orientationLabel(READER_SETTINGS.orientation));
+    drawTile(rightX, row2, tileW, tileH_, "Reader Touch", X4ProQuickPrefs::readerTouchEnabled() ? "An" : "Aus",
+             X4ProQuickPrefs::readerTouchEnabled());
 
     const int grabberW = 72;
     const int grabberH = 5;
     renderer.rectangle.fill((width - grabberW) / 2, panelBottom_ - 19, grabberW, grabberH,
                             static_cast<int>(GfxRenderer::FillTone::Ink), true);
 
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    renderer.displayBuffer(mode);
   }
 };
 
