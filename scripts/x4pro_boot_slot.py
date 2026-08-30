@@ -6,8 +6,13 @@ Default mode is DRY RUN. With --write, this helper may modify ONLY the first
 sector at 0xF000 is deliberately preserved as the original app1 rescue record.
 
 Supported, intentionally narrow state transitions:
-  stock/test preparation: app1 (seq=2) -> app0 (write seq=3 to sector0)
-  manual rollback:        app0 (seq=3) -> app1 (write seq=4 to sector0)
+  stock/test preparation: app1 (factory seq1/seq2) -> app0 (write seq3 to sector0)
+  manual rollback:        app0 (seq3/seq2) -> app1 (restore factory sector0 from backup)
+
+Rollback restores the exact original first otadata sector instead of inventing a
+new sequence number. This returns the device to the same factory seq1/seq2 state
+captured in the verified full-flash backup, so repeated app1 -> stage app0 -> test
+cycles remain fail-closed and reproducible.
 
 No bootloader, partition table, NVS, app image, SPIFFS, coredump, or second
 otadata sector is ever written by this script. After a write it verifies the
@@ -206,6 +211,24 @@ def main() -> int:
 
             original_backup = backup_bytes(args.backup)
             verify_against_backup(original_backup, live_meta, args.target)
+            original_meta = original_backup[
+                PROTECTED_META_OFFSET : PROTECTED_META_OFFSET + PROTECTED_META_SIZE
+            ]
+            factory_otadata = original_meta[
+                OTADATA_SECTOR0_REL : OTADATA_SECTOR0_REL + OTADATA_SIZE
+            ]
+            factory_active, _, factory_records = determine_active_slot(factory_otadata, ota_apps)
+            factory_sector0, factory_sector1 = factory_records
+            if not (
+                factory_active.label == "app1"
+                and factory_sector0.valid
+                and factory_sector0.seq == 1
+                and factory_sector1.valid
+                and factory_sector1.seq == 2
+            ):
+                raise RuntimeError(
+                    "Full-flash backup does not contain the expected factory app1 seq1/seq2 rescue state."
+                )
 
             sector0, sector1 = records
             if args.target == "app0":
@@ -235,7 +258,11 @@ def main() -> int:
                 print(f"  staged   SHA-256: {staged_hash}")
                 if staged_hash != firmware_hash:
                     raise RuntimeError("app0 no longer matches the supplied firmware image.")
-                next_seq = 3
+
+                candidate_sector0 = build_valid_otadata_sector(3)
+                candidate_seq = 3
+                candidate_crc = crc_for_seq(candidate_seq)
+                candidate_description = "new test selector"
                 expected_active = app0
             else:
                 if active.label != "app0":
@@ -249,21 +276,31 @@ def main() -> int:
                     raise RuntimeError(
                         "Rollback requires verified seq3 in sector0 and untouched seq2 rescue record in sector1."
                     )
-                next_seq = 4
+
+                # Restore the exact 4 KiB sector captured before any test. This
+                # deliberately returns otadata to seq1/seq2 rather than producing
+                # seq4, so the next staging run can demand an exact backup match.
+                candidate_sector0 = original_meta[
+                    OTADATA_SECTOR0_REL : OTADATA_SECTOR1_REL
+                ]
+                candidate_seq = factory_sector0.seq
+                candidate_crc = factory_sector0.crc
+                candidate_description = "exact factory sector restored from backup"
                 expected_active = app1
 
-            candidate_sector0 = build_valid_otadata_sector(next_seq)
-            expected_crc = crc_for_seq(next_seq)
             args.out.mkdir(parents=True, exist_ok=True)
             before_snapshot = args.out / f"otadata-before-{args.target}.bin"
             before_snapshot.write_bytes(otadata)
 
             print("\nValidated boot-selection plan:")
-            print(f"  Current active: {active.label}")
+            print(f"  Current active: app{1 if active.label == 'app1' else 0}")
             print(f"  Requested:      {args.target}")
             print(f"  Write address:  0x{OTADATA_OFFSET:x}")
             print(f"  Write size:     0x{FLASH_SECTOR_SIZE:x} (one sector only)")
-            print(f"  New sector0:    seq={next_seq}, state={OTA_IMG_VALID}, crc=0x{expected_crc:08x}")
+            print(
+                f"  New sector0:    seq={candidate_seq}, state={OTA_IMG_VALID}, "
+                f"crc=0x{candidate_crc:08x} ({candidate_description})"
+            )
             print("  sector1 @ 0xf000: PRESERVED / NOT WRITTEN")
             print("  Bootloader:         NOT WRITTEN")
             print("  Partition table:    NOT WRITTEN")
@@ -314,12 +351,19 @@ def main() -> int:
                     f"Readback selects {new_active.label}, expected {expected_active.label}."
                 )
 
+            if args.target == "app1" and after != original_meta:
+                raise RuntimeError(
+                    "Rollback selected app1 but protected metadata was not restored exactly to the original backup."
+                )
+
             after_snapshot = args.out / f"otadata-after-{args.target}.bin"
             after_snapshot.write_bytes(after_otadata)
 
             print("\nBOOT SELECTION VERIFIED")
             print(f"Selected slot: {new_active.label}")
             print("Original app1 rescue record in sector1 is intact.")
+            if args.target == "app1":
+                print("Factory protected metadata is restored exactly to the verified full-flash backup.")
             print("Device is intentionally left in the bootloader.")
             print("Power-cycle WITHOUT holding the left button to boot the selected slot.")
             return 0
