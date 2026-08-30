@@ -27,17 +27,46 @@ void HalGPIO::begin() {
   inputMgr.begin();
 }
 
-void HalGPIO::update() { inputMgr.update(); }
+void HalGPIO::update() {
+  virtualPressedEvents = 0;
+  virtualReleasedEvents = 0;
+
+  inputMgr.update();
+
+  // The X4 Pro profile deliberately leaves back/confirm GPIOs unassigned:
+  // Up/Down are the two side keys, while GT911 + the capacitive Home key supply
+  // the missing actions. Bridge those actions into Inx's existing button model
+  // without making individual activities touch-aware yet.
+  float nx = 0.0f;
+  float ny = 0.0f;
+  if (inputMgr.wasTouchTap(nx, ny)) {
+    const uint8_t mask = static_cast<uint8_t>(1u << BTN_CONFIRM);
+    virtualPressedEvents |= mask;
+    virtualReleasedEvents |= mask;
+  }
+
+  if (inputMgr.wasHomeKeyTapped()) {
+    const uint8_t mask = static_cast<uint8_t>(1u << BTN_BACK);
+    virtualPressedEvents |= mask;
+    virtualReleasedEvents |= mask;
+  }
+}
 
 bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
 
-bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
+bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
+  const uint8_t mask = static_cast<uint8_t>(1u << buttonIndex);
+  return inputMgr.wasPressed(buttonIndex) || (virtualPressedEvents & mask) != 0;
+}
 
-bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed(); }
+bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed() || virtualPressedEvents != 0; }
 
-bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return inputMgr.wasReleased(buttonIndex); }
+bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
+  const uint8_t mask = static_cast<uint8_t>(1u << buttonIndex);
+  return inputMgr.wasReleased(buttonIndex) || (virtualReleasedEvents & mask) != 0;
+}
 
-bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
+bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased() || virtualReleasedEvents != 0; }
 
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
