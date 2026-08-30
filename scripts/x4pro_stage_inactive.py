@@ -12,9 +12,14 @@ Before any write it requires:
   * Secure Boot disabled,
   * Flash Encryption disabled,
   * the known X4 Pro factory 2x0x7e0000 OTA layout,
-  * valid ESP-IDF otadata identifying one active slot,
-  * a full 16 MiB backup matching the device's current metadata,
+  * factory app1 selector state (valid seq1/seq2 otadata),
+  * a full 16 MiB backup whose partition table and app1 rescue record match,
   * an ESP32-S3 application image that fits the inactive slot.
+
+NVS is intentionally allowed to drift from the old full-flash backup because
+legitimate firmware boots may update runtime NVS. Staging still snapshots the
+entire protected metadata region before writing and requires it to remain
+byte-for-byte unchanged afterwards.
 
 After staging, it reads the staged image back and compares SHA-256, then
 re-reads the protected metadata region and verifies it is byte-for-byte
@@ -186,14 +191,26 @@ def verify_backup(backup: Path, live_meta: bytes) -> str:
         raise RuntimeError(
             f"Backup must be exactly {FLASH_SIZE} bytes; got {backup.stat().st_size}."
         )
+
     backup_bytes = backup.read_bytes()
-    backup_meta = backup_bytes[
-        PROTECTED_META_OFFSET : PROTECTED_META_OFFSET + PROTECTED_META_SIZE
+
+    # Partition layout is immutable and must still match the original image.
+    backup_partition_table = backup_bytes[
+        PARTITION_TABLE_OFFSET : PARTITION_TABLE_OFFSET + PARTITION_TABLE_SIZE
     ]
-    if backup_meta != live_meta:
-        raise RuntimeError(
-            "The current device metadata does not match the supplied full-flash backup."
-        )
+    live_partition_table = live_meta[:PARTITION_TABLE_SIZE]
+    if backup_partition_table != live_partition_table:
+        raise RuntimeError("Current partition table does not match the supplied full-flash backup.")
+
+    # Sector1 is the untouched app1 rescue record. It is our persistent rollback
+    # anchor and must remain byte-identical to the original backup.
+    backup_rescue_sector = backup_bytes[
+        OTADATA_OFFSET + FLASH_SECTOR_SIZE : OTADATA_OFFSET + OTADATA_SIZE
+    ]
+    rescue_rel = OTADATA_OFFSET - PROTECTED_META_OFFSET + FLASH_SECTOR_SIZE
+    live_rescue_sector = live_meta[rescue_rel : rescue_rel + FLASH_SECTOR_SIZE]
+    if backup_rescue_sector != live_rescue_sector:
+        raise RuntimeError("app1 rescue otadata sector no longer matches the full-flash backup.")
 
     digest = hashlib.sha256(backup_bytes).hexdigest()
     digest_file = backup.with_suffix(backup.suffix + ".sha256")
@@ -202,6 +219,7 @@ def verify_backup(backup: Path, live_meta: bytes) -> str:
         if not recorded or recorded[0].lower() != digest.lower():
             raise RuntimeError("Backup SHA-256 file does not match the full-flash backup.")
     print(f"Backup verified: {backup} SHA-256={digest}")
+    print("Runtime NVS drift is allowed; partition table and app1 rescue record match.")
     return digest
 
 
@@ -269,6 +287,17 @@ def main() -> int:
                 OTADATA_OFFSET - PROTECTED_META_OFFSET + OTADATA_SIZE
             ]
             active, inactive, records = determine_active_slot(otadata, ota_apps)
+
+            # Staging is deliberately allowed only from the exact factory-style
+            # selector state restored by x4pro_boot_slot.py --target app1.
+            if not (
+                len(records) == 2
+                and records[0].valid
+                and records[0].seq == 1
+                and records[1].valid
+                and records[1].seq == 2
+            ):
+                raise RuntimeError("Expected factory app1 otadata seq1/seq2 before staging.")
 
             verify_backup(args.backup, live_meta)
 
