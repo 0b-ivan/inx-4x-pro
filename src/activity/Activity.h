@@ -66,6 +66,20 @@ class Activity {
   virtual void loop() {}
 
   /**
+   * Routes a completed logical-screen tap to this activity. Activities that
+   * render tappable controls override this and hit-test the exact geometry they
+   * draw. Returning true means the tap was consumed by a semantic UI action.
+   *
+   * The default deliberately does nothing: touch is never converted into
+   * arbitrary directional button presses at the HAL/input layer.
+   */
+  virtual bool handleTouchTap(int x, int y) {
+    (void)x;
+    (void)y;
+    return false;
+  }
+
+  /**
    * @brief Gets the activity's name identifier
    * @return The name as a C-string
    */
