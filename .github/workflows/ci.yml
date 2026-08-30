@@ -1,12 +1,20 @@
 name: CI
-'on':
+
+on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+
     steps:
       - uses: actions/checkout@v6
         with:
@@ -19,6 +27,11 @@ jobs:
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
+      - name: Validate safety scripts
+        run: |
+          python -m py_compile scripts/x4pro_inspect.py
+          python -m py_compile scripts/refuse_x4pro_upload.py
+
       - name: Install clang-format-21
         run: |
           wget https://apt.llvm.org/llvm.sh
@@ -28,10 +41,10 @@ jobs:
           sudo apt-get install -y clang-format-21
 
       - name: Run cppcheck
-        run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
+        run: pio check -e x4pro --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 
       - name: Run clang-format
         run: PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix && git diff --exit-code || (echo "Please run 'bin/clang-format-fix' to fix formatting issues" && exit 1)
 
-      - name: Build Inx
-        run: pio run
+      - name: Build X4 Pro
+        run: pio run -e x4pro
