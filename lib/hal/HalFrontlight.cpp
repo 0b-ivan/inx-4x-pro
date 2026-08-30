@@ -13,39 +13,9 @@ void HalFrontlight::begin(const uint8_t brightness, const uint8_t warmth, const 
     return;
   }
 
-#ifdef INX_X4PRO_PORT
-  // Bench diagnostic from the confirmed X4 Pro wiring: GPIO8 is cool/white and
-  // GPIO9 is warm; both are active-high. Test each channel independently before
-  // LEDC is attached so a PWM/FrontlightManager problem cannot hide the hardware.
-  Serial.printf("[%lu] [LIGHT] raw GPIO8 cool HIGH\n", millis());
-  pinMode(8, OUTPUT);
-  pinMode(9, OUTPUT);
-  digitalWrite(9, LOW);
-  digitalWrite(8, HIGH);
-  delay(700);
-  digitalWrite(8, LOW);
-  delay(250);
-
-  Serial.printf("[%lu] [LIGHT] raw GPIO9 warm HIGH\n", millis());
-  digitalWrite(8, LOW);
-  digitalWrite(9, HIGH);
-  delay(700);
-  digitalWrite(9, LOW);
-  delay(250);
-#endif
-
   manager.begin();
   lastBrightness = brightness > 100 ? 100 : brightness;
   manager.setColorTemperature(warmth > 100 ? 100 : warmth);
-
-#ifdef INX_X4PRO_PORT
-  // Then probe the FreeInk PWM path separately.
-  Serial.printf("[%lu] [LIGHT] PWM diagnostic pulse 100%%\n", millis());
-  manager.setBrightness(100);
-  delay(1200);
-  manager.setBrightness(0);
-#endif
-
   lit = on;
   manager.setBrightness(lit ? lastBrightness : 0);
 
