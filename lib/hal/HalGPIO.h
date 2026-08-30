@@ -32,7 +32,6 @@ class HalGPIO {
   };
 
  private:
-  DeviceType deviceType = DeviceType::X4;
   mutable int batteryCachedPercent = 0;
   mutable unsigned long batteryLastPollMs = 0;
 
@@ -50,13 +49,6 @@ class HalGPIO {
   void begin();
 
   void update();
-  void injectOneShotPress(uint8_t buttonIndex) {
-#if CROSSPOINT_EMULATED == 0
-    inputMgr.injectOneShotPress(buttonIndex);
-#else
-    (void)buttonIndex;
-#endif
-  }
   bool isPressed(uint8_t buttonIndex) const;
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;
