@@ -13,10 +13,51 @@
 #include <cmath>
 
 namespace {
+struct LogicalTouchPoint {
+  float x;
+  float y;
+};
+
 void addVirtualClick(uint8_t button, uint8_t& pressed, uint8_t& released) {
   const uint8_t mask = static_cast<uint8_t>(1u << button);
   pressed |= mask;
   released |= mask;
+}
+
+// FreeInk normalizes GT911 coordinates into the panel's native landscape frame.
+// Inx renders its default UI in GfxRenderer::Portrait, whose pixel transform is:
+//   panelX = logicalY
+//   panelY = panelHeight - 1 - logicalX
+// The normalized inverse is therefore logicalX = 1 - panelY, logicalY = panelX.
+// Keep this mapping next to the X4 Pro compatibility bridge until touch becomes a
+// first-class app input and can share GfxRenderer's orientation directly.
+LogicalTouchPoint panelToPortrait(const float panelX, const float panelY) {
+  return {1.0f - panelY, panelX};
+}
+
+uint8_t buttonForPortraitTap(const LogicalTouchPoint point) {
+  // The bottom row is already drawn by Inx as two soft-key hints (Menu/Open).
+  // Make those labels actual touch targets on X4 Pro.
+  if (point.y >= 0.88f) {
+    return point.x < 0.50f ? HalGPIO::BTN_BACK : HalGPIO::BTN_CONFIRM;
+  }
+
+  // The rest of the legacy button-oriented UI gets large, forgiving navigation
+  // zones. This intentionally does not pretend every legacy widget has native
+  // hit-testing yet; it gives every required logical action a usable touch path.
+  if (point.x <= 0.18f) {
+    return HalGPIO::BTN_LEFT;
+  }
+  if (point.x >= 0.82f) {
+    return HalGPIO::BTN_RIGHT;
+  }
+  if (point.y <= 0.36f) {
+    return HalGPIO::BTN_UP;
+  }
+  if (point.y >= 0.64f) {
+    return HalGPIO::BTN_DOWN;
+  }
+  return HalGPIO::BTN_CONFIRM;
 }
 }  // namespace
 
@@ -42,35 +83,51 @@ void HalGPIO::update() {
 
   inputMgr.update();
 
-  // The X4 Pro profile deliberately leaves back/confirm/left/right GPIOs
-  // unassigned: the two discrete side keys are Up/Down while GT911 + its
-  // capacitive Home key provide the remaining navigation actions. Bridge them
-  // into Inx's existing button model so the application can stay button-based
-  // during the first port stage.
+  // X4 Pro has physical Up/Down side keys but the original Inx UI expects seven
+  // logical buttons. FreeInk deliberately returns GT911 taps as normalized
+  // panel-native coordinates, so translate them into the Portrait UI frame and
+  // bridge large touch zones into the existing button model.
   float nx = 0.0f;
   float ny = 0.0f;
   if (inputMgr.wasTouchTap(nx, ny)) {
-    addVirtualClick(BTN_CONFIRM, virtualPressedEvents, virtualReleasedEvents);
+    const LogicalTouchPoint point = panelToPortrait(nx, ny);
+    const uint8_t button = buttonForPortraitTap(point);
+    Serial.printf("[%lu] [X4PRO INPUT] tap panel=(%.3f,%.3f) portrait=(%.3f,%.3f) -> button=%u\n", millis(), nx,
+                  ny, point.x, point.y, button);
+    addVirtualClick(button, virtualPressedEvents, virtualReleasedEvents);
   }
 
+  // The capacitive key below the display acts as Inx's Back/Menu action. On the
+  // home screen that opens the same menu advertised by the bottom-left soft key;
+  // on deeper screens it backs out through the existing activity stack.
   if (inputMgr.wasHomeKeyTapped()) {
     addVirtualClick(BTN_BACK, virtualPressedEvents, virtualReleasedEvents);
   }
 
-  // Horizontal swipes fill the missing Left/Right actions. This makes Inx's
-  // default main-menu layout usable: the real Up/Down keys move list items and
-  // a horizontal swipe changes tabs. In the reader the same logical Left/Right
-  // events naturally follow the existing page-direction mapping.
+  // Swipes use content-navigation semantics: swipe left/right advances to the
+  // neighboring tab/page; swipe up/down advances to the next/previous list item.
+  // Convert both endpoints to the same Portrait frame before deciding direction.
   float nxStart = 0.0f;
   float nyStart = 0.0f;
   float nxEnd = 0.0f;
   float nyEnd = 0.0f;
   if (inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd)) {
-    const float dx = nxEnd - nxStart;
-    const float dy = nyEnd - nyStart;
+    const LogicalTouchPoint start = panelToPortrait(nxStart, nyStart);
+    const LogicalTouchPoint end = panelToPortrait(nxEnd, nyEnd);
+    const float dx = end.x - start.x;
+    const float dy = end.y - start.y;
+
+    uint8_t button = BTN_CONFIRM;
     if (std::fabs(dx) > std::fabs(dy)) {
-      addVirtualClick(dx < 0.0f ? BTN_RIGHT : BTN_LEFT, virtualPressedEvents, virtualReleasedEvents);
+      button = dx < 0.0f ? BTN_RIGHT : BTN_LEFT;
+    } else {
+      button = dy < 0.0f ? BTN_DOWN : BTN_UP;
     }
+
+    Serial.printf(
+        "[%lu] [X4PRO INPUT] swipe portrait=(%.3f,%.3f)->(%.3f,%.3f) dx=%.3f dy=%.3f -> button=%u\n",
+        millis(), start.x, start.y, end.x, end.y, dx, dy, button);
+    addVirtualClick(button, virtualPressedEvents, virtualReleasedEvents);
   }
 }
 
