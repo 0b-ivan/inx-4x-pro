@@ -12,7 +12,7 @@ inline bool inRect(const int x, const int y, const int rx, const int ry, const i
 }  // namespace
 
 bool RecentActivity::handleTouchTap(const int x, const int y) {
-  if (recentBooks.empty() || removeConfirmOpen_ || (homeMenuDrawer_ && homeMenuDrawer_->visible())) return false;
+  if (recentBooks.empty() || removeConfirmOpen_) return false;
 
   const int screenW = renderer.getScreenWidth();
   const int screenH = renderer.getScreenHeight();
