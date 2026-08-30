@@ -2,46 +2,16 @@
 
 /**
  * @file HalGPIO.h
- * @brief Public interface and types for HalGPIO.
+ * @brief Xteink X4 Pro hardware input/power abstraction.
+ *
+ * The X4 Pro port deliberately contains no hard-coded display, button, battery
+ * or wake GPIOs. FreeInk BoardConfig is the single source of truth for hardware
+ * wiring so production-batch differences stay inside the validated SDK profile.
  */
 
 #include <Arduino.h>
 #include <BatteryMonitor.h>
 #include <InputManager.h>
-
-#define EPD_SCLK 8
-#define EPD_MOSI 10
-#define EPD_CS 21
-#define EPD_DC 4
-#define EPD_RST 5
-#define EPD_BUSY 6
-
-#define SPI_MISO 7
-
-#define BAT_GPIO0 0
-
-#define UART0_RXD 20
-
-#define X3_I2C_SDA 20
-#define X3_I2C_SCL 0
-#define X3_I2C_FREQ 400000
-
-#define I2C_ADDR_BQ27220 0x55
-#define BQ27220_SOC_REG 0x2C
-#define BQ27220_CUR_REG 0x0C
-#define BQ27220_VOLT_REG 0x08
-
-#define I2C_ADDR_DS3231 0x68
-#define DS3231_SEC_REG 0x00
-
-#define I2C_ADDR_QMI8658 0x6B
-#define I2C_ADDR_QMI8658_ALT 0x6A
-#define QMI8658_WHO_AM_I_REG 0x00
-#define QMI8658_WHO_AM_I_VALUE 0x05
-#define QMI8658_CTRL1_REG 0x02
-#define QMI8658_CTRL3_REG 0x04
-#define QMI8658_CTRL7_REG 0x08
-#define QMI8658_GYRO_X_L_REG 0x3B
 
 class HalGPIO {
 #if CROSSPOINT_EMULATED == 0
@@ -65,12 +35,6 @@ class HalGPIO {
   DeviceType deviceType = DeviceType::X4;
   mutable int batteryCachedPercent = 0;
   mutable unsigned long batteryLastPollMs = 0;
-  uint8_t motionSensorAddress = 0;
-  bool motionSensorInitialized = false;
-  bool motionGestureInProgress = false;
-  unsigned long motionLastPollMs = 0;
-  unsigned long motionSensorStartedMs = 0;
-  unsigned long motionLastGestureMs = 0;
 
  public:
   static constexpr unsigned long BATTERY_POLL_MS = 1500;
@@ -78,8 +42,10 @@ class HalGPIO {
 
   HalGPIO() = default;
 
-  bool deviceIsX3() const { return deviceType == DeviceType::X3; }
-  bool deviceIsX4() const { return deviceType == DeviceType::X4; }
+  // The fork is intentionally X4-Pro-only. Keep these compatibility helpers so
+  // the existing Inx application code can remain unchanged during the port.
+  bool deviceIsX3() const { return false; }
+  bool deviceIsX4() const { return true; }
 
   void begin();
 
@@ -102,24 +68,25 @@ class HalGPIO {
   void startDeepSleep();
 
   int getBatteryPercentage() const;
-
   bool isUsbConnected() const;
 
+  // X4 Pro has its own RTC support in FreeInk, but Inx does not consume that HAL
+  // yet. These compatibility methods stay disabled until the clock layer is
+  // ported separately.
   bool readDateTime(DateTime& outDateTime) const;
   bool writeDateTime(const DateTime& dateTime) const;
   bool syncRtcFromSystemTime() const;
 
   enum class WakeupReason { PowerButton, AfterFlash, AfterUSBPower, Other };
-
   WakeupReason getWakeupReason() const;
 
-  static constexpr uint8_t BTN_BACK = 0;
-  static constexpr uint8_t BTN_CONFIRM = 1;
-  static constexpr uint8_t BTN_LEFT = 2;
-  static constexpr uint8_t BTN_RIGHT = 3;
-  static constexpr uint8_t BTN_UP = 4;
-  static constexpr uint8_t BTN_DOWN = 5;
-  static constexpr uint8_t BTN_POWER = 6;
+  static constexpr uint8_t BTN_BACK = InputManager::BTN_BACK;
+  static constexpr uint8_t BTN_CONFIRM = InputManager::BTN_CONFIRM;
+  static constexpr uint8_t BTN_LEFT = InputManager::BTN_LEFT;
+  static constexpr uint8_t BTN_RIGHT = InputManager::BTN_RIGHT;
+  static constexpr uint8_t BTN_UP = InputManager::BTN_UP;
+  static constexpr uint8_t BTN_DOWN = InputManager::BTN_DOWN;
+  static constexpr uint8_t BTN_POWER = InputManager::BTN_POWER;
 };
 
 extern HalGPIO gpio;
