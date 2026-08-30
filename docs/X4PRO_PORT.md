@@ -1,41 +1,156 @@
-# Inx X4 Pro port
+# Inx X4 Pro port — technical status
 
-> **Experimental. Do not flash the current alpha builds to hardware yet.**
+> [!WARNING]
+> **Experimental. The current alpha is not yet approved for hardware flashing.**
 
-This fork ports Inx to the Xteink X4 Pro (ESP32-S3, 16 MB flash, 8 MB PSRAM) using the FreeInk X4 Pro board profile.
+For a beginner-friendly explanation of bootloaders, partitions, OTA slots, backups and the planned first hardware test, read [`X4PRO_FLASHING_GUIDE.md`](X4PRO_FLASHING_GUIDE.md).
 
-## No-brick policy
+## Goal
 
-Until the first-flash procedure has been validated on the actual device, these rules are mandatory:
+Port Inx 1.0.19 from the original Xteink hardware target to the **Xteink X4 Pro** while keeping the first hardware test reversible.
 
-1. Never overwrite the bootloader.
-2. Never overwrite the live partition table.
-3. Never erase NVS or `otadata` as part of a normal test.
-4. Never use generic `pio run -t upload`; the project intentionally blocks it.
-5. Never install firmware through the upstream Inx OTA updater; OTA is compiled out in X4 Pro alpha builds.
-6. Before the first hardware write, read and record the live partition table and active OTA slot.
-7. Take a full 16 MB flash backup and record its SHA-256.
-8. Write only `firmware.bin` to the validated inactive OTA **application** slot.
-9. Keep the currently working application slot intact until the new application has completed boot, display, input, SD and sleep tests.
-10. Do not publish `bootloader.bin` or `partitions.bin` as installable release assets.
+The port targets:
 
-## Build
+- ESP32-S3;
+- 16 MiB flash;
+- 8 MiB OPI PSRAM;
+- 800x480 E-Ink;
+- GT911 touch;
+- X4-Pro digital side buttons;
+- native 1-bit SDMMC;
+- CW2017 battery gauge;
+- X4-Pro power/sleep topology.
+
+## Current implementation
+
+### Build target
+
+`platformio.ini` now defaults to `x4pro` and builds for the ESP32-S3 N16R8 target.
 
 ```bash
 pio run -e x4pro
 ```
 
-The useful test artifact is:
+The application image is:
 
 ```text
 .pio/build/x4pro/firmware.bin
 ```
 
-Building a binary is not permission to flash it. The hardware-test gate remains the validated inactive-slot procedure above.
+Generic upload is blocked deliberately:
 
-## Read-only device preflight
+```bash
+pio run -e x4pro -t upload
+```
 
-Install `esptool`, connect the X4 Pro and run the inspector before any hardware write:
+must fail through `scripts/refuse_x4pro_upload.py`.
+
+## FreeInk backend
+
+The historical `open-x4-sdk` submodule path is retained to minimize changes in the Inx source tree, but it is pinned to the FreeInk SDK used for X4 Pro support.
+
+The active X4 Pro board profile provides the hardware truth for:
+
+- display SPI pins;
+- runtime display-controller selection;
+- GT911 touch;
+- digital buttons;
+- SDMMC and card-power control;
+- battery gauge;
+- peripheral power rails;
+- deep-sleep wake configuration.
+
+Inx code should not invent or duplicate X4 Pro GPIO mappings.
+
+## Display
+
+X4 Pro production batches may contain different compatible E-Ink controllers.
+
+Before `display.begin()`, the port calls FreeInk's Xteink display-controller detection. FreeInk then chooses the matching driver while keeping the same application-facing display API.
+
+The current Inx HAL maps unsupported legacy refresh modes conservatively onto FreeInk refresh modes. Advanced grayscale paths that depended on the old SDK are temporarily simplified during bring-up.
+
+## Input compatibility layer
+
+Inx 1.0.19 expects a button-oriented device. The X4 Pro has two discrete navigation buttons plus GT911 touch and a capacitive Home key.
+
+Temporary mapping:
+
+| Physical/Touch input | Inx logical action |
+| --- | --- |
+| first side key | Up / previous |
+| second side key | Down / next |
+| screen tap | Confirm |
+| capacitive Home tap | Back |
+| horizontal swipe | Left / Right |
+| power button | Power |
+
+This is intentionally a compatibility bridge, not the final touch UI.
+
+## SD card
+
+The X4 Pro uses native SDMMC rather than the legacy X4 SPI-SD path.
+
+The build enables FreeInk's block-device interface:
+
+```text
+USE_BLOCK_DEVICE_INTERFACE=1
+```
+
+The existing Inx `SdMan` API can therefore remain largely unchanged while FreeInk performs X4-Pro-specific SDMMC initialization.
+
+## Battery
+
+Battery percentage is read through FreeInk `BatteryMonitor`, which uses the active X4 Pro profile and CW2017 gauge support.
+
+Hardware validation of displayed percentage and charging-state behavior is still required on the first device.
+
+## Sleep and wake
+
+Legacy C3/X3 GPIO sleep code has been removed from the X4-Pro HAL path.
+
+The port delegates rail shutdown and deep-sleep wake configuration to FreeInk `PowerManager`.
+
+This code compiles, but actual sleep/wake behavior is part of the first-device validation checklist.
+
+## OTA is disabled
+
+The upstream Inx updater is not safe for an experimental X4-Pro port because it can install a generic `firmware.bin` and switch the OTA boot partition without validating the X4 Pro target.
+
+Therefore the X4-Pro build excludes the updater implementation and defines:
+
+```text
+INX_DISABLE_OTA=1
+```
+
+Both online and SD-card firmware installation remain disabled until there is an X4-Pro-specific manifest and validation path.
+
+## No-brick policy
+
+Until first-flash and recovery are validated on real hardware:
+
+1. never overwrite the bootloader;
+2. never overwrite the live partition table;
+3. never erase the whole flash;
+4. never erase NVS during a normal test;
+5. never blindly modify `otadata`;
+6. never use generic PlatformIO upload;
+7. never use upstream Inx OTA installation;
+8. inspect the live device before writing;
+9. create and checksum a full 16 MiB backup;
+10. keep the known-good application slot intact;
+11. write only the verified inactive OTA application slot during the first test;
+12. verify the written bytes before changing boot selection.
+
+## Read-only preflight
+
+The repository includes:
+
+```text
+scripts/x4pro_inspect.py
+```
+
+Example:
 
 ```bash
 python3 -m pip install --upgrade esptool
@@ -45,33 +160,82 @@ python3 scripts/x4pro_inspect.py \
   --backup
 ```
 
-The inspector has no write/erase command. It verifies that the connected chip reports as ESP32-S3, reads and parses the live partition table, requires at least two OTA application slots, checks that `firmware.bin` fits those slots, and optionally saves the complete 16 MiB flash plus its SHA-256 digest.
+The inspector contains no write/erase/boot-selection command. It:
 
-A successful read-only preflight still does **not** flash or select the experimental application. Active/inactive OTA-slot selection is a separate safety gate.
+- verifies ESP32-S3;
+- reads the live partition table;
+- parses partition offsets and sizes;
+- requires multiple OTA application slots;
+- verifies that the firmware fits;
+- optionally reads all 16 MiB of flash;
+- writes a SHA-256 digest for the backup.
 
-## Hardware backend
+A successful preflight is **not** automatically a flash approval. We must additionally identify the active slot and validate the recovery path.
 
-FreeInk is pinned as the `open-x4-sdk` submodule for a reproducible build. The application does not own X4 Pro GPIO numbers. Display, buttons/touch, battery, SDMMC and deep-sleep wake configuration come from FreeInk `BoardConfig`.
+## CI expectations
 
-The X4 Pro may ship with different e-paper controllers. FreeInk controller detection is run before display initialization so the matching driver can be selected without changing Inx.
+The port has two relevant GitHub Actions workflows:
 
-### Temporary Inx input compatibility
+### `CI`
 
-Inx 1.0.19 is button-oriented while the X4 Pro has two discrete navigation buttons plus GT911 touch. Until Inx gets native touch hit-testing, the HAL exposes the X4 Pro input as:
+Runs static analysis, formatting checks and the default firmware build on pull requests and `main`.
 
-- physical left side key -> `Up` / previous
-- physical right side key -> `Down` / next
-- screen tap -> `Confirm`
-- capacitive Home tap -> `Back`
-- horizontal swipe left/right -> logical `Right` / `Left`
-- power button -> `Power`
+### `X4 Pro Build`
 
-This preserves the existing Inx navigation model without inventing new GPIO mappings.
+Runs the focused ESP32-S3 build for `x4pro-port` and uploads only application/debug artifacts:
 
-## Current limitations
+```text
+firmware.bin
+firmware.elf
+firmware.map
+```
 
-- Touch uses the compatibility mapping above; native per-widget hit-testing is not integrated yet.
-- Frontlight UI is not yet integrated.
-- Inx RTC integration is not yet ported.
-- OTA/update installation is intentionally disabled.
-- Hardware flashing is intentionally disabled pending recovery validation.
+It must not publish `bootloader.bin` or `partitions.bin` as installable artifacts.
+
+## First hardware test gate
+
+No write should happen until all boxes below are satisfied:
+
+```text
+[ ] CI green
+[ ] X4 Pro build green
+[ ] connected MCU identifies as ESP32-S3
+[ ] live partition table parsed successfully
+[ ] at least two OTA app slots found
+[ ] firmware fits the target slot
+[ ] active slot identified
+[ ] inactive test slot identified
+[ ] complete 16 MiB flash backup created
+[ ] backup SHA-256 recorded and verified
+[ ] USB recovery access validated
+[ ] known-good app slot remains untouched
+```
+
+## First boot test order
+
+```text
+[ ] boot / serial log
+[ ] display-controller detection
+[ ] E-Ink initialization
+[ ] orientation
+[ ] physical side buttons
+[ ] touch tap
+[ ] Home key
+[ ] horizontal swipe
+[ ] SDMMC mount
+[ ] open an EPUB
+[ ] battery reading
+[ ] sleep
+[ ] wake
+[ ] restart
+[ ] recovery to known-good slot
+```
+
+## Remaining port work
+
+- validate the complete current HAL on physical X4 Pro hardware;
+- integrate native touch hit-testing instead of compatibility button synthesis;
+- integrate frontlight controls into the Inx UI;
+- integrate RTC support;
+- define and test a board-specific safe OTA format;
+- automate inactive-slot detection and post-write verification only after the first manual recovery procedure is proven.
