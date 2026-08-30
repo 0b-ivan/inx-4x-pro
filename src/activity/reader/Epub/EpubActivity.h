@@ -40,10 +40,6 @@ struct ViewportInfo {
   float wordSpacing;
 };
 
-/**
- * Main activity for reading EPUB books.
- * Handles page navigation, bookmarks, settings, and reading statistics.
- */
 class EpubActivity final : public ActivityWithSubactivity {
   friend class EpubAnnotationUi;
   friend class EpubDictionaryUi;
@@ -53,9 +49,6 @@ class EpubActivity final : public ActivityWithSubactivity {
   friend class ReaderButtonBindings;
 
  public:
-  /**
-   * Represents a bookmark in the book.
-   */
   struct Bookmark {
     uint16_t spineIndex;
     uint16_t pageNumber;
@@ -63,33 +56,17 @@ class EpubActivity final : public ActivityWithSubactivity {
     char chapterTitle[64];
     uint32_t timestamp;
 
-    /**
-     * Validates if the bookmark contains reasonable data.
-     *
-     * @return true if bookmark is valid
-     */
     bool isValid() const { return spineIndex != 0xFFFF && pageNumber != 0xFFFF; }
   };
 
-  /**
-   * Constructs a new EpubActivity.
-   *
-   * @param renderer Reference to the graphics renderer
-   * @param mappedInput Reference to the input manager
-   * @param epub Unique pointer to the EPUB document
-   * @param onGoBack Callback for returning to previous activity
-   * @param onGoToRecent Callback for navigating to recent books
-   */
   explicit EpubActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
                         const std::function<void()>& onGoBack, const std::function<void()>& onGoToRecent);
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  /** Match Crosspoint-style reader: pump display from loop (no separate FreeRTOS render task). */
+  bool handleTouchTap(int x, int y) override;
   bool skipLoopDelay() override { return true; }
-  /** X3 flick/shake page turns never register as button activity, so with auto-sleep on the device would
-   *  fall asleep mid-read; suppress the idle timeout in-book while that gesture is enabled. */
   bool preventAutoSleep() override;
 
  private:
@@ -128,7 +105,6 @@ class EpubActivity final : public ActivityWithSubactivity {
   bool showBookmarkIndicator = false;
   int lastPreloadedSpineIndex = -1;
   bool lastPageHadImages = false;
-  /** Previous page: image union bbox at least half screen in both dimensions (for smart HALF refresh). */
   bool lastPageHadLargeImage = false;
 
   int lastGoodSpineIndex_ = 0;
@@ -142,155 +118,46 @@ class EpubActivity final : public ActivityWithSubactivity {
   BookSettings bookSettings;
   BookSettings settingsDrawerSnapshot_;
   bool hasSettingsDrawerSnapshot_ = false;
-  /** Last orientation value used for a full layout/section rebuild; used to detect drift after global sync. */
   uint8_t bookLayoutAppliedOrientation_ = 0xFF;
-  /** Last global status-bar layout used for a full layout/section rebuild. */
   uint32_t statusBarLayoutAppliedSignature_ = 0xFFFFFFFF;
   bool leftButtonLongPressProcessed = false;
 
   EpubReadingStats readingStats_;
 
-  /** @param clearFramebuffer When false, skips clearScreen before compositing (same-page annotation overlay refresh).
-   */
   void renderScreen(bool clearFramebuffer = true);
-
-  /**
-   * Handles page turning logic for forward/backward navigation.
-   * Manages chapter transitions and end-of-book detection.
-   *
-   * @param forward True for forward page turn, false for backward
-   */
   void pageTurn(bool forward);
-
-  /**
-   * Renders page contents with margins and status bar.
-   *
-   * @param page Page to render
-   * @param orientedMarginTop Top margin
-   * @param orientedMarginRight Right margin
-   * @param orientedMarginBottom Bottom margin
-   * @param orientedMarginLeft Left margin
-   */
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
-
-  /**
-   * Renders the status bar with configurable sections.
-   *
-   * @param orientedMarginRight Right margin
-   * @param orientedMarginBottom Bottom margin
-   * @param orientedMarginLeft Left margin
-   */
   void renderStatusBar(int orientedMarginRight, int orientedMarginBottom, int orientedMarginLeft) const;
-
-  /**
-   * Draws the reading-guide overlay when enabled: Grid (vertical lines at 1/3 and 2/3 of the content width)
-   * or Notebook (one horizontal ruled line under each actual text line on the page, so blank space - end of
-   * page, gaps around images - never gets a stray line and every line lands exactly under real text).
-   * Pure overlay — does not affect layout or page cache.
-   */
   void drawReadingGuideLines(const Page& page, int orientedMarginTop, int orientedMarginRight,
                              int orientedMarginBottom, int orientedMarginLeft, int fontId) const;
 
-  /**
-   * Saves current reading progress to file using BookProgress handler.
-   *
-   * @param spineIndex Current spine index
-   * @param currentPage Current page number
-   * @param pageCount Total pages in current chapter
-   */
   void saveProgress(int spineIndex, int currentPage, int pageCount, bool saveRecentNow = true);
-
-  /**
-   * Loads progress from file using BookProgress handler.
-   */
   void loadProgress();
-
-  /**
-   * Lazily constructs and wires up menuDrawer, without changing its visibility. Shared by
-   * toggleMenuDrawer() and openTableOfContents().
-   */
   void ensureMenuDrawer();
-
-  /**
-   * Toggles the menu drawer visibility.
-   */
   void toggleMenuDrawer();
-
-  /**
-   * Opens the menu drawer directly to its Table of Contents view, skipping the main menu list.
-   */
   void openTableOfContents();
-
-  /**
-   * Toggles the settings drawer visibility.
-   */
   void toggleSettingsDrawer();
-
-  /**
-   * Callback when a chapter is selected from TOC.
-   *
-   * @param spineIndex The spine index to navigate to
-   */
   void onTocChapterSelected(int spineIndex);
-
-  /** User picked a bookmark from the reader menu drawer (same UX as TOC). */
   void onBookmarkDrawerSelected(int storageIndex);
-
-  /** User picked an annotated page from the reader menu drawer (storageIndex encodes spine/page). */
   void onAnnotationDrawerSelected(int storageIndex);
-
   void goToAnnotationPage(int spineIndex, int pageNumber);
-
-  /**
-   * Deletes the book cache.
-   */
   void deleteCache();
-
-  /**
-   * Go home.
-   */
   void goHome();
-
-  /**
-   * Deletes the reading progress.
-   */
   void deleteProgress();
-
-  /**
-   * Deletes the entire book.
-   */
   void deleteBook();
-
-  /**
-   * Generates full book data.
-   */
   void generateFullData();
   void prewarmCurrentSectionImages();
   void regenerateThumbnail();
-
-  /** Opens KOReader sync as a sub-activity (from menu). */
   void openKOReaderSyncFromMenu();
-
-  /** Callback for MenuDrawer's integrated "Go to Percent" view. */
   void onPercentDrawerSelected(int percent);
   void jumpToPercent(int percent);
-
   void displayBookTitle();
   void drawLoadingScreen();
   void preloadNextSection();
-
-  /** Hides reader menu and settings drawers (if open). Optionally repaints the reader (skip during error popups). */
   void dismissMenuDrawerForBlockingWork(bool repaintReaderScreen = true);
-
-  /** Close drawers (if open), then show a centered popup message. */
   void readerPopup(const char* message);
-
-  /** After a failed chapter load: popup, revert once to last good chapter, then clear cache and exit if still broken.
-   */
   void handleChapterLoadFailure();
-
-  /** Close drawers (if open), then show the bottom loading progress panel. */
   ScreenComponents::LoadingProgressLayout loadingProgressShow(const char* message, int progressPercent0to100);
 
   void loadBookmarks();
@@ -309,11 +176,7 @@ class EpubActivity final : public ActivityWithSubactivity {
   QuickActionsMenuUi quickActionsUi_;
   ReaderButtonBindings btnBindings_;
 
-  /**
-   * Applies current book settings and rebuilds affected sections.
-   */
   void applyBookSettings();
-
   void saveBookSettings();
   void loadBookSettings();
 
@@ -324,46 +187,17 @@ class EpubActivity final : public ActivityWithSubactivity {
   void endPageTimer();
   void saveBookStats();
 
-  /**
-   * Calculates the viewport dimensions based on current settings.
-   *
-   * @return ViewportInfo structure containing viewport dimensions and settings
-   */
   ViewportInfo calculateViewport();
-
-  /**
-   * Builds a section file for a given spine index.
-   *
-   * @param spineIndex Index of the spine to build
-   * @param info Viewport information for rendering
-   * @param showProgress Whether to show progress during building
-   * @param skipImages If true, skip processing new images and only use existing cached images
-   * @return true if successful, false otherwise
-   */
   bool buildSection(int spineIndex, const ViewportInfo& info, bool showProgress = false, bool skipImages = false);
-
-  /**
-   * Loads a section for a given spine index.
-   *
-   * @param spineIndex Index of the spine to load
-   * @param info Viewport information for rendering
-   * @return Unique pointer to the loaded section
-   */
   std::unique_ptr<Section> loadSection(int spineIndex, const ViewportInfo& info, bool showProgress = true);
 
   void setupOrientation();
-  /** Refreshes inherited reader defaults into books that do not use custom settings. */
   bool syncSettingsFromGlobalIfNeeded();
   uint32_t currentStatusBarLayoutSignature() const;
   bool statusBarLayoutChangedSinceApplied() const;
   void markStatusBarLayoutApplied();
-  /** Settings drawer callback: keep renderer, drawer, and menu layout in sync while editing. */
   void onBookSettingsLiveLayoutSync();
-  /** @param coverAvailable Whether displayCoverOrTitle() already confirmed a real cover exists (cached or
-   *  freshly extracted) - false skips retrying a thumbnail extraction from the same cover entry that just
-   *  failed (or was never there), while the packaged META-INF/thumbnail.jpg path is still tried either way. */
   void ensureThumbnailExists(bool coverAvailable);
-  /** @return true if a real cover image (not just the title fallback) is now cached on disk. */
   bool displayCoverOrTitle();
   void loadCurrentSection(bool showProgress = true);
   void updateExternalState();
