@@ -3,8 +3,6 @@ name: X4 Pro Build
 on:
   push:
     branches: [x4pro-port]
-  pull_request:
-    branches: [main]
 
 jobs:
   x4pro:
