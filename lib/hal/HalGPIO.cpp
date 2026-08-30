@@ -11,6 +11,14 @@
 #include <esp_sleep.h>
 #include <esp_system.h>
 
+namespace {
+void addVirtualClick(uint8_t button, uint8_t& pressed, uint8_t& released) {
+  const uint8_t mask = static_cast<uint8_t>(1u << button);
+  pressed |= mask;
+  released |= mask;
+}
+}  // namespace
+
 void HalGPIO::begin() {
   // Match FreeInk/CrossPoint's X4 Pro bring-up order. Some X4 Pro peripherals
   // sit behind switched rails; assert the board-profile-defined boot levels
@@ -33,22 +41,35 @@ void HalGPIO::update() {
 
   inputMgr.update();
 
-  // The X4 Pro profile deliberately leaves back/confirm GPIOs unassigned:
-  // Up/Down are the two side keys, while GT911 + the capacitive Home key supply
-  // the missing actions. Bridge those actions into Inx's existing button model
-  // without making individual activities touch-aware yet.
+  // The X4 Pro profile deliberately leaves back/confirm/left/right GPIOs
+  // unassigned: the two discrete side keys are Up/Down while GT911 + its
+  // capacitive Home key provide the remaining navigation actions. Bridge them
+  // into Inx's existing button model so the application can stay button-based
+  // during the first port stage.
   float nx = 0.0f;
   float ny = 0.0f;
   if (inputMgr.wasTouchTap(nx, ny)) {
-    const uint8_t mask = static_cast<uint8_t>(1u << BTN_CONFIRM);
-    virtualPressedEvents |= mask;
-    virtualReleasedEvents |= mask;
+    addVirtualClick(BTN_CONFIRM, virtualPressedEvents, virtualReleasedEvents);
   }
 
   if (inputMgr.wasHomeKeyTapped()) {
-    const uint8_t mask = static_cast<uint8_t>(1u << BTN_BACK);
-    virtualPressedEvents |= mask;
-    virtualReleasedEvents |= mask;
+    addVirtualClick(BTN_BACK, virtualPressedEvents, virtualReleasedEvents);
+  }
+
+  // Horizontal swipes fill the missing Left/Right actions. This makes Inx's
+  // default main-menu layout usable: the real Up/Down keys move list items and
+  // a horizontal swipe changes tabs. In the reader the same logical Left/Right
+  // events naturally follow the existing page-direction mapping.
+  float nxStart = 0.0f;
+  float nyStart = 0.0f;
+  float nxEnd = 0.0f;
+  float nyEnd = 0.0f;
+  if (inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd)) {
+    const float dx = nxEnd - nxStart;
+    const float dy = nyEnd - nyStart;
+    if (fabsf(dx) > fabsf(dy)) {
+      addVirtualClick(dx < 0.0f ? BTN_RIGHT : BTN_LEFT, virtualPressedEvents, virtualReleasedEvents);
+    }
   }
 }
 
