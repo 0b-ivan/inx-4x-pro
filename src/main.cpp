@@ -80,7 +80,7 @@ void setupDisplayAndFonts();
 void onNetworkModeSelected(NetworkMode mode);
 void openReaderFromCallback(const std::string& path);
 bool handleGlobalPowerRefresh();
-bool handleMainTabTouch();
+bool handleScreenTouch();
 #ifndef SIMULATOR
 bool handleX4ProFrontlightDoubleClick();
 #endif
@@ -115,7 +115,7 @@ void onGoToReader(const std::string& path) {
 bool isExportedNoteImage(const std::string& path) {
   constexpr const char* root = "/Bookmarks & Annotations";
   const size_t rootLen = strlen(root);
-  const bool inRoot = path.compare(0, rootLen, root) == 0 && (path.size() == rootLen || path[rootLen] == '/');
+  const bool inRoot = path.compare(0, rootLen) == 0 && (path.size() == rootLen || path[rootLen] == '/');
   return inRoot && (StringUtils::checkFileExtension(path, ".bmp") || StringUtils::checkFileExtension(path, ".jpg") ||
                     StringUtils::checkFileExtension(path, ".jpeg") || StringUtils::checkFileExtension(path, ".png"));
 }
@@ -231,7 +231,6 @@ void normalizeUnavailableClockSettings() {
 void enterDeepSleep() {
   normalizeUnavailableClockSettings();
 #ifndef SIMULATOR
-  // Never leave the LED strings driven while the S3 enters deep sleep.
   frontlight.setOn(false);
 #endif
   switchTo<SleepActivity>(render, input);
@@ -283,7 +282,14 @@ bool handleGlobalPowerRefresh() {
   return true;
 }
 
-bool handleMainTabTouch() {
+/**
+ * Dispatch one completed tap in logical screen coordinates.
+ *
+ * Main tabs are global chrome; everything else belongs to the active activity.
+ * Activities hit-test the exact rectangles they render. This mirrors the
+ * CrossPoint/FreeInk touch contract and keeps the HAL free of fake buttons.
+ */
+bool handleScreenTouch() {
   if (!currentActivity) {
     return false;
   }
@@ -297,48 +303,50 @@ bool handleMainTabTouch() {
   const int tabY = INX_THEME.mainTabBarY(renderer);
   const int tabH = INX_THEME.mainTabBarHeight();
   const int width = renderer.getScreenWidth();
-  if (x < 0 || x >= width || y < tabY || y >= tabY + tabH) {
-    return false;
+  if (x >= 0 && x < width && y >= tabY && y < tabY + tabH) {
+    constexpr int tabCount = 5;
+    const int tabButtonWidth = (width / tabCount) - 1;
+    int tab = tabButtonWidth > 0 ? x / tabButtonWidth : 0;
+    if (tab < 0) tab = 0;
+    if (tab >= tabCount) tab = tabCount - 1;
+
+    Serial.printf("[%lu] [TOUCH] main tab=%d x=%d y=%d\n", millis(), tab, x, y);
+    switch (tab) {
+      case 0:
+        onGoToRecent();
+        break;
+      case 1:
+        onGoToLibrary("/");
+        break;
+      case 2:
+        onGoToSettings();
+        break;
+      case 3:
+        onGoToFileTransfer();
+        break;
+      case 4:
+        onGoToStatistics();
+        break;
+      default:
+        return false;
+    }
+    return true;
   }
 
-  constexpr int tabCount = 5;
-  const int tabButtonWidth = (width / tabCount) - 1;
-  int tab = tabButtonWidth > 0 ? x / tabButtonWidth : 0;
-  if (tab < 0) tab = 0;
-  if (tab >= tabCount) tab = tabCount - 1;
-
-  Serial.printf("[%lu] [TOUCH] main tab=%d x=%d y=%d\n", millis(), tab, x, y);
-  switch (tab) {
-    case 0:
-      onGoToRecent();
-      break;
-    case 1:
-      onGoToLibrary("/");
-      break;
-    case 2:
-      onGoToSettings();
-      break;
-    case 3:
-      onGoToFileTransfer();
-      break;
-    case 4:
-      onGoToStatistics();
-      break;
-    default:
-      return false;
+  if (currentActivity->handleTouchTap(x, y)) {
+    Serial.printf("[%lu] [TOUCH] %s handled x=%d y=%d\n", millis(), currentActivity->getName(), x, y);
+    return true;
   }
-  return true;
+
+  // Do not return true here. Legacy components such as HomeMenuDrawer still
+  // inspect the same latched FreeInk tap from their normal loop until they are
+  // migrated to Activity::handleTouchTap().
+  return false;
 }
 
 void setup() {
   t1 = millis();
   gpio.begin();
-#ifndef SIMULATOR
-  // FreeInk owns PWM polarity, frequency, resolution and X4 Pro warm/cool pin
-  // selection through BoardConfig. Start dark; a power-button double-click
-  // toggles the light for the first hardware-validation cycle.
-  frontlight.begin(60, 50, false);
-#endif
   setupDisplayAndFonts();
 
   if (gpio.isUsbConnected()) {
@@ -346,6 +354,12 @@ void setup() {
     unsigned long start = millis();
     while (!Serial && (millis() - start) < 3000) delay(10);
   }
+
+#ifndef SIMULATOR
+  // Initialize after Serial so X4 Pro hardware-validation messages are visible.
+  // FreeInk owns PWM polarity, frequency, resolution and warm/cool pin mapping.
+  frontlight.begin(60, 50, false);
+#endif
 
   sdCardAvailable = SdMan.begin();
 
@@ -402,10 +416,7 @@ void loop() {
     return;
   }
 
-  // Main navigation icons are real touch targets on the X4 Pro. Route this
-  // globally before the current activity so every main page gets the same tab
-  // behavior and sub-activities don't need to duplicate tab geometry.
-  if (handleMainTabTouch()) {
+  if (handleScreenTouch()) {
     delay(10);
     return;
   }
