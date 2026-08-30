@@ -29,9 +29,6 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
     case HalDisplay::HALF_REFRESH:
     case HalDisplay::STRONG_FAST_REFRESH:
     case HalDisplay::MANUAL_REFRESH:
-      // FreeInk's current public contract is Full/Half/Fast. Map Inx's legacy
-      // stronger/manual modes to the balanced HALF waveform rather than trying
-      // to reproduce old X4-specific LUT behavior on X4 Pro panel variants.
       return EInkDisplay::HALF_REFRESH;
     case HalDisplay::FAST_REFRESH:
     default:
@@ -44,6 +41,12 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode) { einkDisplay.displ
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
+
+void HalDisplay::setInverted(const bool inverted) { einkDisplay.setInverted(inverted); }
+
+bool HalDisplay::toggleInverted() { return einkDisplay.toggleInverted(); }
+
+bool HalDisplay::isInverted() const { return einkDisplay.isInverted(); }
 
 void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
 
