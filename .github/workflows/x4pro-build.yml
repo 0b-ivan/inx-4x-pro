@@ -1,0 +1,36 @@
+name: X4 Pro Build
+
+on:
+  push:
+    branches: [x4pro-port]
+  pull_request:
+    branches: [main]
+
+jobs:
+  x4pro:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Build X4 Pro application
+        run: pio run -e x4pro
+
+      - name: Upload application-only artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inx-x4pro-app-${{ github.sha }}
+          path: |
+            .pio/build/x4pro/firmware.bin
+            .pio/build/x4pro/firmware.elf
+            .pio/build/x4pro/firmware.map
+          if-no-files-found: error
