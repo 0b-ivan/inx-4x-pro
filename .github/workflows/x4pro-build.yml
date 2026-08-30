@@ -29,6 +29,7 @@ jobs:
         run: |
           python -m py_compile scripts/x4pro_inspect.py
           python -m py_compile scripts/x4pro_stage_inactive.py
+          python -m py_compile scripts/x4pro_boot_slot.py
           python -m py_compile scripts/refuse_x4pro_upload.py
 
       - name: Build X4 Pro application
