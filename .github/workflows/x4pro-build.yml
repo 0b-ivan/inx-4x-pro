@@ -28,6 +28,7 @@ jobs:
       - name: Validate safety scripts
         run: |
           python -m py_compile scripts/x4pro_inspect.py
+          python -m py_compile scripts/x4pro_stage_inactive.py
           python -m py_compile scripts/refuse_x4pro_upload.py
 
       - name: Build X4 Pro application
@@ -56,9 +57,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: inx-x4pro-app-${{ github.sha }}
-          path: |
-            .pio/build/x4pro/firmware.bin
-            .pio/build/x4pro/firmware.elf
-            .pio/build/x4pro/firmware.map
+          name: inx-x4pro-firmware-${{ github.sha }}
+          path: .pio/build/x4pro/firmware.bin
           if-no-files-found: error
