@@ -31,9 +31,7 @@ void addVirtualClick(uint8_t button, uint8_t& pressed, uint8_t& released) {
 // The normalized inverse is therefore logicalX = 1 - panelY, logicalY = panelX.
 // Keep this mapping next to the X4 Pro compatibility bridge until touch becomes a
 // first-class app input and can share GfxRenderer's orientation directly.
-LogicalTouchPoint panelToPortrait(const float panelX, const float panelY) {
-  return {1.0f - panelY, panelX};
-}
+LogicalTouchPoint panelToPortrait(const float panelX, const float panelY) { return {1.0f - panelY, panelX}; }
 
 uint8_t buttonForPortraitTap(const LogicalTouchPoint point) {
   // The bottom row is already drawn by Inx as two soft-key hints (Menu/Open).
@@ -92,8 +90,8 @@ void HalGPIO::update() {
   if (inputMgr.wasTouchTap(nx, ny)) {
     const LogicalTouchPoint point = panelToPortrait(nx, ny);
     const uint8_t button = buttonForPortraitTap(point);
-    Serial.printf("[%lu] [X4PRO INPUT] tap panel=(%.3f,%.3f) portrait=(%.3f,%.3f) -> button=%u\n", millis(), nx,
-                  ny, point.x, point.y, button);
+    Serial.printf("[%lu] [X4PRO INPUT] tap panel=(%.3f,%.3f) portrait=(%.3f,%.3f) -> button=%u\n", millis(), nx, ny,
+                  point.x, point.y, button);
     addVirtualClick(button, virtualPressedEvents, virtualReleasedEvents);
   }
 
@@ -124,9 +122,8 @@ void HalGPIO::update() {
       button = dy < 0.0f ? BTN_DOWN : BTN_UP;
     }
 
-    Serial.printf(
-        "[%lu] [X4PRO INPUT] swipe portrait=(%.3f,%.3f)->(%.3f,%.3f) dx=%.3f dy=%.3f -> button=%u\n",
-        millis(), start.x, start.y, end.x, end.y, dx, dy, button);
+    Serial.printf("[%lu] [X4PRO INPUT] swipe portrait=(%.3f,%.3f)->(%.3f,%.3f) dx=%.3f dy=%.3f -> button=%u\n",
+                  millis(), start.x, start.y, end.x, end.y, dx, dy, button);
     addVirtualClick(button, virtualPressedEvents, virtualReleasedEvents);
   }
 }
