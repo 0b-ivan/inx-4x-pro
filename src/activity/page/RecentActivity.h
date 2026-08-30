@@ -58,6 +58,7 @@ class RecentActivity final : public Activity, public Menu {
   static constexpr int LIST_VISIBLE_ITEMS = 5;
 
   bool skipLoopDelay() override { return true; }
+  bool handleTouchTap(int x, int y) override;
 
   /**
    * View mode enumeration for displaying recent books.
@@ -129,38 +130,15 @@ class RecentActivity final : public Activity, public Menu {
   bool processNextRecentImageCacheJob();
 
   /**
-   * Renders a single grid item with cover, title, author and progress.
-   *
-   * @param gridX Grid column index
-   * @param gridY Grid row index
-   * @param startY Starting Y coordinate for the grid
-   * @param book Book information to render
-   * @param selected Whether this item is selected
+   * Renders a single grid item with cover image or placeholder.
    */
   void renderGridItem(int gridX, int gridY, int startY, const RecentBook& book, bool selected);
-
-  /**
-   * Renders the complete grid view including all visible books.
-   *
-   * @param startY Starting Y coordinate for the grid
-   */
   void renderGrid(int startY);
-
-  /**
-   * Renders the complete grid view including all visible books.
-   *
-   * @param startY Starting Y coordinate for the grid
-   */
   void renderFlow();
-
   void renderCoverMode();
-
-  /** Book list: five rows, vertical scroll when more than five recents. */
   void renderList(int startY);
   void renderIcons(int startY);
 
-  /** If rounded thumbs on a gray dither strip/carousel, pass true so corners blend; otherwise paper-white cards use
-   * paper corners. */
   std::string resolveThumbnailPath(const std::string& cacheDir) const;
   std::string resolveCoverPath(const std::string& cacheDir) const;
   void drawRecentThumbnailAt(int x, int y, int w, int h, const std::string& cacheDir,
@@ -169,15 +147,10 @@ class RecentActivity final : public Activity, public Menu {
   void drawRecentCoverFitAt(int x, int y, int w, int h, const std::string& cacheDir,
                             const std::string& placeholderTitle, int placeholderFontId);
 
-  /** Tab-relative Y where each Recent view paints its body (keeps constants out of layout engine defs). */
   int recentGridPaintStartY() const { return mainContentTop() + 16; }
   int recentIconsPaintStartY() const { return mainContentTop() + 6; }
   int recentListPaintStartY() const { return mainContentTop(); }
 
-  /**
-   * View-mode paint strategy: one implementation per `ViewMode`, created by `makeLayoutEngine`.
-   * Nested here so `paint` can call private render helpers without friending external types.
-   */
   struct LayoutEngine {
     virtual ~LayoutEngine() = default;
     virtual void paint(RecentActivity& self) = 0;
@@ -209,17 +182,8 @@ class RecentActivity final : public Activity, public Menu {
   std::unique_ptr<LayoutEngine> layoutEngine_;
   ViewMode layoutEngineBoundMode_ = ViewMode::Flow;
 
-  /**
-   * Calculates the number of rows that can be displayed on screen at once.
-   *
-   * @return Number of visible rows based on current view mode
-   */
   int getVisibleRows() const;
 
-  /**
-   * Navigates to the selected tab when tab selector is used.
-   * Overridden from Menu.
-   */
   void navigateToSelectedMenu() override {
     if (tabSelectorIndex == 1) onLibraryOpen();
     if (tabSelectorIndex == 4) onGoToStatistics();
@@ -228,16 +192,6 @@ class RecentActivity final : public Activity, public Menu {
   ViewMode currentViewMode = ViewMode::Flow;
 
  public:
-  /**
-   * Constructs a new RecentActivity.
-   *
-   * @param renderer Graphics renderer for display output
-   * @param mappedInput Input manager for handling button presses
-   * @param onLibraryOpen Callback for opening library tab
-   * @param onGoToStatistics Callback for opening statistics tab
-   * @param onSelectBook Callback when a book is selected to open
-   * @param onGoToRecent Callback for returning to home screen
-   */
   explicit RecentActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                           const std::function<void()>& onLibraryOpen, const std::function<void()>& onGoToStatistics,
                           const std::function<void(const std::string& path)>& onSelectBook,
