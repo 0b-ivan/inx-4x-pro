@@ -144,6 +144,7 @@ class QuickSettingsDrawer {
 
   void close(const bool fullRefresh) {
     if (!open_) return;
+    frontlight.saveSettings();
     restoreSnapshot();
     renderer.displayBuffer(fullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
     releaseSnapshot();
