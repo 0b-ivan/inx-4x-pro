@@ -20,6 +20,7 @@ class Menu {
   static constexpr int TAB_COUNT = 5;
   int tabSelectorIndex = 0;
 
+ public:
   /**
    * @brief Default constructor
    */
@@ -29,6 +30,40 @@ class Menu {
    */
   virtual ~Menu() = default;
 
+  /**
+   * Route a completed screen tap against the exact tab-bar geometry drawn by
+   * UiTheme. This keeps touch semantic at the UI layer: no arbitrary touch
+   * region is converted into a directional button in the HAL.
+   */
+  bool handleTabTouch(MappedInputManager& input, const GfxRenderer& renderer) {
+    int x = 0;
+    int y = 0;
+    if (!input.wasScreenTapped(x, y)) {
+      return false;
+    }
+
+    const int tabY = INX_THEME.mainTabBarY(renderer);
+    const int tabH = INX_THEME.mainTabBarHeight();
+    if (x < 0 || x >= renderer.getScreenWidth() || y < tabY || y >= tabY + tabH) {
+      return false;
+    }
+
+    // Keep this identical to UiTheme::drawMainTabBar(). The final few pixels
+    // caused by integer division belong to the last tab rather than becoming a
+    // dead strip at the screen edge.
+    const int tabButtonWidth = (renderer.getScreenWidth() / TAB_COUNT) - 1;
+    int index = tabButtonWidth > 0 ? x / tabButtonWidth : 0;
+    if (index < 0) index = 0;
+    if (index >= TAB_COUNT) index = TAB_COUNT - 1;
+
+    if (index != tabSelectorIndex) {
+      tabSelectorIndex = index;
+      navigateToSelectedMenu();
+    }
+    return true;
+  }
+
+ protected:
   // Main-menu navigation axis (see MenuNav). Front: Left/Right tabs, Up/Down items; side: swapped.
   /**
    * @brief Returns the button mapped to the previous tab
