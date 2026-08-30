@@ -176,6 +176,33 @@ class RecentActivity::HomeMenuDrawer {
       return;
     }
 
+    // CrossPoint-style direct hit testing: the touch position is already mapped
+    // into the renderer's logical coordinate system by MappedInputManager. A
+    // drawer row is therefore a real UI target, not an artificial Up/Down zone.
+    const int rowHeight = mode_ == HomeDrawerMode::Main ? kHomeDrawerMainRowH : kHomeDrawerRowH;
+    const int visibleRows = std::min(rowsPerPage_, std::max(0, count - scroll_));
+    int touchedRow = -1;
+    const auto touch = input.rowTouch(touchedRow, drawerY_ + headerHeight() + 1, rowHeight, visibleRows, drawerX_,
+                                      drawerX_ + drawerW_, rowHeight);
+    if (touch != MappedInputManager::RowTouch::None) {
+      const int touchedIndex = scroll_ + touchedRow;
+      if (touchedIndex >= 0 && touchedIndex < count) {
+        const int oldSelected = selected_;
+        selected_ = touchedIndex;
+        if (touch == MappedInputManager::RowTouch::Down) {
+          if (oldSelected != selected_) {
+            renderSelectionChange(oldSelected, selected_);
+          }
+        } else {
+          if (oldSelected != selected_) {
+            renderSelectionChange(oldSelected, selected_);
+          }
+          activateSelected();
+        }
+      }
+      return;
+    }
+
     bool changed = false;
     const int oldSelected = selected_;
     const int oldScroll = scroll_;
@@ -546,8 +573,7 @@ class RecentActivity::HomeMenuDrawer {
   }
 
   void renderQuickDeleteConfirmOnly(const char* heading, const char* subtext) {
-    renderer_.rectangle.fill(drawerX_, drawerY_ + headerHeight() + 1, drawerW_,
-                             drawerH_ - headerHeight() - 1, false);
+    renderer_.rectangle.fill(drawerX_, drawerY_ + headerHeight() + 1, drawerW_, drawerH_ - headerHeight() - 1, false);
     renderQuickDeleteConfirm(heading, subtext);
     drawHints();
     renderer_.displayBuffer(HalDisplay::FAST_REFRESH);
@@ -706,8 +732,6 @@ class RecentActivity::HomeMenuDrawer {
     }
   }
 
-  /** Populates rows_ from the global saved-words list (just the words - loadDictionaryWords() never
-   *  touches the stored definitions, see SavedDictionaryWords.h). */
   void loadDictionaryWords() {
     rows_.clear();
     const int n = SAVED_WORDS.count();
@@ -718,20 +742,16 @@ class RecentActivity::HomeMenuDrawer {
     }
   }
 
-  /** Loads the definition exactly as it was saved (same HTML source EpubDictionaryUi looked up),
-   *  parses+lays it out once here (not per-frame - see EpubDictionaryUi's identical reasoning), and
-   *  switches to DictionaryDetail so it renders with the same bold/italic/heading formatting as the
-   *  in-reader panel instead of plain text. */
   void openDictionaryDetail(const int index) {
     dictionaryDetailWord_ = SAVED_WORDS.wordAt(index);
     const std::string definition = SAVED_WORDS.definitionAt(index);
     if (definition.empty()) {
-      std::vector<DefinitionStyledLine>().swap(dictionaryDetailLines_);  // actually release, not just clear()
+      std::vector<DefinitionStyledLine>().swap(dictionaryDetailLines_);
       detailText_ = "No definition saved.";
     } else {
       const auto blocks = parseHtmlToBlocks(definition);
       const int textWidth = renderer_.getScreenWidth() - kHomeDrawerPadX * 2;
-      dictionaryDetailLines_ = layoutDefinitionBlocks(renderer_, blocks, textWidth);  // move-assign frees old capacity
+      dictionaryDetailLines_ = layoutDefinitionBlocks(renderer_, blocks, textWidth);
       detailText_.clear();
     }
     mode_ = HomeDrawerMode::DictionaryDetail;
