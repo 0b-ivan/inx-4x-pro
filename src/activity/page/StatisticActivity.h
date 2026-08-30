@@ -104,4 +104,5 @@ class StatisticActivity final : public Activity, public Menu {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  bool handleTouchTap(int x, int y) override;
 };
