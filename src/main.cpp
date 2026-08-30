@@ -115,7 +115,7 @@ void onGoToReader(const std::string& path) {
 bool isExportedNoteImage(const std::string& path) {
   constexpr const char* root = "/Bookmarks & Annotations";
   const size_t rootLen = strlen(root);
-  const bool inRoot = path.compare(0, rootLen) == 0 && (path.size() == rootLen || path[rootLen] == '/');
+  const bool inRoot = path.compare(0, rootLen, root) == 0 && (path.size() == rootLen || path[rootLen] == '/');
   return inRoot && (StringUtils::checkFileExtension(path, ".bmp") || StringUtils::checkFileExtension(path, ".jpg") ||
                     StringUtils::checkFileExtension(path, ".jpeg") || StringUtils::checkFileExtension(path, ".png"));
 }
