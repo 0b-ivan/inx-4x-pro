@@ -8,6 +8,7 @@
 #include <EpdFontFamily.h>
 #include <HalDisplay.h>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -84,6 +85,39 @@ class GfxRenderer {
 
   int getScreenWidth() const;
   int getScreenHeight() const;
+
+  // FreeInk reports touch in normalized panel-native coordinates. Convert those
+  // coordinates through the exact inverse of rotateCoordinates() so activities
+  // always hit-test against the logical screen they actually rendered. This is
+  // the same separation used by CrossPoint: HAL owns hardware, renderer owns
+  // orientation, UI owns interaction semantics.
+  void tapToLogical(float nx, float ny, int& outX, int& outY) const {
+    int phyX = static_cast<int>(nx * panelWidth);
+    int phyY = static_cast<int>(ny * panelHeight);
+    phyX = std::max(0, std::min(phyX, static_cast<int>(panelWidth) - 1));
+    phyY = std::max(0, std::min(phyY, static_cast<int>(panelHeight) - 1));
+
+    switch (orientation) {
+      case Portrait:
+        outX = panelHeight - 1 - phyY;
+        outY = phyX;
+        break;
+      case PortraitInverted:
+        outX = phyY;
+        outY = panelWidth - 1 - phyX;
+        break;
+      case LandscapeClockwise:
+        outX = panelWidth - 1 - phyX;
+        outY = panelHeight - 1 - phyY;
+        break;
+      case LandscapeCounterClockwise:
+      default:
+        outX = phyX;
+        outY = phyY;
+        break;
+    }
+  }
+
   void displayBuffer(const HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
