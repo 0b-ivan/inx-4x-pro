@@ -3,11 +3,17 @@ name: Compile X4 Pro Release
 on:
   push:
     tags:
-      - '*'
+      - 'v*'
+
+concurrency:
+  group: x4pro-release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
       - uses: actions/checkout@v6
         with:
@@ -27,12 +33,33 @@ jobs:
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
+      - name: Validate safety scripts
+        run: |
+          python -m py_compile scripts/x4pro_inspect.py
+          python -m py_compile scripts/refuse_x4pro_upload.py
+
       - name: Build X4 Pro application
         run: pio run -e gh_release
 
+      - name: Validate application artifact
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          firmware = Path('.pio/build/gh_release/firmware.bin')
+          if not firmware.is_file():
+              raise SystemExit('firmware.bin missing')
+
+          size = firmware.stat().st_size
+          limit = 0x640000
+          print(f'firmware.bin: {size} bytes; conservative limit: {limit} bytes')
+          if size > limit:
+              raise SystemExit('firmware.bin exceeds conservative OTA slot limit')
+          PY
+
       # SAFETY: never publish bootloader.bin or partitions.bin for the port.
-      # The first hardware-test procedure must preserve the live factory boot
-      # region and write only firmware.bin to a validated inactive OTA app slot.
+      # First-device testing must preserve the live factory boot region and write
+      # only firmware.bin to a validated inactive OTA application slot.
       - name: Upload application-only artifacts
         uses: actions/upload-artifact@v4
         with:
