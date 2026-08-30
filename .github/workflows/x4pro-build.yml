@@ -4,9 +4,15 @@ on:
   push:
     branches: [x4pro-port]
 
+concurrency:
+  group: x4pro-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   x4pro:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
       - uses: actions/checkout@v6
         with:
@@ -19,8 +25,32 @@ jobs:
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
+      - name: Validate safety scripts
+        run: |
+          python -m py_compile scripts/x4pro_inspect.py
+          python -m py_compile scripts/refuse_x4pro_upload.py
+
       - name: Build X4 Pro application
         run: pio run -e x4pro
+
+      - name: Validate application artifact
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          firmware = Path('.pio/build/x4pro/firmware.bin')
+          if not firmware.is_file():
+              raise SystemExit('firmware.bin missing')
+
+          size = firmware.stat().st_size
+          # Conservative ceiling: the smaller 0x640000 OTA slot used by the
+          # current development partition table. The real device layout is read
+          # separately before flashing and may provide larger slots.
+          limit = 0x640000
+          print(f'firmware.bin: {size} bytes; conservative limit: {limit} bytes')
+          if size > limit:
+              raise SystemExit('firmware.bin exceeds conservative OTA slot limit')
+          PY
 
       - name: Upload application-only artifact
         if: success()
