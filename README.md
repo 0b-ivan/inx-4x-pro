@@ -1,333 +1,248 @@
-# Inx
+# Inx for Xteink X4 Pro
 
-Reimagined. Improved. Simplified.
+Experimental port of [Inx](https://github.com/obijuankenobiii/inx) to the **Xteink X4 Pro**.
 
-Inx is a community firmware for Xteink e-paper readers. It is focused on a cleaner reading experience, better EPUB support, native image rendering, SD-card fonts, and practical device tools.
+> [!WARNING]
+> **Do not flash the current alpha build yet.**
+> The firmware builds successfully for ESP32-S3, but the first real-device flash is deliberately gated behind a read-only hardware inspection and a complete flash backup.
 
-*This project is a fork of CrossPoint and is not affiliated with Xteink.*
+This fork targets the X4 Pro specifically:
 
----
+- ESP32-S3
+- 16 MiB flash
+- 8 MiB PSRAM
+- 800x480 e-paper display
+- GT911 capacitive touch
+- two physical navigation keys
+- capacitive Home key
+- 1-bit SDMMC microSD
+- CW2017 battery gauge
+- warm/cold frontlight hardware
 
-![](./docs/images/cover.jpg)
+Hardware definitions come from the pinned **FreeInk** X4 Pro board profile instead of hard-coded GPIO numbers in Inx.
 
-## What You Can Do
+## Project status
 
-- Read **EPUB**, **XTC / XTCH**, **TXT**, and **MD** files.
-- Browse books from **Recent**, **Library**, **Settings**, **File Transfer**, and **Statistics** tabs.
-- Use EPUB features such as bookmarks, annotations, dictionary lookup, go-to-percent, table of contents, footnotes, per-book settings, and KOReader sync.
-- Render **JPEG**, **PNG**, and **BMP** images directly.
-- Use **1-bit** or **2-bit** image rendering.
-- Cache rendered images and system data for faster repeat loads.
-- Use custom sleep screens, recent-book sleep screens, transparent cover sleep screens, or date/time sleep screens on supported devices.
-- Install reader fonts from the SD card instead of baking large fonts into firmware.
-- Connect to Wi-Fi, Calibre, OPDS catalogs, KOReader sync, and the local web file manager.
-- Tune reader layout, buttons, fonts, status bar, refresh behavior, image quality, and display options.
+| Area | Status |
+| --- | --- |
+| ESP32-S3 build | ✅ builds in CI |
+| FreeInk X4 Pro board profile | ✅ integrated |
+| Display controller detection | ✅ integrated |
+| PSRAM | ✅ build configured |
+| SDMMC | ✅ backend integrated |
+| Physical side buttons | ✅ mapped |
+| GT911 touch | 🧪 compatibility mapping |
+| Capacitive Home key | 🧪 mapped to Back |
+| Battery | 🧪 backend integrated, hardware validation pending |
+| Deep sleep / wake | 🧪 backend integrated, hardware validation pending |
+| Frontlight UI | ❌ not integrated yet |
+| RTC UI/integration | ❌ not integrated yet |
+| Inx OTA updater | 🔒 disabled intentionally |
+| Generic PlatformIO upload | 🔒 blocked intentionally |
+| First hardware flash | ⛔ not approved yet |
 
-## Main Features
+## Safety model
 
-### Reader
+The X4 Pro has flash memory containing much more than the Inx application. A careless full-device flash can overwrite the bootloader, partition table, factory calibration or the only known-good application.
 
-- EPUB paging with saved progress.
-- EPUB layout support for tables, drop caps, borders, images, lists, blockquotes, superscript/subscript, and common CSS spacing/alignment.
-- EPUB text annotation and highlight support.
-- EPUB dictionary lookup using StarDict dictionaries stored on the SD card.
-- EPUB bookmarks.
-- Go to a specific percentage in an EPUB.
-- Table of contents, bookmark, annotation, and footnote navigation from the in-book menu.
-- EPUB menu tools for deleting cache/progress, deleting a book, generating full data, and regenerating thumbnails.
-- Per-book reader settings and reader presets.
-- Reading statistics.
-- KOReader sync support.
-- TXT / MD reader.
-- XTC / XTCH reader with chapter selection.
-- Auto page turn support for EPUB and XTC reading.
+For this port the rules are therefore:
 
-### Images
+1. **Never erase the complete flash for a normal test.**
+2. **Never overwrite the bootloader.**
+3. **Never overwrite the live partition table.**
+4. **Never erase NVS or `otadata` during a normal test.**
+5. **Never use `pio run -t upload`.** The project blocks this on purpose.
+6. **Never use the upstream Inx OTA updater on the X4 Pro.** It is compiled out.
+7. Before the first write, read the real device partition table.
+8. Before the first write, create a complete 16 MiB flash backup and SHA-256 checksum.
+9. First testing must write only an **inactive OTA application slot**.
+10. Keep the known-good application slot intact until Inx has passed boot, display, input, SD, sleep and restart tests.
 
-- Native JPEG rendering.
-- Native PNG rendering.
-- BMP rendering.
-- 1-bit and 2-bit image modes.
-- Low, medium, and high image quality options for reader images.
-- Low, medium, and high sleep image quality options.
-- Display cache for faster repeated image draws.
-- Improved image scaling and dithering.
-- Cover, thumbnail, and sleep-screen rendering options.
-- Thumbnail generation for EPUB and XTC books.
+The detailed explanation is in [`docs/X4PRO_FLASHING_GUIDE.md`](docs/X4PRO_FLASHING_GUIDE.md).
 
-### Library
+Technical port status is documented in [`docs/X4PRO_PORT.md`](docs/X4PRO_PORT.md).
 
-- Recent books page.
-- Folder-based library browser.
-- Flat all-books view.
-- Cover shelf view for EPUB and XTC books.
-- Tag view when the library index is enabled.
-- Favorites.
-- Sort options by title, group/folder, reading state, and tag.
-- Optional indexed library mode for faster browsing and tag management.
-- List and grid library modes.
+## Why an inactive OTA slot?
 
-### Display
-
-- Text anti-aliasing.
-- Configurable refresh frequency.
-- Optional half refresh when opening main tabs.
-- Sleep screen modes:
-  - Dark
-  - Light
-  - Custom image
-  - Recent book
-  - Transparent cover
-  - None
-  - Date/time on supported devices
-- Custom sleep images from `/sleep/`, `/sleep.bmp`, `/sleep.jpg`, or `/sleep.jpeg`.
-
-### Sync & Network
-
-- Join Wi-Fi networks.
-- Create a hotspot.
-- Connect to Calibre.
-- Browse OPDS catalogs.
-- Use KOReader sync.
-- Upload files through the local web interface.
-
-### Settings
-
-Settings are split into simple **System** and **Reader** panels.
-
-System settings include:
-
-- Sleep screen.
-- Sleep image picker.
-- Recent page mode.
-- Library mode.
-- Button layout.
-- Power button behavior.
-- Time to sleep.
-- Library indexing.
-- Library custom sort.
-- Cache clearing.
-- Thumbnail generation.
-- KOReader, OPDS, Calibre, and OTA update tools.
-- About page with device memory information.
-
-Reader settings include:
-
-- Font family and size.
-- SD-card font families.
-- Line height and word spacing.
-- Screen margins.
-- Paragraph alignment.
-- CSS indentation.
-- Reading orientation.
-- Hyphenation.
-- Bionic Reading.
-- Page navigation mapping.
-- Long-press chapter or page skipping.
-- Auto page turn.
-- Text anti-aliasing.
-- Image grayscale / 2-bit rendering.
-- Smart refresh on image-heavy pages.
-- Status bar layout.
-
-## Web Interface
-
-The local web interface includes:
-
-- **Dashboard**: device status, IP address, Wi-Fi strength, memory, uptime, and quick links.
-- **Files**: browse folders, upload files, create folders, delete files, upload cover art to `/sleep`, and set folder thumbnails.
-- **Epub**: drag-and-drop EPUB imports, folder creation, JPEG optimization, optional packaged device thumbnails, and import progress.
-- **Tags**: create reusable tags and assign them to indexed books.
-- **Fonts**: build SD-card font packs from TTF/OTF files and upload them to `/fonts`.
-- **Settings**: edit system settings, reader settings, Wi-Fi networks, KOReader settings, and OPDS servers.
-
-## Dictionary
-
-Inx supports EPUB dictionary lookup with StarDict dictionaries stored on the SD card.
-
-You can download a ready-to-use dictionary pack here:
-
-[Download dictionary pack](https://drive.google.com/file/d/1N7aUdO93xyO8Cvgr_u2sX5-dJ_a-piCK/view?usp=sharing)
-
-To install a dictionary:
-
-1. Download and extract the dictionary pack.
-2. Copy the extracted dictionary folder to `/dictionaries/` on the SD card.
-3. Make sure the dictionary folder directly contains `.ifo`, `.idx`, and `.dict` files.
-4. On the device, open **Sync/Device Management page -> Choose dictionary** and select the dictionary.
-
-Example SD-card layout:
+A simplified X4 Pro flash layout looks conceptually like this:
 
 ```text
-/dictionaries/
-  English/
-    dictionary.ifo
-    dictionary.idx
-    dictionary.dict
+ESP32-S3 flash
+
++----------------------------+
+| Bootloader                 |  keep
++----------------------------+
+| Partition table            |  keep
++----------------------------+
+| NVS / device data          |  keep
++----------------------------+
+| OTA metadata               |  keep
++----------------------------+
+| Application slot A         |  known-good firmware
++----------------------------+
+| Application slot B         |  experimental Inx
++----------------------------+
+| Other device data          |  keep
++----------------------------+
 ```
 
-Only uncompressed `.dict` files are supported. Compressed `.dict.dz` dictionaries are not supported/must be uncompressed.
+The exact offsets are **not assumed**. They are read from the physical device before the first test.
 
-## Fonts
-
-Inx includes built-in **Literata** and **Atkinson Hyperlegible** reader fonts.
-
-You can also install fonts on the SD card:
-
-```text
-/fonts/
-  MyFont/
-    Regular_10.bin
-    Regular_12.bin
-    Regular_14.bin
-    Bold_14.bin
-    Italic_14.bin
-    BoldItalic_14.bin
-```
-
-The web font manager converts TTF/OTF files into the `.bin` format used by the reader. Regular is required; bold, italic, and bold italic are optional.
-
-## Custom Sleep Images
-
-Put sleep images on the SD card:
-
-```text
-/sleep/
-  image1.bmp
-  image2.jpg
-  image3.png
-
-/sleep.bmp
-/sleep.jpg
-/sleep.jpeg
-```
-
-You can choose a fixed sleep image from settings, or let the device pick one randomly.
-
-## Cache
-
-Inx uses SD-card cache files to save RAM and speed up repeated work.
-
-Main cache locations:
-
-```text
-/.metadata/       EPUB metadata, layout, progress, stats, annotations
-/.metadata/xtc/   XTC / XTCH metadata and progress
-/.system/cache/   Display and image cache
-/.system/         Settings, TXT cache, and system data
-/fonts/           SD-card reader fonts
-/dictionaries/    StarDict dictionaries for EPUB lookup
-/sleep/           Custom sleep images
-```
-
-You can clear cache from **Settings -> Actions -> Delete Cache**.
-
-Deleting `/.metadata` will force EPUB layout data to be rebuilt.
-
-## Installing
-
-### Web Flash
-
-1. Connect your Xteink device to your computer with USB-C.
-2. Download `firmware.bin` from the [releases page](https://github.com/obijuankenobiii/inx/releases).
-3. Open [xteink.dve.al](https://xteink.dve.al/).
-4. Flash the firmware using the OTA fast flash controls.
-
-To return to the official firmware, flash the latest official firmware from [xteink.dve.al](https://xteink.dve.al/) or use the debug page to swap boot partitions.
-
-## Development
+## Build
 
 ### Requirements
 
-- PlatformIO Core (`pio`) or VS Code with PlatformIO.
-- Python 3.8 or newer.
-- USB-C cable.
-- SDL2 for simulator builds.
+- macOS, Linux or Windows
+- Python 3
+- PlatformIO Core
+- Git
 
-### Clone
+On macOS:
 
-```sh
-git clone --recursive https://github.com/obijuankenobiii/inx
-cd inx
+```bash
+python3 -m pip install --upgrade platformio esptool
 ```
 
-If you already cloned without submodules:
+Clone the port branch including submodules:
 
-```sh
+```bash
+git clone --recursive https://github.com/0b-ivan/inx-4x-pro.git
+cd inx-4x-pro
+git checkout x4pro-port
 git submodule update --init --recursive
 ```
 
-### Build
+Build:
 
-```sh
-pio run
+```bash
+pio run -e x4pro
 ```
 
-### Flash
+Application image:
 
-```sh
-pio run --target upload
+```text
+.pio/build/x4pro/firmware.bin
 ```
 
-### Web Assets
+A successful build means only that the program can be compiled for the ESP32-S3 target. It is **not** permission to flash it.
 
-The firmware embeds the HTML and JS from `src/network/html` and `data/js`.
+## Read-only hardware preflight
 
-```sh
-python3 scripts/build_html.py
+Before any write to the X4 Pro, connect it over USB and identify the serial port.
+
+macOS:
+
+```bash
+ls /dev/cu.*
 ```
 
-`pio run` also regenerates these files before compiling.
+Then run:
 
-### Simulator
+```bash
+python3 scripts/x4pro_inspect.py \
+  --port /dev/cu.usbmodemXXXX \
+  --firmware .pio/build/x4pro/firmware.bin \
+  --backup
+```
 
-Inx includes two native simulator targets based on the CrossPoint simulator.
+The inspector intentionally contains **no flash write, erase or boot-selection command**. It:
 
-For the full SDL/device UI simulator:
+- verifies that the connected MCU is an ESP32-S3;
+- reads the live partition table from flash;
+- validates that multiple OTA application slots exist;
+- checks that `firmware.bin` fits those slots;
+- optionally reads the complete 16 MiB flash;
+- creates a SHA-256 checksum of that backup.
 
-```sh
+Expected backup files:
+
+```text
+x4pro-preflight/
+├── partition-table.bin
+├── x4pro-full-16mb.bin
+└── x4pro-full-16mb.bin.sha256
+```
+
+**Stop after this step for the first device.** The actual inactive-slot write procedure will only be documented as approved after the real partition layout and recovery path have been validated.
+
+## Input mapping during the port
+
+Inx is currently button-oriented. The X4 Pro has only two discrete navigation buttons plus GT911 touch, so the HAL temporarily maps the hardware into the existing Inx input model:
+
+| X4 Pro input | Inx action |
+| --- | --- |
+| side key 1 | Up / previous |
+| side key 2 | Down / next |
+| screen tap | Confirm |
+| capacitive Home tap | Back |
+| horizontal swipe | Left / Right |
+| power button | Power |
+
+Native touch hit-testing is planned later.
+
+## What will be tested on the first real boot?
+
+The first hardware test is intentionally boring. We are not testing every Inx feature at once.
+
+```text
+[ ] ESP32-S3 boots the experimental application
+[ ] serial log remains available
+[ ] e-paper controller is detected
+[ ] display initializes without BUSY lockup
+[ ] screen orientation is correct
+[ ] side buttons work
+[ ] touch tap works
+[ ] Home key works
+[ ] horizontal swipe works
+[ ] SD card mounts
+[ ] EPUB can be opened
+[ ] battery value is plausible
+[ ] sleep works
+[ ] power-button wake works
+[ ] restart works
+[ ] known-good OTA slot remains recoverable
+```
+
+Only after those tests pass do we expand hardware features such as frontlight and RTC integration.
+
+## Inx features
+
+The port keeps the Inx application layer, including EPUB/TXT/Markdown reading, library browsing, bookmarks, annotations, dictionary lookup, KOReader sync, OPDS, Calibre integration, image rendering, SD-card fonts, sleep screens, statistics and the local web interface.
+
+Some features can remain temporarily unavailable while the X4 Pro hardware layer is being validated.
+
+## Development
+
+Useful targets:
+
+```bash
+# X4 Pro firmware
+pio run -e x4pro
+
+# SDL simulator
 CROSSPOINT_SIM_SD=./fs_ pio run -e simulator -t run_simulator
-```
 
-For dashboard-only testing:
-
-```sh
+# web-only simulator
 CROSSPOINT_SIM_SD=./fs_ pio run -e simulator_web -t run_simulator
 ```
 
-The simulator stores its SD-card data in the folder passed through `CROSSPOINT_SIM_SD`. The firmware web server is exposed at `http://127.0.0.1:8080/` when the simulated device starts a hotspot or local network server.
+### Important: upload is intentionally blocked
 
-On macOS, SDL2 is required:
+This is expected to fail:
 
-```sh
-brew install sdl2
+```bash
+pio run -e x4pro -t upload
 ```
 
-For more simulator details, see the [CrossPoint simulator project](https://github.com/crosspoint-reader/crosspoint-simulator).
+That failure is a safety feature, not a bug.
 
-### Serial Debugging
+## Documentation
 
-Install the monitor dependencies:
+- [`docs/X4PRO_FLASHING_GUIDE.md`](docs/X4PRO_FLASHING_GUIDE.md) — beginner-friendly explanation of bootloader, partitions, OTA slots, backup, flashing, rollback and the planned first test.
+- [`docs/X4PRO_PORT.md`](docs/X4PRO_PORT.md) — technical implementation status and port constraints.
 
-```sh
-python3 -m pip install pyserial colorama matplotlib
-```
+## Upstream
 
-Run the monitor:
+This repository is based on Inx and uses FreeInk hardware support for the Xteink X4 Pro.
 
-```sh
-# Linux
-python3 scripts/debugging_monitor.py
-
-# macOS example
-python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101
-```
-
-## Contributing
-
-Contributions are welcome.
-
-1. Fork the repository.
-2. Create a branch.
-3. Make your changes.
-4. Open a pull request.
+It is a community project and is not affiliated with Xteink.
