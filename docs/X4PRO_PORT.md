@@ -1,13 +1,13 @@
 # Inx X4 Pro port — technical status
 
 > [!WARNING]
-> **Experimental. The current alpha is not yet approved for hardware flashing.**
+> **Experimental. Hardware testing is allowed only through the guarded inactive-slot workflow documented in this repository. Generic flashing remains unsafe.**
 
 For a beginner-friendly explanation of bootloaders, partitions, OTA slots, backups and the planned first hardware test, read [`X4PRO_FLASHING_GUIDE.md`](X4PRO_FLASHING_GUIDE.md).
 
 ## Goal
 
-Port Inx 1.0.19 from the original Xteink hardware target to the **Xteink X4 Pro** while keeping the first hardware test reversible.
+Port Inx 1.0.19 from the original Xteink hardware target to the **Xteink X4 Pro** while keeping hardware tests reversible.
 
 The port targets:
 
@@ -74,18 +74,45 @@ The current Inx HAL maps unsupported legacy refresh modes conservatively onto Fr
 
 Inx 1.0.19 expects a button-oriented device. The X4 Pro has two discrete navigation buttons plus GT911 touch and a capacitive Home key.
 
-Temporary mapping:
+Current temporary mapping:
 
 | Physical/Touch input | Inx logical action |
 | --- | --- |
-| first side key | Up / previous |
-| second side key | Down / next |
-| screen tap | Confirm |
-| capacitive Home tap | Back |
-| horizontal swipe | Left / Right |
+| left side key | Up / previous |
+| right side key | Down / next |
+| bottom-left touch zone | Back / Menu |
+| bottom-right touch zone | Confirm / Open |
+| left touch edge | Left |
+| right touch edge | Right |
+| upper touch zone | Up |
+| lower touch zone | Down |
+| center touch zone | Confirm |
+| horizontal swipe | Left / Right content navigation |
+| vertical swipe | Up / Down list navigation |
+| capacitive Home tap | Back / Menu |
 | power button | Power |
 
 This is intentionally a compatibility bridge, not the final touch UI.
+
+### Touch orientation — physically confirmed
+
+FreeInk exposes GT911 positions normalized in the panel-native landscape frame. Inx renders its default UI in logical portrait orientation. The compatibility bridge therefore uses:
+
+```text
+portraitX = 1 - panelY
+portraitY = panelX
+```
+
+A four-corner test on the physical X4 Pro confirmed that this transform is correct with the currently pinned FreeInk profile:
+
+| Physical corner | Panel-native log | Inx portrait result |
+| --- | --- | --- |
+| top-left | `(0.023, 0.956)` | `(0.044, 0.023)` |
+| top-right | `(0.033, 0.023)` | `(0.977, 0.033)` |
+| bottom-left | `(0.972, 0.916)` | `(0.084, 0.972)` |
+| bottom-right | `(0.972, 0.061)` | `(0.939, 0.972)` |
+
+The tested unit therefore requires **no additional app-layer X/Y flip** beyond the existing axis swap/orientation transform. If the FreeInk board profile changes later, repeat the corner test before changing this mapping.
 
 ## SD card
 
@@ -111,7 +138,7 @@ Legacy C3/X3 GPIO sleep code has been removed from the X4-Pro HAL path.
 
 The port delegates rail shutdown and deep-sleep wake configuration to FreeInk `PowerManager`.
 
-This code compiles, but actual sleep/wake behavior is part of the first-device validation checklist.
+Basic sleep/wake behavior has been observed on the test device: USB-Serial/JTAG disappears while sleeping and re-enumerates after a physical power-button wake. More deliberate sleep-duration and wake-source testing is still required.
 
 ## OTA is disabled
 
@@ -127,20 +154,19 @@ Both online and SD-card firmware installation remain disabled until there is an 
 
 ## No-brick policy
 
-Until first-flash and recovery are validated on real hardware:
-
-1. never overwrite the bootloader;
+1. never overwrite the bootloader during normal testing;
 2. never overwrite the live partition table;
 3. never erase the whole flash;
 4. never erase NVS during a normal test;
-5. never blindly modify `otadata`;
+5. modify `otadata` only through the guarded boot-slot helper;
 6. never use generic PlatformIO upload;
 7. never use upstream Inx OTA installation;
 8. inspect the live device before writing;
 9. create and checksum a full 16 MiB backup;
 10. keep the known-good application slot intact;
-11. write only the verified inactive OTA application slot during the first test;
-12. verify the written bytes before changing boot selection.
+11. write only the verified inactive OTA application slot;
+12. verify written bytes before changing boot selection;
+13. restore the factory otadata sector from the verified backup when rolling back to app1.
 
 ## Read-only preflight
 
@@ -170,7 +196,7 @@ The inspector contains no write/erase/boot-selection command. It:
 - optionally reads all 16 MiB of flash;
 - writes a SHA-256 digest for the backup.
 
-A successful preflight is **not** automatically a flash approval. We must additionally identify the active slot and validate the recovery path.
+A successful preflight is **not** automatically a flash approval. The guarded stage and boot-slot scripts additionally validate active/inactive slots, security state, backup consistency and post-write readback.
 
 ## CI expectations
 
@@ -182,60 +208,62 @@ Runs static analysis, formatting checks and the default firmware build on pull r
 
 ### `X4 Pro Build`
 
-Runs the focused ESP32-S3 build for `x4pro-port` and uploads only application/debug artifacts:
+Runs the focused ESP32-S3 build for `x4pro-port` and uploads the application image.
+
+Installable release assets must not publish `bootloader.bin` or `partitions.bin` for the X4 Pro.
+
+## Hardware-test gate
+
+Confirmed on the current test device:
 
 ```text
-firmware.bin
-firmware.elf
-firmware.map
+[x] connected MCU identifies as ESP32-S3
+[x] live partition table parsed successfully
+[x] two OTA app slots found
+[x] firmware fits the inactive target slot
+[x] active/inactive slots identified
+[x] complete 16 MiB flash backup created and SHA-256 verified
+[x] Secure Boot disabled
+[x] Flash Encryption disabled
+[x] manual GPIO0 ROM recovery access validated
+[x] original app1 kept untouched as rescue slot
+[x] staged app0 image read back and SHA-256 verified
+[x] guarded app1 -> app0 selection validated
+[x] guarded app0 -> factory app1 rollback validated
+[x] test firmware boots and renders on the physical panel
+[x] GT911 corner calibration validated
 ```
 
-It must not publish `bootloader.bin` or `partitions.bin` as installable artifacts.
-
-## First hardware test gate
-
-No write should happen until all boxes below are satisfied:
+## Hardware validation order
 
 ```text
-[ ] CI green
-[ ] X4 Pro build green
-[ ] connected MCU identifies as ESP32-S3
-[ ] live partition table parsed successfully
-[ ] at least two OTA app slots found
-[ ] firmware fits the target slot
-[ ] active slot identified
-[ ] inactive test slot identified
-[ ] complete 16 MiB flash backup created
-[ ] backup SHA-256 recorded and verified
-[ ] USB recovery access validated
-[ ] known-good app slot remains untouched
-```
-
-## First boot test order
-
-```text
-[ ] boot / serial log
-[ ] display-controller detection
-[ ] E-Ink initialization
-[ ] orientation
-[ ] physical side buttons
-[ ] touch tap
-[ ] Home key
-[ ] horizontal swipe
-[ ] SDMMC mount
+[x] boot / serial log
+[x] display-controller detection
+[x] E-Ink initialization
+[x] portrait orientation
+[x] physical side buttons
+[x] touch tap
+[x] Home key
+[x] touch corner orientation
+[ ] horizontal swipe behavior
+[ ] vertical swipe behavior
+[ ] complete menu navigation by touch
+[ ] SDMMC mount/content behavior
 [ ] open an EPUB
-[ ] battery reading
-[ ] sleep
-[ ] wake
+[ ] battery reading accuracy
+[ ] deliberate sleep/wake cycle
 [ ] restart
-[ ] recovery to known-good slot
+[x] recovery path to known-good slot
 ```
 
 ## Remaining port work
 
-- validate the complete current HAL on physical X4 Pro hardware;
-- integrate native touch hit-testing instead of compatibility button synthesis;
+- replace compatibility button synthesis with native touch hit-testing where useful;
+- validate four-direction swipe behavior on physical hardware;
+- investigate missing `/.metadata/books.bin` and `.system/statistics.bin` files during empty-storage startup;
+- validate SDMMC mount and book discovery;
 - integrate frontlight controls into the Inx UI;
 - integrate RTC support;
-- define and test a board-specific safe OTA format;
-- automate inactive-slot detection and post-write verification only after the first manual recovery procedure is proven.
+- validate battery/charging telemetry;
+- harden sleep/wake behavior;
+- define and test a board-specific safe OTA format.
