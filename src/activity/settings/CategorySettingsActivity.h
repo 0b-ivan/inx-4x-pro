@@ -9,6 +9,7 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
+#include <algorithm>
 #include <array>
 #include <functional>
 #include <string>
@@ -44,9 +45,7 @@ struct ValueRange {
   uint8_t max;
   uint8_t step;
 
-  /** Constructs a zeroed value range. */
   ValueRange() : min(0), max(0), step(0) {}
-  /** Constructs a value range with the given min, max, and step. */
   ValueRange(uint8_t minVal, uint8_t maxVal, uint8_t stepVal) : min(minVal), max(maxVal), step(stepVal) {}
 };
 
@@ -59,29 +58,23 @@ struct SettingInfo {
   ValueRange valueRange;
   GroupType group;
 
-  /** Constructs an empty separator-typed setting info. */
   SettingInfo()
       : name(nullptr), type(SettingType::SEPARATOR), valuePtr(nullptr), valueRange(), group(GroupType::NONE) {}
 
-  /** Constructs a setting info with a name, type, backing member pointer, and group. */
   SettingInfo(const char* n, SettingType t, uint8_t SystemSetting::* ptr, GroupType g)
       : name(n), type(t), valuePtr(ptr), valueRange(), group(g) {}
 
-  /** Constructs a setting info with enum option values. */
   SettingInfo(const char* n, SettingType t, uint8_t SystemSetting::* ptr, const std::vector<std::string>& values,
               GroupType g)
       : name(n), type(t), valuePtr(ptr), enumValues(values), valueRange(), group(g) {}
 
-  /** Constructs a setting info with enum labels and explicit stored values. */
   SettingInfo(const char* n, SettingType t, uint8_t SystemSetting::* ptr, const std::vector<std::string>& values,
               const std::vector<uint8_t>& optionValues, GroupType g)
       : name(n), type(t), valuePtr(ptr), enumValues(values), enumOptionValues(optionValues), valueRange(), group(g) {}
 
-  /** Constructs a setting info with a numeric value range. */
   SettingInfo(const char* n, SettingType t, uint8_t SystemSetting::* ptr, const ValueRange& range, GroupType g)
       : name(n), type(t), valuePtr(ptr), valueRange(range), group(g) {}
 
-  /** Creates a toggle-type setting info bound to a boolean member. */
   static SettingInfo Toggle(const char* name, uint8_t SystemSetting::* ptr, GroupType group = GroupType::NONE) {
     SettingInfo info;
     info.name = name;
@@ -92,7 +85,6 @@ struct SettingInfo {
     return info;
   }
 
-  /** Creates an enum-type setting info bound to a member with a list of option labels. */
   static SettingInfo Enum(const char* name, uint8_t SystemSetting::* ptr, const std::vector<std::string>& values,
                           GroupType group = GroupType::NONE) {
     SettingInfo info;
@@ -105,7 +97,6 @@ struct SettingInfo {
     return info;
   }
 
-  /** Creates an enum setting whose option indexes map to explicit stored values. */
   static SettingInfo Enum(const char* name, uint8_t SystemSetting::* ptr, const std::vector<std::string>& values,
                           const std::vector<uint8_t>& optionValues, GroupType group = GroupType::NONE) {
     SettingInfo info;
@@ -119,7 +110,6 @@ struct SettingInfo {
     return info;
   }
 
-  /** Creates an action-type setting info that triggers a handler when selected. */
   static SettingInfo Action(const char* name, GroupType group = GroupType::NONE) {
     SettingInfo info;
     info.name = name;
@@ -130,7 +120,6 @@ struct SettingInfo {
     return info;
   }
 
-  /** Creates a numeric value-type setting info bound to a member with a min/max/step range. */
   static SettingInfo Value(const char* name, uint8_t SystemSetting::* ptr, const ValueRange& valueRange,
                            GroupType group = GroupType::NONE) {
     SettingInfo info;
@@ -142,7 +131,6 @@ struct SettingInfo {
     return info;
   }
 
-  /** Creates a separator row used to divide and expand/collapse a group. */
   static SettingInfo Separator(const char* name, GroupType group) {
     SettingInfo info;
     info.name = name;
@@ -152,7 +140,6 @@ struct SettingInfo {
     return info;
   }
 
-  /** Read-only row; `value` is shown on the right (e.g. firmware version). */
   static SettingInfo Info(const char* name, const char* value, GroupType group = GroupType::NONE) {
     SettingInfo info;
     info.name = name;
@@ -167,8 +154,6 @@ struct SettingInfo {
 extern const int LIST_ITEM_HEIGHT;
 
 class CategorySettingsActivity final : public ActivityWithSubactivity, public Menu {
-  // In bottom-tabs mode, the tab bar sits at the screen bottom where the classic button-hints row normally
-  // goes, so that row is redrawn just above the tab bar instead (see render()). This reserves that space.
   static constexpr int kBottomButtonHintsHeight = 50;
 
   TaskHandle_t displayTaskHandle = nullptr;
@@ -216,42 +201,24 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
   std::vector<std::string> selectorValues;
   std::array<bool, kGroupCount> groupExpanded_{};
 
-  /** FreeRTOS task entry point that forwards to displayTaskLoop. */
   static void taskTrampoline(void* param);
-  /** Background task loop that redraws the menu when required. */
   void displayTaskLoop();
-  /** Draws the category settings screen, including any open selector overlay. */
   void render();
-  /** Rebuilds the flattened menu item list based on current group expansion state. */
   void setupMenu();
-  /** Applies a delta change to the currently selected menu item. */
   void applyChange(int delta);
-  /** Opens the value/enum picker overlay for the currently selected item. */
   void openSelectorForSelected();
-  /** Opens the sleep image picker overlay populated from the sleep image index. */
   void openSleepImageSelector();
-  /** Rebuilds the on-disk sleep image index from files under /sleep. */
   bool rebuildSleepImageIndex();
-  /** Loads the sleep image index rows into the selector option lists. */
   void loadSleepImageIndexRows();
-  /** Applies the currently selected sleep image option to settings. */
   void applySleepImageSelection();
-  /** Moves the selector highlight by delta rows, wrapping and scrolling as needed. */
   void moveSelector(int delta);
-  /** Moves the selector highlight by whole pages. */
   void selectorPage(int delta);
-  /** Closes the selector overlay, optionally saving the chosen option. */
   void closeSelector(bool save);
-  /** Draws the value/enum/sleep-image selector overlay. */
   void renderSelectorOverlay();
-  /** Returns the option index corresponding to the entry's current value. */
   int selectedOptionIndex(const MenuEntry& entry) const;
-  /** Applies the chosen option index to the entry's backing setting. */
   void applySelectedOption(MenuEntry& entry, int optionIndex);
-  /** Toggles expansion state of a settings group. */
   void toggleGroup(GroupType group);
 
-  /** Handles tab-bar navigation to another top-level activity. */
   void navigateToSelectedMenu() override;
 
  public:
@@ -287,6 +254,74 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
 
     groupExpanded_.fill(false);
   }
+
+  bool handleTouchTap(const int x, const int y) override {
+    if (subActivity) {
+      return subActivity->handleTouchTap(x, y);
+    }
+    if (x < 0 || x >= renderer.getScreenWidth() || y < 0 || y >= renderer.getScreenHeight()) {
+      return false;
+    }
+
+    // Selector overlay: tapping a visible option selects and confirms it.
+    if (selectorOpen && !selectorOptions.empty()) {
+      constexpr int rowHeight = UiTheme::DRAWER_LIST_ITEM_HEIGHT - 4;
+      const int headerHeight = INX_THEME.drawerHeaderHeight() - 4;
+      constexpr int visibleRows = 5;
+      const int rows = std::min(visibleRows, static_cast<int>(selectorOptions.size()));
+      const int panelW = std::min(renderer.getScreenWidth() - 24, 360);
+      const int panelH = headerHeight + rows * rowHeight;
+      const int panelX = (renderer.getScreenWidth() - panelW) / 2;
+      const int panelY = std::max(mainContentTop() + 8, (renderer.getScreenHeight() - panelH) / 2);
+      const int rowsY = panelY + headerHeight;
+      if (x >= panelX && x < panelX + panelW && y >= rowsY && y < rowsY + rows * rowHeight) {
+        const int visibleRow = (y - rowsY) / rowHeight;
+        const int optionIndex = selectorScrollOffset + visibleRow;
+        if (optionIndex >= 0 && optionIndex < static_cast<int>(selectorOptions.size())) {
+          selectorSelectedIndex = optionIndex;
+          closeSelector(true);
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // Settings list: use exactly the row placement from render(), including
+    // invisible blank separators. A tap directly invokes the row's normal
+    // Confirm action instead of synthesizing a hardware button.
+    const int startY = mainContentTop() + mainHeaderHeight();
+    constexpr int itemHeight = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
+    int visibleCount = 0;
+    for (int i = 0; i < itemsPerPage && (i + scrollOffset) < static_cast<int>(menuItems.size()); ++i) {
+      const int index = i + scrollOffset;
+      const auto& entry = menuItems[index];
+      if (entry.type == SettingType::SEPARATOR && (entry.name == nullptr || entry.name[0] == '\0')) {
+        continue;
+      }
+      const int itemY = startY + visibleCount * itemHeight;
+      ++visibleCount;
+      if (y < itemY || y >= itemY + itemHeight) {
+        continue;
+      }
+
+      selectedIndex = index;
+      updateRequired = true;
+      if (entry.type == SettingType::SEPARATOR) {
+        toggleGroup(entry.group);
+      } else if (entry.type == SettingType::ACTION) {
+        entry.change(0);
+      } else if (entry.type == SettingType::INFO) {
+        // Read-only row: selection highlight only.
+      } else if (entry.type == SettingType::ENUM || entry.type == SettingType::VALUE) {
+        openSelectorForSelected();
+      } else {
+        applyChange(1);
+      }
+      return true;
+    }
+    return false;
+  }
+
   void onEnter() override;
   void onExit() override;
   void loop() override;
