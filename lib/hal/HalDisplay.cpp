@@ -1,23 +1,19 @@
 /**
  * @file HalDisplay.cpp
- * @brief Definitions for HalDisplay.
+ * @brief Definitions for HalDisplay on the Xteink X4 Pro.
  */
 
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 
-#define SD_SPI_MISO 7
-
-HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY) {}
+// FreeInk ignores these legacy constructor pins and resolves the real display
+// wiring from BoardConfig::ACTIVE during begin(). Passing -1 makes it explicit
+// that Inx must never own X4 Pro pin mapping itself.
+HalDisplay::HalDisplay() : einkDisplay(-1, -1, -1, -1, -1, -1) {}
 
 HalDisplay::~HalDisplay() {}
 
-void HalDisplay::begin() {
-  if (gpio.deviceIsX3()) {
-    einkDisplay.setDisplayX3();
-  }
-  einkDisplay.begin();
-}
+void HalDisplay::begin() { einkDisplay.begin(); }
 
 void HalDisplay::clearScreen(uint8_t color) const { einkDisplay.clearScreen(color); }
 
@@ -31,28 +27,21 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
     case HalDisplay::FULL_REFRESH:
       return EInkDisplay::FULL_REFRESH;
     case HalDisplay::HALF_REFRESH:
-      return EInkDisplay::HALF_REFRESH;
-    case HalDisplay::MANUAL_REFRESH:
-      return gpio.deviceIsX3() ? EInkDisplay::FAST_REFRESH : EInkDisplay::HALF_REFRESH;
     case HalDisplay::STRONG_FAST_REFRESH:
-      return EInkDisplay::STRONG_FAST_REFRESH;
+    case HalDisplay::MANUAL_REFRESH:
+      // FreeInk's current public contract is Full/Half/Fast. Map Inx's legacy
+      // stronger/manual modes to the balanced HALF waveform rather than trying
+      // to reproduce old X4-specific LUT behavior on X4 Pro panel variants.
+      return EInkDisplay::HALF_REFRESH;
     case HalDisplay::FAST_REFRESH:
     default:
       return EInkDisplay::FAST_REFRESH;
   }
 }
 
-void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode) {
-  if (mode == HalDisplay::MANUAL_REFRESH && gpio.deviceIsX3()) {
-    einkDisplay.requestResync();
-  }
-  einkDisplay.displayBuffer(convertRefreshMode(mode));
-}
+void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode) { einkDisplay.displayBuffer(convertRefreshMode(mode)); }
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
-  if (mode == HalDisplay::MANUAL_REFRESH && gpio.deviceIsX3()) {
-    einkDisplay.requestResync();
-  }
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
 
@@ -71,18 +60,16 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
 
 void HalDisplay::displayGrayBuffer(const bool quality, const bool trackForRevert) {
-  einkDisplay.displayGrayBuffer(false, nullptr, quality, trackForRevert);
+  (void)trackForRevert;
+  einkDisplay.displayGrayBuffer(false, nullptr, quality);
 }
 
-void HalDisplay::displayGrayBufferFastQuality() {
-  if (deviceIsX3()) {
-    einkDisplay.displayGrayBuffer(false, nullptr, true);
-    return;
-  }
-  einkDisplay.displayGrayBufferFastQuality(false);
-}
+void HalDisplay::displayGrayBufferFastQuality() { einkDisplay.displayGrayBuffer(false, nullptr, true); }
 
-void HalDisplay::prepareQualityGrayscale() { einkDisplay.prepareQualityGrayscale(); }
+void HalDisplay::prepareQualityGrayscale() {
+  // The legacy Inx hook was X3/X4-SDK specific. Current FreeInk drivers own
+  // their grayscale preparation; no extra X4 Pro command sequence is injected.
+}
 
 uint16_t HalDisplay::getDisplayWidth() const { return einkDisplay.getDisplayWidth(); }
 
@@ -92,4 +79,4 @@ uint16_t HalDisplay::getDisplayWidthBytes() const { return einkDisplay.getDispla
 
 uint32_t HalDisplay::getBufferSize() const { return einkDisplay.getBufferSize(); }
 
-bool HalDisplay::deviceIsX3() const { return einkDisplay.isX3(); }
+bool HalDisplay::deviceIsX3() const { return einkDisplay.isX3Mode(); }
