@@ -1,4 +1,5 @@
-name: Compile Release
+name: Compile X4 Pro Release
+
 on:
   push:
     tags:
@@ -17,7 +18,7 @@ jobs:
           path: |
             ~/.cache/pip
             ~/.platformio/.cache
-          key: ${{ runner.os }}-pio
+          key: ${{ runner.os }}-pio-x4pro
 
       - uses: actions/setup-python@v6
         with:
@@ -26,16 +27,18 @@ jobs:
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
-      - name: Build Inx
+      - name: Build X4 Pro application
         run: pio run -e gh_release
 
-      - name: Upload Artifacts
+      # SAFETY: never publish bootloader.bin or partitions.bin for the port.
+      # The first hardware-test procedure must preserve the live factory boot
+      # region and write only firmware.bin to a validated inactive OTA app slot.
+      - name: Upload application-only artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Inx-${{ github.ref_name }}
+          name: Inx-X4Pro-${{ github.ref_name }}-APP-ONLY
           path: |
-            .pio/build/gh_release/bootloader.bin
             .pio/build/gh_release/firmware.bin
             .pio/build/gh_release/firmware.elf
             .pio/build/gh_release/firmware.map
-            .pio/build/gh_release/partitions.bin
+          if-no-files-found: error
