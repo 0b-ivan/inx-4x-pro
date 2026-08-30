@@ -10,13 +10,18 @@ Supported, intentionally narrow state transitions:
   manual rollback:        app0 (seq3/seq2) -> app1 (restore factory sector0 from backup)
 
 Rollback restores the exact original first otadata sector instead of inventing a
-new sequence number. This returns the device to the same factory seq1/seq2 state
+new sequence number. This returns otadata to the same factory seq1/seq2 state
 captured in the verified full-flash backup, so repeated app1 -> stage app0 -> test
 cycles remain fail-closed and reproducible.
 
+Runtime NVS is allowed to differ from the old full-flash backup because normal
+firmware boots may update it. The script never writes NVS and verifies that the
+partition table and NVS bytes present before a selector write remain unchanged
+afterwards.
+
 No bootloader, partition table, NVS, app image, SPIFFS, coredump, or second
 otadata sector is ever written by this script. After a write it verifies the
-entire protected metadata region and leaves the device in the ROM bootloader;
+entire affected metadata state and leaves the device in the ROM bootloader;
 the selected app starts only after a deliberate power-cycle/reset.
 """
 
@@ -136,18 +141,22 @@ def verify_against_backup(backup: bytes, live_meta: bytes, target: str) -> None:
     original = backup[
         PROTECTED_META_OFFSET : PROTECTED_META_OFFSET + PROTECTED_META_SIZE
     ]
+
+    # The partition table is immutable and must remain byte-identical to the
+    # original backup. Runtime NVS between 0x9000 and 0xdfff may legitimately
+    # drift and is therefore preserved rather than compared to the old snapshot.
+    if live_meta[:PARTITION_TABLE_SIZE] != original[:PARTITION_TABLE_SIZE]:
+        raise RuntimeError("Current partition table differs from the original backup.")
+
     if target == "app0":
-        if live_meta != original:
-            raise RuntimeError(
-                "Current partition/NVS/otadata metadata no longer exactly matches the original backup."
-            )
+        # Entering a test requires the exact factory otadata state restored by
+        # the rollback helper. NVS does not participate in slot selection.
+        if live_meta[OTADATA_SECTOR0_REL:] != original[OTADATA_SECTOR0_REL:]:
+            raise RuntimeError("Current otadata does not exactly match the factory seq1/seq2 backup state.")
         return
 
     # Rollback state is allowed to differ from the factory backup ONLY in
-    # otadata sector0. Everything else, especially sector1 rescue data, must
-    # still match the original full-flash backup byte-for-byte.
-    if live_meta[:OTADATA_SECTOR0_REL] != original[:OTADATA_SECTOR0_REL]:
-        raise RuntimeError("Protected metadata before otadata differs from the original backup.")
+    # otadata sector0. Sector1 remains the immutable app1 rescue anchor.
     if live_meta[OTADATA_SECTOR1_REL:] != original[OTADATA_SECTOR1_REL:]:
         raise RuntimeError("otadata sector1 or adjacent metadata differs from the original backup.")
 
@@ -279,7 +288,7 @@ def main() -> int:
 
                 # Restore the exact 4 KiB sector captured before any test. This
                 # deliberately returns otadata to seq1/seq2 rather than producing
-                # seq4, so the next staging run can demand an exact backup match.
+                # seq4, so the next staging run can demand an exact selector state.
                 candidate_sector0 = original_meta[
                     OTADATA_SECTOR0_REL : OTADATA_SECTOR1_REL
                 ]
@@ -304,7 +313,7 @@ def main() -> int:
             print("  sector1 @ 0xf000: PRESERVED / NOT WRITTEN")
             print("  Bootloader:         NOT WRITTEN")
             print("  Partition table:    NOT WRITTEN")
-            print("  NVS:                NOT WRITTEN")
+            print("  NVS:                NOT WRITTEN / current runtime state preserved")
             print("  app0/app1 contents: NOT WRITTEN")
             print("  Device after write: LEFT IN BOOTLOADER; explicit power-cycle required")
 
@@ -351,9 +360,9 @@ def main() -> int:
                     f"Readback selects {new_active.label}, expected {expected_active.label}."
                 )
 
-            if args.target == "app1" and after != original_meta:
+            if args.target == "app1" and after[OTADATA_SECTOR0_REL:] != original_meta[OTADATA_SECTOR0_REL:]:
                 raise RuntimeError(
-                    "Rollback selected app1 but protected metadata was not restored exactly to the original backup."
+                    "Rollback selected app1 but factory otadata was not restored exactly."
                 )
 
             after_snapshot = args.out / f"otadata-after-{args.target}.bin"
@@ -363,7 +372,7 @@ def main() -> int:
             print(f"Selected slot: {new_active.label}")
             print("Original app1 rescue record in sector1 is intact.")
             if args.target == "app1":
-                print("Factory protected metadata is restored exactly to the verified full-flash backup.")
+                print("Factory otadata is restored exactly; current runtime NVS is preserved.")
             print("Device is intentionally left in the bootloader.")
             print("Power-cycle WITHOUT holding the left button to boot the selected slot.")
             return 0
