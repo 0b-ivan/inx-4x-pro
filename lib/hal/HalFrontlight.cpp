@@ -16,6 +16,17 @@ void HalFrontlight::begin(const uint8_t brightness, const uint8_t warmth, const 
   manager.begin();
   lastBrightness = brightness > 100 ? 100 : brightness;
   manager.setColorTemperature(warmth > 100 ? 100 : warmth);
+
+#ifdef INX_X4PRO_PORT
+  // Hardware-validation pulse: this bypasses all button/double-click logic.
+  // If the X4 Pro LEDs and FreeInk PWM path are correct, the panel must light
+  // at full brightness for ~1.2 s during every boot of this test build.
+  Serial.printf("[%lu] [LIGHT] X4 Pro diagnostic pulse gpio8/9 100%%\n", millis());
+  manager.setBrightness(100);
+  delay(1200);
+  manager.setBrightness(0);
+#endif
+
   lit = on;
   manager.setBrightness(lit ? lastBrightness : 0);
 
