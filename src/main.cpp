@@ -9,6 +9,9 @@
 #include <HalGPIO.h>
 #include <SDCardManager.h>
 #include <SPI.h>
+#ifndef SIMULATOR
+#include <HalFrontlight.h>
+#endif
 
 #include <cstring>
 #include <new>
@@ -34,6 +37,7 @@
 #include "system/FontManager.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
+#include "system/UiTheme.h"
 #include "util/StringUtils.h"
 
 #ifdef SIMULATOR
@@ -53,6 +57,14 @@ bool sdCardAvailable = false;
 unsigned long t1 = 0;
 unsigned long t2 = 0;
 
+#ifndef SIMULATOR
+namespace {
+constexpr unsigned long X4PRO_POWER_DOUBLE_CLICK_MS = 500;
+constexpr unsigned long X4PRO_POWER_CLICK_MAX_HOLD_MS = 300;
+unsigned long lastX4ProPowerClickAt = 0;
+}  // namespace
+#endif
+
 void verifyPowerButtonDuration();
 void waitForPowerRelease();
 void normalizeUnavailableClockSettings();
@@ -68,6 +80,10 @@ void setupDisplayAndFonts();
 void onNetworkModeSelected(NetworkMode mode);
 void openReaderFromCallback(const std::string& path);
 bool handleGlobalPowerRefresh();
+bool handleMainTabTouch();
+#ifndef SIMULATOR
+bool handleX4ProFrontlightDoubleClick();
+#endif
 
 /**
  * @brief Switches the current activity using standard heap allocation.
@@ -108,9 +124,6 @@ bool isExportedNoteImage(const std::string& path) {
  * @brief Opens the reader activity and returns to the library when closed.
  */
 void openReaderFromCallback(const std::string& path) {
-  // Defensive copy: `path` is typically a reference into the calling activity's own state (e.g.
-  // LibraryActivity's currentPageItems), but switchTo() deletes that activity before this function's
-  // arguments are used to construct the new one - passing `path` itself through would dangle.
   const std::string pathCopy = path;
   if (isExportedNoteImage(pathCopy)) {
     switchTo<ImageViewerActivity>(render, input, pathCopy, [pathCopy]() {
@@ -127,26 +140,14 @@ void openReaderFromCallback(const std::string& path) {
   });
 }
 
-/**
- * @brief Callback wrapper for selecting a book to read.
- */
 void onSelectBook(const std::string& path) { onGoToReader(path); }
 
-/**
- * @brief Navigates to the statistics activity.
- */
 void onGoToStatistics() { switchTo<StatisticActivity>(render, input, onGoToRecent, onGoToFileTransfer); }
 
-/**
- * @brief Navigates to the recent books activity.
- */
 void onGoToRecent() {
   switchTo<RecentActivity>(render, input, []() { onGoToLibrary("/"); }, onGoToStatistics, onSelectBook, onGoToRecent);
 }
 
-/**
- * @brief Handles network mode selection and navigates to appropriate activity.
- */
 void onNetworkModeSelected(NetworkMode mode) {
   switch (mode) {
     case NetworkMode::JOIN_NETWORK:
@@ -164,31 +165,19 @@ void onNetworkModeSelected(NetworkMode mode) {
   }
 }
 
-/**
- * @brief Navigates to the file transfer/sync activity.
- */
 void onGoToFileTransfer() {
   switchTo<SyncActivity>(render, input, onNetworkModeSelected, onGoToRecent, onGoToStatistics, onGoToSettings);
 }
 
-/**
- * @brief Navigates to the settings activity.
- */
 void onGoToSettings() {
   switchTo<SettingsActivity>(
       render, input, onGoToRecent, []() { onGoToLibrary("/"); }, onGoToFileTransfer, onGoToStatistics);
 }
 
-/**
- * @brief Navigates to the library activity.
- */
 void onGoToLibrary(const std::string& path) {
   switchTo<LibraryActivity>(render, input, onGoToRecent, openReaderFromCallback, onGoToRecent, onGoToSettings, path);
 }
 
-/**
- * @brief Set up application.
- */
 void verifyPowerButtonDuration() {
   if (SETTINGS.shortPwrBtn == SystemSetting::SHORT_PWRBTN::SLEEP) return;
   const auto start = millis();
@@ -241,6 +230,10 @@ void normalizeUnavailableClockSettings() {
 
 void enterDeepSleep() {
   normalizeUnavailableClockSettings();
+#ifndef SIMULATOR
+  // Never leave the LED strings driven while the S3 enters deep sleep.
+  frontlight.setOn(false);
+#endif
   switchTo<SleepActivity>(render, input);
   display.deepSleep();
   gpio.startDeepSleep();
@@ -251,6 +244,29 @@ void setupDisplayAndFonts() {
   render.begin();
   FontManager::initialize(render);
 }
+
+#ifndef SIMULATOR
+bool handleX4ProFrontlightDoubleClick() {
+  if (!gpio.deviceIsX4() || !gpio.wasReleased(HalGPIO::BTN_POWER)) {
+    return false;
+  }
+
+  const unsigned long now = millis();
+  if (gpio.getHeldTime() > X4PRO_POWER_CLICK_MAX_HOLD_MS) {
+    lastX4ProPowerClickAt = 0;
+    return false;
+  }
+
+  if (lastX4ProPowerClickAt == 0 || now - lastX4ProPowerClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
+    lastX4ProPowerClickAt = now;
+    return false;
+  }
+
+  lastX4ProPowerClickAt = 0;
+  frontlight.toggle();
+  return true;
+}
+#endif
 
 bool handleGlobalPowerRefresh() {
   if (!currentActivity || !currentActivity->allowGlobalPowerRefresh()) {
@@ -267,12 +283,62 @@ bool handleGlobalPowerRefresh() {
   return true;
 }
 
-/**
- * @brief Set up application.
- */
+bool handleMainTabTouch() {
+  if (!currentActivity) {
+    return false;
+  }
+
+  int x = 0;
+  int y = 0;
+  if (!input.wasScreenTapped(x, y)) {
+    return false;
+  }
+
+  const int tabY = INX_THEME.mainTabBarY(renderer);
+  const int tabH = INX_THEME.mainTabBarHeight();
+  const int width = renderer.getScreenWidth();
+  if (x < 0 || x >= width || y < tabY || y >= tabY + tabH) {
+    return false;
+  }
+
+  constexpr int tabCount = 5;
+  const int tabButtonWidth = (width / tabCount) - 1;
+  int tab = tabButtonWidth > 0 ? x / tabButtonWidth : 0;
+  if (tab < 0) tab = 0;
+  if (tab >= tabCount) tab = tabCount - 1;
+
+  Serial.printf("[%lu] [TOUCH] main tab=%d x=%d y=%d\n", millis(), tab, x, y);
+  switch (tab) {
+    case 0:
+      onGoToRecent();
+      break;
+    case 1:
+      onGoToLibrary("/");
+      break;
+    case 2:
+      onGoToSettings();
+      break;
+    case 3:
+      onGoToFileTransfer();
+      break;
+    case 4:
+      onGoToStatistics();
+      break;
+    default:
+      return false;
+  }
+  return true;
+}
+
 void setup() {
   t1 = millis();
   gpio.begin();
+#ifndef SIMULATOR
+  // FreeInk owns PWM polarity, frequency, resolution and X4 Pro warm/cool pin
+  // selection through BoardConfig. Start dark; a power-button double-click
+  // toggles the light for the first hardware-validation cycle.
+  frontlight.begin(60, 50, false);
+#endif
   setupDisplayAndFonts();
 
   if (gpio.isUsbConnected()) {
@@ -305,14 +371,12 @@ void setup() {
   waitForPowerRelease();
 }
 
-/**
- * @brief All activity loop.
- */
 void loop() {
   gpio.update();
   static unsigned long lastActivityTime = millis();
 
-  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || (currentActivity && currentActivity->preventAutoSleep())) {
+  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() ||
+      (currentActivity && currentActivity->preventAutoSleep())) {
     lastActivityTime = millis();
   }
 
@@ -326,7 +390,22 @@ void loop() {
     return;
   }
 
+#ifndef SIMULATOR
+  if (handleX4ProFrontlightDoubleClick()) {
+    delay(10);
+    return;
+  }
+#endif
+
   if (handleGlobalPowerRefresh()) {
+    delay(10);
+    return;
+  }
+
+  // Main navigation icons are real touch targets on the X4 Pro. Route this
+  // globally before the current activity so every main page gets the same tab
+  // behavior and sub-activities don't need to duplicate tab geometry.
+  if (handleMainTabTouch()) {
     delay(10);
     return;
   }
