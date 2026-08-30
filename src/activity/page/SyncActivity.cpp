@@ -6,6 +6,9 @@
 #include "../page/SyncActivity.h"
 
 #include <GfxRenderer.h>
+#ifndef SIMULATOR
+#include <HalFrontlight.h>
+#endif
 
 #include "activity/network/BackupRestoreActivity.h"
 #include "activity/reader/ImageViewerActivity.h"
@@ -19,11 +22,14 @@
 #include "system/UiTheme.h"
 
 namespace {
-constexpr int MENU_ITEM_COUNT = 9;
+constexpr int MENU_ITEM_COUNT = 10;
 const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Manage via wifi",   "Connect to calibre", "Create hotspot",
                                            "OPDS Browser",      "Backup and restore", "KOReader Sync",
-                                           "Check for updates", "Choose dictionary",  "Device"};
-constexpr int LIST_ITEM_HEIGHT = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
+                                           "Check for updates", "Choose dictionary",  "Device",
+                                           "Frontlight"};
+// Ten rows still fit the X4 Pro portrait content area while retaining a large
+// finger-sized touch target. The previous theme row height only fit nine rows.
+constexpr int LIST_ITEM_HEIGHT = 58;
 }  // namespace
 
 /**
@@ -90,6 +96,14 @@ void SyncActivity::activateSelected() {
       exitActivity();
       updateRequired = true;
     }));
+    return;
+  }
+
+  if (selectedIndex == 9) {
+#ifndef SIMULATOR
+    frontlight.toggle();
+#endif
+    updateRequired = true;
     return;
   }
 
@@ -250,8 +264,19 @@ void SyncActivity::render() const {
       const int titleY = itemY + (LIST_ITEM_HEIGHT - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
 
       renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, titleY, MENU_ITEMS[i], !isSelected);
-      const int caretW = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_10_FONT_ID, "›");
-      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, screenWidth - caretW - 30, titleY, "›", !isSelected);
+      if (i == 9) {
+#ifndef SIMULATOR
+        const char* state = frontlight.isOn() ? "ON" : "OFF";
+#else
+        const char* state = "OFF";
+#endif
+        const int stateW = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_10_FONT_ID, state);
+        renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, screenWidth - stateW - 30, titleY, state, !isSelected,
+                             EpdFontFamily::BOLD);
+      } else {
+        const int caretW = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_10_FONT_ID, "›");
+        renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, screenWidth - caretW - 30, titleY, "›", !isSelected);
+      }
 
       if (i < MENU_ITEM_COUNT - 1) {
         renderer.line.render(0, itemY + LIST_ITEM_HEIGHT - 1, screenWidth, itemY + LIST_ITEM_HEIGHT - 1, true,
