@@ -5,15 +5,24 @@
 
 #include <HalDisplay.h>
 #include <HalGPIO.h>
+#ifndef SIMULATOR
+#include <Preferences.h>
+#endif
 
-// FreeInk ignores these legacy constructor pins and resolves the real display
-// wiring from BoardConfig::ACTIVE during begin(). Passing -1 makes it explicit
-// that Inx must never own X4 Pro pin mapping itself.
 HalDisplay::HalDisplay() : einkDisplay(-1, -1, -1, -1, -1, -1) {}
 
 HalDisplay::~HalDisplay() {}
 
-void HalDisplay::begin() { einkDisplay.begin(); }
+void HalDisplay::begin() {
+  einkDisplay.begin();
+#ifndef SIMULATOR
+  Preferences prefs;
+  if (prefs.begin("inx-quick", true)) {
+    einkDisplay.setInverted(prefs.getBool("night", false));
+    prefs.end();
+  }
+#endif
+}
 
 void HalDisplay::clearScreen(uint8_t color) const { einkDisplay.clearScreen(color); }
 
