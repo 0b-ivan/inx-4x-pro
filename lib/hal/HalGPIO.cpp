@@ -11,6 +11,8 @@
 #include <esp_sleep.h>
 #include <esp_system.h>
 
+#include <cmath>
+
 namespace {
 void addVirtualClick(uint8_t button, uint8_t& pressed, uint8_t& released) {
   const uint8_t mask = static_cast<uint8_t>(1u << button);
@@ -67,7 +69,7 @@ void HalGPIO::update() {
   if (inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd)) {
     const float dx = nxEnd - nxStart;
     const float dy = nyEnd - nyStart;
-    if (fabsf(dx) > fabsf(dy)) {
+    if (std::fabs(dx) > std::fabs(dy)) {
       addVirtualClick(dx < 0.0f ? BTN_RIGHT : BTN_LEFT, virtualPressedEvents, virtualReleasedEvents);
     }
   }
