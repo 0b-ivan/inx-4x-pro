@@ -35,11 +35,12 @@ class HalGPIO {
   mutable int batteryCachedPercent = 0;
   mutable unsigned long batteryLastPollMs = 0;
 
-  // X4 Pro has only Up/Down/Power as discrete buttons. FreeInk intentionally
-  // leaves GT911 taps to the consumer. Inx is button-oriented, so expose a
-  // short virtual click pulse: screen tap -> Confirm, capacitive Home -> Back.
-  // A click is represented as both press + release in one update, matching
-  // FreeInk's own synthesized short-click behavior for other board profiles.
+  // X4 Pro has only Up/Down/Power as discrete buttons. FreeInk exposes GT911
+  // taps/swipes in normalized panel-native coordinates and the capacitive Home
+  // key separately. Inx is still button-oriented, so HalGPIO temporarily maps
+  // portrait touch zones + four-way swipes onto the missing logical buttons.
+  // Virtual clicks are press+release pulses in one update, matching FreeInk's
+  // synthesized short-click behavior on other board profiles.
   uint8_t virtualPressedEvents = 0;
   uint8_t virtualReleasedEvents = 0;
 
