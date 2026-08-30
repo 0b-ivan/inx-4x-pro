@@ -37,6 +37,9 @@
 #include "system/FontManager.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
+#ifndef SIMULATOR
+#include "system/QuickSettingsDrawer.h"
+#endif
 #include "system/UiTheme.h"
 #include "util/StringUtils.h"
 
@@ -50,6 +53,9 @@ HalGPIO gpio;
 MappedInputManager input(gpio);
 GfxRenderer renderer(display);
 GfxRenderer& render = renderer;
+#ifndef SIMULATOR
+QuickSettingsDrawer quickSettings(renderer, input);
+#endif
 
 Activity* currentActivity = nullptr;
 bool sdCardAvailable = false;
@@ -405,6 +411,21 @@ void loop() {
   }
 
 #ifndef SIMULATOR
+  // CrossPoint control-center gesture: swipe down from the top edge. While the
+  // overlay is open the underlying Activity stays alive but paused, so reader
+  // page/list state cannot be destroyed by opening quick settings.
+  if (quickSettings.isOpen()) {
+    quickSettings.loop();
+    delay(10);
+    return;
+  }
+
+  if (input.wasMenuGesture()) {
+    if (quickSettings.open()) lastActivityTime = millis();
+    delay(10);
+    return;
+  }
+
   if (handleX4ProFrontlightDoubleClick()) {
     delay(10);
     return;
