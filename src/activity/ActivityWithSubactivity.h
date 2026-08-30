@@ -24,6 +24,10 @@ class ActivityWithSubactivity : public Activity {
 
   /** Forwards the loop call to the active subactivity, if any. */
   void loop() override;
+  /** Forwards semantic screen taps to the active subactivity. */
+  bool handleTouchTap(int x, int y) override {
+    return subActivity ? subActivity->handleTouchTap(x, y) : Activity::handleTouchTap(x, y);
+  }
   /** Cleans up the current subactivity on exit. */
   void onExit() override;
 };
