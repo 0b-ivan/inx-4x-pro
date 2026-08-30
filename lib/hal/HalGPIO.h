@@ -35,6 +35,14 @@ class HalGPIO {
   mutable int batteryCachedPercent = 0;
   mutable unsigned long batteryLastPollMs = 0;
 
+  // X4 Pro has only Up/Down/Power as discrete buttons. FreeInk intentionally
+  // leaves GT911 taps to the consumer. Inx is button-oriented, so expose a
+  // short virtual click pulse: screen tap -> Confirm, capacitive Home -> Back.
+  // A click is represented as both press + release in one update, matching
+  // FreeInk's own synthesized short-click behavior for other board profiles.
+  uint8_t virtualPressedEvents = 0;
+  uint8_t virtualReleasedEvents = 0;
+
  public:
   static constexpr unsigned long BATTERY_POLL_MS = 1500;
   enum class MotionGesture : uint8_t { None, Previous, Next };
