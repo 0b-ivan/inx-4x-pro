@@ -1,238 +1,19 @@
 /**
  * @file HalGPIO.cpp
- * @brief Definitions for HalGPIO.
+ * @brief Xteink X4 Pro hardware abstraction backed by FreeInk BoardConfig.
  */
 
 #include <HalGPIO.h>
-#include <Preferences.h>
-#include <SPI.h>
-#include <Wire.h>
+
+#include <BoardConfig.h>
+#include <PowerManager.h>
 #include <esp_sleep.h>
-#include <time.h>
-
-#include <algorithm>
-#include <cstdlib>
-
-namespace X3GPIO {
-
-struct X3ProbeResult {
-  bool bq27220 = false;
-  bool ds3231 = false;
-  bool qmi8658 = false;
-
-  uint8_t score() const {
-    return static_cast<uint8_t>(bq27220) + static_cast<uint8_t>(ds3231) + static_cast<uint8_t>(qmi8658);
-  }
-};
-
-bool readI2CReg8(uint8_t addr, uint8_t reg, uint8_t* outValue) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) {
-    return false;
-  }
-  if (Wire.requestFrom(addr, static_cast<uint8_t>(1), static_cast<uint8_t>(true)) < 1) {
-    return false;
-  }
-  *outValue = Wire.read();
-  return true;
-}
-
-bool readI2CReg16LE(uint8_t addr, uint8_t reg, uint16_t* outValue) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) {
-    return false;
-  }
-  if (Wire.requestFrom(addr, static_cast<uint8_t>(2), static_cast<uint8_t>(true)) < 2) {
-    while (Wire.available()) {
-      Wire.read();
-    }
-    return false;
-  }
-  const uint8_t lo = Wire.read();
-  const uint8_t hi = Wire.read();
-  *outValue = (static_cast<uint16_t>(hi) << 8) | lo;
-  return true;
-}
-
-bool readI2CRegs(uint8_t addr, uint8_t reg, uint8_t* out, uint8_t len) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) {
-    return false;
-  }
-  if (Wire.requestFrom(addr, len, static_cast<uint8_t>(true)) < len) {
-    while (Wire.available()) {
-      Wire.read();
-    }
-    return false;
-  }
-  for (uint8_t i = 0; i < len; ++i) {
-    out[i] = Wire.read();
-  }
-  return true;
-}
-
-bool writeI2CRegs(uint8_t addr, uint8_t reg, const uint8_t* data, uint8_t len) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  for (uint8_t i = 0; i < len; ++i) {
-    Wire.write(data[i]);
-  }
-  return Wire.endTransmission(true) == 0;
-}
-
-bool readBQ27220CurrentMA(int16_t* outCurrent) {
-  uint16_t raw = 0;
-  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_CUR_REG, &raw)) {
-    return false;
-  }
-  *outCurrent = static_cast<int16_t>(raw);
-  return true;
-}
-
-bool readBQ27220StateOfCharge(uint16_t* outSoc) { return readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_SOC_REG, outSoc); }
-
-void beginX3I2C() {
-  Wire.begin(X3_I2C_SDA, X3_I2C_SCL, X3_I2C_FREQ);
-  Wire.setTimeOut(6);
-}
-
-void endX3I2C() {
-  Wire.end();
-  pinMode(X3_I2C_SDA, INPUT);
-  pinMode(X3_I2C_SCL, INPUT);
-}
-
-bool probeBQ27220Signature() {
-  uint16_t soc = 0;
-  uint16_t voltageMv = 0;
-  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_SOC_REG, &soc) || soc > 100) {
-    return false;
-  }
-  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_VOLT_REG, &voltageMv)) {
-    return false;
-  }
-  return voltageMv >= 2500 && voltageMv <= 5000;
-}
-
-bool probeDS3231Signature() {
-  uint8_t sec = 0;
-  if (!readI2CReg8(I2C_ADDR_DS3231, DS3231_SEC_REG, &sec)) {
-    return false;
-  }
-  const uint8_t tensDigit = (sec >> 4) & 0x07;
-  const uint8_t onesDigit = sec & 0x0F;
-  return tensDigit <= 5 && onesDigit <= 9;
-}
-
-bool probeQMI8658Signature() {
-  uint8_t whoami = 0;
-  if (readI2CReg8(I2C_ADDR_QMI8658, QMI8658_WHO_AM_I_REG, &whoami) && whoami == QMI8658_WHO_AM_I_VALUE) {
-    return true;
-  }
-  if (readI2CReg8(I2C_ADDR_QMI8658_ALT, QMI8658_WHO_AM_I_REG, &whoami) && whoami == QMI8658_WHO_AM_I_VALUE) {
-    return true;
-  }
-  return false;
-}
-
-X3ProbeResult runX3ProbePass() {
-  X3ProbeResult result;
-  beginX3I2C();
-
-  result.bq27220 = probeBQ27220Signature();
-  result.ds3231 = probeDS3231Signature();
-  result.qmi8658 = probeQMI8658Signature();
-
-  endX3I2C();
-  return result;
-}
-
-}  // namespace X3GPIO
-
-namespace {
-
-constexpr char HW_NAMESPACE[] = "inxhw";
-constexpr char NVS_KEY_DEV_OVERRIDE[] = "dev_ovr";
-constexpr char NVS_KEY_DEV_CACHED[] = "dev_det";
-
-enum class NvsDeviceValue : uint8_t { Unknown = 0, X4 = 1, X3 = 2 };
-
-NvsDeviceValue readNvsDeviceValue(const char* key, NvsDeviceValue defaultValue) {
-  Preferences prefs;
-  if (!prefs.begin(HW_NAMESPACE, true)) {
-    return defaultValue;
-  }
-  const uint8_t raw = prefs.getUChar(key, static_cast<uint8_t>(defaultValue));
-  prefs.end();
-  if (raw > static_cast<uint8_t>(NvsDeviceValue::X3)) {
-    return defaultValue;
-  }
-  return static_cast<NvsDeviceValue>(raw);
-}
-
-void writeNvsDeviceValue(const char* key, NvsDeviceValue value) {
-  Preferences prefs;
-  if (!prefs.begin(HW_NAMESPACE, false)) {
-    return;
-  }
-  prefs.putUChar(key, static_cast<uint8_t>(value));
-  prefs.end();
-}
-
-HalGPIO::DeviceType nvsToDeviceType(NvsDeviceValue value) {
-  return value == NvsDeviceValue::X3 ? HalGPIO::DeviceType::X3 : HalGPIO::DeviceType::X4;
-}
-
-HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
-  const NvsDeviceValue overrideValue = readNvsDeviceValue(NVS_KEY_DEV_OVERRIDE, NvsDeviceValue::Unknown);
-  if (overrideValue == NvsDeviceValue::X3 || overrideValue == NvsDeviceValue::X4) {
-    return nvsToDeviceType(overrideValue);
-  }
-
-  const NvsDeviceValue cachedValue = readNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::Unknown);
-  if (cachedValue == NvsDeviceValue::X3 || cachedValue == NvsDeviceValue::X4) {
-    return nvsToDeviceType(cachedValue);
-  }
-
-  const X3GPIO::X3ProbeResult pass1 = X3GPIO::runX3ProbePass();
-  delay(2);
-  const X3GPIO::X3ProbeResult pass2 = X3GPIO::runX3ProbePass();
-  const bool x3Confirmed = pass1.score() >= 2 && pass2.score() >= 2;
-  const bool x4Confirmed = pass1.score() == 0 && pass2.score() == 0;
-
-  if (x3Confirmed) {
-    writeNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::X3);
-    return HalGPIO::DeviceType::X3;
-  }
-  if (x4Confirmed) {
-    writeNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::X4);
-    return HalGPIO::DeviceType::X4;
-  }
-  return HalGPIO::DeviceType::X4;
-}
-
-uint8_t bcdToDec(uint8_t value) { return ((value >> 4) * 10) + (value & 0x0F); }
-
-uint8_t decToBcd(uint8_t value) { return static_cast<uint8_t>(((value / 10) << 4) | (value % 10)); }
-
-bool validDateTime(const HalGPIO::DateTime& dt) {
-  return dt.year >= 2024 && dt.year <= 2099 && dt.month >= 1 && dt.month <= 12 && dt.day >= 1 && dt.day <= 31 &&
-         dt.hour <= 23 && dt.minute <= 59 && dt.second <= 59;
-}
-
-}  // namespace
+#include <esp_system.h>
 
 void HalGPIO::begin() {
+  // InputManager resolves the X4 Pro's digital buttons and GT911 controller from
+  // BoardConfig. Do not initialize SPI or probe legacy X3/C3 pins here.
   inputMgr.begin();
-  SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
-  deviceType = detectDeviceTypeWithFingerprint();
-  if (deviceIsX4()) {
-    pinMode(BAT_GPIO0, INPUT);
-    pinMode(UART0_RXD, INPUT);
-  }
 }
 
 void HalGPIO::update() { inputMgr.update(); }
@@ -249,262 +30,72 @@ bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
 
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
-HalGPIO::MotionGesture HalGPIO::readMotionGesture(const uint8_t orientation, const uint8_t mode,
-                                                  const uint8_t sensitivity) {
-  if (!deviceIsX3()) {
-    return MotionGesture::None;
-  }
-  if (mode == 0 && !motionSensorInitialized) {
-    return MotionGesture::None;
-  }
-
-  const unsigned long now = millis();
-  if (motionLastPollMs != 0 && now - motionLastPollMs < 50) {
-    return MotionGesture::None;
-  }
-  motionLastPollMs = now;
-
-  X3GPIO::beginX3I2C();
-  if (!motionSensorInitialized) {
-    uint8_t whoami = 0;
-    if (X3GPIO::readI2CReg8(I2C_ADDR_QMI8658, QMI8658_WHO_AM_I_REG, &whoami) && whoami == QMI8658_WHO_AM_I_VALUE) {
-      motionSensorAddress = I2C_ADDR_QMI8658;
-    } else if (X3GPIO::readI2CReg8(I2C_ADDR_QMI8658_ALT, QMI8658_WHO_AM_I_REG, &whoami) &&
-               whoami == QMI8658_WHO_AM_I_VALUE) {
-      motionSensorAddress = I2C_ADDR_QMI8658_ALT;
-    } else {
-      X3GPIO::endX3I2C();
-      return MotionGesture::None;
-    }
-
-    const uint8_t ctrl1 = 0x60;  // Register auto-increment.
-    const uint8_t ctrl3 = 0x58;  // Gyroscope: +/-512 dps, 28 Hz.
-    const uint8_t ctrl7 = 0x02;  // Enable gyroscope only.
-    const bool configured = X3GPIO::writeI2CRegs(motionSensorAddress, QMI8658_CTRL1_REG, &ctrl1, 1) &&
-                            X3GPIO::writeI2CRegs(motionSensorAddress, QMI8658_CTRL3_REG, &ctrl3, 1) &&
-                            X3GPIO::writeI2CRegs(motionSensorAddress, QMI8658_CTRL7_REG, &ctrl7, 1);
-    if (!configured) {
-      motionSensorAddress = 0;
-      X3GPIO::endX3I2C();
-      return MotionGesture::None;
-    }
-    motionSensorInitialized = true;
-    motionSensorStartedMs = now;
-    motionLastGestureMs = now;
-  }
-
-  if (mode == 0) {
-    const uint8_t ctrl7 = 0x00;
-    const uint8_t ctrl1 = 0x61;
-    X3GPIO::writeI2CRegs(motionSensorAddress, QMI8658_CTRL7_REG, &ctrl7, 1);
-    X3GPIO::writeI2CRegs(motionSensorAddress, QMI8658_CTRL1_REG, &ctrl1, 1);
-    motionSensorInitialized = false;
-    motionGestureInProgress = false;
-    X3GPIO::endX3I2C();
-    return MotionGesture::None;
-  }
-
-  uint8_t raw[6] = {};
-  const bool readOk =
-      X3GPIO::readI2CRegs(motionSensorAddress, QMI8658_GYRO_X_L_REG, raw, static_cast<uint8_t>(sizeof(raw)));
-  X3GPIO::endX3I2C();
-  if (!readOk) {
-    return MotionGesture::None;
-  }
-
-  if (now - motionSensorStartedMs < 300) {
-    return MotionGesture::None;
-  }
-
-  const int16_t gx = static_cast<int16_t>((static_cast<uint16_t>(raw[1]) << 8) | raw[0]);
-  const int16_t gy = static_cast<int16_t>((static_cast<uint16_t>(raw[3]) << 8) | raw[2]);
-  int32_t axis = 0;
-  switch (orientation) {
-    case 1:  // Landscape clockwise
-      axis = -static_cast<int32_t>(gy);
-      break;
-    case 2:  // Portrait inverted
-      axis = -static_cast<int32_t>(gx);
-      break;
-    case 3:  // Landscape counter-clockwise
-      axis = gy;
-      break;
-    default:
-      axis = gx;
-      break;
-  }
-  if (mode == 2) {
-    axis = -axis;
-  }
-
-  constexpr int32_t kGyroLsbPerDps = 64;
-  constexpr int32_t kNeutralThreshold = 50 * kGyroLsbPerDps;
-  const int32_t triggerDps = sensitivity >= 2 ? 180 : sensitivity == 0 ? 360 : 270;
-  const int32_t triggerThreshold = triggerDps * kGyroLsbPerDps;
-
-  if (motionGestureInProgress) {
-    if (std::abs(axis) < kNeutralThreshold) {
-      motionGestureInProgress = false;
-    }
-    return MotionGesture::None;
-  }
-
-  if (now - motionLastGestureMs < 600) {
-    return MotionGesture::None;
-  }
-
-  if (axis > triggerThreshold) {
-    motionGestureInProgress = true;
-    motionLastGestureMs = now;
-    return MotionGesture::Next;
-  }
-  if (axis < -triggerThreshold) {
-    motionGestureInProgress = true;
-    motionLastGestureMs = now;
-    return MotionGesture::Previous;
-  }
-  return MotionGesture::None;
-}
+HalGPIO::MotionGesture HalGPIO::readMotionGesture(uint8_t, uint8_t, uint8_t) { return MotionGesture::None; }
 
 void HalGPIO::startDeepSleep() {
-  while (inputMgr.isPressed(BTN_POWER)) {
-    delay(50);
-    inputMgr.update();
-  }
-
-  esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
-
-  esp_deep_sleep_start();
+  // The X4 Pro is ESP32-S3. FreeInk selects the correct ext1 wake source and
+  // powers down board rails using the active BoardConfig profile.
+  freeink::PowerManager::powerDownRailsForSleep();
+  freeink::PowerManager::deepSleepUntilPowerButton();
 }
 
 int HalGPIO::getBatteryPercentage() const {
-  if (deviceIsX3()) {
-    const unsigned long now = millis();
-    if (batteryLastPollMs != 0 && (now - batteryLastPollMs) < BATTERY_POLL_MS) {
-      return batteryCachedPercent;
-    }
-
-    uint16_t soc = 0;
-    X3GPIO::beginX3I2C();
-    const bool ok = X3GPIO::readBQ27220StateOfCharge(&soc);
-    X3GPIO::endX3I2C();
-    if (ok && soc <= 100) {
-      batteryCachedPercent = static_cast<int>(soc);
-      batteryLastPollMs = now;
-      return batteryCachedPercent;
-    }
-    batteryLastPollMs = now;
+  const unsigned long now = millis();
+  if (batteryLastPollMs != 0 && (now - batteryLastPollMs) < BATTERY_POLL_MS) {
     return batteryCachedPercent;
   }
-  static const BatteryMonitor battery = BatteryMonitor(BAT_GPIO0);
-  return battery.readPercentage();
+
+  static const BatteryMonitor battery;
+  uint16_t percent = 0;
+  if (battery.readPercentageChecked(percent) && percent <= 100) {
+    batteryCachedPercent = static_cast<int>(percent);
+  }
+  batteryLastPollMs = now;
+  return batteryCachedPercent;
 }
 
 bool HalGPIO::isUsbConnected() const {
-  if (deviceIsX3()) {
-    X3GPIO::beginX3I2C();
-    for (uint8_t attempt = 0; attempt < 2; ++attempt) {
-      int16_t currentMa = 0;
-      if (X3GPIO::readBQ27220CurrentMA(&currentMa)) {
-        X3GPIO::endX3I2C();
-        return currentMa > 0;
-      }
-      delay(2);
-    }
-    X3GPIO::endX3I2C();
-    return false;
+  // Prefer a real USB/VBUS detect line when the board profile exposes one.
+  if (BoardConfig::ACTIVE.usbDetect >= 0) {
+    return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
   }
-  return digitalRead(UART0_RXD) == HIGH;
+
+  // Fallback to charging telemetry. This can report false at charge termination,
+  // but it never requires poking an unverified X4/C3 GPIO.
+  static const BatteryMonitor battery;
+  return battery.isCharging();
 }
 
-bool HalGPIO::readDateTime(DateTime& outDateTime) const {
-  if (!deviceIsX3()) {
-    return false;
-  }
+bool HalGPIO::readDateTime(DateTime&) const { return false; }
 
-  uint8_t regs[7] = {};
-  X3GPIO::beginX3I2C();
-  const bool ok = X3GPIO::readI2CRegs(I2C_ADDR_DS3231, DS3231_SEC_REG, regs, sizeof(regs));
-  X3GPIO::endX3I2C();
-  if (!ok) {
-    return false;
-  }
+bool HalGPIO::writeDateTime(const DateTime&) const { return false; }
 
-  DateTime dt;
-  dt.second = bcdToDec(regs[0] & 0x7F);
-  dt.minute = bcdToDec(regs[1] & 0x7F);
-  dt.hour = bcdToDec(regs[2] & 0x3F);
-  dt.weekday = bcdToDec(regs[3] & 0x07);
-  dt.day = bcdToDec(regs[4] & 0x3F);
-  dt.month = bcdToDec(regs[5] & 0x1F);
-  dt.year = static_cast<uint16_t>(2000 + bcdToDec(regs[6]));
-
-  if (!validDateTime(dt)) {
-    return false;
-  }
-
-  outDateTime = dt;
-  return true;
-}
-
-bool HalGPIO::writeDateTime(const DateTime& dateTime) const {
-  if (!deviceIsX3() || !validDateTime(dateTime)) {
-    return false;
-  }
-
-  const uint8_t regs[7] = {decToBcd(dateTime.second),
-                           decToBcd(dateTime.minute),
-                           decToBcd(dateTime.hour),
-                           decToBcd(dateTime.weekday >= 1 && dateTime.weekday <= 7 ? dateTime.weekday : 1),
-                           decToBcd(dateTime.day),
-                           decToBcd(dateTime.month),
-                           decToBcd(static_cast<uint8_t>(dateTime.year - 2000))};
-  X3GPIO::beginX3I2C();
-  const bool ok = X3GPIO::writeI2CRegs(I2C_ADDR_DS3231, DS3231_SEC_REG, regs, sizeof(regs));
-  X3GPIO::endX3I2C();
-  return ok;
-}
-
-bool HalGPIO::syncRtcFromSystemTime() const {
-  if (!deviceIsX3()) {
-    return false;
-  }
-
-  const time_t now = time(nullptr);
-  if (now < 1704067200) {
-    return false;
-  }
-
-  struct tm localTime{};
-  if (localtime_r(&now, &localTime) == nullptr) {
-    return false;
-  }
-
-  DateTime dt;
-  dt.year = static_cast<uint16_t>(localTime.tm_year + 1900);
-  dt.month = static_cast<uint8_t>(localTime.tm_mon + 1);
-  dt.day = static_cast<uint8_t>(localTime.tm_mday);
-  dt.hour = static_cast<uint8_t>(localTime.tm_hour);
-  dt.minute = static_cast<uint8_t>(localTime.tm_min);
-  dt.second = static_cast<uint8_t>(localTime.tm_sec);
-  dt.weekday = static_cast<uint8_t>(localTime.tm_wday == 0 ? 7 : localTime.tm_wday);
-  return writeDateTime(dt);
-}
+bool HalGPIO::syncRtcFromSystemTime() const { return false; }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
-  const bool usbConnected = isUsbConnected();
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
+  const bool usbConnected = isUsbConnected();
 
-  if ((wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected) ||
-      (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP && usbConnected)) {
+  if (resetReason == ESP_RST_DEEPSLEEP &&
+      (wakeupCause == ESP_SLEEP_WAKEUP_GPIO || wakeupCause == ESP_SLEEP_WAKEUP_EXT1)) {
     return WakeupReason::PowerButton;
   }
+
+  // Xteink's power topology allows a battery-only cold boot from the held power
+  // button. This classification is used only by Inx's existing boot UX; it does
+  // not write flash or alter boot configuration.
+  if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected) {
+    return WakeupReason::PowerButton;
+  }
+
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN && usbConnected) {
     return WakeupReason::AfterFlash;
   }
+
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && usbConnected) {
     return WakeupReason::AfterUSBPower;
   }
+
   return WakeupReason::Other;
 }
