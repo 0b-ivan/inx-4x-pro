@@ -7,10 +7,21 @@
 
 #include <BoardConfig.h>
 #include <PowerManager.h>
+#include <XteinkDetect.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
 
 void HalGPIO::begin() {
+  // Match FreeInk/CrossPoint's X4 Pro bring-up order. Some X4 Pro peripherals
+  // sit behind switched rails; assert the board-profile-defined boot levels
+  // before touching input, SD or display buses.
+  BoardConfig::holdPowerRails();
+
+  // X4 Pro production batches can use different 800x480 panel controllers.
+  // Resolve the controller before display.begin(); FreeInk then selects the
+  // matching driver while retaining the same board pinout.
+  freeink::applyXteinkDisplayController();
+
   // InputManager resolves the X4 Pro's digital buttons and GT911 controller from
   // BoardConfig. Do not initialize SPI or probe legacy X3/C3 pins here.
   inputMgr.begin();
