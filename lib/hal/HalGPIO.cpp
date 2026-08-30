@@ -65,7 +65,17 @@ bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
 
 bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased() || virtualReleasedEvents != 0; }
 
-unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
+unsigned long HalGPIO::getHeldTime() const {
+  // CrossPoint's X4 Pro power-double-click path evaluates the dedicated power
+  // button hold duration. Inx historically exposes only one generic held-time
+  // accessor, so on the power release frame return FreeInk's latched power hold
+  // value instead of the last arbitrary button/touch duration. This keeps all
+  // existing Inx callers unchanged while matching the X4 Pro input contract.
+  if (inputMgr.wasReleased(BTN_POWER)) {
+    return inputMgr.getPowerButtonHeldTime();
+  }
+  return inputMgr.getHeldTime();
+}
 
 bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
 
