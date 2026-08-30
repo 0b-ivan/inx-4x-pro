@@ -3,9 +3,8 @@
  * @brief Xteink X4 Pro hardware abstraction backed by FreeInk BoardConfig.
  */
 
-#include <HalGPIO.h>
-
 #include <BoardConfig.h>
+#include <HalGPIO.h>
 #include <PowerManager.h>
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
