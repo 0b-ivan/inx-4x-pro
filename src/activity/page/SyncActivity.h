@@ -31,6 +31,7 @@ class SyncActivity final : public ActivityWithSubactivity, public Menu {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  bool handleTouchTap(int x, int y) override;
 
  private:
   int selectedIndex = 0;
@@ -42,6 +43,7 @@ class SyncActivity final : public ActivityWithSubactivity, public Menu {
   const std::function<void()> onSettingsOpen;
 
   void render() const;
+  void activateSelected();
 
   void navigateToSelectedMenu() override {
     if (tabSelectorIndex == 2 && onSettingsOpen) onSettingsOpen();
