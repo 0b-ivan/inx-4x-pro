@@ -33,15 +33,44 @@ The useful test artifact is:
 
 Building a binary is not permission to flash it. The hardware-test gate remains the validated inactive-slot procedure above.
 
+## Read-only device preflight
+
+Install `esptool`, connect the X4 Pro and run the inspector before any hardware write:
+
+```bash
+python3 -m pip install --upgrade esptool
+python3 scripts/x4pro_inspect.py \
+  --port /dev/cu.usbmodemXXXX \
+  --firmware .pio/build/x4pro/firmware.bin \
+  --backup
+```
+
+The inspector has no write/erase command. It verifies that the connected chip reports as ESP32-S3, reads and parses the live partition table, requires at least two OTA application slots, checks that `firmware.bin` fits those slots, and optionally saves the complete 16 MiB flash plus its SHA-256 digest.
+
+A successful read-only preflight still does **not** flash or select the experimental application. Active/inactive OTA-slot selection is a separate safety gate.
+
 ## Hardware backend
 
 FreeInk is pinned as the `open-x4-sdk` submodule for a reproducible build. The application does not own X4 Pro GPIO numbers. Display, buttons/touch, battery, SDMMC and deep-sleep wake configuration come from FreeInk `BoardConfig`.
 
 The X4 Pro may ship with different e-paper controllers. FreeInk controller detection is run before display initialization so the matching driver can be selected without changing Inx.
 
+### Temporary Inx input compatibility
+
+Inx 1.0.19 is button-oriented while the X4 Pro has two discrete navigation buttons plus GT911 touch. Until Inx gets native touch hit-testing, the HAL exposes the X4 Pro input as:
+
+- physical left side key -> `Up` / previous
+- physical right side key -> `Down` / next
+- screen tap -> `Confirm`
+- capacitive Home tap -> `Back`
+- horizontal swipe left/right -> logical `Right` / `Left`
+- power button -> `Power`
+
+This preserves the existing Inx navigation model without inventing new GPIO mappings.
+
 ## Current limitations
 
-- X4 Pro UI touch routing is not yet integrated into Inx navigation.
+- Touch uses the compatibility mapping above; native per-widget hit-testing is not integrated yet.
 - Frontlight UI is not yet integrated.
 - Inx RTC integration is not yet ported.
 - OTA/update installation is intentionally disabled.
