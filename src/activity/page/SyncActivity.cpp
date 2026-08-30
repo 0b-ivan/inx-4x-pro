@@ -38,6 +38,116 @@ void SyncActivity::onEnter() {
   SETTINGS.runHalfRefreshOnLoadIfEnabled(renderer, SystemSetting::RefreshOnLoadPage::Sync);
 }
 
+void SyncActivity::activateSelected() {
+  NetworkMode mode = NetworkMode::JOIN_NETWORK;
+
+  if (selectedIndex == 1) {
+    mode = NetworkMode::CONNECT_CALIBRE;
+  }
+
+  if (selectedIndex == 2) {
+    mode = NetworkMode::CREATE_HOTSPOT;
+  }
+
+  if (selectedIndex == 3) {
+    mode = NetworkMode::OPDS_BROWSER;
+  }
+
+  if (selectedIndex == 4) {
+    enterNewActivity(new BackupRestoreActivity(renderer, mappedInput, [this] {
+      exitActivity();
+      updateRequired = true;
+    }));
+    return;
+  }
+
+  if (selectedIndex == 5) {
+    enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
+      exitActivity();
+      updateRequired = true;
+    }));
+    return;
+  }
+
+  if (selectedIndex == 6) {
+    enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
+      exitActivity();
+      updateRequired = true;
+    }));
+    return;
+  }
+
+  if (selectedIndex == 7) {
+    enterNewActivity(new DictionaryPickerActivity(renderer, mappedInput, [this] {
+      exitActivity();
+      updateRequired = true;
+    }));
+    return;
+  }
+
+  if (selectedIndex == 8) {
+    enterNewActivity(new ImageViewerActivity(renderer, mappedInput, "/sleep/device-identity.jpg", [this] {
+      exitActivity();
+      updateRequired = true;
+    }));
+    return;
+  }
+
+  if (onModeSelected) {
+    onModeSelected(mode);
+  }
+}
+
+bool SyncActivity::handleTouchTap(const int x, const int y) {
+  if (subActivity) {
+    return subActivity->handleTouchTap(x, y);
+  }
+
+  const int screenWidth = renderer.getScreenWidth();
+  const int screenHeight = renderer.getScreenHeight();
+  if (x < 0 || x >= screenWidth || y < 0 || y >= screenHeight) {
+    return false;
+  }
+
+  const int listStartY = mainContentTop() + mainHeaderHeight();
+  const int contentBottom = mainContentBottom(renderer);
+  const int visibleBottom = INX_THEME.mainTabsAtBottom() ? contentBottom : screenHeight - 80;
+  if (y >= listStartY && y < visibleBottom) {
+    const int index = (y - listStartY) / LIST_ITEM_HEIGHT;
+    if (index >= 0 && index < MENU_ITEM_COUNT) {
+      selectedIndex = index;
+      updateRequired = true;
+      activateSelected();
+      return true;
+    }
+  }
+
+  // The classic bottom hints are visible controls too. Keep the exact same
+  // button rectangles as UiRender::buttonHints.
+  if (!INX_THEME.mainTabsAtBottom() && y >= screenHeight - 40) {
+    const auto labels = mappedInput.mapLabels("« Recent", "Select", "", "");
+    const char* slots[] = {labels.btn1, labels.btn2, labels.btn3, labels.btn4};
+    constexpr int positions[] = {25, 130, 245, 350};
+    constexpr int buttonWidth = 106;
+    for (int slot = 0; slot < 4; ++slot) {
+      if (x < positions[slot] || x >= positions[slot] + buttonWidth || !slots[slot] || slots[slot][0] == '\0') {
+        continue;
+      }
+      const std::string label = slots[slot];
+      if (label == "« Recent") {
+        if (onRecentOpen) onRecentOpen();
+        return true;
+      }
+      if (label == "Select") {
+        activateSelected();
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 /**
  * Main loop for handling user input and updating the display state.
  * Processes button presses for menu navigation and tab switching.
@@ -82,63 +192,7 @@ void SyncActivity::loop() {
   }
 
   if (confirmPressed) {
-    NetworkMode mode = NetworkMode::JOIN_NETWORK;
-
-    if (selectedIndex == 1) {
-      mode = NetworkMode::CONNECT_CALIBRE;
-    }
-
-    if (selectedIndex == 2) {
-      mode = NetworkMode::CREATE_HOTSPOT;
-    }
-
-    if (selectedIndex == 3) {
-      mode = NetworkMode::OPDS_BROWSER;
-    }
-
-    if (selectedIndex == 4) {
-      enterNewActivity(new BackupRestoreActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      return;
-    }
-
-    if (selectedIndex == 5) {
-      enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      return;
-    }
-
-    if (selectedIndex == 6) {
-      enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      return;
-    }
-
-    if (selectedIndex == 7) {
-      enterNewActivity(new DictionaryPickerActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      return;
-    }
-
-    if (selectedIndex == 8) {
-      enterNewActivity(new ImageViewerActivity(renderer, mappedInput, "/sleep/device-identity.jpg", [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-      return;
-    }
-
-    if (onModeSelected) {
-      onModeSelected(mode);
-    }
+    activateSelected();
     return;
   }
 
