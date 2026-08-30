@@ -35,12 +35,9 @@ class HalGPIO {
   mutable int batteryCachedPercent = 0;
   mutable unsigned long batteryLastPollMs = 0;
 
-  // X4 Pro has only Up/Down/Power as discrete buttons. FreeInk exposes GT911
-  // taps/swipes in normalized panel-native coordinates and the capacitive Home
-  // key separately. Inx is still button-oriented, so HalGPIO temporarily maps
-  // portrait touch zones + four-way swipes onto the missing logical buttons.
-  // Virtual clicks are press+release pulses in one update, matching FreeInk's
-  // synthesized short-click behavior on other board profiles.
+  // Screen touch stays a first-class input and is exposed unchanged through the
+  // methods below. Only the dedicated capacitive Home key is bridged into Inx's
+  // legacy Back action so existing activity stacks retain their Home/Back path.
   uint8_t virtualPressedEvents = 0;
   uint8_t virtualReleasedEvents = 0;
 
@@ -64,6 +61,23 @@ class HalGPIO {
   bool wasReleased(uint8_t buttonIndex) const;
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
+
+  // Raw FreeInk touch contract. Coordinates are normalized in the panel-native
+  // frame; MappedInputManager converts them to the live GfxRenderer orientation
+  // before any activity performs hit-testing. Do not synthesize directional
+  // button presses from arbitrary screen regions here.
+  bool hasTouch() const;
+  bool wasTouchTap(float& nx, float& ny) const;
+  bool wasTouchDown(float& nx, float& ny) const;
+  bool wasTouchReleased() const;
+  bool isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const;
+  bool isTouchHeldAt(float& nx, float& ny) const;
+  bool wasTouchLongPress(float& nx, float& ny) const;
+  void suppressTouchContact();
+  unsigned long lastTouchHeldMs() const;
+  bool wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const;
+  bool wasTouchActivity() const;
+
   MotionGesture readMotionGesture(uint8_t orientation, uint8_t mode, uint8_t sensitivity);
 
   void startDeepSleep();
