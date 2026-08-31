@@ -34,6 +34,7 @@ class SystemSetting {
     TRANSPARENT = 4,  ///< Transparent
     BLANK = 5,        ///< Blank screen
     DATETIME = 6,     ///< Minimal date and time
+    TAROT = 7,        ///< Procedural shuffled Major Arcana card
     SLEEP_SCREEN_MODE_COUNT
   };
 
@@ -383,7 +384,7 @@ class SystemSetting {
     READER_IMAGE_DITHER_COUNT
   };
 
-  uint8_t sleepScreen = LIGHT;                 ///< Sleep screen display mode
+  uint8_t sleepScreen = TAROT;                 ///< Sleep screen display mode
   uint8_t sleepScreenCoverMode = FIT;          ///< Sleep screen cover scaling mode
   uint8_t sleepScreenCoverFilter = NO_FILTER;  ///< Sleep screen cover filter
   /** Sleep image quality; persisted in the old sleep 2-bit slot for settings compatibility. */

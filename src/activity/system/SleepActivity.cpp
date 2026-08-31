@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "../reader/Epub/StatusBar.h"
+#include "activity/tarot/TarotAssets.h"
 #include "images/CorgiSleep.h"
 #include "state/BookProgress.h"
 #include "state/BookSetting.h"
@@ -324,10 +325,89 @@ void SleepActivity::onEnter() {
         renderDefaultSleepScreen();
       }
       break;
+    case SystemSetting::SLEEP_SCREEN_MODE::TAROT:
+      renderTarotSleepScreen();
+      break;
     default:
       renderDefaultSleepScreen();
       break;
   }
+}
+
+void SleepActivity::renderTarotSleepScreen() const {
+  static constexpr const char* kMajorArcana[] = {
+      "The Fool",       "The Magician", "The High Priestess", "The Empress",  "The Emperor", "The Hierophant",
+      "The Lovers",     "The Chariot",  "Strength",           "The Hermit",   "Wheel of Fortune", "Justice",
+      "The Hanged Man", "Death",        "Temperance",         "The Devil",    "The Tower", "The Star",
+      "The Moon",       "The Sun",      "Judgement",          "The World"};
+  constexpr size_t kFallbackCardCount = sizeof(kMajorArcana) / sizeof(kMajorArcana[0]);
+  const bool fullDeckInstalled = TarotAssets::installed();
+  const size_t cardCount = fullDeckInstalled ? 78U : kFallbackCardCount;
+
+  beginNewSleepImageCycleIfNeeded(cardCount);
+  const size_t card = sleepImageIndexForPosition(APP_STATE.sleepImageShuffleSeed, APP_STATE.lastSleepImage, cardCount);
+  recordSleepImageUsed();
+
+  if (fullDeckInstalled) {
+    ImageRender::Options options;
+    options.cropToFill = true;
+    options.mode = sleepImageRenderMode();
+    options.useDisplayCache = true;
+    if (ImageRender::create(renderer, TarotAssets::cardPath(static_cast<int>(card)))
+            .render(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), options)) {
+      renderer.displayBuffer();
+      return;
+    }
+  }
+
+  const int sw = renderer.getScreenWidth();
+  const int sh = renderer.getScreenHeight();
+  const int cardW = std::min(sw - 64, 360);
+  const int cardH = std::min(sh - 80, 580);
+  const int x = (sw - cardW) / 2;
+  const int y = (sh - cardH) / 2;
+  const int cx = sw / 2;
+
+  renderer.clearScreen();
+  renderer.rectangle.render(x, y, cardW, cardH, true, true);
+  renderer.rectangle.render(x + 8, y + 8, cardW - 16, cardH - 16, true, true);
+
+  char number[12];
+  std::snprintf(number, sizeof(number), "%u", static_cast<unsigned>(card));
+  renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, y + 26, number, true, EpdFontFamily::BOLD);
+  renderer.line.render(x + 28, y + 58, x + cardW - 28, y + 58, true);
+
+  // A deterministic geometric sigil makes every Arcana visually distinct while
+  // keeping the default deck independent of SD-card assets.
+  const int artTop = y + 82;
+  const int artBottom = y + cardH - 112;
+  const int artH = artBottom - artTop;
+  const int rays = 5 + static_cast<int>(card % 7);
+  const int halfW = cardW / 2 - 42;
+  for (int i = 0; i < rays; ++i) {
+    const int px = cx - halfW + (2 * halfW * i) / std::max(1, rays - 1);
+    const int offset = static_cast<int>((card * 17 + i * 29) % std::max(1, artH / 3));
+    renderer.line.render(cx, artTop + artH / 2, px, (i & 1) ? artBottom - offset : artTop + offset, true);
+  }
+  const int diamondW = 54 + static_cast<int>((card % 4) * 12);
+  const int diamondH = 72 + static_cast<int>((card % 5) * 10);
+  const int midY = artTop + artH / 2;
+  renderer.line.render(cx, midY - diamondH, cx + diamondW, midY, true);
+  renderer.line.render(cx + diamondW, midY, cx, midY + diamondH, true);
+  renderer.line.render(cx, midY + diamondH, cx - diamondW, midY, true);
+  renderer.line.render(cx - diamondW, midY, cx, midY - diamondH, true);
+  if ((card & 1U) != 0U) {
+    renderer.rectangle.render(cx - 34, midY - 34, 68, 68, true, true);
+  }
+
+  renderer.line.render(x + 28, y + cardH - 82, x + cardW - 28, y + cardH - 82, true);
+  const size_t fallbackCard = card % kFallbackCardCount;
+  const int titleFont = std::strlen(kMajorArcana[fallbackCard]) > 15 ? ATKINSON_HYPERLEGIBLE_10_FONT_ID
+                                                            : ATKINSON_HYPERLEGIBLE_12_FONT_ID;
+  renderer.text.centered(titleFont, y + cardH - 58, kMajorArcana[fallbackCard], true, EpdFontFamily::BOLD);
+  renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, y + cardH - 28, "MAJOR ARCANA", true,
+                         EpdFontFamily::REGULAR);
+  renderer.displayBuffer();
 }
 
 /**

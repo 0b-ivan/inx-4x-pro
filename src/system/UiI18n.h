@@ -12,6 +12,7 @@ inline const char* uiTr(const char* text) {
   struct Entry { const char* en; const char* de; };
   static constexpr Entry entries[] = {
       {"Settings", "Einstellungen"}, {"System settings", "Systemeinstellungen"},
+      {"Tarot", "Tarot"},
       {"Reader", "Lesen"}, {"Display", "Anzeige"}, {"Clock", "Uhr"}, {"Image", "Bild"},
       {"Buttons", "Tasten"}, {"Device", "Gerät"}, {"Actions", "Aktionen"},
       {"Language", "Sprache"}, {"English", "Englisch"}, {"German", "Deutsch"},

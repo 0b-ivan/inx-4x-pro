@@ -418,3 +418,83 @@ void SleepImagePickerActivity::loop() {
     requestRedraw();
   }
 }
+
+bool SleepImagePickerActivity::handleTouchTap(const int x, const int y) {
+  if (subActivity) return subActivity->handleTouchTap(x, y);
+  const int pageW = renderer.getScreenWidth();
+  const int pageH = renderer.getScreenHeight();
+  if (x < 0 || x >= pageW || y < 0 || y >= pageH) return false;
+
+  // The legacy footer looks like four buttons on the touch device, so make
+  // the two meaningful actions genuinely tappable as well.
+  if (y >= pageH - 40) {
+    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Select", "Random", "Next");
+    const char* slots[] = {labels.btn1, labels.btn2, labels.btn3, labels.btn4};
+    constexpr int positions[] = {25, 130, 245, 350};
+    constexpr int buttonW = 106;
+    for (int slot = 0; slot < 4; ++slot) {
+      if (x < positions[slot] || x >= positions[slot] + buttonW || !slots[slot]) continue;
+      const std::string label = slots[slot];
+      if (label == "\xC2\xAB Back") {
+        onBack();
+        return true;
+      }
+      if (label == "Select") {
+        randomEnabled = false;
+        applySelection();
+        return true;
+      }
+      if (label == "Random") {
+        randomEnabled = !randomEnabled;
+        SETTINGS.setSleepCustomBmpFromInput(
+            randomEnabled ? "" : (rows.empty() ? "" : rows[static_cast<size_t>(selectedIndex)].value.c_str()));
+        SETTINGS.saveToFile();
+        renderedPageStart = -1;
+        freeGridBuffer();
+        requestRedraw();
+        return true;
+      }
+      if (label == "Next" && !rows.empty()) {
+        selectedIndex = (selectedIndex + 1) % static_cast<int>(rows.size());
+        requestRedraw();
+        return true;
+      }
+    }
+  }
+
+  const int randomX = pageW - RANDOM_BUTTON_W - FOOTER_SIDE_PAD;
+  const int randomY = pageH - 76;
+  if (x >= randomX && x < randomX + RANDOM_BUTTON_W && y >= randomY && y < randomY + RANDOM_BUTTON_H) {
+    randomEnabled = !randomEnabled;
+    SETTINGS.setSleepCustomBmpFromInput(
+        randomEnabled ? "" : (rows.empty() ? "" : rows[static_cast<size_t>(selectedIndex)].value.c_str()));
+    SETTINGS.saveToFile();
+    renderedPageStart = -1;
+    freeGridBuffer();
+    requestRedraw();
+    return true;
+  }
+
+  const int gridBottom = randomY - 14;
+  const int gridHeight = std::max(1, gridBottom - GRID_TOP);
+  const int cellW = (pageW - GRID_MARGIN_X * 2 - GRID_GAP_X) / GRID_COLS;
+  const int cellH = (gridHeight - GRID_GAP_Y * (GRID_ROWS - 1)) / GRID_ROWS;
+  if (y >= GRID_TOP && y < gridBottom) {
+    for (int slot = 0; slot < GRID_ITEMS; ++slot) {
+      const int col = slot % GRID_COLS;
+      const int row = slot / GRID_COLS;
+      const int cellX = GRID_MARGIN_X + col * (cellW + GRID_GAP_X);
+      const int cellY = GRID_TOP + row * (cellH + GRID_GAP_Y);
+      if (x < cellX || x >= cellX + cellW || y < cellY || y >= cellY + cellH) continue;
+      const int index = indexForSlot(pageStartForIndex(selectedIndex), slot);
+      if (index >= 0 && index < static_cast<int>(rows.size())) {
+        selectedIndex = index;
+        randomEnabled = false;
+        applySelection();
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
