@@ -28,6 +28,10 @@ class ActivityWithSubactivity : public Activity {
   bool handleTouchTap(int x, int y) override {
     return subActivity ? subActivity->handleTouchTap(x, y) : Activity::handleTouchTap(x, y);
   }
+  /** Bubble modal touch priority through every nesting level to the global dispatcher. */
+  bool prioritizesScreenTouch() const override {
+    return subActivity && subActivity->prioritizesScreenTouch();
+  }
   /** Cleans up the current subactivity on exit. */
   void onExit() override;
 };
