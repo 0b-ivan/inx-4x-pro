@@ -31,7 +31,7 @@ class BitmapRender {
 
   void render(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0.f, float cropY = 0.f,
               RoundedOutside roundedOutside = RoundedOutside::None,
-              ImageRenderMode mode = ImageRenderMode::OneBit, bool flipHorizontal = false) const;
+              ImageRenderMode mode = ImageRenderMode::OneBit, bool flipHorizontal = false, bool flipVertical = false) const;
 
   void icon(const uint8_t bitmap[], int x, int y, int width, int height, Orientation orientation = Orientation::None,
             bool invert = false) const;
@@ -47,6 +47,6 @@ class BitmapRender {
 
  private:
   void oneBit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight,
-              RoundedOutside roundedOutside = RoundedOutside::None, bool flipHorizontal = false) const;
+              RoundedOutside roundedOutside = RoundedOutside::None, bool flipHorizontal = false, bool flipVertical = false) const;
   GfxRenderer& gfx;
 };

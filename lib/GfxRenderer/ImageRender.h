@@ -25,6 +25,7 @@ class ImageRender {
     bool quality = false;
     bool fastQuality = false;
     bool flipHorizontal = false;
+    bool flipVertical = false;
   };
 
   static ImageRender create(GfxRenderer& renderer, const std::string& path);

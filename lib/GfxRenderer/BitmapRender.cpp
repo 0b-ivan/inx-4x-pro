@@ -185,9 +185,9 @@ bool readIconBitMsbFirst(const uint8_t* bitmap, const int width, const int heigh
 
 void BitmapRender::render(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                           const float cropX, const float cropY, const RoundedOutside roundedOutside,
-                          const ImageRenderMode mode, const bool flipHorizontal) const {
+                          const ImageRenderMode mode, const bool flipHorizontal, const bool flipVertical) const {
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
-    oneBit(bitmap, x, y, maxWidth, maxHeight, roundedOutside, flipHorizontal);
+    oneBit(bitmap, x, y, maxWidth, maxHeight, roundedOutside, flipHorizontal, flipVertical);
     return;
   }
 
@@ -283,8 +283,9 @@ void BitmapRender::render(const Bitmap& bitmap, const int x, const int y, const 
     const int uY = bitmap.isTopDown() ? (t - tFirstY) : (tFirstY - t);
 
     if (replicateUpscale) {
-      const int y0 = y + static_cast<int>(std::floor(static_cast<float>(uY) * scale));
-      const int y1 = y + static_cast<int>(std::floor(static_cast<float>(uY + 1) * scale));
+      const int drawY = flipVertical ? contentH - 1 - uY : uY;
+      const int y0 = y + static_cast<int>(std::floor(static_cast<float>(drawY) * scale));
+      const int y1 = y + static_cast<int>(std::floor(static_cast<float>(drawY + 1) * scale));
       if (y0 >= gfx.getScreenHeight()) {
         break;
       }
@@ -306,7 +307,7 @@ void BitmapRender::render(const Bitmap& bitmap, const int x, const int y, const 
         }
       }
     } else {
-      int screenY = t;
+      int screenY = flipVertical ? contentH - 1 - t : t;
       if (isScaled) {
         screenY = static_cast<int>(std::floor(static_cast<float>(t) * scale));
       }
@@ -346,7 +347,7 @@ void BitmapRender::render(const Bitmap& bitmap, const int x, const int y, const 
 }
 
 void BitmapRender::oneBit(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                          const RoundedOutside roundedOutside, const bool flipHorizontal) const {
+                          const RoundedOutside roundedOutside, const bool flipHorizontal, const bool flipVertical) const {
   constexpr float kScaleEps = 1e-5f;
   constexpr float kHuge = 1e9f;
   float scale = 1.0f;
@@ -416,8 +417,9 @@ void BitmapRender::oneBit(const Bitmap& bitmap, const int x, const int y, const 
     const int vr = bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY;
 
     if (replicateUpscale) {
-      const int y0 = y + static_cast<int>(std::floor(static_cast<float>(vr) * scale));
-      const int y1 = y + static_cast<int>(std::floor(static_cast<float>(vr + 1) * scale));
+      const int drawY = flipVertical ? bitmap.getHeight() - 1 - vr : vr;
+      const int y0 = y + static_cast<int>(std::floor(static_cast<float>(drawY) * scale));
+      const int y1 = y + static_cast<int>(std::floor(static_cast<float>(drawY + 1) * scale));
       if (y0 >= gfx.getScreenHeight()) {
         continue;
       }
@@ -439,7 +441,8 @@ void BitmapRender::oneBit(const Bitmap& bitmap, const int x, const int y, const 
         }
       }
     } else {
-      const int screenY = y + (isScaled ? static_cast<int>(std::floor(static_cast<float>(vr) * scale)) : vr);
+      const int drawY = flipVertical ? bitmap.getHeight() - 1 - vr : vr;
+      const int screenY = y + (isScaled ? static_cast<int>(std::floor(static_cast<float>(drawY) * scale)) : drawY);
       if (screenY >= gfx.getScreenHeight()) {
         continue;
       }
