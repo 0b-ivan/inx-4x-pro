@@ -349,15 +349,36 @@ void SleepActivity::renderTarotSleepScreen() const {
   recordSleepImageUsed();
 
   if (fullDeckInstalled) {
+    const GfxRenderer::Orientation previousOrientation = renderer.getOrientation();
+    renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+    const int screenW = renderer.getScreenWidth();
+    const int screenH = renderer.getScreenHeight();
+    const int availableW = screenW - GfxRenderer::VIEWABLE_MARGIN_LEFT - GfxRenderer::VIEWABLE_MARGIN_RIGHT;
+    const int availableH = screenH - GfxRenderer::VIEWABLE_MARGIN_TOP - GfxRenderer::VIEWABLE_MARGIN_BOTTOM;
+    constexpr int sourceW = 320;
+    constexpr int sourceH = 533;
+    int imageW = availableW;
+    int imageH = imageW * sourceH / sourceW;
+    if (imageH > availableH) {
+      imageH = availableH;
+      imageW = imageH * sourceW / sourceH;
+    }
+    const int imageX = (screenW - imageW) / 2;
+    const int imageY = (screenH - imageH) / 2;
+
     ImageRender::Options options;
-    options.cropToFill = true;
+    options.cropToFill = false;
     options.mode = sleepImageRenderMode();
-    options.useDisplayCache = true;
+    // The same card can also be cached by the upright Tarot activity. Bypass
+    // that cache because this sleep-only rendering is intentionally rotated.
+    options.useDisplayCache = false;
     if (ImageRender::create(renderer, TarotAssets::cardPath(static_cast<int>(card)))
-            .render(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), options)) {
+            .render(imageX, imageY, imageW, imageH, options)) {
+      renderer.setOrientation(previousOrientation);
       renderer.displayBuffer();
       return;
     }
+    renderer.setOrientation(previousOrientation);
   }
 
   const int sw = renderer.getScreenWidth();
