@@ -44,6 +44,7 @@
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/ScreenComponents.h"
+#include "system/X4ProQuickPrefs.h"
 
 namespace {
 /** Encodes spine and page for MenuDrawer::BookmarkNavItem::storageIndex (page < 100000). */
@@ -761,6 +762,16 @@ void EpubActivity::loop() {
   }
 
   if (annUi_.isActive()) {
+    if (annUi_.touchSelecting()) {
+      int touchX = 0;
+      int touchY = 0;
+      if (mappedInput.isScreenTouchHeld(touchX, touchY)) {
+        annUi_.updateTouchSelection(*this, touchX, touchY);
+      }
+      if (mappedInput.wasScreenTouchReleased()) {
+        annUi_.finishTouchSelection(*this);
+      }
+    }
     annUi_.handleInput(*this);
     if (updateRequired && annUi_.isActive()) {
       updateRequired = false;
@@ -783,6 +794,15 @@ void EpubActivity::loop() {
       renderScreen(true);
     }
     return;
+  }
+
+  if (section && epub && !menuDrawerVisible && !settingsDrawerVisible) {
+    int touchX = 0;
+    int touchY = 0;
+    if (mappedInput.wasScreenLongPressDrag(touchX, touchY) && annUi_.beginTouchSelection(*this, touchX, touchY)) {
+      pauseReadingStats();
+      return;
+    }
   }
 
   if (orientationPicker_.isActive()) {
@@ -860,6 +880,16 @@ void EpubActivity::loop() {
   // deferred by one frame). Skip it entirely once an overlay has taken over input this frame.
   if (annUi_.isActive() || dictUi_.isActive()) {
     return;
+  }
+
+  if (X4ProQuickPrefs::readerTouchEnabled() && !menuDrawerVisible && !settingsDrawerVisible) {
+    const auto swipe = mappedInput.wasSwipe();
+    if (swipe == MappedInputManager::SwipeDir::Left || swipe == MappedInputManager::SwipeDir::Right) {
+      endPageTimer();
+      pageTurn(swipe == MappedInputManager::SwipeDir::Left);
+      lastAutoPageTurnTime = millis();
+      return;
+    }
   }
 
   // Up/Down/Left/Right dispatch (page turn, open settings/menu, annotate, dictionary, refresh,

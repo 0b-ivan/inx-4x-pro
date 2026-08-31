@@ -12,11 +12,14 @@
 #include <Arduino.h>
 #include <BatteryMonitor.h>
 #include <InputManager.h>
+#include <Rtc.h>
 
 class HalGPIO {
 #if CROSSPOINT_EMULATED == 0
   InputManager inputMgr;
+  mutable Rtc rtc;
 #endif
+  bool rtcAvailable = false;
 
  public:
   enum class DeviceType : uint8_t { X4, X3 };
@@ -85,10 +88,10 @@ class HalGPIO {
   int getBatteryPercentage() const;
   bool isUsbConnected() const;
 
-  // X4 Pro has its own RTC support in FreeInk, but Inx does not consume that HAL
-  // yet. These compatibility methods stay disabled until the clock layer is
-  // ported separately.
-  bool readDateTime(DateTime& outDateTime) const;
+  bool hasRtc() const { return rtcAvailable; }
+  // The hardware clock follows CrossPoint and stores UTC. The optional offset
+  // is applied only to the returned display value, including calendar rollover.
+  bool readDateTime(DateTime& outDateTime, int timeZoneOffsetMinutes = 0) const;
   bool writeDateTime(const DateTime& dateTime) const;
   bool syncRtcFromSystemTime() const;
 

@@ -7,10 +7,13 @@
 
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
+#include <HalGPIO.h>
 #include <SDCardManager.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <vector>
 
 #include "../settings/CategorySettingsActivity.h"
@@ -24,15 +27,31 @@
 const int LIST_ITEM_HEIGHT = 60;
 
 namespace {
-std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
+std::vector<std::string> clockOffsetLabels() {
+  std::vector<std::string> labels;
+  labels.reserve(105);
+  for (int encoded = 0; encoded <= 104; ++encoded) {
+    const int minutes = (encoded - 48) * 15;
+    const char sign = minutes < 0 ? '-' : '+';
+    const int absolute = std::abs(minutes);
+    char label[16];
+    std::snprintf(label, sizeof(label), "UTC%c%02d:%02d", sign, absolute / 60, absolute % 60);
+    labels.emplace_back(label);
+  }
+  return labels;
+}
+
+std::vector<SettingInfo> buildSystemPageSettings(const bool clockAvailable, const bool motionAvailable,
+                                                 const bool x4Pro) {
   std::vector<SettingInfo> settings;
-  settings.reserve(x3 ? 42 : 35);
+  settings.reserve(42);
 
   settings.push_back(SettingInfo::Separator("Display ", GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Enum(
       "Sleep Screen", &SystemSetting::sleepScreen,
-      x3 ? std::vector<std::string>{"Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None", "Date Time"}
-         : std::vector<std::string>{"Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None"},
+      clockAvailable
+          ? std::vector<std::string>{"Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None", "Date Time"}
+          : std::vector<std::string>{"Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None"},
       GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Action("Choose sleep image", GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Enum("Hide Battery %", &SystemSetting::hideBatteryPercentage,
@@ -52,12 +71,14 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
   settings.push_back(SettingInfo::Value("Recent books shown", &SystemSetting::recentVisibleCount, {1, 9, 1},
                                         GroupType::DEVICE_DISPLAY));
 
-  if (x3) {
+  if (clockAvailable) {
     settings.push_back(SettingInfo::Separator("Clock", GroupType::CLOCK));
     settings.push_back(SettingInfo::Toggle("Show Clock", &SystemSetting::showMenuClock, GroupType::CLOCK));
     settings.push_back(SettingInfo::Action("Face", GroupType::CLOCK));
     settings.push_back(
         SettingInfo::Enum("Format", &SystemSetting::sleepClockTimeFormat, {"12 hour", "24 hour"}, GroupType::CLOCK));
+    settings.push_back(
+        SettingInfo::Enum("Time zone", &SystemSetting::timeZoneQuarterOffset, clockOffsetLabels(), GroupType::CLOCK));
     settings.push_back(SettingInfo::Action("Sync", GroupType::CLOCK));
   }
 
@@ -72,16 +93,20 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
                                        {"Square", "Rounded", "Subtle"}, GroupType::IMAGE));
 
   settings.push_back(SettingInfo::Separator("Buttons", GroupType::DEVICE_BUTTONS));
-  settings.push_back(SettingInfo::Enum("Front Button", &SystemSetting::frontButtonLayout,
-                                       {"Back, Ccnfirm, Left, Right", "Left, Right, Back, Confirm",
-                                        "Left, Back, Confirm, Right", "Back, Confirm, Right, Left",
-                                        "Left, Right, Confirm, Back"},
-                                       GroupType::DEVICE_BUTTONS));
+  if (!x4Pro) {
+    settings.push_back(SettingInfo::Enum("Front Button", &SystemSetting::frontButtonLayout,
+                                         {"Back, Confirm, Left, Right", "Left, Right, Back, Confirm",
+                                          "Left, Back, Confirm, Right", "Back, Confirm, Right, Left",
+                                          "Left, Right, Confirm, Back"},
+                                         GroupType::DEVICE_BUTTONS));
+  }
   settings.push_back(SettingInfo::Enum("Short Power Button Click", &SystemSetting::shortPwrBtn,
                                        {"Ignore", "Sleep", "Page Refresh"}, GroupType::DEVICE_BUTTONS));
-  settings.push_back(SettingInfo::Enum("Main Menu Buttons", &SystemSetting::mainMenuNav,
-                                       {"Front (Left/Right)", "Side (Up/Down)"}, GroupType::DEVICE_BUTTONS));
-  if (x3) {
+  if (!x4Pro) {
+    settings.push_back(SettingInfo::Enum("Main Menu Buttons", &SystemSetting::mainMenuNav,
+                                         {"Front (Left/Right)", "Side (Up/Down)"}, GroupType::DEVICE_BUTTONS));
+  }
+  if (motionAvailable) {
     settings.push_back(SettingInfo::Enum("Flick page turn", &SystemSetting::shakePageTurn,
                                          {"Off", "Normal", "Inverted"}, GroupType::DEVICE_BUTTONS));
     settings.push_back(SettingInfo::Enum("Flick sensitivity", &SystemSetting::shakePageTurnSensitivity,
@@ -89,6 +114,8 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
   }
 
   settings.push_back(SettingInfo::Separator("Device ", GroupType::DEVICE_ADVANCED));
+  settings.push_back(SettingInfo::Enum("Language", &SystemSetting::uiLanguage, {"English", "German"},
+                                       GroupType::DEVICE_ADVANCED));
   settings.push_back(SettingInfo::Enum("Time to Sleep", &SystemSetting::sleepTimeout,
                                        {"1 min", "5 min", "10 min", "15 min", "30 min"}, GroupType::DEVICE_ADVANCED));
   settings.push_back(
@@ -268,7 +295,9 @@ void SettingsActivity::openCurrentPanel() {
   const char* title = "System settings";
 
   enterNewActivity(new CategorySettingsActivity(
-      renderer, mappedInput, title, buildSystemPageSettings(renderer.deviceIsX3()), [this] { requestPanelSwap(); },
+      renderer, mappedInput, title,
+      buildSystemPageSettings(gpio.hasRtc(), renderer.deviceIsX3(), gpio.deviceIsX4()),
+      [this] { requestPanelSwap(); },
       [this] {
         exitActivity();
         startLibraryIndexing();

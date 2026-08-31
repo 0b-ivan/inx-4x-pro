@@ -55,7 +55,7 @@ bool sleepTwoBitEnabled() {
 
 bool sleepImageQualityEnabled() { return SETTINGS.sleepImageQuality == SystemSetting::SLEEP_IMAGE_HIGH; }
 
-bool dateTimeSleepScreenAvailable() { return gpio.deviceIsX3(); }
+bool dateTimeSleepScreenAvailable() { return gpio.hasRtc(); }
 
 ImageRenderMode sleepImageRenderMode() {
   return sleepTwoBitEnabled() ? ImageRenderMode::TwoBit : ImageRenderMode::OneBit;
@@ -648,16 +648,14 @@ void SleepActivity::renderDateTimeSleepScreen() const {
   SleepClockRenderer::DateTimeView view;
 #ifndef SIMULATOR
   HalGPIO::DateTime dateTime;
-  if (gpio.deviceIsX3()) {
-    hasClock = gpio.readDateTime(dateTime);
-    if (hasClock) {
-      view.year = dateTime.year;
-      view.month = dateTime.month;
-      view.day = dateTime.day;
-      view.hour = dateTime.hour;
-      view.minute = dateTime.minute;
-      view.weekday = dateTime.weekday;
-    }
+  hasClock = gpio.readDateTime(dateTime, SETTINGS.getTimeZoneOffsetMinutes());
+  if (hasClock) {
+    view.year = dateTime.year;
+    view.month = dateTime.month;
+    view.day = dateTime.day;
+    view.hour = dateTime.hour;
+    view.minute = dateTime.minute;
+    view.weekday = dateTime.weekday == 0 ? 7 : dateTime.weekday;
   }
 #endif
 

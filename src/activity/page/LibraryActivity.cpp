@@ -1975,6 +1975,16 @@ void LibraryActivity::loop() {
   std::vector<LibraryItem>& currentList = currentPageItems;
   const int itemCount = static_cast<int>(currentList.size());
 
+  const auto touchSwipe = Activity::mappedInput.wasSwipe();
+  if (touchSwipe == MappedInputManager::SwipeDir::Up || touchSwipe == MappedInputManager::SwipeDir::Left) {
+    if (currentPage < totalPages - 1) goToNextPage();
+    return;
+  }
+  if (touchSwipe == MappedInputManager::SwipeDir::Down || touchSwipe == MappedInputManager::SwipeDir::Right) {
+    if (currentPage > 0) goToPreviousPage();
+    return;
+  }
+
   bool wantDownStep = false;
   bool wantUpStep = false;
   // Item-list step buttons depend on the main-menu nav setting (front: Up/Down, side: Left/Right).

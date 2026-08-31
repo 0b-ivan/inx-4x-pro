@@ -6,9 +6,11 @@ bool EpubActivity::handleTouchTap(const int x, const int y) {
   if (subActivity) return ActivityWithSubactivity::handleTouchTap(x, y);
   if (!X4ProQuickPrefs::readerTouchEnabled()) return false;
 
+  if (annUi_.isActive()) return annUi_.handleTouchTap(*this, x, y);
+
   // Existing modal reader UIs own their input while visible. Returning false
   // keeps the latched tap available to legacy drawer/overlay input handling.
-  if (annUi_.isActive() || dictUi_.isActive() || orientationPicker_.isActive() || presetPicker_.isActive() ||
+  if (dictUi_.isActive() || orientationPicker_.isActive() || presetPicker_.isActive() ||
       quickActionsUi_.isActive() || menuDrawerVisible || settingsDrawerVisible || isDoingSomethingHeavy || !section ||
       !epub) {
     return false;

@@ -157,15 +157,7 @@ void TimeSyncActivity::performSync() {
 
   char buffer[40];
 #ifndef SIMULATOR
-  HalGPIO::DateTime rtcDateTime;
-  rtcDateTime.year = dt.year;
-  rtcDateTime.month = dt.month;
-  rtcDateTime.day = dt.day;
-  rtcDateTime.hour = dt.hour;
-  rtcDateTime.minute = dt.minute;
-  rtcDateTime.second = dt.second;
-  rtcDateTime.weekday = dt.weekday;
-  if (gpio.deviceIsX3() && gpio.writeDateTime(rtcDateTime)) {
+  if (gpio.syncRtcFromSystemTime()) {
     std::snprintf(buffer, sizeof(buffer), "%02u:%02u saved to RTC", dt.hour, dt.minute);
   } else
 #endif

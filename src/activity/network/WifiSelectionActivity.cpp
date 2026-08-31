@@ -226,7 +226,14 @@ void WifiSelectionActivity::attemptConnection() {
   connectionError.clear();
   updateRequired = true;
 
+  // Match CrossPoint's ESP32-S3 connection reset. A scan can otherwise leave
+  // stale SDK credentials/channel state behind and WiFi.begin() fails at once.
+  WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
+  WiFi.disconnect(true, true);
+  delay(100);
+  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+  WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
 
   if (selectedRequiresPassword && !enteredPassword.empty()) {
     WiFi.begin(selectedSSID.c_str(), enteredPassword.c_str());
@@ -261,7 +268,9 @@ void WifiSelectionActivity::checkConnectionStatus() {
     return;
   }
 
-  if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL) {
+  // The Arduino WiFi state briefly reports failure while the S3 is still
+  // associating. Only treat it as final after a short grace period.
+  if ((status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL) && millis() - connectionStartTime > 5000) {
     connectionError = "Error: General failure";
     if (status == WL_NO_SSID_AVAIL) {
       connectionError = "Error: Network not found";
@@ -271,7 +280,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
     return;
   }
 
-  if (millis() - connectionStartTime > 15000) {
+  if (millis() - connectionStartTime > 30000) {
     WiFi.disconnect();
     connectionError = "Error: Connection timeout";
     state = WifiSelectionState::CONNECTION_FAILED;
@@ -305,6 +314,18 @@ void WifiSelectionActivity::loop() {
   }
 
   if (state == WifiSelectionState::SAVE_PROMPT) {
+    int tx = 0;
+    int ty = 0;
+    if (mappedInput.wasScreenTapped(tx, ty)) {
+      savePromptSelection = tx < renderer.getScreenWidth() / 2 ? 0 : 1;
+      if (savePromptSelection == 0) {
+        xSemaphoreTake(renderingMutex, portMAX_DELAY);
+        WIFI_STORE.addCredential(selectedSSID, enteredPassword);
+        xSemaphoreGive(renderingMutex);
+      }
+      onComplete(true);
+      return;
+    }
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       savePromptSelection = (savePromptSelection + 1) % 2;
@@ -361,6 +382,14 @@ void WifiSelectionActivity::loop() {
   }
 
   if (state == WifiSelectionState::CONNECTION_FAILED) {
+    int tx = 0;
+    int ty = 0;
+    if (mappedInput.wasScreenTapped(tx, ty)) {
+      state = usedSavedPassword ? WifiSelectionState::FORGET_PROMPT : WifiSelectionState::NETWORK_LIST;
+      forgetPromptSelection = 0;
+      updateRequired = true;
+      return;
+    }
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (usedSavedPassword) {
@@ -375,6 +404,25 @@ void WifiSelectionActivity::loop() {
   }
 
   if (state == WifiSelectionState::NETWORK_LIST) {
+    const int dividerY = INX_THEME.drawerPageHeaderHeight();
+    const int visibleRows = std::max(1, (renderer.getScreenHeight() - dividerY - 80) / LIST_ITEM_HEIGHT);
+    const int scrollOffset = selectedNetworkIndex >= visibleRows ? selectedNetworkIndex - visibleRows + 1 : 0;
+    int touchedRow = -1;
+    if (mappedInput.rowTouch(touchedRow, dividerY, LIST_ITEM_HEIGHT,
+                             std::min(visibleRows, static_cast<int>(networks.size()) - scrollOffset), 0,
+                             renderer.getScreenWidth(), LIST_ITEM_HEIGHT) == MappedInputManager::RowTouch::Tap) {
+      selectedNetworkIndex = scrollOffset + touchedRow;
+      selectNetwork(selectedNetworkIndex);
+      return;
+    }
+    const auto swipe = mappedInput.wasSwipe();
+    if (!networks.empty() && (swipe == MappedInputManager::SwipeDir::Up ||
+                              swipe == MappedInputManager::SwipeDir::Down)) {
+      const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows;
+      selectedNetworkIndex = std::clamp(selectedNetworkIndex + delta, 0, static_cast<int>(networks.size()) - 1);
+      updateRequired = true;
+      return;
+    }
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       onComplete(false);
       return;

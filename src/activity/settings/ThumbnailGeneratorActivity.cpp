@@ -8,7 +8,6 @@
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
-#include <ImageRender.h>
 #include <SDCardManager.h>
 #include <Xtc.h>
 
@@ -16,7 +15,6 @@
 #include <cstring>
 #include <string>
 
-#include "activity/page/LibraryActivity.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/UiTheme.h"
@@ -25,24 +23,6 @@
 namespace {
 constexpr uint32_t kDisplayTaskStack = 4096;
 constexpr uint32_t kWorkerTaskStack = 12288;
-
-// Pre-populate the on-disk display cache for a freshly-generated thumbnail at the exact size
-// LibraryActivity's shelf grid draws covers at, so the shelf's first render after "Generate
-// Thumbnails" hits the cache (raw read) instead of paying for a fresh decode+dither per book.
-void precacheShelfThumbnail(GfxRenderer& renderer, const std::string& thumbPath) {
-  int coverW = 0;
-  int coverH = 0;
-  LibraryActivity::getShelfCoverSize(renderer, coverW, coverH);
-  if (coverW <= 2 || coverH <= 2) {
-    return;
-  }
-  ImageRender::Options options;
-  // Must match LibraryActivity::renderShelfCard's options exactly (cropToFill included) - the display
-  // cache is keyed on these, so a mismatch here means the shelf render misses this cache entry.
-  options.cropToFill = true;
-  options.useDisplayCache = true;
-  ImageRender::create(renderer, thumbPath).render(0, 0, coverW - 2, coverH - 2, options);
-}
 
 void drawThinProgressBar(const GfxRenderer& renderer, const int x, const int y, const int w, const int h,
                          const int fillX, const int fillW) {
@@ -197,31 +177,28 @@ bool ThumbnailGeneratorActivity::isSupportedBookFile(const std::string& filename
 bool ThumbnailGeneratorActivity::processBook(const std::string& path) {
   strlcpy(currentPath, path.c_str(), sizeof(currentPath));
   updateRequired = true;
+  Serial.printf("[%lu] [THUMB] begin path=%s free=%u largest=%u\n", millis(), path.c_str(),
+                static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
 
   if (StringUtils::checkFileExtension(path, ".epub")) {
     Epub epub(path, "/.metadata/epub");
     const std::string thumbJpegPath = epub.getThumbJpegPath();
     const std::string thumbBmpPath = epub.getThumbBmpPath();
-    if (SdMan.exists(thumbJpegPath.c_str()) || SdMan.exists(thumbBmpPath.c_str())) {
-      skippedCount++;
-      processedCount++;
-      return true;
-    }
-    const bool ok = epub.load() && epub.generateThumbBmp();
+    // This activity is also the user's explicit refresh command. Remove stale
+    // variants first instead of silently skipping every existing thumbnail.
+    SdMan.remove(thumbJpegPath.c_str());
+    SdMan.remove(thumbBmpPath.c_str());
+    SdMan.remove(epub.getSmallThumbBmpPath().c_str());
+    const bool loaded = epub.load();
+    const bool ok = loaded && epub.generateThumbBmp();
+    Serial.printf("[%lu] [THUMB] epub loaded=%d generated=%d free=%u largest=%u\n", millis(), loaded, ok,
+                  static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
     processedCount++;
     if (ok) {
       generatedCount++;
-      // precacheShelfThumbnail draws into the shared framebuffer (it's just borrowing ImageRender's
-      // decode-then-store side effect) - take the same mutex displayTaskLoop uses before render(), so
-      // the two don't interleave writes to the same buffer or race a displayBuffer() refresh.
-      if (renderingMutex && xSemaphoreTake(renderingMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
-        if (SdMan.exists(thumbJpegPath.c_str())) {
-          precacheShelfThumbnail(renderer, thumbJpegPath);
-        } else if (SdMan.exists(thumbBmpPath.c_str())) {
-          precacheShelfThumbnail(renderer, thumbBmpPath);
-        }
-        xSemaphoreGive(renderingMutex);
-      }
+      // Do not decode the freshly generated image again here. Shelf rendering
+      // can populate its display cache lazily; doing both operations back to
+      // back creates a needless peak-memory spike on the X4 Pro.
     } else {
       failedCount++;
     }
@@ -231,19 +208,14 @@ bool ThumbnailGeneratorActivity::processBook(const std::string& path) {
   if (StringUtils::checkFileExtension(path, ".xtc")) {
     Xtc xtc(path, "/.metadata/xtc");
     const std::string thumbBmpPath = xtc.getThumbBmpPath();
-    if (SdMan.exists(thumbBmpPath.c_str())) {
-      skippedCount++;
-      processedCount++;
-      return true;
-    }
-    const bool ok = xtc.load() && xtc.generateThumbBmp();
+    SdMan.remove(thumbBmpPath.c_str());
+    const bool loaded = xtc.load();
+    const bool ok = loaded && xtc.generateThumbBmp();
+    Serial.printf("[%lu] [THUMB] xtc loaded=%d generated=%d free=%u largest=%u\n", millis(), loaded, ok,
+                  static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
     processedCount++;
     if (ok) {
       generatedCount++;
-      if (renderingMutex && xSemaphoreTake(renderingMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
-        precacheShelfThumbnail(renderer, thumbBmpPath);
-        xSemaphoreGive(renderingMutex);
-      }
     } else {
       failedCount++;
     }
@@ -315,6 +287,8 @@ bool ThumbnailGeneratorActivity::scanPath(const std::string& path) {
 }
 
 void ThumbnailGeneratorActivity::workerTaskLoop() {
+  Serial.printf("[%lu] [THUMB] worker start free=%u largest=%u\n", millis(),
+                static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
   scanPath("/");
 
   if (cancelRequested) {
@@ -326,6 +300,9 @@ void ThumbnailGeneratorActivity::workerTaskLoop() {
   }
   currentPath[0] = '\0';
   updateRequired = true;
+  Serial.printf("[%lu] [THUMB] worker done state=%u processed=%d generated=%d failed=%d free=%u largest=%u\n",
+                millis(), static_cast<unsigned>(state), processedCount, generatedCount, failedCount,
+                static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
   workerTaskHandle = nullptr;
   vTaskDelete(nullptr);
 }
@@ -341,9 +318,9 @@ void ThumbnailGeneratorActivity::render() {
     const int centerY = contentTop + (screenHeight - contentTop - 80) / 2;
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY - 92, "GENERATE THUMBNAILS", true,
                            EpdFontFamily::BOLD);
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_14_FONT_ID, centerY - 54, "Build missing covers", true,
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_14_FONT_ID, centerY - 54, "Refresh book covers", true,
                            EpdFontFamily::BOLD);
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY - 10, "Existing thumbnails are skipped.", true,
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY - 10, "Existing thumbnails are replaced.", true,
                            EpdFontFamily::REGULAR);
 
     const int barW = std::min(300, pageWidth - 72);
@@ -403,4 +380,29 @@ void ThumbnailGeneratorActivity::loop() {
       mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     goBack();
   }
+}
+
+bool ThumbnailGeneratorActivity::handleTouchTap(const int x, const int y) {
+  const int screenH = renderer.getScreenHeight();
+  if (y < screenH - 48) return false;
+
+  const char* backLabel = state == RUNNING ? "Stop" : "\xC2\xAB Back";
+  const char* confirmLabel = state == READY ? "Start" : "";
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, "", "");
+  const char* slots[] = {labels.btn1, labels.btn2, labels.btn3, labels.btn4};
+  constexpr int positions[] = {25, 130, 245, 350};
+  constexpr int buttonWidth = 106;
+  for (int slot = 0; slot < 4; ++slot) {
+    if (x < positions[slot] || x >= positions[slot] + buttonWidth || !slots[slot] || slots[slot][0] == '\0') continue;
+    if (state == READY && std::strcmp(slots[slot], "Start") == 0) {
+      startGeneration();
+    } else if (state == RUNNING) {
+      cancelRequested = true;
+      updateRequired = true;
+    } else {
+      goBack();
+    }
+    return true;
+  }
+  return false;
 }

@@ -30,6 +30,7 @@
 #include "system/MappedInputManager.h"
 #include "system/MenuNav.h"
 #include "system/UiTheme.h"
+#include "system/UiI18n.h"
 #include "util/StringUtils.h"
 
 namespace {
@@ -636,6 +637,30 @@ void CategorySettingsActivity::loop() {
     return;
   }
 
+  // Touch lists follow CrossPoint's direct-manipulation convention: swiping up
+  // advances the visible window, swiping down moves it back. Keep the selected
+  // row inside that window so subsequent button input continues naturally.
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+    const int direction = swipe == MappedInputManager::SwipeDir::Up ? 1 : -1;
+    if (selectorOpen && !selectorOptions.empty()) {
+      constexpr int visibleRows = 5;
+      const int maxScroll = std::max(0, static_cast<int>(selectorOptions.size()) - visibleRows);
+      selectorScrollOffset = std::clamp(selectorScrollOffset + direction * visibleRows, 0, maxScroll);
+      selectorSelectedIndex = std::clamp(selectorSelectedIndex + direction * visibleRows, 0,
+                                         static_cast<int>(selectorOptions.size()) - 1);
+    } else if (!menuItems.empty()) {
+      const int maxScroll = std::max(0, static_cast<int>(menuItems.size()) - itemsPerPage);
+      scrollOffset = std::clamp(scrollOffset + direction * itemsPerPage, 0, maxScroll);
+      selectedIndex = std::clamp(selectedIndex + direction * itemsPerPage, 0,
+                                 static_cast<int>(menuItems.size()) - 1);
+      if (selectedIndex < scrollOffset) selectedIndex = scrollOffset;
+      if (selectedIndex >= scrollOffset + itemsPerPage) selectedIndex = scrollOffset + itemsPerPage - 1;
+    }
+    updateRequired = true;
+    return;
+  }
+
   if (selectorOpen) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       closeSelector(false);
@@ -797,7 +822,7 @@ void CategorySettingsActivity::renderSelectorOverlay() {
       menuItems[selectorSourceIndex].name) {
     title = menuItems[selectorSourceIndex].name;
   }
-  const std::string shownTitle = renderer.text.truncate(titleFont, title, panelW - 32, EpdFontFamily::BOLD);
+  const std::string shownTitle = renderer.text.truncate(titleFont, uiTr(title), panelW - 32, EpdFontFamily::BOLD);
   const int titleY = panelY + (headerHeight - renderer.text.getLineHeight(titleFont)) / 2;
   renderer.text.render(titleFont, panelX + 16, titleY, shownTitle.c_str(), true, EpdFontFamily::BOLD);
   renderer.line.render(panelX, panelY + headerHeight, panelX + panelW, panelY + headerHeight, true);
@@ -815,7 +840,7 @@ void CategorySettingsActivity::renderSelectorOverlay() {
       renderer.rectangle.fill(panelX + 1, rowY, panelW - 2, rowHeight, true);
     }
 
-    const std::string option = renderer.text.truncate(itemFont, selectorOptions[optionIndex].c_str(), panelW - 44);
+    const std::string option = renderer.text.truncate(itemFont, uiTr(selectorOptions[optionIndex].c_str()), panelW - 44);
     const int textY = rowY + (rowHeight - renderer.text.getLineHeight(itemFont)) / 2;
     renderer.text.render(itemFont, panelX + 18, textY, option.c_str(), !selected,
                          selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
@@ -853,7 +878,7 @@ void CategorySettingsActivity::render() {
   const int headerHeight = mainHeaderHeight();
   const int headerTextY = headerY + (headerHeight - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_12_FONT_ID)) / 2;
 
-  renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, 20, headerTextY, categoryName, true, EpdFontFamily::BOLD);
+  renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, 20, headerTextY, uiTr(categoryName), true, EpdFontFamily::BOLD);
 
   // Version shown as a small rounded tag: black rounded background with white text.
   const int verFont = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
@@ -899,7 +924,7 @@ void CategorySettingsActivity::render() {
 
       int textX = 20;
       int textY = itemY + (itemHeight - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
-      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, textY, entry.name, !isSelected);
+      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, textY, uiTr(entry.name), !isSelected);
 
       const char* indicator = entry.getValueText();
       if (indicator && indicator[0] != '\0') {
@@ -922,7 +947,7 @@ void CategorySettingsActivity::render() {
     int textX = entry.group == GroupType::NONE ? 20 : 28;
     int textY = itemY + (itemHeight - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
 
-    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, textY, entry.name, !isSelected);
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, textY, uiTr(entry.name), !isSelected);
 
     const bool useCheckbox = (entry.type == SettingType::TOGGLE && entry.valuePtr);
     if (useCheckbox) {
@@ -941,6 +966,7 @@ void CategorySettingsActivity::render() {
     } else {
       const char* val = entry.getValueText();
       if (val && val[0] != '\0') {
+        val = uiTr(val);
         int valW = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_10_FONT_ID, val);
         const int valY = itemY + (itemHeight - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
         renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, pageWidth - valW - 30, valY, val, !isSelected);

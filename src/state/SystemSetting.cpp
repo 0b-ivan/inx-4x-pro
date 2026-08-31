@@ -40,7 +40,7 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 }
 
 namespace {
-constexpr uint8_t SETTINGS_FILE_VERSION = 37;
+constexpr uint8_t SETTINGS_FILE_VERSION = 38;
 // Reader-related fields (font/layout, status bar, refresh frequency, page auto-turn, image
 // grayscale, per-button reader actions, XTC reader settings, hyphenation, bionic reading, screen
 // margin, orientation, dictionary folder...) moved out to ReaderSetting/reader_settings.bin as of
@@ -55,7 +55,7 @@ constexpr uint8_t MIN_SUPPORTED_SETTINGS_VERSION = 37;
 // know whether the tail fields are actually present. If it's wrong, either the tail fields never get
 // read back even though they were written (undercount), or the file never triggers the self-healing
 // rewrite on old-format files (overcount, since fileSettingsCount can never reach it).
-constexpr uint8_t SETTINGS_COUNT = 40;
+constexpr uint8_t SETTINGS_COUNT = 41;
 constexpr uint8_t LEGACY_IMAGE_PRESENTATION_COUNT = 4;
 constexpr char SETTINGS_FILE[] = "/.system/settings.bin";
 constexpr char UI_THEME_FILE[] = "/.system/ui_theme.bin";
@@ -194,6 +194,7 @@ uint32_t settingsHash(const SystemSetting& settings) {
   hashPod(hash, settings.libraryShelfEnabled);
   hashPod(hash, settings.hideButtonHints);
   hashPod(hash, settings.showMenuClock);
+  hashPod(hash, settings.uiLanguage);
   return hash;
 }
 
@@ -312,6 +313,7 @@ bool SystemSetting::saveToFile() const {
   serialization::writePod(outputFile, libraryShelfEnabled);
   serialization::writePod(outputFile, hideButtonHints);
   serialization::writePod(outputFile, showMenuClock);
+  serialization::writePod(outputFile, uiLanguage);
 
   outputFile.close();
   saveUiThemeSetting(uiTheme);
@@ -502,6 +504,9 @@ bool SystemSetting::loadFromFile() {
 
     serialization::readPod(inputFile, showMenuClock);
     if (showMenuClock > 1) showMenuClock = 1;
+    if (++settingsRead >= fileSettingsCount) break;
+
+    readAndValidate(inputFile, uiLanguage, UI_LANGUAGE_COUNT);
     ++settingsRead;
 
   } while (false);
@@ -513,6 +518,7 @@ bool SystemSetting::loadFromFile() {
   if (libraryShelfEnabled > 1) libraryShelfEnabled = 0;
   if (hideButtonHints > 1) hideButtonHints = 0;
   if (showMenuClock > 1) showMenuClock = 1;
+  if (uiLanguage >= UI_LANGUAGE_COUNT) uiLanguage = UI_LANGUAGE_ENGLISH;
   if (librarySortMode > 7) librarySortMode = 0;
   if (sleepClockStyle >= SLEEP_CLOCK_STYLE_COUNT) sleepClockStyle = CLOCK_CENTERED_DATE;
   if (sleepClockTimeFormat >= CLOCK_TIME_FORMAT_COUNT) sleepClockTimeFormat = CLOCK_24_HOUR;
