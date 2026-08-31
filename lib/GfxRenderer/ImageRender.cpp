@@ -141,7 +141,7 @@ bool ImageRender::render(int x, int y, int width, int height, const Options& opt
         }
       }
       renderer_.bitmap.render(bitmap, x, y, width, height, cropX, cropY, options.roundedOutside, options.mode,
-                              options.flipHorizontal);
+                              options.flipHorizontal, options.flipVertical);
     }
     file.close();
   }
