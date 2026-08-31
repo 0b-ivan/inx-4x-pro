@@ -199,6 +199,21 @@ void TarotDownloadActivity::loop() {
   }
 }
 
+bool TarotDownloadActivity::handleTouchTap(const int x, const int y) {
+  if (subActivity) return subActivity->handleTouchTap(x, y);
+  if (x < 0 || x >= renderer.getScreenWidth() || y < 0 || y >= renderer.getScreenHeight()) return false;
+  const State state = state_.load();
+  if (state == State::Prompt || state == State::Failed) {
+    startWifi();
+    return true;
+  }
+  if (state == State::Finished) {
+    onDone_(true);
+    return true;
+  }
+  return state == State::Downloading;
+}
+
 void TarotDownloadActivity::render() {
   lastRender_ = millis();
   lastRenderedCompleted_ = completed_;
