@@ -349,8 +349,6 @@ void SleepActivity::renderTarotSleepScreen() const {
   recordSleepImageUsed();
 
   if (fullDeckInstalled) {
-    const GfxRenderer::Orientation previousOrientation = renderer.getOrientation();
-    renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
     const int screenW = renderer.getScreenWidth();
     const int screenH = renderer.getScreenHeight();
     const int availableW = screenW - GfxRenderer::VIEWABLE_MARGIN_LEFT - GfxRenderer::VIEWABLE_MARGIN_RIGHT;
@@ -369,16 +367,12 @@ void SleepActivity::renderTarotSleepScreen() const {
     ImageRender::Options options;
     options.cropToFill = false;
     options.mode = sleepImageRenderMode();
-    // The same card can also be cached by the upright Tarot activity. Bypass
-    // that cache because this sleep-only rendering is intentionally rotated.
     options.useDisplayCache = false;
     if (ImageRender::create(renderer, TarotAssets::cardPath(static_cast<int>(card)))
             .render(imageX, imageY, imageW, imageH, options)) {
-      renderer.setOrientation(previousOrientation);
       renderer.displayBuffer();
       return;
     }
-    renderer.setOrientation(previousOrientation);
   }
 
   const int sw = renderer.getScreenWidth();
