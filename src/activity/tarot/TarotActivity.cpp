@@ -20,6 +20,7 @@ ImageRender::Options tarotImageOptions() {
   options.mode = ImageRenderMode::OneBit;
   options.cropToFill = false;
   options.useDisplayCache = true;
+  options.flipHorizontal = true;
   return options;
 }
 }  // namespace
