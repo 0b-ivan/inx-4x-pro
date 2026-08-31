@@ -19,6 +19,7 @@
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/MenuNav.h"
+#include "system/UiI18n.h"
 #include "system/UiTheme.h"
 #include "util/StringUtils.h"
 
@@ -147,7 +148,7 @@ void SleepImagePickerActivity::drawPickerChrome(const int pageStart, const int r
     const int emptyW = pageWidth - GRID_MARGIN_X * 2;
     const int emptyH = gridBottom - GRID_TOP;
     renderer.rectangle.render(emptyX, emptyY, emptyW, emptyH, true);
-    const char* msg = "No sleep images";
+    const char* msg = uiTr("No sleep images");
     const int msgFont = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
     const int msgW = renderer.text.getWidth(msgFont, msg);
     renderer.text.render(msgFont, emptyX + (emptyW - msgW) / 2,
@@ -175,7 +176,7 @@ void SleepImagePickerActivity::drawPickerChrome(const int pageStart, const int r
 
   renderer.rectangle.fill(buttonX, buttonY, RANDOM_BUTTON_W, RANDOM_BUTTON_H, false);
   renderer.rectangle.render(buttonX, buttonY, RANDOM_BUTTON_W, RANDOM_BUTTON_H, true);
-  const char* buttonText = localRandomEnabled ? "Random: On" : "Random: Off";
+  const char* buttonText = uiTr(localRandomEnabled ? "Random: On" : "Random: Off");
   const int buttonTextW = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_10_FONT_ID, buttonText);
   const int buttonTextX = buttonX + (RANDOM_BUTTON_W - buttonTextW) / 2;
   const int buttonTextY =
@@ -183,7 +184,7 @@ void SleepImagePickerActivity::drawPickerChrome(const int pageStart, const int r
   renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, buttonTextX, buttonTextY, buttonText, true,
                        EpdFontFamily::BOLD);
 
-  const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Select", "Random", "Next");
+  const auto labels = mappedInput.mapLabels(uiTr("Back"), uiTr("Select"), uiTr("Random"), uiTr("Next"));
   renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
@@ -222,7 +223,7 @@ void SleepImagePickerActivity::drawPickerThumbnails(const int pageStart, const i
     }
 
     if (!rendered) {
-      const char* msg = "No preview";
+      const char* msg = uiTr("No preview");
       const int msgFont = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
       const int msgW = renderer.text.getWidth(msgFont, msg);
       renderer.text.render(msgFont, cellX + (cellW - msgW) / 2,

@@ -13,6 +13,7 @@
 #include "network/HttpDownloader.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
+#include "system/UiI18n.h"
 #include "system/UiTheme.h"
 
 namespace {
@@ -220,16 +221,16 @@ void TarotDownloadActivity::render() {
   lastRenderedPercent_ = filePercent_;
   renderer.clearScreen();
   const int h = renderer.getScreenHeight();
-  INX_THEME.drawPageHeader(renderer, "Tarot images");
+  INX_THEME.drawPageHeader(renderer, uiTr("Tarot images"));
   if (state_ == State::Prompt) {
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, h / 2 - 70, "Download 78 tarot cards?", true,
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, h / 2 - 70, uiTr("Download 78 tarot cards?"), true,
                            EpdFontFamily::BOLD);
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, h / 2 - 20, "About 14 MB will be stored on the SD card.", true);
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, h / 2 + 18, "Existing verified files are kept.", true);
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, h / 2 - 20, uiTr("About 14 MB will be stored on the SD card."), true);
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, h / 2 + 18, uiTr("Existing verified files are kept."), true);
   } else if (state_ == State::Downloading) {
     char status[64];
-    std::snprintf(status, sizeof(status), "%d / %d files", completed_.load(), total_.load());
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, h / 2 - 70, "Downloading...", true,
+    std::snprintf(status, sizeof(status), "%d / %d %s", completed_.load(), total_.load(), uiTr("files"));
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, h / 2 - 70, uiTr("Downloading..."), true,
                            EpdFontFamily::BOLD);
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, h / 2 - 20, status, true);
     const std::string clipped = renderer.text.truncate(ATKINSON_HYPERLEGIBLE_8_FONT_ID, currentFile_,
@@ -240,16 +241,16 @@ void TarotDownloadActivity::render() {
     const int overall = total_ ? std::min(100, completed_.load() * 100 / total_.load()) : 0;
     renderer.rectangle.fill(barX + 2, barY + 2, (barW - 4) * overall / 100, 6, true);
   } else if (state_ == State::Finished) {
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, h / 2 - 30, "Tarot images installed", true,
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, h / 2 - 30, uiTr("Tarot images installed"), true,
                            EpdFontFamily::BOLD);
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, h / 2 + 15, "All files passed SHA-256 verification.", true);
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, h / 2 + 15, uiTr("All files passed SHA-256 verification."), true);
   } else if (state_ == State::Failed) {
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, h / 2 - 50, "Download failed", true,
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, h / 2 - 50, uiTr("Download failed"), true,
                            EpdFontFamily::BOLD);
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, h / 2, error_, true);
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, h / 2 + 35, "Retry resumes verified files.", true);
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, h / 2, uiTr(error_), true);
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, h / 2 + 35, uiTr("Retry resumes verified files."), true);
   }
-  const auto labels = mappedInput.mapLabels("Back", "Select", "", "");
+  const auto labels = mappedInput.mapLabels(uiTr("Back"), uiTr("Select"), "", "");
   renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }

@@ -7,6 +7,7 @@
 
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
+#include "system/UiI18n.h"
 #include "system/UiTheme.h"
 #include "TarotDownloadActivity.h"
 
@@ -164,8 +165,8 @@ void TarotActivity::renderPrompt() {
   renderer.rectangle.render(w / 2 - 95, 190, 190, 318, true, true);
   renderer.rectangle.render(w / 2 - 84, 201, 168, 296, true, true);
   renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, 320, "78", true, EpdFontFamily::BOLD);
-  renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 365, "Tap to draw a card", true);
-  const auto labels = mappedInput.mapLabels("Back", "", "", "Draw");
+  renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 365, uiTr("Tap to draw a card"), true);
+  const auto labels = mappedInput.mapLabels(uiTr("Back"), "", "", uiTr("Draw"));
   renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
@@ -190,13 +191,13 @@ void TarotActivity::renderCard() {
     renderer.line.render(boxX + 22, boxY + 58, boxX + boxW - 22, boxY + 58, true);
     renderWrapped(m.meaning, boxX + 24, boxY + 82, boxW - 48, 5);
   }
-  const auto labels = mappedInput.mapLabels("Back", "History", "Meaning", "Draw");
+  const auto labels = mappedInput.mapLabels(uiTr("Back"), uiTr("History"), uiTr("Meaning"), uiTr("Draw"));
   renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void TarotActivity::renderHistory() {
   const int w = renderer.getScreenWidth();
-  const int headerBottom = INX_THEME.drawPageHeader(renderer, "Tarot history");
+  const int headerBottom = INX_THEME.drawPageHeader(renderer, uiTr("Tarot history"));
   constexpr int cols = 4;
   constexpr int rows = 3;
   constexpr int thumbW = 80;
@@ -217,7 +218,7 @@ void TarotActivity::renderHistory() {
   char page[24];
   std::snprintf(page, sizeof(page), "%d / %d", historyPage_ + 1, pages);
   renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, renderer.getScreenHeight() - 72, page, true);
-  const auto labels = mappedInput.mapLabels("Back", "", "Prev", "Next");
+  const auto labels = mappedInput.mapLabels(uiTr("Back"), "", uiTr("Prev"), uiTr("Next"));
   renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
@@ -225,10 +226,10 @@ void TarotActivity::render() {
   renderer.clearScreen();
   if (!TarotAssets::installed()) {
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, renderer.getScreenHeight() / 2 - 20,
-                           "Tarot files missing", true, EpdFontFamily::BOLD);
+                           uiTr("Tarot files missing"), true, EpdFontFamily::BOLD);
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, renderer.getScreenHeight() / 2 + 20,
-                           "Press Select or tap to download about 14 MB", true);
-    const auto labels = mappedInput.mapLabels("Back", "Download", "", "");
+                           uiTr("Press Select or tap to download about 14 MB"), true);
+    const auto labels = mappedInput.mapLabels(uiTr("Back"), uiTr("Download"), "", "");
     renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (view_ == View::Prompt) renderPrompt();
   else if (view_ == View::Card) renderCard();
