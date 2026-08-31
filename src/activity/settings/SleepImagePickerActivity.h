@@ -27,6 +27,7 @@ class SleepImagePickerActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  bool handleTouchTap(int x, int y) override;
 
  private:
   struct Row {

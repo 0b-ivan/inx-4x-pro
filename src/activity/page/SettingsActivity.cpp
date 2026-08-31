@@ -50,8 +50,15 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool clockAvailable, cons
   settings.push_back(SettingInfo::Enum(
       "Sleep Screen", &SystemSetting::sleepScreen,
       clockAvailable
-          ? std::vector<std::string>{"Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None", "Date Time"}
-          : std::vector<std::string>{"Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None"},
+          ? std::vector<std::string>{"Tarot", "Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None", "Date Time"}
+          : std::vector<std::string>{"Tarot", "Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None"},
+      clockAvailable
+          ? std::vector<uint8_t>{SystemSetting::TAROT, SystemSetting::DARK, SystemSetting::LIGHT,
+                                 SystemSetting::CUSTOM, SystemSetting::COVER, SystemSetting::TRANSPARENT,
+                                 SystemSetting::BLANK, SystemSetting::DATETIME}
+          : std::vector<uint8_t>{SystemSetting::TAROT, SystemSetting::DARK, SystemSetting::LIGHT,
+                                 SystemSetting::CUSTOM, SystemSetting::COVER, SystemSetting::TRANSPARENT,
+                                 SystemSetting::BLANK},
       GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Action("Choose sleep image", GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Enum("Hide Battery %", &SystemSetting::hideBatteryPercentage,

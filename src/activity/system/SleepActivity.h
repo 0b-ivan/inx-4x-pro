@@ -90,6 +90,9 @@ class SleepActivity final : public Activity {
    */
   void renderDateTimeSleepScreen() const;
 
+  /** Draws one card from a shuffled, non-repeating Major Arcana cycle. */
+  void renderTarotSleepScreen() const;
+
   /**
    * @brief Renders a transparent overlay sleep screen.
    *

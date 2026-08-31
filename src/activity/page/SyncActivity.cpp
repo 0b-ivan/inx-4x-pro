@@ -12,6 +12,7 @@
 
 #include "activity/network/BackupRestoreActivity.h"
 #include "activity/reader/ImageViewerActivity.h"
+#include "activity/tarot/TarotActivity.h"
 #include "activity/settings/DictionaryPickerActivity.h"
 #include "activity/settings/KOReaderSettingsActivity.h"
 #include "activity/settings/OtaUpdateActivity.h"
@@ -25,7 +26,7 @@ namespace {
 constexpr int MENU_ITEM_COUNT = 10;
 const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Manage via wifi",   "Connect to calibre", "Create hotspot",
                                            "OPDS Browser",      "Backup and restore", "KOReader Sync",
-                                           "Check for updates", "Choose dictionary",  "Device",
+                                           "Check for updates", "Choose dictionary",  "Tarot",
                                            "Frontlight"};
 // Ten rows still fit the X4 Pro portrait content area while retaining a large
 // finger-sized touch target. The previous theme row height only fit nine rows.
@@ -92,7 +93,7 @@ void SyncActivity::activateSelected() {
   }
 
   if (selectedIndex == 8) {
-    enterNewActivity(new ImageViewerActivity(renderer, mappedInput, "/sleep/device-identity.jpg", [this] {
+    enterNewActivity(new TarotActivity(renderer, mappedInput, [this] {
       exitActivity();
       updateRequired = true;
     }));

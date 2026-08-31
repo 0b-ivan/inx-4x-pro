@@ -63,6 +63,11 @@ bool sdCardAvailable = false;
 
 unsigned long t1 = 0;
 unsigned long t2 = 0;
+// A wake press must be released before long-press-to-sleep is armed again.
+// Some X4 Pro power controllers briefly report an unpressed sample while the
+// user is still holding the wake button, so require a stable release window.
+bool powerSleepArmed = true;
+unsigned long powerReleaseStableSince = 0;
 
 #ifndef SIMULATOR
 namespace {
@@ -209,10 +214,18 @@ void verifyPowerButtonDuration() {
 }
 
 void waitForPowerRelease() {
-  gpio.update();
-  while (gpio.isPressed(HalGPIO::BTN_POWER)) {
-    delay(50);
+  constexpr unsigned long kStableReleaseMs = 350;
+  unsigned long releasedSince = 0;
+  while (true) {
     gpio.update();
+    if (gpio.isPressed(HalGPIO::BTN_POWER)) {
+      releasedSince = 0;
+    } else if (releasedSince == 0) {
+      releasedSince = millis();
+    } else if (millis() - releasedSince >= kStableReleaseMs) {
+      break;
+    }
+    delay(20);
   }
 }
 
@@ -386,7 +399,9 @@ void setup() {
   }
   normalizeUnavailableClockSettings();
 
-  switch (gpio.getWakeupReason()) {
+  const HalGPIO::WakeupReason wakeReason = gpio.getWakeupReason();
+  powerSleepArmed = wakeReason != HalGPIO::WakeupReason::PowerButton;
+  switch (wakeReason) {
     case HalGPIO::WakeupReason::PowerButton:
       verifyPowerButtonDuration();
       break;
@@ -399,11 +414,22 @@ void setup() {
 
   switchTo<BootActivity>(render, input);
   waitForPowerRelease();
+  powerReleaseStableSince = millis();
 }
 
 void loop() {
   gpio.update();
   static unsigned long lastActivityTime = millis();
+
+  if (!powerSleepArmed) {
+    if (gpio.isPressed(HalGPIO::BTN_POWER)) {
+      powerReleaseStableSince = 0;
+    } else if (powerReleaseStableSince == 0) {
+      powerReleaseStableSince = millis();
+    } else if (millis() - powerReleaseStableSince >= 350) {
+      powerSleepArmed = true;
+    }
+  }
 
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() ||
       (currentActivity && currentActivity->preventAutoSleep())) {
@@ -415,7 +441,8 @@ void loop() {
     return;
   }
 
-  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
+  if (powerSleepArmed && gpio.isPressed(HalGPIO::BTN_POWER) &&
+      gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
     enterDeepSleep();
     return;
   }
