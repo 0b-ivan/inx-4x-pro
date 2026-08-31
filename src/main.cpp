@@ -9,6 +9,7 @@
 #include <HalGPIO.h>
 #include <SDCardManager.h>
 #include <SPI.h>
+#include <esp_system.h>
 #ifndef SIMULATOR
 #include <HalFrontlight.h>
 #endif
@@ -216,7 +217,7 @@ void waitForPowerRelease() {
 }
 
 void normalizeUnavailableClockSettings() {
-  if (gpio.deviceIsX3()) {
+  if (gpio.hasRtc()) {
     return;
   }
 
@@ -306,6 +307,13 @@ bool handleScreenTouch() {
     return false;
   }
 
+  // Modal/activity-owned surfaces (reader selection, thumbnail controls) get
+  // first refusal, even when their bottom action row overlaps the global tab bar.
+  if (currentActivity->prioritizesScreenTouch() && currentActivity->handleTouchTap(x, y)) {
+    Serial.printf("[%lu] [TOUCH] %s priority handled x=%d y=%d\n", millis(), currentActivity->getName(), x, y);
+    return true;
+  }
+
   const int tabY = INX_THEME.mainTabBarY(renderer);
   const int tabH = INX_THEME.mainTabBarHeight();
   const int width = renderer.getScreenWidth();
@@ -359,6 +367,8 @@ void setup() {
     Serial.begin(115200);
     unsigned long start = millis();
     while (!Serial && (millis() - start) < 3000) delay(10);
+    Serial.printf("[%lu] [BOOT] reset_reason=%d free=%u largest=%u\n", millis(), static_cast<int>(esp_reset_reason()),
+                  static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
   }
 
 #ifndef SIMULATOR

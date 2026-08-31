@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "GfxRenderer.h"
+#include <UiI18n.h>
 
 void UiRender::buttonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
                            const char* btn4, const int topY) const {
@@ -15,7 +16,7 @@ void UiRender::buttonHints(const int fontId, const char* btn1, const char* btn2,
   constexpr int defaultButtonY = 40;
   constexpr int textYOffset = 7;
   constexpr int buttonPositions[] = {25, 130, 245, 350};
-  const char* labels[] = {btn1, btn2, btn3, btn4};
+  const char* labels[] = {uiTr(btn1), uiTr(btn2), uiTr(btn3), uiTr(btn4)};
   const int y = topY >= 0 ? topY : pageHeight - defaultButtonY;
 
   for (int i = 0; i < 4; i++) {
@@ -34,6 +35,9 @@ void UiRender::buttonHints(const int fontId, const char* btn1, const char* btn2,
 
 void UiRender::sideButtonHints(const int fontId, const char* powerBtn, const char* topBtn,
                                const char* bottomBtn) const {
+  powerBtn = uiTr(powerBtn);
+  topBtn = uiTr(topBtn);
+  bottomBtn = uiTr(bottomBtn);
   if (gfx.deviceIsX3()) {
     constexpr int buttonWidth = 106;
     constexpr int buttonHeight = 40;

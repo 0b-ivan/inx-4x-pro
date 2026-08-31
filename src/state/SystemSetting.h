@@ -371,6 +371,8 @@ class SystemSetting {
     BOOT_SETTING_COUNT
   };
 
+  enum UI_LANGUAGE : uint8_t { UI_LANGUAGE_ENGLISH = 0, UI_LANGUAGE_GERMAN, UI_LANGUAGE_COUNT };
+
   /**
    * @brief Legacy image-dither values kept only for settings-file compatibility; rendering always uses Floyd.
    */
@@ -395,11 +397,12 @@ class SystemSetting {
   char sleepCustomBmp[64] = "";
   uint8_t sleepClockStyle = CLOCK_CENTERED_DATE;          ///< Date/time sleep screen style
   uint8_t sleepClockTimeFormat = CLOCK_24_HOUR;           ///< 12/24 hour clock format
-  uint8_t sleepClockRefreshInterval = CLOCK_REFRESH_OFF;  ///< Legacy settings slot; Date Time is X3-only
+  uint8_t sleepClockRefreshInterval = CLOCK_REFRESH_OFF;  ///< Legacy refresh slot; RTC availability is runtime-detected
   /** UTC offset in 15-minute steps, biased by +12h. 0=UTC-12:00, 80=UTC+08:00, 104=UTC+14:00. */
   uint8_t timeZoneQuarterOffset = 80;
-  /** X3 only: show the ambient clock (ScreenComponents::drawMenuClock) in the tab-bar chrome. */
+  /** Show the ambient clock when the active board exposes a working RTC. */
   uint8_t showMenuClock = 1;
+  uint8_t uiLanguage = UI_LANGUAGE_ENGLISH;
 
   uint8_t shortPwrBtn = PAGE_REFRESH;  ///< Short power button behavior
 

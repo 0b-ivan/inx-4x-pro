@@ -66,6 +66,7 @@ class EpubActivity final : public ActivityWithSubactivity {
   void onExit() override;
   void loop() override;
   bool handleTouchTap(int x, int y) override;
+  bool prioritizesScreenTouch() const override { return annUi_.touchSelecting(); }
   bool skipLoopDelay() override { return true; }
   bool preventAutoSleep() override;
 

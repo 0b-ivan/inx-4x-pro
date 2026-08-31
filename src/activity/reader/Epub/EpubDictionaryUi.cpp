@@ -181,6 +181,29 @@ void EpubDictionaryUi::enter(EpubActivity& act) {
   act.updateRequired = true;
 }
 
+void EpubDictionaryUi::enterAtWordIndex(EpubActivity& act, const size_t wordIndex, const bool lookUpImmediately) {
+  enter(act);
+  if (!mode_ || words_.empty()) return;
+  focus_ = std::min(wordIndex, words_.size() - 1);
+  if (lookUpImmediately) performLookup(act);
+  act.updateRequired = true;
+}
+
+void EpubDictionaryUi::enterTextPanel(EpubActivity& act, const std::string& title, const std::string& text) {
+  enter(act);
+  if (!mode_) return;
+  lookedUpWord_ = title;
+  currentDefinition_ = text;
+  showingDefinition_ = true;
+  definitionScrollLine_ = 0;
+  definitionBlocks_ = parseHtmlToBlocks(currentDefinition_);
+  const int textWidth =
+      (act.renderer.getScreenWidth() - kDefinitionPanelMargin * 2) - kDefinitionPanelPad * 2;
+  definitionLines_ = layoutDefinitionBlocks(act.renderer, definitionBlocks_, textWidth);
+  definitionScrollable_ = definitionLines_.size() > 12;
+  act.updateRequired = true;
+}
+
 void EpubDictionaryUi::exit(EpubActivity& act) {
   mode_ = false;
   showingDefinition_ = false;
@@ -446,7 +469,14 @@ void EpubDictionaryUi::handleInput(EpubActivity& act) {
     // Word navigation is frozen while a definition is on screen; Up/Down instead scroll long
     // definitions that don't fully fit (drawDefinitionPanel clamps the range each frame).
     constexpr size_t kScrollLinesPerPress = 3;
-    if (m.wasPressed(MappedInputManager::Button::Up)) {
+    const auto swipe = m.wasSwipe();
+    if (swipe == MappedInputManager::SwipeDir::Down) {
+      definitionScrollLine_ = definitionScrollLine_ > 6 ? definitionScrollLine_ - 6 : 0;
+      act.updateRequired = true;
+    } else if (swipe == MappedInputManager::SwipeDir::Up) {
+      definitionScrollLine_ += 6;
+      act.updateRequired = true;
+    } else if (m.wasPressed(MappedInputManager::Button::Up)) {
       definitionScrollLine_ = (definitionScrollLine_ > kScrollLinesPerPress) ? definitionScrollLine_ - kScrollLinesPerPress : 0;
       act.updateRequired = true;
     } else if (m.wasPressed(MappedInputManager::Button::Down)) {

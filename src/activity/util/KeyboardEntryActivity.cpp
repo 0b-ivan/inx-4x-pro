@@ -9,7 +9,10 @@
 #include "system/MappedInputManager.h"
 
 namespace {
-constexpr int KEY_HEIGHT = 34;
+// X4 Pro is touch-first: 34 px was visibly and physically too small. 44 px
+// gives each row a substantially larger hit target while all five rows still
+// fit in portrait and landscape.
+constexpr int KEY_HEIGHT = 44;
 constexpr int KEY_SPACING = 5;
 constexpr int BOTTOM_MARGIN = 52;
 constexpr int PAGE_MARGIN = 18;
@@ -231,6 +234,53 @@ void KeyboardEntryActivity::loop() {
     }
     updateRequired = true;
   }
+}
+
+bool KeyboardEntryActivity::handleTouchTap(const int x, const int y) {
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  if (x < 0 || x >= pageWidth || y < 0 || y >= pageHeight) return false;
+
+  // The visible Back button remains usable on touch-only boards.
+  if (y >= pageHeight - 40 && x >= 25 && x < 131) {
+    if (onCancel) onCancel();
+    return true;
+  }
+
+  const int keyboardAreaHeight = NUM_ROWS * (KEY_HEIGHT + KEY_SPACING);
+  const int keyboardStartY = pageHeight - keyboardAreaHeight - BOTTOM_MARGIN;
+  if (y < keyboardStartY || y >= keyboardStartY + keyboardAreaHeight) return false;
+  const int row = (y - keyboardStartY) / (KEY_HEIGHT + KEY_SPACING);
+  if (row < 0 || row >= NUM_ROWS || (y - keyboardStartY) % (KEY_HEIGHT + KEY_SPACING) >= KEY_HEIGHT) return false;
+
+  constexpr int maxKeysInRow = 13;
+  const int keyWidth = (pageWidth - PAGE_MARGIN * 2 - (maxKeysInRow - 1) * KEY_SPACING) / maxKeysInRow;
+  int col = -1;
+  if (row == SPECIAL_ROW) {
+    const int widths[] = {2 * keyWidth + KEY_SPACING, 5 * keyWidth + 4 * KEY_SPACING,
+                          2 * keyWidth + KEY_SPACING, 2 * keyWidth + KEY_SPACING};
+    const int mappedCols[] = {SHIFT_COL, SPACE_COL, BACKSPACE_COL, DONE_COL};
+    const int totalWidth = widths[0] + widths[1] + widths[2] + widths[3] + 3 * KEY_SPACING;
+    int keyX = (pageWidth - totalWidth) / 2;
+    for (int i = 0; i < 4; ++i) {
+      if (x >= keyX && x < keyX + widths[i]) col = mappedCols[i];
+      keyX += widths[i] + KEY_SPACING;
+    }
+  } else {
+    const int rowLength = getRowLength(row);
+    const int totalWidth = rowLength * keyWidth + (rowLength - 1) * KEY_SPACING;
+    const int startX = (pageWidth - totalWidth) / 2;
+    if (x >= startX) {
+      const int candidate = (x - startX) / (keyWidth + KEY_SPACING);
+      if (candidate < rowLength && (x - startX) % (keyWidth + KEY_SPACING) < keyWidth) col = candidate;
+    }
+  }
+  if (col < 0) return false;
+  selectedRow = row;
+  selectedCol = col;
+  handleKeyPress();
+  updateRequired = true;
+  return true;
 }
 
 void KeyboardEntryActivity::render() const {

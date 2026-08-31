@@ -12,6 +12,7 @@
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/ScreenComponents.h"
+#include "system/UiI18n.h"
 
 namespace {
 constexpr int kMainTabCount = 5;
@@ -130,6 +131,8 @@ void UiTheme::drawMainTabBar(const GfxRenderer& renderer, const int selectedInde
 
 int UiTheme::drawPageHeader(const GfxRenderer& renderer, const char* title, const int startY, const char* trailingText,
                             const int titleX) const {
+  title = uiTr(title);
+  trailingText = uiTr(trailingText);
   const int pageWidth = renderer.getScreenWidth();
   const int headerH = drawerPageHeaderHeight();
   renderer.rectangle.fill(0, startY, pageWidth, headerH, false);

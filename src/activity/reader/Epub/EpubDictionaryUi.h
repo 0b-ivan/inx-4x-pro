@@ -26,6 +26,8 @@ class EpubDictionaryUi {
 
   void tryChordEnter(EpubActivity& act);
   void enter(EpubActivity& act);
+  void enterAtWordIndex(EpubActivity& act, size_t wordIndex, bool lookUpImmediately = true);
+  void enterTextPanel(EpubActivity& act, const std::string& title, const std::string& text);
   void exit(EpubActivity& act);
   void handleInput(EpubActivity& act);
   void repaint(EpubActivity& act);

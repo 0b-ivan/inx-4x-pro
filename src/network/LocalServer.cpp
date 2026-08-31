@@ -216,7 +216,7 @@ void clearEpubCacheIfNeeded(const String& filePath) {
 
 bool clockSettingsAvailable() {
 #ifndef INX_SIMULATOR_WEB_ONLY
-  return gpio.deviceIsX3();
+  return gpio.hasRtc();
 #else
   return false;
 #endif

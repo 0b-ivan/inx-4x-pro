@@ -151,7 +151,18 @@ bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {
   return true;
 }
 
+bool MappedInputManager::wasScreenLongPressDrag(int& x, int& y) const {
+  float nx = 0.0f;
+  float ny = 0.0f;
+  if (!gpio.wasTouchLongPress(nx, ny)) return false;
+  renderer.tapToLogical(nx, ny, x, y);
+  rememberTouchHeldTime();
+  return true;
+}
+
 bool MappedInputManager::wasScreenTouchReleased() const { return gpio.wasTouchReleased(); }
+
+void MappedInputManager::suppressScreenTouchContact() const { gpio.suppressTouchContact(); }
 
 bool MappedInputManager::wasTapInRect(const int x, const int y, const int width, const int height) const {
   int tx = 0;

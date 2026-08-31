@@ -54,6 +54,11 @@ class EpubAnnotationUi {
   void exit(EpubActivity& act);
   void handleInput(EpubActivity& act);
   void repaint(EpubActivity& act);
+  bool beginTouchSelection(EpubActivity& act, int x, int y);
+  bool updateTouchSelection(EpubActivity& act, int x, int y);
+  void finishTouchSelection(EpubActivity& act);
+  bool handleTouchTap(EpubActivity& act, int x, int y);
+  bool touchSelecting() const { return touchSelecting_; }
 
   void ensureDiskListLoaded(EpubActivity& act);
   void updateStoredRangesForPage(const EpubActivity& act);
@@ -76,6 +81,7 @@ class EpubAnnotationUi {
 
   void moveFocusWord(int delta);
   void moveFocusLine(int delta);
+  size_t wordAtPoint(int x, int y) const;
   bool tryNavigationHoldRepeat(EpubActivity& act);
 
   void captureFramebuffer(EpubActivity& act);
@@ -110,6 +116,7 @@ class EpubAnnotationUi {
   unsigned long chordStartMs_ = 0;
   bool chordConsumed_ = false;
   bool selectingStarted_ = false;
+  bool touchSelecting_ = false;
   /** Completed ranges while browsing between Start/Stop cycles (same page). */
   std::vector<std::pair<size_t, size_t>> pendingSpans_;
   /** Suppress duplicate wasPressed edges (ADC bounce) for the same direction. */

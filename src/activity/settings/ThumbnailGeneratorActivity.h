@@ -22,6 +22,8 @@ class ThumbnailGeneratorActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  bool handleTouchTap(int x, int y) override;
+  bool prioritizesScreenTouch() const override { return true; }
 
  private:
   enum State : uint8_t { READY, RUNNING, SUCCESS, CANCELLED, FAILED };

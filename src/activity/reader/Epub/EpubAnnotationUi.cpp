@@ -12,6 +12,7 @@
 #include <new>
 
 #include "EpubActivity.h"
+#include "network/TranslationClient.h"
 #include "system/FontManager.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
@@ -163,6 +164,7 @@ void EpubAnnotationUi::enter(EpubActivity& act) {
   act.btnBindings_.reset();
   mode_ = true;
   selectingStarted_ = false;
+  touchSelecting_ = false;
   pendingSpans_.clear();
   annLastNavEdgeDir_ = -1;
   annNavRepeatDir_ = -1;
@@ -188,6 +190,7 @@ void EpubAnnotationUi::enter(EpubActivity& act) {
 void EpubAnnotationUi::exit(EpubActivity& act) {
   mode_ = false;
   selectingStarted_ = false;
+  touchSelecting_ = false;
   // swap, not .clear() - .clear() empties the contents but keeps the heap capacity reserved for
   // reuse; a page with many highlights/words can grow these well past what's needed once the UI
   // closes (same fix as EpubDictionaryUi's releaseDefinitionMemory()).
@@ -207,6 +210,87 @@ void EpubAnnotationUi::exit(EpubActivity& act) {
   captureBytes_ = 0;
   captureValid_ = false;
   act.updateRequired = true;
+}
+
+size_t EpubAnnotationUi::wordAtPoint(const int x, const int y) const {
+  if (words_.empty()) return 0;
+  size_t best = 0;
+  long bestDistance = LONG_MAX;
+  for (size_t i = 0; i < words_.size(); ++i) {
+    const auto& word = words_[i];
+    const int right = word.screenX + std::max(1, word.screenW);
+    const int bottom = word.screenY + std::max(1, word.screenH);
+    if (x >= word.screenX && x <= right && y >= word.screenY && y <= bottom) return i;
+    const int cx = std::clamp(x, word.screenX, right);
+    const int cy = std::clamp(y, word.screenY, bottom);
+    const long dx = x - cx;
+    const long dy = y - cy;
+    const long distance = dx * dx + dy * dy;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = i;
+    }
+  }
+  return best;
+}
+
+bool EpubAnnotationUi::beginTouchSelection(EpubActivity& act, const int x, const int y) {
+  enter(act);
+  if (!mode_ || words_.empty()) return false;
+  anchor_ = focus_ = wordAtPoint(x, y);
+  selectingStarted_ = true;
+  touchSelecting_ = true;
+  act.updateRequired = true;
+  return true;
+}
+
+bool EpubAnnotationUi::updateTouchSelection(EpubActivity& act, const int x, const int y) {
+  if (!mode_ || !touchSelecting_ || words_.empty()) return false;
+  const size_t next = wordAtPoint(x, y);
+  if (next == focus_) return true;
+  focus_ = next;
+  act.updateRequired = true;
+  return true;
+}
+
+void EpubAnnotationUi::finishTouchSelection(EpubActivity& act) {
+  if (!mode_ || !touchSelecting_) return;
+  // A drag-select is one semantic gesture. Do not let its lift become a
+  // second tap (especially on the bottom main-tab bar, which would leave the
+  // reader and appear like a crash).
+  act.mappedInput.suppressScreenTouchContact();
+  touchSelecting_ = false;
+  act.updateRequired = true;
+}
+
+bool EpubAnnotationUi::handleTouchTap(EpubActivity& act, const int x, const int y) {
+  if (!mode_) return false;
+  constexpr int actionHeight = 72;
+  const int width = act.renderer.getScreenWidth();
+  const int height = act.renderer.getScreenHeight();
+  if (y < height - actionHeight || width <= 0) return false;
+  const int action = std::clamp((x * 4) / width, 0, 3);
+  if (action == 0) {
+    exit(act);
+    act.startPageTimer();
+  } else if (action == 1) {
+    saveToStorage(act);
+    act.startPageTimer();
+  } else if (action == 2) {
+    const size_t word = focus_;
+    exit(act);
+    act.dictUi_.enterAtWordIndex(act, word, true);
+  } else {
+    const std::string selected = extractRangeText(anchor_, focus_);
+    act.readerPopup("Translating...");
+    std::string translated;
+    std::string error;
+    TranslationClient client;
+    const bool ok = client.translate(selected, translated, error);
+    exit(act);
+    act.dictUi_.enterTextPanel(act, ok ? "Translation" : "Translation error", ok ? translated : error);
+  }
+  return true;
 }
 
 bool EpubAnnotationUi::tryNavigationHoldRepeat(EpubActivity& act) {
@@ -548,10 +632,7 @@ void EpubAnnotationUi::drawUiOverlay(EpubActivity& act) {
   const GfxRenderer::Orientation o = act.renderer.getOrientation();
   drawHighlights(act);
   act.renderer.setOrientation(GfxRenderer::Portrait);
-  const char* backHint = hasSaveableContent() ? "Save" : "Exit";
-  const char* mid = selectingStarted_ ? "Stop" : "Start";
-  const auto labels = act.mappedInput.mapLabels(backHint, mid, "Prev", "Next");
-  act.renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  act.renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, "Cancel", "Highlight", "Dictionary", "Translate");
   act.renderer.ui.sideButtonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, "Reset", "Up", "Down");
   act.renderer.setOrientation(o);
   act.renderer.displayBuffer(HalDisplay::FAST_REFRESH);

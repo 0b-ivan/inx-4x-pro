@@ -33,12 +33,12 @@ void drawBatteryLightningBolt(const GfxRenderer& renderer, const int boltX, cons
 }
 
 bool formatMenuClock(char* out, const size_t outSize) {
-  if (!out || outSize == 0 || !gpio.deviceIsX3() || !SETTINGS.showMenuClock) {
+  if (!out || outSize == 0 || !gpio.hasRtc() || !SETTINGS.showMenuClock) {
     return false;
   }
 
   HalGPIO::DateTime dt;
-  if (!gpio.readDateTime(dt)) {
+  if (!gpio.readDateTime(dt, SETTINGS.getTimeZoneOffsetMinutes())) {
     return false;
   }
 

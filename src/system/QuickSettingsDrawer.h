@@ -13,6 +13,7 @@
 
 #include "state/ReaderSetting.h"
 #include "state/SystemSetting.h"
+#include "images/FrontlightIcons.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/X4ProQuickPrefs.h"
@@ -330,7 +331,10 @@ class QuickSettingsDrawer {
     const int plusX = width - side_ - buttonW_ - gap_ - buttonW_;
     const int toggleX = width - side_ - buttonW_;
     drawButton(plusX, brightnessY_, buttonW_, controlH_, "+");
-    drawButton(toggleX, brightnessY_, buttonW_, controlH_, frontlight.isOn() ? "ON" : "OFF", frontlight.isOn());
+    drawButton(toggleX, brightnessY_, buttonW_, controlH_, "", frontlight.isOn());
+    const uint8_t* sunIcon = frontlight.isOn() ? FrontlightSunFilled32 : FrontlightSunOutline32;
+    renderer.bitmap.icon(sunIcon, toggleX + (buttonW_ - 32) / 2, brightnessY_ + (controlH_ - 32) / 2, 32, 32,
+                         BitmapRender::Orientation::None, frontlight.isOn());
 
     drawCaption("Warmth", frontlight.warmth(), 128);
     drawButton(side_, warmthY_, buttonW_, controlH_, "-");

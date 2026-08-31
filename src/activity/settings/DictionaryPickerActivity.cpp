@@ -107,6 +107,16 @@ void DictionaryPickerActivity::loop() {
     return;
   }
 
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+    const int bodyTop = INX_THEME.mainContentTop() + INX_THEME.mainHeaderHeight();
+    const int visibleRows = std::max(1, (renderer.getScreenHeight() - 44 - bodyTop) / kRowH);
+    const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows;
+    selectedIndex_ = std::clamp(selectedIndex_ + delta, 0, total - 1);
+    render();
+    return;
+  }
+
   if (mappedInput.wasPressed(MenuNav::itemNext())) {
     selectedIndex_ = (selectedIndex_ + 1) % total;
     render();

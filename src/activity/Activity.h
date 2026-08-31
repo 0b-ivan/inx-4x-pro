@@ -79,6 +79,9 @@ class Activity {
     return false;
   }
 
+  /** Let modal/activity-specific touch handling run before the global tab bar. */
+  virtual bool prioritizesScreenTouch() const { return false; }
+
   /**
    * @brief Gets the activity's name identifier
    * @return The name as a C-string

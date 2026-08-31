@@ -56,7 +56,10 @@ class MappedInputManager {
   bool wasScreenTouchDown(int& x, int& y) const;
   bool isScreenTouchHeld(int& x, int& y) const;
   bool wasScreenLongPress(int& x, int& y) const;
+  /** Long press without suppressing the active contact, for drag-selection UIs. */
+  bool wasScreenLongPressDrag(int& x, int& y) const;
   bool wasScreenTouchReleased() const;
+  void suppressScreenTouchContact() const;
   bool wasTapInRect(int x, int y, int width, int height) const;
   RowTouch rowTouch(int& row, int top, int rowStep, int rowCount, int xStart = 0, int xEnd = INT32_MAX,
                     int rowHeight = 0) const;
