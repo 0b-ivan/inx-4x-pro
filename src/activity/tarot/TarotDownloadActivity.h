@@ -16,6 +16,8 @@ class TarotDownloadActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  bool handleTouchTap(int x, int y) override;
+  bool prioritizesScreenTouch() const override { return true; }
   bool preventAutoSleep() override { return state_ == State::Downloading; }
 
  private:
