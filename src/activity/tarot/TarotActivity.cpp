@@ -94,6 +94,7 @@ void TarotActivity::loop() {
 }
 
 bool TarotActivity::handleTouchTap(const int x, const int y) {
+  if (subActivity) return subActivity->handleTouchTap(x, y);
   const int w = renderer.getScreenWidth();
   const int h = renderer.getScreenHeight();
   if (x < 0 || x >= w || y < 0 || y >= h) return false;
