@@ -24,6 +24,7 @@ class ImageRender {
     bool useDisplayCache = true;
     bool quality = false;
     bool fastQuality = false;
+    bool flipHorizontal = false;
   };
 
   static ImageRender create(GfxRenderer& renderer, const std::string& path);

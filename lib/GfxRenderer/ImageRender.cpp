@@ -140,7 +140,8 @@ bool ImageRender::render(int x, int y, int width, int height, const Options& opt
           cropY = 1.0f - (imageRatio / targetRatio);
         }
       }
-      renderer_.bitmap.render(bitmap, x, y, width, height, cropX, cropY, options.roundedOutside, options.mode);
+      renderer_.bitmap.render(bitmap, x, y, width, height, cropX, cropY, options.roundedOutside, options.mode,
+                              options.flipHorizontal);
     }
     file.close();
   }

@@ -185,9 +185,9 @@ bool readIconBitMsbFirst(const uint8_t* bitmap, const int width, const int heigh
 
 void BitmapRender::render(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                           const float cropX, const float cropY, const RoundedOutside roundedOutside,
-                          const ImageRenderMode mode) const {
+                          const ImageRenderMode mode, const bool flipHorizontal) const {
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
-    oneBit(bitmap, x, y, maxWidth, maxHeight, roundedOutside);
+    oneBit(bitmap, x, y, maxWidth, maxHeight, roundedOutside, flipHorizontal);
     return;
   }
 
@@ -293,7 +293,7 @@ void BitmapRender::render(const Bitmap& bitmap, const int x, const int y, const 
           continue;
         }
         for (int bmpX = cropPixX; bmpX < bitmap.getWidth() - cropPixX; bmpX++) {
-          const int srcCol = bmpX - cropPixX;
+          const int srcCol = (flipHorizontal ? bitmap.getWidth() - 1 - bmpX : bmpX) - cropPixX;
           const int x0 = x + static_cast<int>(std::floor(static_cast<float>(srcCol) * scale));
           const int x1 = x + static_cast<int>(std::floor(static_cast<float>(srcCol + 1) * scale));
           const uint8_t val = pixel2bpp(outRow, bmpX);
@@ -319,7 +319,7 @@ void BitmapRender::render(const Bitmap& bitmap, const int x, const int y, const 
       }
 
       for (int bmpX = cropPixX; bmpX < bitmap.getWidth() - cropPixX; bmpX++) {
-        int screenX = bmpX - cropPixX;
+        int screenX = (flipHorizontal ? bitmap.getWidth() - 1 - bmpX : bmpX) - cropPixX;
         if (isScaled) {
           screenX = static_cast<int>(std::floor(static_cast<float>(screenX) * scale));
         }
@@ -346,7 +346,7 @@ void BitmapRender::render(const Bitmap& bitmap, const int x, const int y, const 
 }
 
 void BitmapRender::oneBit(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                          const RoundedOutside roundedOutside) const {
+                          const RoundedOutside roundedOutside, const bool flipHorizontal) const {
   constexpr float kScaleEps = 1e-5f;
   constexpr float kHuge = 1e9f;
   float scale = 1.0f;
@@ -426,9 +426,10 @@ void BitmapRender::oneBit(const Bitmap& bitmap, const int x, const int y, const 
           continue;
         }
         for (int bmpX = 0; bmpX < bw; bmpX++) {
+          const int sourceX = flipHorizontal ? bw - 1 - bmpX : bmpX;
           const int x0 = x + static_cast<int>(std::floor(static_cast<float>(bmpX) * scale));
           const int x1 = x + static_cast<int>(std::floor(static_cast<float>(bmpX + 1) * scale));
-          const uint8_t val = pixel2bpp(outRow, bmpX);
+          const uint8_t val = pixel2bpp(outRow, sourceX);
           for (int sx = x0; sx < x1 && sx < gfx.getScreenWidth(); ++sx) {
             if (sx < 0) {
               continue;
@@ -447,7 +448,8 @@ void BitmapRender::oneBit(const Bitmap& bitmap, const int x, const int y, const 
       }
 
       for (int bmpX = 0; bmpX < bw; bmpX++) {
-        const int screenX = x + (isScaled ? static_cast<int>(std::floor(static_cast<float>(bmpX) * scale)) : bmpX);
+        const int drawX = flipHorizontal ? bw - 1 - bmpX : bmpX;
+        const int screenX = x + (isScaled ? static_cast<int>(std::floor(static_cast<float>(drawX) * scale)) : drawX);
         if (screenX >= gfx.getScreenWidth()) {
           break;
         }
@@ -455,7 +457,7 @@ void BitmapRender::oneBit(const Bitmap& bitmap, const int x, const int y, const 
           continue;
         }
 
-        const uint8_t val = pixel2bpp(outRow, bmpX);
+        const uint8_t val = pixel2bpp(outRow, flipHorizontal ? bw - 1 - bmpX : bmpX);
         emitPixel1(screenX, screenY, val);
       }
     }
