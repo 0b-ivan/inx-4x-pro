@@ -13,8 +13,8 @@
 
 namespace {
 constexpr int kFooterH = 44;
-constexpr int kCardW = 320;
-constexpr int kCardH = 533;
+constexpr int kSourceCardW = 320;
+constexpr int kSourceCardH = 533;
 ImageRender::Options tarotImageOptions() {
   ImageRender::Options options;
   options.mode = ImageRenderMode::OneBit;
@@ -172,12 +172,24 @@ void TarotActivity::renderPrompt() {
 
 void TarotActivity::renderCard() {
   const int w = renderer.getScreenWidth();
-  const int x = (w - kCardW) / 2;
-  const int y = 18;
-  ImageRender::create(renderer, TarotAssets::cardPath(card_)).render(x, y, kCardW, kCardH, tarotImageOptions());
-  renderer.rectangle.render(x - 2, y - 2, kCardW + 4, kCardH + 4, true);
+  const int h = renderer.getScreenHeight();
+  constexpr int topMargin = 8;
+  constexpr int sideMargin = 8;
+  constexpr int titleAreaH = 38;
+  const int availableW = std::max(1, w - sideMargin * 2);
+  const int availableH = std::max(1, h - kFooterH - topMargin - titleAreaH);
+  int cardW = availableW;
+  int cardH = cardW * kSourceCardH / kSourceCardW;
+  if (cardH > availableH) {
+    cardH = availableH;
+    cardW = cardH * kSourceCardW / kSourceCardH;
+  }
+  const int x = (w - cardW) / 2;
+  const int y = topMargin;
+  ImageRender::create(renderer, TarotAssets::cardPath(card_)).render(x, y, cardW, cardH, tarotImageOptions());
+  renderer.rectangle.render(x - 2, y - 2, cardW + 4, cardH + 4, true);
   const TarotMeaning m = assets_.meaning(card_);
-  renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, y + kCardH + 14, m.name.c_str(), true,
+  renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, y + cardH + 10, m.name.c_str(), true,
                          EpdFontFamily::BOLD);
   if (showMeaning_) {
     const int boxX = 28;
