@@ -475,8 +475,8 @@ void GameBoyActivity::loop() {
       lastFrameHash_ = hash;
       renderGameFrame();
       ++displayedFrames_;
-      const HalDisplay::RefreshMode mode = (displayedFrames_ % 64u == 0u) ? HalDisplay::STRONG_FAST_REFRESH
-                                                                         : HalDisplay::FAST_REFRESH;
+      const HalDisplay::RefreshMode mode =
+          (displayedFrames_ % kGhostClearInterval == 0u) ? HalDisplay::STRONG_FAST_REFRESH : HalDisplay::FAST_REFRESH;
       if (renderer.supportsAsyncRefresh()) {
         renderer.displayBufferAsync(mode);
       } else {
