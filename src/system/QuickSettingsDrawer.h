@@ -253,7 +253,12 @@ class QuickSettingsDrawer {
     if (inRect(x, y, side_, row2, tileW, tileH_)) {
       READER_SETTINGS.orientation = static_cast<uint8_t>((READER_SETTINGS.orientation + 1) % SystemSetting::ORIENTATION_COUNT);
       READER_SETTINGS.saveToFile();
-      render();
+      // Activities lay themselves out for the orientation that was active on
+      // entry. Restart after persisting so the complete UI is rebuilt instead
+      // of merely changing the label while leaving the old layout on screen.
+      close(true);
+      delay(150);
+      ESP.restart();
       return;
     }
     if (inRect(x, y, rightX, row2, tileW, tileH_)) {
