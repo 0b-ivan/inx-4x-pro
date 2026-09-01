@@ -32,6 +32,14 @@ class ActivityWithSubactivity : public Activity {
   bool prioritizesScreenTouch() const override {
     return subActivity && subActivity->prioritizesScreenTouch();
   }
+  /** Bubble runtime policy through nested activities as well as input/touch. */
+  bool skipLoopDelay() override { return subActivity ? subActivity->skipLoopDelay() : Activity::skipLoopDelay(); }
+  bool preventAutoSleep() override {
+    return subActivity ? subActivity->preventAutoSleep() : Activity::preventAutoSleep();
+  }
+  bool allowGlobalPowerRefresh() override {
+    return subActivity ? subActivity->allowGlobalPowerRefresh() : Activity::allowGlobalPowerRefresh();
+  }
   /** Cleans up the current subactivity on exit. */
   void onExit() override;
 };
