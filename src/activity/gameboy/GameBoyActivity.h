@@ -1,17 +1,9 @@
 #pragma once
 
-#include <array>
-#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
-
-#ifndef SIMULATOR
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
-#endif
 
 #include "activity/Activity.h"
 #include "activity/ActivityWithSubactivity.h"
@@ -39,14 +31,11 @@ class GameBoyActivity final : public Activity {
   static constexpr int kScale = 3;
   static constexpr int kGameWidth = kGbWidth * kScale;
   static constexpr int kGameHeight = kGbHeight * kScale;
-  static constexpr int kFrameBytes = (kGbWidth * kGbHeight) / 4;
   static constexpr int kBankSize = 0x4000;
   static constexpr int kBankCacheSlots = 8;
   static constexpr uint32_t kMaxRomSize = 8u * 1024u * 1024u;
   static constexpr unsigned long kExitHoldMs = 1200;
   static constexpr unsigned long kAutoSaveMs = 60000;
-  static constexpr unsigned long kDisplayIntervalMs = 50;
-  static constexpr unsigned long kTouchPulseMs = 100;
 
   std::string romPath_;
   std::string romName_;
@@ -66,27 +55,11 @@ class GameBoyActivity final : public Activity {
   bool inputSinceSave_ = false;
   uint32_t lastFrameHash_ = 0;
   uint32_t displayedFrames_ = 0;
-  uint32_t consumedFrameSequence_ = 0;
   unsigned long exitChordStartedAt_ = 0;
   unsigned long lastAutoSaveAt_ = 0;
-  unsigned long lastDisplayAt_ = 0;
-  unsigned long lastSynchronousFrameAt_ = 0;
   uint8_t touchPulseMask_ = 0;
-  unsigned long touchPulseUntil_ = 0;
+  uint8_t touchPulseFrames_ = 0;
   int previousOrientation_ = 0;
-
-  std::atomic<uint8_t> currentInput_{0};
-  std::atomic<uint32_t> publishedFrameSequence_{0};
-  std::array<uint8_t, kFrameBytes> publishedFrame_{};
-  std::array<uint8_t, kFrameBytes> renderFrame_{};
-  bool backgroundEmulation_ = false;
-
-#ifndef SIMULATOR
-  std::atomic<TaskHandle_t> emulatorTaskHandle_{nullptr};
-  SemaphoreHandle_t emulatorMutex_ = nullptr;
-  portMUX_TYPE frameMux_ = portMUX_INITIALIZER_UNLOCKED;
-  std::atomic<bool> stopEmulatorTask_{false};
-#endif
 
   bool initializeEmulator();
   bool loadRom();
@@ -99,15 +72,6 @@ class GameBoyActivity final : public Activity {
   uint32_t hashFrame() const;
   uint8_t collectInput();
   void requestClose();
-
-  void captureEmulatorFrame();
-  bool snapshotLatestFrame();
-  bool startEmulatorTask();
-  void stopEmulatorTask();
-#ifndef SIMULATOR
-  static void emulatorTaskTrampoline(void* arg);
-  void emulatorTaskLoop();
-#endif
 
   bool loadSram();
   bool saveSram();
