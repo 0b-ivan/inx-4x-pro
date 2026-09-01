@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "calendar/CalendarStore.h"
+#include "calendar/CalendarSyncService.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 
@@ -76,6 +77,10 @@ namespace DeskCalendarRenderer {
 
 bool render(GfxRenderer& renderer, const SleepClockRenderer::DateTimeView& dateTime, int x, int y, int w, int h) {
   if (w < 300 || h < 260) return false;
+
+  // This is a no-op unless calendar.json exists, the feature is enabled and
+  // the configured interval elapsed. Failures never invalidate the old cache.
+  CalendarSyncService::syncIfDue(dateTime);
 
   Calendar::CalendarStore store;
   std::vector<Calendar::Event> events;
