@@ -11,6 +11,7 @@
 #include <cstdio>
 
 #include "state/SystemSetting.h"
+#include "system/DeskCalendarRenderer.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/MenuNav.h"
@@ -77,7 +78,13 @@ void ClockStylePickerActivity::render() {
 
   renderer.clearScreen();
   const auto dt = previewDateTime();
-  SleepClockRenderer::render(renderer, selectedIndex, dt, true, 0, 0, pageWidth, pageHeight);
+  if (selectedIndex == SystemSetting::CLOCK_HORIZONTAL_CARD) {
+    // The desk-calendar preview must remain side-effect free: do not bring up
+    // Wi-Fi or perform a CalDAV request just because settings were opened.
+    DeskCalendarRenderer::render(renderer, dt, 0, 0, pageWidth, pageHeight, false);
+  } else {
+    SleepClockRenderer::render(renderer, selectedIndex, dt, true, 0, 0, pageWidth, pageHeight);
+  }
 
   const char* name = SleepClockRenderer::styleName(selectedIndex);
   renderer.rectangle.fill(0, 0, pageWidth, 24, false);
