@@ -247,7 +247,7 @@ void TarotActivity::renderCard() {
   const int h = renderer.getScreenHeight();
   constexpr int topMargin = 16;
   constexpr int sideMargin = 18;
-  constexpr int bottomAreaH = 42;
+  constexpr int bottomAreaH = 16;
   const int availableW = std::max(1, w - sideMargin * 2);
   const int availableH = std::max(1, h - topMargin - bottomAreaH);
   int cardW = availableW;
@@ -263,8 +263,6 @@ void TarotActivity::renderCard() {
   renderer.rectangle.render(x - 1, y - 1, cardW + 2, cardH + 2, true);
 
   const TarotMeaning m = assets_.meaning(card_);
-  renderer.text.centered(LITERATA_10_FONT_ID, y + cardH + 10, m.name.c_str(), true, EpdFontFamily::BOLD);
-
   if (showMeaning_) {
     const int boxX = 24;
     const int boxW = w - 48;
