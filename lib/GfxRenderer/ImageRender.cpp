@@ -147,14 +147,13 @@ bool ImageRender::render(int x, int y, int width, int height, const Options& opt
         }
       }
 
-      // The imported DogeReader Tarot BMPs use the opposite vertical row
-      // orientation from normal Inx image assets. Normalize that once here so
-      // every consumer (Tarot activity, history thumbnails and Tarot standby)
-      // sees the same upright card instead of each screen having to remember a
-      // private transform.
-      const bool effectiveFlipVertical = options.flipVertical || isTarotBitmapAsset(path_);
+      // The imported DogeReader Tarot BMPs are top-down already, but their
+      // pixels are mirrored horizontally. Normalize that once here so every
+      // consumer (Tarot activity, history thumbnails and Tarot standby) sees
+      // upright, readable cards.
+      const bool effectiveFlipHorizontal = options.flipHorizontal || isTarotBitmapAsset(path_);
       renderer_.bitmap.render(bitmap, x, y, width, height, cropX, cropY, options.roundedOutside, options.mode,
-                              options.flipHorizontal, effectiveFlipVertical);
+                              effectiveFlipHorizontal, options.flipVertical);
     }
     file.close();
   }
