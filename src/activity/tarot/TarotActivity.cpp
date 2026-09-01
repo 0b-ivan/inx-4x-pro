@@ -13,20 +13,22 @@
 #include "TarotI18n.h"
 
 namespace {
-constexpr int kSourceCardW = 320;
-constexpr int kSourceCardH = 533;
-
 ImageRender::Options tarotImageOptions() {
   ImageRender::Options options;
   options.mode = ImageRenderMode::OneBit;
   options.cropToFill = false;
-
-  // Never reuse old Tarot raster cache entries while the deck orientation is
-  // being corrected. The source BMPs are vertically inverted for Inx's normal
-  // logical coordinate system, so flip only the vertical axis here.
   options.useDisplayCache = false;
+  // Tarot BMP orientation is normalized centrally in ImageRender.
   options.flipHorizontal = false;
-  options.flipVertical = true;
+  options.flipVertical = false;
+  return options;
+}
+
+ImageRender::Options tarotMenuImageOptions() {
+  ImageRender::Options options;
+  options.mode = ImageRenderMode::OneBit;
+  options.cropToFill = false;
+  options.useDisplayCache = false;
   return options;
 }
 
@@ -45,32 +47,6 @@ void drawTarotDivider(GfxRenderer& renderer, const int y) {
   renderer.line.render(cx - halfWidth, y, cx - starGap, y, true);
   renderer.line.render(cx + starGap, y, cx + halfWidth, y, true);
   drawTarotStar(renderer, cx, y, 5);
-}
-
-void drawDiamond(GfxRenderer& renderer, const int cx, const int cy, const int radius) {
-  renderer.line.render(cx, cy - radius, cx + radius, cy, true);
-  renderer.line.render(cx + radius, cy, cx, cy + radius, true);
-  renderer.line.render(cx, cy + radius, cx - radius, cy, true);
-  renderer.line.render(cx - radius, cy, cx, cy - radius, true);
-}
-
-void drawTarotCardBack(GfxRenderer& renderer, const int x, const int y, const int w, const int h) {
-  renderer.rectangle.render(x, y, w, h, true, true);
-  renderer.rectangle.render(x + 7, y + 7, w - 14, h - 14, true, true);
-  renderer.rectangle.render(x + 17, y + 17, w - 34, h - 34, true, true);
-
-  const int cx = x + w / 2;
-  const int cy = y + h / 2;
-  const int outer = std::max(28, std::min(w, h) / 7);
-  drawDiamond(renderer, cx, cy, outer);
-  drawDiamond(renderer, cx, cy, std::max(16, outer / 2));
-  drawTarotStar(renderer, cx, cy, std::max(8, outer / 4));
-
-  const int rayGap = outer + 16;
-  renderer.line.render(cx, cy - rayGap - 18, cx, cy - rayGap, true);
-  renderer.line.render(cx, cy + rayGap, cx, cy + rayGap + 18, true);
-  renderer.line.render(cx - rayGap - 18, cy, cx - rayGap, cy, true);
-  renderer.line.render(cx + rayGap, cy, cx + rayGap + 18, cy, true);
 }
 }  // namespace
 
@@ -225,50 +201,33 @@ void TarotActivity::renderPrompt() {
   const int w = renderer.getScreenWidth();
   const int h = renderer.getScreenHeight();
 
-  constexpr int titleY = 58;
-  renderer.text.centered(LITERATA_18_FONT_ID, titleY, "Tarot", true, EpdFontFamily::BOLD);
-  drawTarotDivider(renderer, titleY + 47);
+  // The illustration contains only the approved card stack and ornamental
+  // dividers. All words are rendered by the firmware so they stay crisp and
+  // can follow the selected UI language.
+  const bool artworkRendered =
+      ImageRender::create(renderer, "/tarot/menu.png").render(0, 0, w, h, tarotMenuImageOptions());
 
-  constexpr int stackOffset = 9;
-  const int deckY = std::max(148, h / 5 - 12);
-  int cardW = std::min(238, std::max(205, w * 50 / 100));
-  int cardH = cardW * kSourceCardH / kSourceCardW;
-  const int maxCardH = std::max(320, h - deckY - 210);
-  if (cardH > maxCardH) {
-    cardH = maxCardH;
-    cardW = cardH * kSourceCardW / kSourceCardH;
+  if (!artworkRendered) {
+    // Minimal fallback if the menu asset is damaged or missing.
+    drawTarotDivider(renderer, 116);
+    renderer.rectangle.render(w / 2 - 115, 170, 230, 390, true, true);
+    renderer.rectangle.render(w / 2 - 105, 180, 230, 390, true, true);
+    renderer.rectangle.render(w / 2 - 95, 190, 230, 390, true, true);
+    drawTarotDivider(renderer, 734);
   }
-  const int deckX = (w - cardW - stackOffset * 2) / 2;
 
-  renderer.rectangle.render(deckX + stackOffset * 2, deckY + stackOffset * 2, cardW, cardH, true, true);
-  renderer.rectangle.render(deckX + stackOffset, deckY + stackOffset, cardW, cardH, true, true);
-  drawTarotCardBack(renderer, deckX, deckY, cardW, cardH);
-
-  const int labelY = deckY + cardH + stackOffset * 2 + 30;
-  renderer.text.centered(LITERATA_12_FONT_ID, labelY, uiTr("78 cards"), true, EpdFontFamily::BOLD);
-  drawTarotDivider(renderer, labelY + 40);
-  renderer.text.centered(LITERATA_10_FONT_ID, labelY + 67, uiTr("Tap to draw a card"), true);
+  renderer.text.centered(LITERATA_18_FONT_ID, 48, "Tarot", true, EpdFontFamily::BOLD);
+  renderer.text.centered(LITERATA_12_FONT_ID, 686, uiTr("78 cards"), true, EpdFontFamily::BOLD);
+  renderer.text.centered(LITERATA_10_FONT_ID, 748, uiTr("Tap to draw a card"), true);
 }
 
 void TarotActivity::renderCard() {
   const int w = renderer.getScreenWidth();
   const int h = renderer.getScreenHeight();
-  constexpr int topMargin = 16;
-  constexpr int sideMargin = 18;
-  constexpr int bottomAreaH = 16;
-  const int availableW = std::max(1, w - sideMargin * 2);
-  const int availableH = std::max(1, h - topMargin - bottomAreaH);
-  int cardW = availableW;
-  int cardH = cardW * kSourceCardH / kSourceCardW;
-  if (cardH > availableH) {
-    cardH = availableH;
-    cardW = cardH * kSourceCardW / kSourceCardH;
-  }
-  const int x = (w - cardW) / 2;
-  const int y = topMargin;
 
-  ImageRender::create(renderer, TarotAssets::cardPath(card_)).render(x, y, cardW, cardH, tarotImageOptions());
-  renderer.rectangle.render(x - 1, y - 1, cardW + 2, cardH + 2, true);
+  // Rider-Waite cards are 320x533; the X4 Pro is 480x800. The aspect ratios
+  // are effectively identical, so render edge-to-edge without UI chrome.
+  ImageRender::create(renderer, TarotAssets::cardPath(card_)).render(0, 0, w, h, tarotImageOptions());
 
   const TarotMeaning m = assets_.meaning(card_);
   if (showMeaning_) {
@@ -322,8 +281,12 @@ void TarotActivity::render() {
                            uiTr("Tarot files missing"), true, EpdFontFamily::BOLD);
     renderer.text.centered(LITERATA_10_FONT_ID, renderer.getScreenHeight() / 2 + 24,
                            uiTr("Press Select or tap to download about 14 MB"), true);
-  } else if (view_ == View::Prompt) renderPrompt();
-  else if (view_ == View::Card) renderCard();
-  else renderHistory();
+  } else if (view_ == View::Prompt) {
+    renderPrompt();
+  } else if (view_ == View::Card) {
+    renderCard();
+  } else {
+    renderHistory();
+  }
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
