@@ -60,5 +60,6 @@ class OtaUpdateActivity : public ActivityWithSubactivity, public Menu {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  bool handleTouchTap(int x, int y) override;
   bool preventAutoSleep() override { return state == CHECKING_FOR_UPDATE || state == UPDATE_IN_PROGRESS; }
 };

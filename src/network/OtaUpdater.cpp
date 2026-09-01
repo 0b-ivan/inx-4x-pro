@@ -23,7 +23,7 @@
 #include "esp_wifi.h"
 
 namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/obijuankenobiii/inx/releases/latest";
+constexpr char latestReleaseUrl[] = "https://api.github.com/repos/0b-ivan/inx-4x-pro/releases/latest";
 
 constexpr size_t kMaxReleaseJsonBytes = 12288;
 
