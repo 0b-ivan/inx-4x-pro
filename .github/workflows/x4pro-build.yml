@@ -2,7 +2,7 @@ name: X4 Pro Build
 
 on:
   push:
-    branches: [x4pro-port]
+    branches: [main]
 
 concurrency:
   group: x4pro-build-${{ github.ref }}
