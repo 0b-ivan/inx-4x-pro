@@ -39,7 +39,9 @@ bool CalendarStore::save(const std::string& ics) const {
 
   SdMan.mkdir("/.calendar");
   constexpr const char* tempPath = "/.calendar/cache.tmp";
+  constexpr const char* backupPath = "/.calendar/cache.prev";
   if (SdMan.exists(tempPath)) SdMan.remove(tempPath);
+  if (SdMan.exists(backupPath)) SdMan.remove(backupPath);
 
   FsFile file;
   if (!SdMan.openFileForWrite("CAL", tempPath, file)) return false;
@@ -70,11 +72,19 @@ bool CalendarStore::save(const std::string& ics) const {
     return false;
   }
 
-  if (SdMan.exists(kCachePath)) SdMan.remove(kCachePath);
-  if (!SdMan.rename(tempPath, kCachePath)) {
+  const bool hadCache = SdMan.exists(kCachePath);
+  if (hadCache && !SdMan.rename(kCachePath, backupPath)) {
     SdMan.remove(tempPath);
     return false;
   }
+
+  if (!SdMan.rename(tempPath, kCachePath)) {
+    SdMan.remove(tempPath);
+    if (hadCache) SdMan.rename(backupPath, kCachePath);
+    return false;
+  }
+
+  if (hadCache && SdMan.exists(backupPath)) SdMan.remove(backupPath);
   return true;
 }
 
