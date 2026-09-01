@@ -22,8 +22,8 @@ constexpr const char* kManifestUrl =
 constexpr const char* kAssetBaseUrl =
     "https://raw.githubusercontent.com/0b-ivan/inx-4x-pro/x4pro-port/tarot/";
 constexpr const char* kMenuRelativePath = "menu.png";
-constexpr size_t kMenuSize = 9531;
-constexpr const char* kMenuSha256 = "8b96b07f4b49103e9900d4100a4230c93b47de7bd60f28f28446bafb41661d76";
+constexpr size_t kMenuSize = 6734;
+constexpr const char* kMenuSha256 = "9e248f8f91110c1e3545d55f2f44a86e333a61df200a13dd63ec9d74f86a5d18";
 constexpr const char* kMenuVersionMarker = "/tarot/.menu-v2";
 
 bool sha256File(const std::string& path, std::string& hex) {
