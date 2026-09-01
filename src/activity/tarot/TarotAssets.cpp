@@ -27,9 +27,9 @@ TarotMeaning TarotAssets::meaning(const int card) const {
 std::string TarotAssets::cardPath(const int card) { return "/tarot/cards/" + std::to_string(card) + ".bmp"; }
 std::string TarotAssets::thumbPath(const int card) { return "/tarot/thumbs/" + std::to_string(card) + ".bmp"; }
 bool TarotAssets::installed() {
-  // The menu-v2 marker deliberately invalidates older Tarot installations.
-  // Existing cards stay on the SD card; the downloader only replaces the new
-  // E-Ink menu artwork and then writes this marker.
+  // Menu v3 is the final pure-white 1-bit X4 Pro artwork. Requiring the marker
+  // makes older installations enter the downloader once so only menu.png is
+  // refreshed; the verified 78 card BMPs remain untouched.
   return SdMan.exists("/tarot/cards/0.bmp") && SdMan.exists("/tarot/meanings.json") &&
-         SdMan.exists("/tarot/menu.png") && SdMan.exists("/tarot/.menu-v2");
+         SdMan.exists("/tarot/menu.png") && SdMan.exists("/tarot/.menu-v3");
 }
