@@ -103,33 +103,18 @@ void GameBoyActivity::onEnter() {
   }
 
   emulator_->runFrames(2);
-  captureEmulatorFrame();
-
   ready_ = true;
   firstFrame_ = true;
   lastAutoSaveAt_ = millis();
-  lastDisplayAt_ = millis();
-  lastSynchronousFrameAt_ = millis();
-  currentInput_.store(0, std::memory_order_relaxed);
-
   renderShell();
   lastFrameHash_ = hashFrame();
-
-  backgroundEmulation_ = startEmulatorTask();
-  if (!backgroundEmulation_) {
-    Serial.println("[GB] Background task unavailable; using synchronous frame pacing");
-  }
 }
 
 void GameBoyActivity::onExit() {
-  stopEmulatorTask();
-
   if (ready_) {
     saveSram();
   }
-
   ready_ = false;
-  backgroundEmulation_ = false;
   cleanupEmulator();
   renderer.resetTransientReaderState();
   renderer.setOrientation(static_cast<GfxRenderer::Orientation>(previousOrientation_));
@@ -183,15 +168,6 @@ bool GameBoyActivity::initializeEmulator() {
     cleanupEmulator();
     return false;
   }
-
-#ifndef SIMULATOR
-  emulatorMutex_ = xSemaphoreCreateMutex();
-  if (!emulatorMutex_) {
-    Serial.println("[GB] Failed to allocate emulator mutex");
-    cleanupEmulator();
-    return false;
-  }
-#endif
 
   loadSram();
   Serial.printf("[GB] Ready: %s, free heap=%u\n", romPath_.c_str(), static_cast<unsigned>(ESP.getFreeHeap()));
@@ -256,13 +232,6 @@ bool GameBoyActivity::loadRom() {
 }
 
 void GameBoyActivity::cleanupEmulator() {
-#ifndef SIMULATOR
-  if (emulatorMutex_) {
-    vSemaphoreDelete(emulatorMutex_);
-    emulatorMutex_ = nullptr;
-  }
-#endif
-
   if (emulator_) {
     if (emulator_->romFile_) emulator_->romFile_.close();
     delete emulator_;
@@ -308,7 +277,6 @@ void GameBoyActivity::drawTouchButton(const int x, const int y, const int w, con
 
 void GameBoyActivity::renderShell() {
   renderer.clearScreen();
-  snapshotLatestFrame();
   renderGameFrame();
   renderer.line.render(0, kControlsTop, renderer.getScreenWidth() - 1, kControlsTop, true);
 
@@ -331,18 +299,19 @@ void GameBoyActivity::renderShell() {
   renderer.displayBuffer(HalDisplay::FULL_REFRESH);
   firstFrame_ = false;
   displayedFrames_ = 1;
-  lastDisplayAt_ = millis();
 }
 
 void GameBoyActivity::renderGameFrame() {
-  const uint8_t* frame = renderFrame_.data();
+  if (!emulator_) return;
+  const uint8_t* frame = emulator_->getFramebuffer();
   uint8_t* target = renderer.getFrameBuffer();
-  if (!target) return;
+  if (!frame || !target) return;
 
   // The X4 Pro's native panel is 800x480. INX Portrait maps logical (x,y)
   // to native (y, 479-x). Derive the native stride from the live framebuffer
   // instead of hard-coding 100 bytes so the adapter remains defensive.
   if (renderer.getScreenWidth() != kGameWidth || renderer.getScreenHeight() < kGameHeight) {
+    // Unexpected panel/orientation: use the safe renderer path.
     for (int gy = 0; gy < kGbHeight; ++gy) {
       for (int gx = 0; gx < kGbWidth; ++gx) {
         const int byteIndex = gy * (kGbWidth / 4) + (gx >> 2);
@@ -389,9 +358,12 @@ void GameBoyActivity::renderGameFrame() {
 }
 
 uint32_t GameBoyActivity::hashFrame() const {
+  if (!emulator_ || !emulator_->getFramebuffer()) return 0;
+  const uint8_t* data = emulator_->getFramebuffer();
+  constexpr int bytes = (kGbWidth * kGbHeight) / 4;
   uint32_t hash = 2166136261u;
-  for (const uint8_t value : renderFrame_) {
-    hash ^= value;
+  for (int i = 0; i < bytes; ++i) {
+    hash ^= data[i];
     hash *= 16777619u;
   }
   return hash;
@@ -408,106 +380,14 @@ uint8_t GameBoyActivity::collectInput() {
   if (mappedInput.isPressed(MappedInputManager::Button::PageBack)) input |= INPUT_SELECT;
   if (mappedInput.isPressed(MappedInputManager::Button::PageForward)) input |= INPUT_START;
 
-  if (touchPulseMask_ != 0) {
-    const unsigned long now = millis();
-    if (static_cast<int32_t>(touchPulseUntil_ - now) > 0) {
-      input |= touchPulseMask_;
-    } else {
-      touchPulseMask_ = 0;
-      touchPulseUntil_ = 0;
-    }
+  if (touchPulseFrames_ > 0) {
+    input |= touchPulseMask_;
+    --touchPulseFrames_;
+    if (touchPulseFrames_ == 0) touchPulseMask_ = 0;
   }
-
   if (input != 0) inputSinceSave_ = true;
   return input;
 }
-
-void GameBoyActivity::captureEmulatorFrame() {
-  if (!emulator_ || !emulator_->getFramebuffer()) return;
-  const uint8_t* frame = emulator_->getFramebuffer();
-
-#ifndef SIMULATOR
-  portENTER_CRITICAL(&frameMux_);
-#endif
-  memcpy(publishedFrame_.data(), frame, kFrameBytes);
-  publishedFrameSequence_.fetch_add(1, std::memory_order_release);
-#ifndef SIMULATOR
-  portEXIT_CRITICAL(&frameMux_);
-#endif
-}
-
-bool GameBoyActivity::snapshotLatestFrame() {
-  if (publishedFrameSequence_.load(std::memory_order_acquire) == consumedFrameSequence_) return false;
-
-#ifndef SIMULATOR
-  portENTER_CRITICAL(&frameMux_);
-#endif
-  memcpy(renderFrame_.data(), publishedFrame_.data(), kFrameBytes);
-  consumedFrameSequence_ = publishedFrameSequence_.load(std::memory_order_relaxed);
-#ifndef SIMULATOR
-  portEXIT_CRITICAL(&frameMux_);
-#endif
-  return true;
-}
-
-bool GameBoyActivity::startEmulatorTask() {
-#ifdef SIMULATOR
-  return false;
-#else
-  if (!emulator_ || !emulatorMutex_) return false;
-  if (emulatorTaskHandle_.load(std::memory_order_acquire) != nullptr) return true;
-
-  stopEmulatorTask_.store(false, std::memory_order_release);
-  TaskHandle_t handle = nullptr;
-  const BaseType_t created =
-      xTaskCreatePinnedToCore(emulatorTaskTrampoline, "gb-emulator", 8192, this, 2, &handle, 0);
-  if (created != pdPASS || handle == nullptr) {
-    Serial.println("[GB] Failed to create emulator task");
-    return false;
-  }
-  emulatorTaskHandle_.store(handle, std::memory_order_release);
-  return true;
-#endif
-}
-
-void GameBoyActivity::stopEmulatorTask() {
-#ifndef SIMULATOR
-  TaskHandle_t handle = emulatorTaskHandle_.load(std::memory_order_acquire);
-  if (!handle) return;
-
-  stopEmulatorTask_.store(true, std::memory_order_release);
-  while (emulatorTaskHandle_.load(std::memory_order_acquire) != nullptr) {
-    vTaskDelay(1);
-  }
-#endif
-}
-
-#ifndef SIMULATOR
-void GameBoyActivity::emulatorTaskTrampoline(void* arg) {
-  static_cast<GameBoyActivity*>(arg)->emulatorTaskLoop();
-}
-
-void GameBoyActivity::emulatorTaskLoop() {
-  TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t framePeriod = std::max<TickType_t>(1, pdMS_TO_TICKS(17));
-
-  while (!stopEmulatorTask_.load(std::memory_order_acquire)) {
-    if (xSemaphoreTake(emulatorMutex_, portMAX_DELAY) == pdTRUE) {
-      if (emulator_) {
-        emulator_->setInput(currentInput_.load(std::memory_order_relaxed));
-        emulator_->runFrames(1);
-        captureEmulatorFrame();
-      }
-      xSemaphoreGive(emulatorMutex_);
-    }
-
-    vTaskDelayUntil(&lastWake, framePeriod);
-  }
-
-  emulatorTaskHandle_.store(nullptr, std::memory_order_release);
-  vTaskDelete(nullptr);
-}
-#endif
 
 void GameBoyActivity::loop() {
   if (mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
@@ -526,67 +406,23 @@ void GameBoyActivity::loop() {
     return;
   }
 
-  currentInput_.store(collectInput(), std::memory_order_relaxed);
+  emulator_->setInput(collectInput());
+  emulator_->runFrames(8);
+
+  const uint32_t hash = hashFrame();
+  if (hash != lastFrameHash_) {
+    lastFrameHash_ = hash;
+    renderGameFrame();
+    ++displayedFrames_;
+    const HalDisplay::RefreshMode mode = (displayedFrames_ % 32u == 0u) ? HalDisplay::STRONG_FAST_REFRESH
+                                                                        : HalDisplay::FAST_REFRESH;
+    renderer.displayBuffer(mode);
+  }
 
   const unsigned long now = millis();
-
-  // Simulator and task-allocation fallback: keep emulation frame-paced instead
-  // of returning to the old runFrames(8) burst behavior.
-  if (!backgroundEmulation_ && now - lastSynchronousFrameAt_ >= 17) {
-    emulator_->setInput(currentInput_.load(std::memory_order_relaxed));
-    emulator_->runFrames(1);
-    captureEmulatorFrame();
-    lastSynchronousFrameAt_ = now;
-  }
-
-  // The Game Boy keeps running near 60 Hz independently. The e-ink panel only
-  // consumes the newest completed frame at a controlled rate.
-  if (now - lastDisplayAt_ >= kDisplayIntervalMs && snapshotLatestFrame()) {
-    const uint32_t hash = hashFrame();
-    if (hash != lastFrameHash_) {
-      lastFrameHash_ = hash;
-
-      const uint32_t renderStartedAt = micros();
-      renderGameFrame();
-      const uint32_t renderFinishedAt = micros();
-
-      ++displayedFrames_;
-      const HalDisplay::RefreshMode mode = (displayedFrames_ % 64u == 0u) ? HalDisplay::STRONG_FAST_REFRESH
-                                                                         : HalDisplay::FAST_REFRESH;
-      renderer.displayBuffer(mode);
-      const uint32_t displayFinishedAt = micros();
-
-      // Set the interval after the blocking e-ink update. This intentionally
-      // leaves time for the main input loop between refreshes.
-      lastDisplayAt_ = millis();
-
-      if ((displayedFrames_ % 32u) == 0u) {
-        Serial.printf("[GB PERF] render=%lu ms display=%lu ms shown=%lu\n",
-                      static_cast<unsigned long>((renderFinishedAt - renderStartedAt) / 1000u),
-                      static_cast<unsigned long>((displayFinishedAt - renderFinishedAt) / 1000u),
-                      static_cast<unsigned long>(displayedFrames_));
-      }
-    } else {
-      lastDisplayAt_ = now;
-    }
-  }
-
   if (inputSinceSave_ && now - lastAutoSaveAt_ >= kAutoSaveMs) {
-    bool saved = false;
-#ifndef SIMULATOR
-    if (backgroundEmulation_ && emulatorMutex_) {
-      if (xSemaphoreTake(emulatorMutex_, portMAX_DELAY) == pdTRUE) {
-        saved = saveSram();
-        xSemaphoreGive(emulatorMutex_);
-      }
-    } else {
-      saved = saveSram();
-    }
-#else
-    saved = saveSram();
-#endif
-    if (saved) inputSinceSave_ = false;
-    lastAutoSaveAt_ = millis();
+    if (saveSram()) inputSinceSave_ = false;
+    lastAutoSaveAt_ = now;
   }
 }
 
@@ -609,12 +445,8 @@ bool GameBoyActivity::handleTouchTap(const int x, const int y) {
 
   if (pulse != 0) {
     touchPulseMask_ = pulse;
-    touchPulseUntil_ = millis() + kTouchPulseMs;
+    touchPulseFrames_ = 2;
     inputSinceSave_ = true;
-
-    // Make the tap visible to the emulator task immediately; the next main-loop
-    // collectInput() will merge the physical-button state back in.
-    currentInput_.fetch_or(pulse, std::memory_order_relaxed);
     return true;
   }
   return y >= kControlsTop;
@@ -727,9 +559,7 @@ void GameBoyBrowserActivity::loadRoms() {
     std::transform(bl.begin(), bl.end(), bl.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return al < bl;
   });
-  if (selectedIndex_ >= static_cast<int>(roms_.size())) {
-    selectedIndex_ = std::max(0, static_cast<int>(roms_.size()) - 1);
-  }
+  if (selectedIndex_ >= static_cast<int>(roms_.size())) selectedIndex_ = std::max(0, static_cast<int>(roms_.size()) - 1);
   scrollOffset_ = 0;
 }
 
