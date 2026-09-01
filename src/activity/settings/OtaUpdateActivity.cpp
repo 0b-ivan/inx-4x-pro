@@ -255,6 +255,12 @@ bool OtaUpdateActivity::handleTouchTap(const int x, const int y) {
   if (x < 0 || x >= width || y < 0 || y >= height) return false;
   const int bodyTop = INX_THEME.drawPageHeader(renderer, "Update", 0);
 
+  // The bottom hint row is the touch equivalent of the physical Confirm key.
+  if (y >= height - 70 && x >= width / 4 && x < width * 3 / 4) {
+    touchConfirmRequested = true;
+    return true;
+  }
+
   if (state == SOURCE_SELECTION) {
     if (y >= bodyTop && y < bodyTop + 2 * kSourceItemHeight) {
       sourceSelectedIndex = (y - bodyTop) / kSourceItemHeight;
@@ -461,7 +467,8 @@ void OtaUpdateActivity::loop() {
       updateRequired = true;
       return;
     }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) || touchConfirmRequested) {
+      touchConfirmRequested = false;
       if (sourceSelectedIndex == 0) {
         xSemaphoreTake(renderingMutex, portMAX_DELAY);
         state = WIFI_SELECTION;
@@ -492,7 +499,8 @@ void OtaUpdateActivity::loop() {
   }
 
   if (state == WAITING_CONFIRMATION) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) || touchConfirmRequested) {
+      touchConfirmRequested = false;
       Serial.printf("[%lu] [OTA] New update available, starting download...\n", millis());
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = UPDATE_IN_PROGRESS;
@@ -549,7 +557,8 @@ void OtaUpdateActivity::loop() {
       return;
     }
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) || touchConfirmRequested) {
+      touchConfirmRequested = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = WAITING_SD_CONFIRMATION;
       xSemaphoreGive(renderingMutex);
@@ -570,8 +579,9 @@ void OtaUpdateActivity::loop() {
     }
 
     const std::string& firmwarePath = selectedSdFirmwarePath();
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && !firmwarePath.empty() &&
+    if ((mappedInput.wasPressed(MappedInputManager::Button::Confirm) || touchConfirmRequested) && !firmwarePath.empty() &&
         SdMan.exists(firmwarePath.c_str())) {
+      touchConfirmRequested = false;
       Serial.printf("[%lu] [OTA] Installing firmware from SD: %s\n", millis(), firmwarePath.c_str());
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = UPDATE_IN_PROGRESS;
