@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <SDCardManager.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -162,6 +163,17 @@ bool syncIfDue(const SleepClockRenderer::DateTimeView& now) {
   stopWifiIfOwned(startedWifi);
   return ok;
 #endif
+}
+
+uint32_t nextWakeSeconds(const SleepClockRenderer::DateTimeView& now) {
+  Calendar::Config config;
+  if (!Calendar::ConfigStore::load(config) || !config.enabled) return 0;
+
+  const uint32_t syncSeconds = static_cast<uint32_t>(config.syncIntervalMinutes) * 60U;
+  const uint32_t secondsToMidnight =
+      static_cast<uint32_t>(23U - std::min<uint8_t>(now.hour, 23U)) * 3600U +
+      static_cast<uint32_t>(59U - std::min<uint8_t>(now.minute, 59U)) * 60U + 60U;
+  return std::max<uint32_t>(60U, std::min(syncSeconds, secondsToMidnight));
 }
 
 }  // namespace CalendarSyncService
