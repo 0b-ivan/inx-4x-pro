@@ -26,4 +26,6 @@ TarotMeaning TarotAssets::meaning(const int card) const {
 
 std::string TarotAssets::cardPath(const int card) { return "/tarot/cards/" + std::to_string(card) + ".bmp"; }
 std::string TarotAssets::thumbPath(const int card) { return "/tarot/thumbs/" + std::to_string(card) + ".bmp"; }
-bool TarotAssets::installed() { return SdMan.exists("/tarot/cards/0.bmp") && SdMan.exists("/tarot/meanings.json"); }
+bool TarotAssets::installed() {
+  return SdMan.exists("/tarot/cards/0.bmp") && SdMan.exists("/tarot/meanings.json") && SdMan.exists("/tarot/menu.png");
+}
