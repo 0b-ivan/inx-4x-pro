@@ -38,6 +38,9 @@ class HalGPIO {
   mutable int batteryCachedPercent = 0;
   mutable unsigned long batteryLastPollMs = 0;
 
+  // Screen touch stays a first-class input and is exposed unchanged through the
+  // methods below. Only the dedicated capacitive Home key is bridged into Inx's
+  // legacy Back action so existing activity stacks retain their Home/Back path.
   uint8_t virtualPressedEvents = 0;
   uint8_t virtualReleasedEvents = 0;
 
@@ -47,6 +50,8 @@ class HalGPIO {
 
   HalGPIO() = default;
 
+  // The fork is intentionally X4-Pro-only. Keep these compatibility helpers so
+  // the existing Inx application code can remain unchanged during the port.
   bool deviceIsX3() const { return false; }
   bool deviceIsX4() const { return true; }
 
@@ -60,6 +65,10 @@ class HalGPIO {
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
 
+  // Raw FreeInk touch contract. Coordinates are normalized in the panel-native
+  // frame; MappedInputManager converts them to the live GfxRenderer orientation
+  // before any activity performs hit-testing. Do not synthesize directional
+  // button presses from arbitrary screen regions here.
   bool hasTouch() const;
   bool wasTouchTap(float& nx, float& ny) const;
   bool wasTouchDown(float& nx, float& ny) const;
@@ -74,19 +83,19 @@ class HalGPIO {
 
   MotionGesture readMotionGesture(uint8_t orientation, uint8_t mode, uint8_t sensitivity);
 
-  // Keeps the existing power-button wake source and optionally adds an ESP32
-  // timer wake. wakeAfterSeconds=0 preserves the legacy behavior.
-  void startDeepSleep(uint32_t wakeAfterSeconds = 0);
+  void startDeepSleep();
 
   int getBatteryPercentage() const;
   bool isUsbConnected() const;
 
   bool hasRtc() const { return rtcAvailable; }
+  // The hardware clock follows CrossPoint and stores UTC. The optional offset
+  // is applied only to the returned display value, including calendar rollover.
   bool readDateTime(DateTime& outDateTime, int timeZoneOffsetMinutes = 0) const;
   bool writeDateTime(const DateTime& dateTime) const;
   bool syncRtcFromSystemTime() const;
 
-  enum class WakeupReason { PowerButton, Timer, AfterFlash, AfterUSBPower, Other };
+  enum class WakeupReason { PowerButton, AfterFlash, AfterUSBPower, Other };
   WakeupReason getWakeupReason() const;
 
   static constexpr uint8_t BTN_BACK = InputManager::BTN_BACK;
