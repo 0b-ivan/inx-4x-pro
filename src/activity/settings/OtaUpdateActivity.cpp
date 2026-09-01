@@ -248,6 +248,36 @@ void OtaUpdateActivity::onExit() {
   renderingMutex = nullptr;
 }
 
+bool OtaUpdateActivity::handleTouchTap(const int x, const int y) {
+  if (subActivity) return subActivity->handleTouchTap(x, y);
+  const int width = renderer.getScreenWidth();
+  const int height = renderer.getScreenHeight();
+  if (x < 0 || x >= width || y < 0 || y >= height) return false;
+  const int bodyTop = INX_THEME.drawPageHeader(renderer, "Update", 0);
+
+  if (state == SOURCE_SELECTION) {
+    if (y >= bodyTop && y < bodyTop + 2 * kSourceItemHeight) {
+      sourceSelectedIndex = (y - bodyTop) / kSourceItemHeight;
+      updateRequired = true;
+      return true;
+    }
+  } else if (state == WAITING_CONFIRMATION) {
+    if (y >= bodyTop + kFirmwareItemHeight && y < bodyTop + 2 * kFirmwareItemHeight) {
+      return true;
+    }
+  } else if (state == WAITING_SD_SELECTION && !sdFirmwareFiles.empty()) {
+    const int index = sdFirmwareScrollOffset + (y - bodyTop) / kFirmwareItemHeight;
+    if (y >= bodyTop && index >= 0 && index < static_cast<int>(sdFirmwareFiles.size())) {
+      sdFirmwareSelectedIndex = index;
+      updateRequired = true;
+      return true;
+    }
+  } else if (state == WAITING_SD_CONFIRMATION) {
+    return true;
+  }
+  return false;
+}
+
 void OtaUpdateActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired || updater.getRender()) {
