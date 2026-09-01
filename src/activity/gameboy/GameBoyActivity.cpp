@@ -649,7 +649,7 @@ bool GameBoyBrowserActivity::handleTouchTap(const int x, const int y) {
   if (subActivity) return subActivity->handleTouchTap(x, y);
   if (roms_.empty()) return true;
 
-  const int top = INX_THEME.mainContentTop(renderer) + INX_THEME.mainHeaderHeight();
+  const int top = INX_THEME.drawerPageHeaderHeight();
   if (y < top) return false;
   const int row = (y - top) / kRowHeight;
   const int index = scrollOffset_ + row;

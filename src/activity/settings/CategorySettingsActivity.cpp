@@ -345,7 +345,7 @@ void CategorySettingsActivity::setupMenu() {
   // The emulator is an X4-Pro-specific device tool rather than a persisted
   // setting, so inject it into the expanded Actions group without changing the
   // settings storage schema or migration logic.
-  if (categoryName != nullptr && strcmp(categoryName, "System") == 0 && isGroupExpanded(GroupType::DEVICE_ACTIONS)) {
+  if (categoryName != nullptr && strncmp(categoryName, "System", 6) == 0 && isGroupExpanded(GroupType::DEVICE_ACTIONS)) {
     MenuEntry entry;
     entry.name = "Game Boy";
     entry.type = SettingType::ACTION;
