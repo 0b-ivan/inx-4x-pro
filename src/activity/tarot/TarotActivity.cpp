@@ -20,7 +20,11 @@ ImageRender::Options tarotImageOptions() {
   ImageRender::Options options;
   options.mode = ImageRenderMode::OneBit;
   options.cropToFill = false;
-  options.useDisplayCache = true;
+
+  // Do not use the raster cache for Tarot. The generic cache key currently
+  // does not include flipHorizontal/flipVertical, so an older mirrored cached
+  // card would otherwise survive this correction and still be displayed.
+  options.useDisplayCache = false;
 
   // The Rider-Waite BMP pack is stored mirrored for the panel byte order used
   // by the original source. Inx renders normal logical coordinates, so correct
@@ -109,7 +113,7 @@ void TarotActivity::loop() {
   }
 
   // Touch contract for the tarot card:
-  //   tap       -> draw the next card
+  //   tap        -> draw the next card
   //   long press -> reveal the current card meaning
   // wasScreenLongPress() suppresses the active touch contact, so releasing a
   // long press cannot accidentally become a normal tap and draw another card.
