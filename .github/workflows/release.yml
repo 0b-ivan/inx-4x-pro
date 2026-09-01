@@ -78,7 +78,9 @@ jobs:
       - name: Publish GitHub alpha release
         uses: softprops/action-gh-release@v2
         with:
-          prerelease: true
+          # Keep this as the latest release: the device queries GitHub's
+          # /releases/latest endpoint, which excludes prereleases.
+          prerelease: false
           generate_release_notes: true
           name: Inx X4 Pro ${{ github.ref_name }} (ALPHA)
           body: |
