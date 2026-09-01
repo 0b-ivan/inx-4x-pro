@@ -18,31 +18,12 @@
  */
 class BootActivity : public Activity {
  public:
-  /**
-   * @brief Constructs the boot activity.
-   *
-   * @param renderer Graphics renderer for drawing the splash screen and progress bar
-   * @param inputManager Input manager for handling user input during boot
-   */
   BootActivity(GfxRenderer& renderer, MappedInputManager& inputManager);
-
-  /**
-   * @brief Initializes the boot activity when it becomes active.
-   *
-   * Displays the Corgi logo, draws the progress bar outline, loads persisted
-   * state from SD, and completes boot in one pass (no staged delays).
-   */
   void onEnter() override;
-
-  /**
-   * @brief Main update loop for the boot activity.
-   *
-   * When boot is complete, navigates to either the recent books view or the
-   * last opened book based on application settings and saved state.
-   */
   void loop() override;
 
  private:
-  int bootProgress = 0;       ///< Current boot progress percentage (0-100)
-  bool bootComplete = false;  ///< Flag indicating if boot sequence has finished
+  int bootProgress = 0;
+  bool bootComplete = false;
+  bool deskCalendarTimerWake = false;
 };
