@@ -119,6 +119,9 @@ class GfxRenderer {
   }
 
   void displayBuffer(const HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
+  void displayBufferAsync(const HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
+  bool displayRefreshBusy() const;
+  bool supportsAsyncRefresh() const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void begin();

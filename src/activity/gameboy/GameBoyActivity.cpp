@@ -469,7 +469,7 @@ void GameBoyActivity::loop() {
   }
 
   const unsigned long now = millis();
-  if (framesRun > 0 && now - lastDisplayAt_ >= kDisplayIntervalMs) {
+  if (framesRun > 0 && now - lastDisplayAt_ >= kDisplayIntervalMs && !renderer.displayRefreshBusy()) {
     const uint32_t hash = hashFrame();
     if (hash != lastFrameHash_) {
       lastFrameHash_ = hash;
@@ -477,10 +477,14 @@ void GameBoyActivity::loop() {
       ++displayedFrames_;
       const HalDisplay::RefreshMode mode = (displayedFrames_ % 64u == 0u) ? HalDisplay::STRONG_FAST_REFRESH
                                                                          : HalDisplay::FAST_REFRESH;
-      renderer.displayBuffer(mode);
+      if (renderer.supportsAsyncRefresh()) {
+        renderer.displayBufferAsync(mode);
+      } else {
+        renderer.displayBuffer(mode);
+      }
     }
-    // Count from the end of the blocking refresh. That guarantees a short
-    // input/emulation window before the next panel update starts.
+    // Async refresh keeps emulation and input alive while the panel waveform
+    // runs. Blocking-only targets retain the same pacing as before.
     lastDisplayAt_ = millis();
   }
 

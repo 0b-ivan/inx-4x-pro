@@ -28,6 +28,9 @@ class HalDisplay {
                  bool fromProgmem = false) const;
 
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH);
+  void displayBufferAsync(RefreshMode mode = RefreshMode::FAST_REFRESH);
+  bool refreshBusy();
+  bool supportsAsyncRefresh() const;
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
   void setInverted(bool inverted);

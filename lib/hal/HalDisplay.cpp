@@ -47,6 +47,30 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
 
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode) { einkDisplay.displayBuffer(convertRefreshMode(mode)); }
 
+void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
+#ifdef SIMULATOR
+  einkDisplay.displayBuffer(convertRefreshMode(mode));
+#else
+  einkDisplay.displayBufferAsync(convertRefreshMode(mode));
+#endif
+}
+
+bool HalDisplay::refreshBusy() {
+#ifdef SIMULATOR
+  return false;
+#else
+  return einkDisplay.refreshBusy();
+#endif
+}
+
+bool HalDisplay::supportsAsyncRefresh() const {
+#ifdef SIMULATOR
+  return false;
+#else
+  return einkDisplay.supportsAsyncRefresh();
+#endif
+}
+
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
