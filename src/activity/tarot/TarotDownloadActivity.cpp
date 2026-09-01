@@ -22,8 +22,9 @@ constexpr const char* kManifestUrl =
 constexpr const char* kAssetBaseUrl =
     "https://raw.githubusercontent.com/0b-ivan/inx-4x-pro/x4pro-port/tarot/";
 constexpr const char* kMenuRelativePath = "menu.png";
-constexpr size_t kMenuSize = 8954;
-constexpr const char* kMenuSha256 = "d0973f86de6c29cafb09d1db2a742db329654140ac4395044da1604797ad720b";
+constexpr size_t kMenuSize = 9531;
+constexpr const char* kMenuSha256 = "8b96b07f4b49103e9900d4100a4230c93b47de7bd60f28f28446bafb41661d76";
+constexpr const char* kMenuVersionMarker = "/tarot/.menu-v2";
 
 bool sha256File(const std::string& path, std::string& hex) {
   FsFile file = SdMan.open(path.c_str(), O_READ);
@@ -124,7 +125,7 @@ void TarotDownloadActivity::downloadTask() {
   }
   const JsonArray files = document["files"].as<JsonArray>();
   // menu.png intentionally lives outside the original DogeReader manifest: it
-  // is the X4 Pro-specific text-free menu artwork, downloaded and verified here.
+  // is the X4 Pro-specific text-free, pure black/white menu artwork.
   total_ = files.size() + 1;
   SdMan.mkdir("/tarot");
   SdMan.mkdir("/tarot/cards");
@@ -195,6 +196,16 @@ void TarotDownloadActivity::downloadTask() {
       }
     }
     ++completed_;
+
+    FsFile menuMarker;
+    if (!SdMan.openFileForWrite("TAROT", kMenuVersionMarker, menuMarker)) {
+      std::snprintf(error_, sizeof(error_), "Could not install tarot menu marker");
+      state_ = State::Failed;
+      task_ = nullptr;
+      vTaskDelete(nullptr);
+    }
+    menuMarker.print("2");
+    menuMarker.close();
   }
 
   if (!cancel_) {
