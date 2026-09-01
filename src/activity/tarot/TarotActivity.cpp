@@ -10,6 +10,7 @@
 #include "system/UiI18n.h"
 #include "system/UiTheme.h"
 #include "TarotDownloadActivity.h"
+#include "TarotI18n.h"
 
 namespace {
 constexpr int kFooterH = 44;
@@ -201,7 +202,7 @@ void TarotActivity::renderCard() {
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, boxY + 22, m.name.c_str(), true,
                            EpdFontFamily::BOLD);
     renderer.line.render(boxX + 22, boxY + 58, boxX + boxW - 22, boxY + 58, true);
-    renderWrapped(m.meaning, boxX + 24, boxY + 82, boxW - 48, 5);
+    renderWrapped(tarotMeaningLocalized(card_, m.meaning.c_str()), boxX + 24, boxY + 82, boxW - 48, 5);
   }
   const auto labels = mappedInput.mapLabels(uiTr("Back"), uiTr("History"), uiTr("Meaning"), uiTr("Draw"));
   renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
