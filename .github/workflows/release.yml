@@ -80,7 +80,7 @@ jobs:
       - name: Upload application-only artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Inx-X4Pro-${{ github.ref_name }}-APP-ONLY
+          name: Inx-X4Pro-${{ steps.release.outputs.tag || github.ref_name }}-APP-ONLY
           path: |
             .pio/build/gh_release/firmware.bin
             .pio/build/gh_release/firmware.elf
