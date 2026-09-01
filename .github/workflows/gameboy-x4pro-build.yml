@@ -3,6 +3,8 @@ name: Game Boy X4 Pro Build
 on:
   push:
     branches: [feature/gameboy-emulator]
+  pull_request:
+    branches: [x4pro-port]
 
 permissions:
   contents: write
@@ -20,6 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: feature/gameboy-emulator
           submodules: recursive
           fetch-depth: 0
 
@@ -27,7 +30,7 @@ jobs:
         with:
           python-version: '3.14'
 
-      - name: Apply Game Boy integration
+      - name: Apply final Game Boy integration fixes
         run: python scripts/apply_gameboy_integration.py
 
       - name: Check patch whitespace
@@ -62,7 +65,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No integration changes to commit"
           else
-            git commit -m "Integrate Game Boy emulator into X4 Pro settings"
+            git commit -m "Validate Game Boy emulator integration"
             git push origin HEAD:feature/gameboy-emulator
           fi
 
