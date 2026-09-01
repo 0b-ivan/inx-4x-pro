@@ -80,7 +80,7 @@ std::string formatUtcRange(int64_t utcMinutes) {
   unsigned day = 0;
   civilFromDays(dayStamp, year, month, day);
 
-  char out[24];
+  char out[64];
   std::snprintf(out, sizeof(out), "%04d%02u%02uT%02d%02d00Z", year, month, day, minuteOfDay / 60,
                 minuteOfDay % 60);
   return out;
