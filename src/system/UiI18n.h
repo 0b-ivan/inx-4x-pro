@@ -71,6 +71,7 @@ inline const char* uiTr(const char* text) {
       {"Download or SHA-256 check failed", "Download oder SHA-256-Prüfung fehlgeschlagen"},
       {"Could not install downloaded file", "Heruntergeladene Datei konnte nicht installiert werden"},
       {"78 cards", "78 Karten"}, {"Tap to draw a card", "Tippen, um eine Karte zu ziehen"}, {"Draw", "Ziehen"},
+      {"Tap: next card   Hold: meaning", "Tippen: nächste Karte   Halten: Bedeutung"},
       {"History", "Verlauf"}, {"Meaning", "Bedeutung"}, {"Tarot history", "Tarot-Verlauf"},
       {"Tarot files missing", "Tarotdateien fehlen"},
       {"Press Select or tap to download about 14 MB", "Auswählen oder tippen, um etwa 14 MB herunterzuladen"},
