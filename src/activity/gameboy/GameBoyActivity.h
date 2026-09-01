@@ -37,6 +37,7 @@ class GameBoyActivity final : public Activity {
   static constexpr uint32_t kFramePeriodUs = 16742u;
   static constexpr uint8_t kMaxCatchUpFrames = 4;
   static constexpr unsigned long kDisplayIntervalMs = 20;
+  static constexpr uint8_t kGhostClearInterval = 8;
   static constexpr uint8_t kTouchTapFrames = 6;
   static constexpr unsigned long kExitHoldMs = 1200;
   static constexpr unsigned long kAutoSaveMs = 60000;
