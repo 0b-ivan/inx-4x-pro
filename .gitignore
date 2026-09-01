@@ -1,4 +1,10 @@
 .pio
+# Local PlatformIO core/toolchain state (the shared build commands use this path).
+/.platformio-local/
+# Developer-specific Python environments.
+/.venv*/
+# Device backups, partition dumps and guarded-flashing scratch artifacts.
+/x4pro-preflight/
 .idea
 .DS_Store
 .vscode
