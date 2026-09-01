@@ -368,8 +368,6 @@ void SleepActivity::renderTarotSleepScreen() const {
     options.cropToFill = false;
     options.mode = sleepImageRenderMode();
     options.useDisplayCache = false;
-    options.flipHorizontal = true;
-    options.flipVertical = true;
     if (ImageRender::create(renderer, TarotAssets::cardPath(static_cast<int>(card)))
             .render(imageX, imageY, imageW, imageH, options)) {
       renderer.displayBuffer();

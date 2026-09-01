@@ -21,6 +21,10 @@ constexpr const char* kManifestUrl =
     "https://raw.githubusercontent.com/0b-ivan/inx-4x-pro/x4pro-port/tarot/manifest.json";
 constexpr const char* kAssetBaseUrl =
     "https://raw.githubusercontent.com/0b-ivan/inx-4x-pro/x4pro-port/tarot/";
+constexpr const char* kMenuRelativePath = "menu.png";
+constexpr size_t kMenuSize = 8272;
+constexpr const char* kMenuSha256 = "1086ac529fd4c8b95216c8c1e3da7765d6d84fba8fac492da23edfb3f6954f7f";
+constexpr const char* kMenuVersionMarker = "/tarot/.menu-v3";
 
 bool sha256File(const std::string& path, std::string& hex) {
   FsFile file = SdMan.open(path.c_str(), O_READ);
@@ -120,7 +124,9 @@ void TarotDownloadActivity::downloadTask() {
     vTaskDelete(nullptr);
   }
   const JsonArray files = document["files"].as<JsonArray>();
-  total_ = files.size();
+  // menu.png intentionally lives outside the original DogeReader manifest: it
+  // is the X4 Pro-specific text-free, pure black/white menu artwork.
+  total_ = files.size() + 1;
   SdMan.mkdir("/tarot");
   SdMan.mkdir("/tarot/cards");
   SdMan.mkdir("/tarot/thumbs");
@@ -162,6 +168,46 @@ void TarotDownloadActivity::downloadTask() {
     }
     ++completed_;
   }
+
+  if (!cancel_) {
+    std::snprintf(currentFile_, sizeof(currentFile_), "%s", kMenuRelativePath);
+    filePercent_ = 0;
+    const std::string destination = "/tarot/menu.png";
+    if (!validFile(destination, kMenuSize, kMenuSha256)) {
+      const std::string partial = destination + ".part";
+      const std::string url = std::string(kAssetBaseUrl) + kMenuRelativePath;
+      const auto result = HttpDownloader::downloadToFile(
+          url, partial, "", "", [this](const size_t done, const size_t length) {
+            if (length) filePercent_ = static_cast<int>(done * 100 / length);
+          });
+      if (result != HttpDownloader::OK || !validFile(partial, kMenuSize, kMenuSha256)) {
+        SdMan.remove(partial.c_str());
+        std::snprintf(error_, sizeof(error_), "Download or SHA-256 check failed");
+        state_ = State::Failed;
+        task_ = nullptr;
+        vTaskDelete(nullptr);
+      }
+      if (SdMan.exists(destination.c_str())) SdMan.remove(destination.c_str());
+      if (!SdMan.rename(partial.c_str(), destination.c_str())) {
+        std::snprintf(error_, sizeof(error_), "Could not install downloaded file");
+        state_ = State::Failed;
+        task_ = nullptr;
+        vTaskDelete(nullptr);
+      }
+    }
+    ++completed_;
+
+    FsFile menuMarker;
+    if (!SdMan.openFileForWrite("TAROT", kMenuVersionMarker, menuMarker)) {
+      std::snprintf(error_, sizeof(error_), "Could not install tarot menu marker");
+      state_ = State::Failed;
+      task_ = nullptr;
+      vTaskDelete(nullptr);
+    }
+    menuMarker.print("3");
+    menuMarker.close();
+  }
+
   if (!cancel_) {
     FsFile marker;
     if (SdMan.openFileForWrite("TAROT", "/tarot/.installed", marker)) {
@@ -181,7 +227,9 @@ void TarotDownloadActivity::loop() {
     ActivityWithSubactivity::loop();
     return;
   }
-  if (state_ == State::Downloading) {
+  const State state = state_.load();
+  if (state != lastRenderedState_) render();
+  if (state == State::Downloading) {
     const int done = completed_.load();
     const int percent = filePercent_.load();
     if ((done != lastRenderedCompleted_ || percent / 20 != lastRenderedPercent_ / 20) && millis() - lastRender_ > 1200) {
@@ -217,6 +265,7 @@ bool TarotDownloadActivity::handleTouchTap(const int x, const int y) {
 
 void TarotDownloadActivity::render() {
   lastRender_ = millis();
+  lastRenderedState_ = state_.load();
   lastRenderedCompleted_ = completed_;
   lastRenderedPercent_ = filePercent_;
   renderer.clearScreen();
