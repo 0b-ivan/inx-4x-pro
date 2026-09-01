@@ -22,8 +22,9 @@ constexpr const char* kManifestUrl =
 constexpr const char* kAssetBaseUrl =
     "https://raw.githubusercontent.com/0b-ivan/inx-4x-pro/x4pro-port/tarot/";
 constexpr const char* kMenuRelativePath = "menu.png";
-constexpr size_t kMenuSize = 6831;
-constexpr const char* kMenuSha256 = "dd2955b4a6397813301c8d6be3936f233beb1bcfb341479b13b30c97706c70e9";
+constexpr size_t kMenuSize = 6734;
+constexpr const char* kMenuSha256 = "9e248f8f91110c1e3545d55f2f44a86e333a61df200a13dd63ec9d74f86a5d18";
+constexpr const char* kMenuVersionMarker = "/tarot/.menu-v2";
 
 bool sha256File(const std::string& path, std::string& hex) {
   FsFile file = SdMan.open(path.c_str(), O_READ);
@@ -124,7 +125,7 @@ void TarotDownloadActivity::downloadTask() {
   }
   const JsonArray files = document["files"].as<JsonArray>();
   // menu.png intentionally lives outside the original DogeReader manifest: it
-  // is the X4 Pro-specific text-free menu artwork, downloaded and verified here.
+  // is the X4 Pro-specific text-free, pure black/white menu artwork.
   total_ = files.size() + 1;
   SdMan.mkdir("/tarot");
   SdMan.mkdir("/tarot/cards");
@@ -195,6 +196,16 @@ void TarotDownloadActivity::downloadTask() {
       }
     }
     ++completed_;
+
+    FsFile menuMarker;
+    if (!SdMan.openFileForWrite("TAROT", kMenuVersionMarker, menuMarker)) {
+      std::snprintf(error_, sizeof(error_), "Could not install tarot menu marker");
+      state_ = State::Failed;
+      task_ = nullptr;
+      vTaskDelete(nullptr);
+    }
+    menuMarker.print("2");
+    menuMarker.close();
   }
 
   if (!cancel_) {
@@ -216,7 +227,9 @@ void TarotDownloadActivity::loop() {
     ActivityWithSubactivity::loop();
     return;
   }
-  if (state_ == State::Downloading) {
+  const State state = state_.load();
+  if (state != lastRenderedState_) render();
+  if (state == State::Downloading) {
     const int done = completed_.load();
     const int percent = filePercent_.load();
     if ((done != lastRenderedCompleted_ || percent / 20 != lastRenderedPercent_ / 20) && millis() - lastRender_ > 1200) {
@@ -252,6 +265,7 @@ bool TarotDownloadActivity::handleTouchTap(const int x, const int y) {
 
 void TarotDownloadActivity::render() {
   lastRender_ = millis();
+  lastRenderedState_ = state_.load();
   lastRenderedCompleted_ = completed_;
   lastRenderedPercent_ = filePercent_;
   renderer.clearScreen();

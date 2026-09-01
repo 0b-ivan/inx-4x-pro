@@ -32,6 +32,7 @@ class TarotDownloadActivity final : public ActivityWithSubactivity {
   char currentFile_[128] = {};
   char error_[128] = {};
   unsigned long lastRender_ = 0;
+  State lastRenderedState_ = State::Prompt;
   int lastRenderedCompleted_ = -1;
   int lastRenderedPercent_ = -1;
 
