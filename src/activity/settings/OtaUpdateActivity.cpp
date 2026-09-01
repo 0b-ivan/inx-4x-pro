@@ -262,16 +262,28 @@ bool OtaUpdateActivity::handleTouchTap(const int x, const int y) {
   }
 
   if (state == SOURCE_SELECTION) {
+    if (y >= bodyTop + 2 * kSourceItemHeight) {
+      touchConfirmRequested = true;
+      return true;
+    }
     if (y >= bodyTop && y < bodyTop + 2 * kSourceItemHeight) {
       sourceSelectedIndex = (y - bodyTop) / kSourceItemHeight;
       updateRequired = true;
       return true;
     }
   } else if (state == WAITING_CONFIRMATION) {
+    if (y >= bodyTop + 2 * kFirmwareItemHeight) {
+      touchConfirmRequested = true;
+      return true;
+    }
     if (y >= bodyTop + kFirmwareItemHeight && y < bodyTop + 2 * kFirmwareItemHeight) {
       return true;
     }
   } else if (state == WAITING_SD_SELECTION && !sdFirmwareFiles.empty()) {
+    if (y >= bodyTop + static_cast<int>(sdFirmwareFiles.size()) * kFirmwareItemHeight) {
+      touchConfirmRequested = true;
+      return true;
+    }
     const int index = sdFirmwareScrollOffset + (y - bodyTop) / kFirmwareItemHeight;
     if (y >= bodyTop && index >= 0 && index < static_cast<int>(sdFirmwareFiles.size())) {
       sdFirmwareSelectedIndex = index;
