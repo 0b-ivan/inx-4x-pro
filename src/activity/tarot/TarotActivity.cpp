@@ -201,24 +201,17 @@ void TarotActivity::renderPrompt() {
   const int w = renderer.getScreenWidth();
   const int h = renderer.getScreenHeight();
 
-  // The illustration contains only the approved card stack and ornamental
-  // dividers. All words are rendered by the firmware so they stay crisp and
-  // can follow the selected UI language.
-  const bool artworkRendered =
-      ImageRender::create(renderer, "/tarot/menu.png").render(0, 0, w, h, tarotMenuImageOptions());
+  // menu.png already contains the complete card-stack artwork and both
+  // ornamental dividers. Do not draw the old vector fallback on top of it:
+  // the PNG decoder may have produced visible pixels even when it reports a
+  // decode failure, which previously caused both layouts to be superimposed.
+  ImageRender::create(renderer, "/tarot/menu.png").render(0, 0, w, h, tarotMenuImageOptions());
 
-  if (!artworkRendered) {
-    // Minimal fallback if the menu asset is damaged or missing.
-    drawTarotDivider(renderer, 116);
-    renderer.rectangle.render(w / 2 - 115, 170, 230, 390, true, true);
-    renderer.rectangle.render(w / 2 - 105, 180, 230, 390, true, true);
-    renderer.rectangle.render(w / 2 - 95, 190, 230, 390, true, true);
-    drawTarotDivider(renderer, 734);
-  }
-
-  renderer.text.centered(LITERATA_18_FONT_ID, 48, "Tarot", true, EpdFontFamily::BOLD);
-  renderer.text.centered(LITERATA_12_FONT_ID, 686, uiTr("78 cards"), true, EpdFontFamily::BOLD);
-  renderer.text.centered(LITERATA_10_FONT_ID, 748, uiTr("Tap to draw a card"), true);
+  // Only the localized text is rendered by firmware. Keep the title above the
+  // upper divider and the labels in the reserved white bands of the artwork.
+  renderer.text.centered(LITERATA_18_FONT_ID, 20, "Tarot", true, EpdFontFamily::BOLD);
+  renderer.text.centered(LITERATA_12_FONT_ID, 676, uiTr("78 cards"), true, EpdFontFamily::BOLD);
+  renderer.text.centered(LITERATA_10_FONT_ID, 758, uiTr("Tap to draw a card"), true);
 }
 
 void TarotActivity::renderCard() {
@@ -273,7 +266,7 @@ void TarotActivity::renderHistory() {
 }
 
 void TarotActivity::render() {
-  renderer.clearScreen();
+  renderer.clearScreen(0xFF);
   if (!TarotAssets::installed()) {
     renderer.text.centered(LITERATA_18_FONT_ID, 72, "Tarot", true, EpdFontFamily::BOLD);
     drawTarotDivider(renderer, 120);
@@ -288,5 +281,12 @@ void TarotActivity::render() {
   } else {
     renderHistory();
   }
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+
+  // The prompt consists mostly of white paper. A fast E-Ink refresh leaves the
+  // previous vector menu visible as ghosting in those areas, which looked like
+  // the old UI was still being drawn. Use a full refresh for the menu only;
+  // card-to-card interaction stays fast.
+  const HalDisplay::RefreshMode refreshMode =
+      TarotAssets::installed() && view_ == View::Prompt ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH;
+  renderer.displayBuffer(refreshMode);
 }
