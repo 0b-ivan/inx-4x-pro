@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "calendarUrl": "https://cloud.example.com/remote.php/dav/calendars/alice/personal/",
+  "username": "alice",
+  "appPassword": "NEXTCLOUD-APP-PASSWORD",
+  "wifiSsid": "HomeWiFi",
+  "syncIntervalMinutes": 180,
+  "lookAheadDays": 7
+}
