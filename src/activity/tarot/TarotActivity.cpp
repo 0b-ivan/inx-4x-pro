@@ -21,7 +21,6 @@ ImageRender::Options tarotImageOptions() {
   options.cropToFill = false;
   options.useDisplayCache = true;
   options.flipHorizontal = true;
-  options.flipVertical = true;
   return options;
 }
 }  // namespace
