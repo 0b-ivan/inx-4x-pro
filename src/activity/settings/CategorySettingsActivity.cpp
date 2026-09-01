@@ -304,6 +304,14 @@ void CategorySettingsActivity::setupMenu() {
               }
               return;
             }
+            if (strcmp(settingPtr->name, "Game Boy") == 0) {
+              exitActivity();
+              enterNewActivity(new GameBoyBrowserActivity(renderer, mappedInput, [this] {
+                exitActivity();
+                updateRequired = true;
+              }));
+              return;
+            }
             if (strcmp(settingPtr->name, "Delete Cache") == 0) {
               exitActivity();
               enterNewActivity(new ClearCacheActivity(renderer, mappedInput, [this] {
@@ -342,31 +350,6 @@ void CategorySettingsActivity::setupMenu() {
     }
   }
 
-  // The emulator is an X4-Pro-specific device tool rather than a persisted
-  // setting, so inject it into the expanded Actions group without changing the
-  // settings storage schema or migration logic.
-  if (categoryName != nullptr && strncmp(categoryName, "System", 6) == 0 && isGroupExpanded(GroupType::DEVICE_ACTIONS)) {
-    MenuEntry entry;
-    entry.name = "Game Boy";
-    entry.type = SettingType::ACTION;
-    entry.valuePtr = nullptr;
-    entry.valueRange = {0, 0, 0};
-    entry.group = GroupType::DEVICE_ACTIONS;
-    entry.setting = nullptr;
-    entry.getValueText = []() -> const char* { return ""; };
-    entry.change = [this](int) {
-      exitActivity();
-      enterNewActivity(new GameBoyBrowserActivity(renderer, mappedInput, [this] {
-        exitActivity();
-        updateRequired = true;
-      }));
-    };
-
-    const auto about = std::find_if(menuItems.begin(), menuItems.end(), [](const MenuEntry& item) {
-      return item.name != nullptr && strcmp(item.name, "About") == 0;
-    });
-    menuItems.insert(about, entry);
-  }
 }
 
 void CategorySettingsActivity::applyChange(int delta) {

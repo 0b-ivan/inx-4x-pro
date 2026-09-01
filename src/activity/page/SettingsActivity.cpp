@@ -146,6 +146,7 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool clockAvailable, cons
   settings.push_back(SettingInfo::Action("Delete Cache", GroupType::DEVICE_ACTIONS));
   settings.push_back(SettingInfo::Action("Index your library", GroupType::DEVICE_ACTIONS));
   settings.push_back(SettingInfo::Action("Generate thumbnails", GroupType::DEVICE_ACTIONS));
+  settings.push_back(SettingInfo::Action("Game Boy", GroupType::NONE));
   settings.push_back(SettingInfo::Action("About", GroupType::NONE));
 
   return settings;
