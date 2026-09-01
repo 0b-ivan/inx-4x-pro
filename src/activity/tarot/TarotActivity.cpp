@@ -21,15 +21,12 @@ ImageRender::Options tarotImageOptions() {
   options.mode = ImageRenderMode::OneBit;
   options.cropToFill = false;
 
-  // Do not use the raster cache for Tarot. The generic cache key currently
-  // does not include flipHorizontal/flipVertical, so an older mirrored cached
-  // card would otherwise survive this correction and still be displayed.
+  // Never reuse old Tarot raster cache entries while the deck orientation is
+  // being corrected. The source BMPs are vertically inverted for Inx's normal
+  // logical coordinate system, so flip only the vertical axis here.
   options.useDisplayCache = false;
-
-  // The Rider-Waite BMP pack is stored mirrored for the panel byte order used
-  // by the original source. Inx renders normal logical coordinates, so correct
-  // the deck locally instead of changing global image rendering behaviour.
-  options.flipHorizontal = true;
+  options.flipHorizontal = false;
+  options.flipVertical = true;
   return options;
 }
 
@@ -58,9 +55,6 @@ void drawDiamond(GfxRenderer& renderer, const int cx, const int cy, const int ra
 }
 
 void drawTarotCardBack(GfxRenderer& renderer, const int x, const int y, const int w, const int h) {
-  // Restrained, classic card-back treatment: double frame, a small central
-  // celestial mark and generous negative space. This intentionally avoids the
-  // large "plus" motif the first version produced on the device.
   renderer.rectangle.render(x, y, w, h, true, true);
   renderer.rectangle.render(x + 7, y + 7, w - 14, h - 14, true, true);
   renderer.rectangle.render(x + 17, y + 17, w - 34, h - 34, true, true);
@@ -112,11 +106,11 @@ void TarotActivity::loop() {
     return;
   }
 
-  // Touch contract for the tarot card:
+  // Tarot touch contract:
   //   tap        -> draw the next card
   //   long press -> reveal the current card meaning
-  // wasScreenLongPress() suppresses the active touch contact, so releasing a
-  // long press cannot accidentally become a normal tap and draw another card.
+  // wasScreenLongPress() suppresses the contact, so the release cannot also
+  // become a tap and accidentally draw another card.
   if (view_ == View::Card) {
     int touchX = 0;
     int touchY = 0;
@@ -197,9 +191,6 @@ bool TarotActivity::handleTouchTap(const int x, const int y) {
     return true;
   }
 
-  // A normal tap always advances the deck. Meaning is intentionally reserved
-  // for long press, matching the interaction of a physical deck: inspect one
-  // card, then tap to place the next one.
   drawNext();
   return true;
 }
@@ -226,8 +217,6 @@ void TarotActivity::renderPrompt() {
   const int w = renderer.getScreenWidth();
   const int h = renderer.getScreenHeight();
 
-  // Match the approved mockup direction: quiet typography, lots of whitespace,
-  // one centered deck and no permanent button chrome.
   constexpr int titleY = 58;
   renderer.text.centered(LITERATA_18_FONT_ID, titleY, "Tarot", true, EpdFontFamily::BOLD);
   drawTarotDivider(renderer, titleY + 47);
@@ -243,7 +232,6 @@ void TarotActivity::renderPrompt() {
   }
   const int deckX = (w - cardW - stackOffset * 2) / 2;
 
-  // Back cards are deliberately understated. The front card carries the motif.
   renderer.rectangle.render(deckX + stackOffset * 2, deckY + stackOffset * 2, cardW, cardH, true, true);
   renderer.rectangle.render(deckX + stackOffset, deckY + stackOffset, cardW, cardH, true, true);
   drawTarotCardBack(renderer, deckX, deckY, cardW, cardH);
@@ -259,7 +247,7 @@ void TarotActivity::renderCard() {
   const int h = renderer.getScreenHeight();
   constexpr int topMargin = 16;
   constexpr int sideMargin = 18;
-  constexpr int bottomAreaH = 72;
+  constexpr int bottomAreaH = 42;
   const int availableW = std::max(1, w - sideMargin * 2);
   const int availableH = std::max(1, h - topMargin - bottomAreaH);
   int cardW = availableW;
@@ -276,7 +264,6 @@ void TarotActivity::renderCard() {
 
   const TarotMeaning m = assets_.meaning(card_);
   renderer.text.centered(LITERATA_10_FONT_ID, y + cardH + 10, m.name.c_str(), true, EpdFontFamily::BOLD);
-  renderer.text.centered(LITERATA_10_FONT_ID, h - 28, uiTr("Tap: next card   Hold: meaning"), true);
 
   if (showMeaning_) {
     const int boxX = 24;
