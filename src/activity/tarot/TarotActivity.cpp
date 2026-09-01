@@ -201,17 +201,20 @@ void TarotActivity::renderPrompt() {
   const int w = renderer.getScreenWidth();
   const int h = renderer.getScreenHeight();
 
-  // menu.png already contains the complete card-stack artwork and both
-  // ornamental dividers. Do not draw the old vector fallback on top of it:
-  // the PNG decoder may have produced visible pixels even when it reports a
-  // decode failure, which previously caused both layouts to be superimposed.
-  ImageRender::create(renderer, "/tarot/menu.png").render(0, 0, w, h, tarotMenuImageOptions());
+  // Keep the complete 480x800 artwork inside a slightly shorter safe canvas.
+  // PngRender preserves the source aspect ratio when cropToFill is false, so
+  // this scales the whole illustration down by about 3.5% instead of clipping
+  // its lower ornament against the physical X4 Pro bezel/viewable edge.
+  constexpr int kArtworkBottomInset = 28;
+  ImageRender::create(renderer, "/tarot/menu.png")
+      .render(0, 0, w, std::max(1, h - kArtworkBottomInset), tarotMenuImageOptions());
 
-  // Only the localized text is rendered by firmware. Keep the title above the
-  // upper divider and the labels in the reserved white bands of the artwork.
-  renderer.text.centered(LITERATA_18_FONT_ID, 20, "Tarot", true, EpdFontFamily::BOLD);
-  renderer.text.centered(LITERATA_12_FONT_ID, 676, uiTr("78 cards"), true, EpdFontFamily::BOLD);
-  renderer.text.centered(LITERATA_10_FONT_ID, 758, uiTr("Tap to draw a card"), true);
+  // menu.png contains only artwork/dividers; firmware owns all text. The title
+  // is deliberately close to the top edge, while the two lower labels sit on
+  // opposite sides of the now safely visible lower divider.
+  renderer.text.centered(LITERATA_18_FONT_ID, 8, "Tarot", true, EpdFontFamily::BOLD);
+  renderer.text.centered(LITERATA_12_FONT_ID, h - 140, uiTr("78 cards"), true, EpdFontFamily::BOLD);
+  renderer.text.centered(LITERATA_10_FONT_ID, h - 68, uiTr("Tap to draw a card"), true);
 }
 
 void TarotActivity::renderCard() {
