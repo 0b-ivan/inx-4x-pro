@@ -40,10 +40,9 @@ void BootActivity::onEnter() {
   }
 
 #ifndef SIMULATOR
-  deskCalendarTimerWake =
-      esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER &&
-      SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::DATETIME &&
-      SETTINGS.sleepClockStyle == SystemSetting::SLEEP_CLOCK_STYLE::CLOCK_HORIZONTAL_CARD;
+  deskCalendarTimerWake = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER &&
+                          SETTINGS.sleepScreen == SystemSetting::DATETIME &&
+                          SETTINGS.sleepClockStyle == SystemSetting::CLOCK_HORIZONTAL_CARD;
 #endif
 
   bootComplete = true;
