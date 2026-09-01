@@ -208,7 +208,7 @@ Runs static analysis, formatting checks and the default firmware build on pull r
 
 ### `X4 Pro Build`
 
-Runs the focused ESP32-S3 build for `x4pro-port` and uploads the application image.
+Runs the focused ESP32-S3 build for `main` and uploads the application image.
 
 Installable release assets must not publish `bootloader.bin` or `partitions.bin` for the X4 Pro.
 

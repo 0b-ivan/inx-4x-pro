@@ -45,7 +45,7 @@ Hardware definitions come from the pinned **FreeInk** X4 Pro board profile inste
 | Battery | 🧪 backend integrated, hardware validation pending |
 | Deep sleep / wake | 🧪 basic hardware behavior confirmed; extended validation pending |
 | RTC clock UI | 🧪 available when a working RTC is detected |
-| Inx OTA updater | 🔒 disabled intentionally |
+| X4 Pro OTA updater | 🧪 enabled for application-only alpha releases |
 | Generic PlatformIO upload | 🔒 blocked intentionally |
 | Guarded inactive-slot flash and rollback | ✅ validated on hardware |
 
@@ -60,7 +60,7 @@ For this port the rules are therefore:
 3. **Never overwrite the live partition table.**
 4. **Never erase NVS or `otadata` during a normal test.**
 5. **Never use `pio run -t upload`.** The project blocks this on purpose.
-6. **Never use the upstream Inx OTA updater on the X4 Pro.** It is compiled out.
+6. **Only install this repository's X4 Pro releases.** The updater accepts the application-only `firmware.bin`; never flash bootloader or partition files.
 7. Before the first write, read the real device partition table.
 8. Before the first write, create a complete 16 MiB flash backup and SHA-256 checksum.
 9. Testing must write only an **inactive OTA application slot** through the guarded helper.
@@ -111,12 +111,11 @@ On macOS:
 python3 -m pip install --upgrade platformio esptool
 ```
 
-Clone the port branch including submodules:
+Clone the repository including submodules:
 
 ```bash
 git clone --recursive https://github.com/0b-ivan/inx-4x-pro.git
 cd inx-4x-pro
-git checkout x4pro-port
 git submodule update --init --recursive
 ```
 
