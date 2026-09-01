@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 concurrency:
   group: x4pro-release-${{ github.ref }}
   cancel-in-progress: true
@@ -69,3 +72,17 @@ jobs:
             .pio/build/gh_release/firmware.elf
             .pio/build/gh_release/firmware.map
           if-no-files-found: error
+
+      # GitHub OTA updater consumes the latest release and looks for this
+      # exact asset name. The first X4-Pro release is intentionally alpha.
+      - name: Publish GitHub alpha release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          generate_release_notes: true
+          name: Inx X4 Pro ${{ github.ref_name }} (ALPHA)
+          body: |
+            **ALPHA – X4 Pro experimental firmware**
+
+            Application-only OTA image. Do not flash bootloader or partition files.
+          files: .pio/build/gh_release/firmware.bin
