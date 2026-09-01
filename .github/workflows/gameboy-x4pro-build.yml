@@ -7,7 +7,7 @@ on:
     branches: [x4pro-port]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: gameboy-x4pro-${{ github.ref }}
@@ -15,14 +15,12 @@ concurrency:
 
 jobs:
   build:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: feature/gameboy-emulator
           submodules: recursive
           fetch-depth: 0
 
@@ -30,11 +28,8 @@ jobs:
         with:
           python-version: '3.14'
 
-      - name: Apply final Game Boy integration fixes
-        run: python scripts/apply_gameboy_integration.py
-
-      - name: Check patch whitespace
-        run: git diff --check
+      - name: Check whitespace
+        run: git diff --check x4pro-port...HEAD
 
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
@@ -55,19 +50,6 @@ jobs:
           if size > limit:
               raise SystemExit('firmware.bin exceeds conservative OTA slot limit')
           PY
-
-      - name: Commit validated integration
-        run: |
-          rm scripts/apply_gameboy_integration.py
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No integration changes to commit"
-          else
-            git commit -m "Validate Game Boy emulator integration"
-            git push origin HEAD:feature/gameboy-emulator
-          fi
 
       - name: Upload application-only artifact
         uses: actions/upload-artifact@v4
