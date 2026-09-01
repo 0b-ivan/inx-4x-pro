@@ -191,6 +191,14 @@ bool TarotActivity::handleTouchTap(const int x, const int y) {
     return true;
   }
 
+  // When the meaning overlay is open, the first tap only dismisses it. A
+  // second, separate tap is required to draw the next card.
+  if (showMeaning_) {
+    showMeaning_ = false;
+    render();
+    return true;
+  }
+
   drawNext();
   return true;
 }
