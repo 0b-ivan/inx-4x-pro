@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "calendar/CalendarConfig.h"
 #include "calendar/CalendarStore.h"
 #include "calendar/CalendarSyncService.h"
 #include "state/SystemSetting.h"
@@ -74,6 +75,45 @@ void renderHeader(GfxRenderer& renderer, const SleepClockRenderer::DateTimeView&
                        EpdFontFamily::BOLD);
 }
 
+void renderNoData(GfxRenderer& renderer, const SleepClockRenderer::DateTimeView& dateTime, int x, int y, int w, int h,
+                  bool configReady) {
+  renderer.clearScreen(0xff);
+  const int margin = std::max(18, w / 30);
+  const int left = x + margin;
+  const int right = x + w - margin;
+  int cursorY = y + 18;
+
+  renderHeader(renderer, dateTime, left, cursorY, right - left);
+  cursorY += 42;
+  renderer.line.render(left, cursorY, right, cursorY, true);
+  cursorY += 34;
+
+  renderer.text.render(ATKINSON_HYPERLEGIBLE_18_FONT_ID, left, cursorY, "Desk Calendar", true, EpdFontFamily::BOLD);
+  cursorY += 48;
+  renderer.text.render(ATKINSON_HYPERLEGIBLE_14_FONT_ID, left, cursorY, "No calendar data yet", true,
+                       EpdFontFamily::BOLD);
+  cursorY += 42;
+
+  if (configReady) {
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, left, cursorY,
+                         "Config found. Check saved Wi-Fi, Nextcloud URL and app password.", true);
+    cursorY += 30;
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, left, cursorY,
+                         "Put the reader to sleep again to retry the CalDAV sync.", true);
+  } else {
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, left, cursorY,
+                         "Add /calendar.json to the SD card and save Wi-Fi once in Inx.", true);
+    cursorY += 30;
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, left, cursorY,
+                         "Then select Desk Calendar and put the reader to sleep.", true);
+  }
+
+  const int footerY = y + h - 34;
+  renderer.line.render(left, footerY - 10, right, footerY - 10, true);
+  renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, left, footerY, "CalDAV / Nextcloud", true);
+  renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, right - 94, footerY, "read-only MVP", true);
+}
+
 void armNextCalendarWake(const SleepClockRenderer::DateTimeView& dateTime) {
 #ifndef SIMULATOR
   const uint32_t seconds = CalendarSyncService::nextWakeSeconds(dateTime);
@@ -89,17 +129,26 @@ void armNextCalendarWake(const SleepClockRenderer::DateTimeView& dateTime) {
 
 namespace DeskCalendarRenderer {
 
-bool render(GfxRenderer& renderer, const SleepClockRenderer::DateTimeView& dateTime, int x, int y, int w, int h) {
+bool render(GfxRenderer& renderer, const SleepClockRenderer::DateTimeView& dateTime, int x, int y, int w, int h,
+            bool syncAllowed) {
   if (w < 300 || h < 260) return false;
 
-  // This is a no-op unless calendar.json exists, the feature is enabled and
-  // the configured interval elapsed. Failures never invalidate the old cache.
-  CalendarSyncService::syncIfDue(dateTime);
-  armNextCalendarWake(dateTime);
+  Calendar::Config config;
+  const bool configReady = Calendar::ConfigStore::load(config) && config.enabled;
+
+  // Settings previews never start Wi-Fi. On the real sleep screen this remains
+  // a no-op unless calendar.json exists, the feature is enabled and sync is due.
+  if (syncAllowed) {
+    CalendarSyncService::syncIfDue(dateTime);
+    armNextCalendarWake(dateTime);
+  }
 
   Calendar::CalendarStore store;
   std::vector<Calendar::Event> events;
-  if (!store.load(events, SETTINGS.getTimeZoneOffsetMinutes())) return false;
+  if (!store.load(events, SETTINGS.getTimeZoneOffsetMinutes())) {
+    renderNoData(renderer, dateTime, x, y, w, h, configReady);
+    return true;
+  }
 
   const int today = static_cast<int>(dateTime.year) * 10000 + static_cast<int>(dateTime.month) * 100 + dateTime.day;
   const int tomorrow = tomorrowKey(dateTime);
