@@ -26,6 +26,7 @@ class UiTheme {
   int mainTabBarHeight() const;
   int mainTabBarY(const GfxRenderer& renderer) const;
   int mainContentTop() const;
+  int mainContentTop(const GfxRenderer&) const { return mainContentTop(); }
   int mainContentBottom(const GfxRenderer& renderer) const;
   int drawerHeaderHeight() const;
   int drawerPageHeaderHeight() const;
