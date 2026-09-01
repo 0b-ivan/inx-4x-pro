@@ -19,6 +19,7 @@
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "ClockStylePickerActivity.h"
+#include "../gameboy/GameBoyActivity.h"
 #include "ReaderFontSettingsDraw.h"
 #include "SleepImagePickerActivity.h"
 #include "ThumbnailGeneratorActivity.h"
@@ -49,17 +50,11 @@ void writeString(FsFile& file, const std::string& s) {
 }
 }  // namespace
 
-/**
- * @brief Static trampoline function for task creation
- */
 void CategorySettingsActivity::taskTrampoline(void* param) {
   auto* self = static_cast<CategorySettingsActivity*>(param);
   self->displayTaskLoop();
 }
 
-/**
- * @brief Initialize activity state and create display task
- */
 void CategorySettingsActivity::onEnter() {
   Activity::onEnter();
   renderingMutex = xSemaphoreCreateMutex();
@@ -80,16 +75,9 @@ void CategorySettingsActivity::onEnter() {
               &displayTaskHandle);
 }
 
-/**
- * @brief Clean up resources and delete display task
- */
 void CategorySettingsActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
-  // The display task holds renderingMutex across the whole render() — including the long displayBuffer() SPI/panel
-  // transaction. Deleting it mid-render aborts that transaction, leaving the panel stuck on the half-written
-  // settings frame (which then ghosts onto later screens). Take the mutex first so we block until the task has
-  // finished its current frame and is idle, then delete it safely between frames.
   if (renderingMutex) {
     xSemaphoreTake(renderingMutex, portMAX_DELAY);
   }
@@ -125,9 +113,6 @@ void CategorySettingsActivity::navigateToSelectedMenu() {
   }
 }
 
-/**
- * @brief Toggles expansion state of a group
- */
 void CategorySettingsActivity::toggleGroup(GroupType group) {
   groupExpanded_[groupIndex(group)] = !groupExpanded_[groupIndex(group)];
   setupMenu();
@@ -146,9 +131,6 @@ void CategorySettingsActivity::toggleGroup(GroupType group) {
   updateRequired = true;
 }
 
-/**
- * @brief Sets up the menu structure based on expansion states
- */
 void CategorySettingsActivity::setupMenu() {
   menuItems.clear();
 
@@ -359,11 +341,34 @@ void CategorySettingsActivity::setupMenu() {
       }
     }
   }
+
+  // The emulator is an X4-Pro-specific device tool rather than a persisted
+  // setting, so inject it into the expanded Actions group without changing the
+  // settings storage schema or migration logic.
+  if (categoryName != nullptr && strcmp(categoryName, "System") == 0 && isGroupExpanded(GroupType::DEVICE_ACTIONS)) {
+    MenuEntry entry;
+    entry.name = "Game Boy";
+    entry.type = SettingType::ACTION;
+    entry.valuePtr = nullptr;
+    entry.valueRange = {0, 0, 0};
+    entry.group = GroupType::DEVICE_ACTIONS;
+    entry.setting = nullptr;
+    entry.getValueText = []() -> const char* { return ""; };
+    entry.change = [this](int) {
+      exitActivity();
+      enterNewActivity(new GameBoyBrowserActivity(renderer, mappedInput, [this] {
+        exitActivity();
+        updateRequired = true;
+      }));
+    };
+
+    const auto about = std::find_if(menuItems.begin(), menuItems.end(), [](const MenuEntry& item) {
+      return item.name != nullptr && strcmp(item.name, "About") == 0;
+    });
+    menuItems.insert(about, entry);
+  }
 }
 
-/**
- * @brief Applies a delta change to the currently selected menu item
- */
 void CategorySettingsActivity::applyChange(int delta) {
   if (selectedIndex < 0 || selectedIndex >= (int)menuItems.size()) return;
   const auto& selected = menuItems[selectedIndex];
@@ -628,18 +633,12 @@ void CategorySettingsActivity::closeSelector(const bool save) {
   updateRequired = true;
 }
 
-/**
- * @brief Main loop handling input and state updates
- */
 void CategorySettingsActivity::loop() {
   if (subActivity) {
     subActivity->loop();
     return;
   }
 
-  // Touch lists follow CrossPoint's direct-manipulation convention: swiping up
-  // advances the visible window, swiping down moves it back. Keep the selected
-  // row inside that window so subsequent button input continues naturally.
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
     const int direction = swipe == MappedInputManager::SwipeDir::Up ? 1 : -1;
@@ -689,7 +688,6 @@ void CategorySettingsActivity::loop() {
     return;
   }
 
-  // Tab vs item nav buttons depend on the main-menu nav setting (front: L/R tabs, U/D items; side: swapped).
   const bool upPressed = mappedInput.wasPressed(itemPrevButton());
   const bool downPressed = mappedInput.wasPressed(itemNextButton());
   const bool leftPressed = mappedInput.wasPressed(tabPrevButton());
@@ -775,9 +773,6 @@ void CategorySettingsActivity::loop() {
   }
 }
 
-/**
- * @brief Display task loop for periodic rendering
- */
 void CategorySettingsActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired && !subActivity) {
@@ -864,9 +859,6 @@ void CategorySettingsActivity::renderSelectorOverlay() {
   renderer.rectangle.render(panelX + 1, panelY + 1, panelW - 2, panelH - 2, true);
 }
 
-/**
- * @brief Render the category settings screen
- */
 void CategorySettingsActivity::render() {
   renderer.clearScreen();
 
@@ -880,7 +872,6 @@ void CategorySettingsActivity::render() {
 
   renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, 20, headerTextY, uiTr(categoryName), true, EpdFontFamily::BOLD);
 
-  // Version shown as a small rounded tag: black rounded background with white text.
   const int verFont = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
   const int verPadX = 8;
   const int versionW = renderer.text.getWidth(verFont, INX_VERSION);
@@ -889,9 +880,9 @@ void CategorySettingsActivity::render() {
   const int verTagW = versionW + verPadX * 2;
   const int verTagX = pageWidth - verTagW - 20;
   const int verTagY = headerY + (headerHeight - verTagH) / 2;
-  renderer.rectangle.fill(verTagX, verTagY, verTagW, verTagH, true, true);  // filled, rounded (black)
+  renderer.rectangle.fill(verTagX, verTagY, verTagW, verTagH, true, true);
   const int versionY = verTagY + (verTagH - verLineH) / 2;
-  renderer.text.render(verFont, verTagX + verPadX, versionY, INX_VERSION, false, EpdFontFamily::REGULAR);  // white text
+  renderer.text.render(verFont, verTagX + verPadX, versionY, INX_VERSION, false, EpdFontFamily::REGULAR);
 
   const int dividerY = headerY + headerHeight;
   renderer.line.render(0, dividerY, pageWidth, dividerY, true);
@@ -985,9 +976,6 @@ void CategorySettingsActivity::render() {
   }
 
   if (INX_THEME.mainTabsAtBottom()) {
-    // Bottom-tabs mode moves the tab bar to the screen bottom, where the classic button-hints row normally
-    // goes, so redraw that same row just above the tab bar instead — only for this settings screen, since
-    // other bottom-tabs screens rely on the tab bar alone.
     const int hintsAreaTop = mainContentBottom(renderer) - kBottomButtonHintsHeight;
     const int hintsY = hintsAreaTop + (kBottomButtonHintsHeight - 40) / 2;
     renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4,
