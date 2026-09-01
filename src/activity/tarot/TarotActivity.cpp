@@ -13,15 +13,50 @@
 #include "TarotI18n.h"
 
 namespace {
-constexpr int kFooterH = 44;
 constexpr int kSourceCardW = 320;
 constexpr int kSourceCardH = 533;
+
 ImageRender::Options tarotImageOptions() {
   ImageRender::Options options;
   options.mode = ImageRenderMode::OneBit;
   options.cropToFill = false;
   options.useDisplayCache = true;
   return options;
+}
+
+void drawTarotStar(GfxRenderer& renderer, const int cx, const int cy, const int radius) {
+  renderer.line.render(cx - radius, cy, cx + radius, cy, true);
+  renderer.line.render(cx, cy - radius, cx, cy + radius, true);
+  const int diagonal = std::max(2, radius * 7 / 10);
+  renderer.line.render(cx - diagonal, cy - diagonal, cx + diagonal, cy + diagonal, true);
+  renderer.line.render(cx + diagonal, cy - diagonal, cx - diagonal, cy + diagonal, true);
+}
+
+void drawTarotDivider(GfxRenderer& renderer, const int y) {
+  const int cx = renderer.getScreenWidth() / 2;
+  constexpr int halfWidth = 78;
+  constexpr int starGap = 15;
+  renderer.line.render(cx - halfWidth, y, cx - starGap, y, true);
+  renderer.line.render(cx + starGap, y, cx + halfWidth, y, true);
+  drawTarotStar(renderer, cx, y, 7);
+}
+
+void drawTarotCardBack(GfxRenderer& renderer, const int x, const int y, const int w, const int h) {
+  renderer.rectangle.render(x, y, w, h, true, true);
+  renderer.rectangle.render(x + 7, y + 7, w - 14, h - 14, true, true);
+  renderer.rectangle.render(x + 14, y + 14, w - 28, h - 28, true, true);
+
+  const int cx = x + w / 2;
+  const int cy = y + h / 2;
+  const int emblem = std::min(w, h) / 5;
+  renderer.rectangle.render(cx - emblem, cy - emblem, emblem * 2, emblem * 2, true, true);
+  drawTarotStar(renderer, cx, cy, std::max(14, emblem * 3 / 4));
+
+  const int ray = std::max(18, emblem + 12);
+  renderer.line.render(cx, cy - ray - 20, cx, cy - ray, true);
+  renderer.line.render(cx, cy + ray, cx, cy + ray + 20, true);
+  renderer.line.render(cx - ray - 20, cy, cx - ray, cy, true);
+  renderer.line.render(cx + ray, cy, cx + ray + 20, cy, true);
 }
 }  // namespace
 
@@ -113,29 +148,20 @@ bool TarotActivity::handleTouchTap(const int x, const int y) {
     return true;
   }
   if (view_ == View::History) {
-    if (y >= h - kFooterH) {
-      if (x < w / 3) goBack();
-      else if (x > w * 2 / 3) {
-        const int pages = std::max(1, (static_cast<int>(deck_.history().size()) + 11) / 12);
-        historyPage_ = (historyPage_ + 1) % pages;
-        render();
-      }
-      return true;
+    const int pages = std::max(1, (static_cast<int>(deck_.history().size()) + 11) / 12);
+    if (x < w / 3) {
+      historyPage_ = std::max(0, historyPage_ - 1);
+      render();
+    } else if (x > w * 2 / 3) {
+      historyPage_ = std::min(historyPage_ + 1, pages - 1);
+      render();
+    } else {
+      goBack();
     }
-    return false;
-  }
-  if (y >= h - kFooterH) {
-    if (x < w / 4) goBack();
-    else if (x < w / 2) {
-      view_ = View::History;
-      historyPage_ = 0;
-      render();
-    } else if (x < w * 3 / 4) {
-      showMeaning_ = !showMeaning_;
-      render();
-    } else drawNext();
     return true;
   }
+
+  // The card itself is the control: tapping it opens/closes the meaning.
   showMeaning_ = !showMeaning_;
   render();
   return true;
@@ -150,25 +176,44 @@ void TarotActivity::renderWrapped(const std::string& text, const int x, int y, c
       const size_t end = text.find(' ', pos);
       const std::string word = text.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
       const std::string candidate = line.empty() ? word : line + " " + word;
-      if (!line.empty() && renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_10_FONT_ID, candidate.c_str()) > width) break;
+      if (!line.empty() && renderer.text.getWidth(LITERATA_10_FONT_ID, candidate.c_str()) > width) break;
       line = candidate;
       pos = end == std::string::npos ? text.size() : end + 1;
     }
-    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, x, y, line.c_str(), true);
-    y += renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID) + 5;
+    renderer.text.render(LITERATA_10_FONT_ID, x, y, line.c_str(), true);
+    y += renderer.text.getLineHeight(LITERATA_10_FONT_ID) + 5;
   }
 }
 
 void TarotActivity::renderPrompt() {
   const int w = renderer.getScreenWidth();
   const int h = renderer.getScreenHeight();
-  renderer.text.centered(ATKINSON_HYPERLEGIBLE_16_FONT_ID, 105, "Tarot", true, EpdFontFamily::BOLD);
-  renderer.rectangle.render(w / 2 - 95, 190, 190, 318, true, true);
-  renderer.rectangle.render(w / 2 - 84, 201, 168, 296, true, true);
-  renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, 320, "78", true, EpdFontFamily::BOLD);
-  renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 365, uiTr("Tap to draw a card"), true);
-  const auto labels = mappedInput.mapLabels(uiTr("Back"), "", "", uiTr("Draw"));
-  renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  const int titleY = std::max(48, h / 12);
+  renderer.text.centered(LITERATA_18_FONT_ID, titleY, "Tarot", true, EpdFontFamily::BOLD);
+  drawTarotDivider(renderer, titleY + 48);
+
+  const int deckY = std::max(150, h / 5);
+  constexpr int stackOffset = 12;
+  constexpr int textBlockH = 145;
+  int cardW = std::min(250, std::max(180, w * 56 / 100));
+  int cardH = cardW * kSourceCardH / kSourceCardW;
+  const int maxCardH = std::max(280, h - deckY - textBlockH - stackOffset * 2);
+  if (cardH > maxCardH) {
+    cardH = maxCardH;
+    cardW = cardH * kSourceCardW / kSourceCardH;
+  }
+  const int deckX = (w - cardW - stackOffset * 2) / 2;
+
+  // Two offset outlines make the central object read as a real stack of cards.
+  renderer.rectangle.render(deckX + stackOffset * 2, deckY + stackOffset * 2, cardW, cardH, true, true);
+  renderer.rectangle.render(deckX + stackOffset, deckY + stackOffset, cardW, cardH, true, true);
+  drawTarotCardBack(renderer, deckX, deckY, cardW, cardH);
+
+  const int labelY = deckY + cardH + stackOffset * 2 + 24;
+  renderer.text.centered(LITERATA_12_FONT_ID, labelY, uiTr("78 cards"), true, EpdFontFamily::BOLD);
+  drawTarotDivider(renderer, labelY + 36);
+  renderer.text.centered(LITERATA_10_FONT_ID, labelY + 60, uiTr("Tap to draw a card"), true);
 }
 
 void TarotActivity::renderCard() {
@@ -176,9 +221,9 @@ void TarotActivity::renderCard() {
   const int h = renderer.getScreenHeight();
   constexpr int topMargin = 8;
   constexpr int sideMargin = 8;
-  constexpr int titleAreaH = 38;
+  constexpr int titleAreaH = 54;
   const int availableW = std::max(1, w - sideMargin * 2);
-  const int availableH = std::max(1, h - kFooterH - topMargin - titleAreaH);
+  const int availableH = std::max(1, h - topMargin - titleAreaH);
   int cardW = availableW;
   int cardH = cardW * kSourceCardH / kSourceCardW;
   if (cardH > availableH) {
@@ -190,60 +235,57 @@ void TarotActivity::renderCard() {
   ImageRender::create(renderer, TarotAssets::cardPath(card_)).render(x, y, cardW, cardH, tarotImageOptions());
   renderer.rectangle.render(x - 2, y - 2, cardW + 4, cardH + 4, true);
   const TarotMeaning m = assets_.meaning(card_);
-  renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, y + cardH + 10, m.name.c_str(), true,
-                         EpdFontFamily::BOLD);
+  renderer.text.centered(LITERATA_10_FONT_ID, y + cardH + 10, m.name.c_str(), true, EpdFontFamily::BOLD);
   if (showMeaning_) {
     const int boxX = 28;
-    const int boxY = 220;
+    const int boxY = 210;
     const int boxW = w - 56;
-    const int boxH = 230;
+    const int boxH = 240;
     renderer.rectangle.fill(boxX, boxY, boxW, boxH, false, true);
     renderer.rectangle.render(boxX, boxY, boxW, boxH, true, true);
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, boxY + 22, m.name.c_str(), true,
-                           EpdFontFamily::BOLD);
-    renderer.line.render(boxX + 22, boxY + 58, boxX + boxW - 22, boxY + 58, true);
-    renderWrapped(tarotMeaningLocalized(card_, m.meaning.c_str()), boxX + 24, boxY + 82, boxW - 48, 5);
+    renderer.text.centered(LITERATA_12_FONT_ID, boxY + 22, m.name.c_str(), true, EpdFontFamily::BOLD);
+    drawTarotDivider(renderer, boxY + 62);
+    renderWrapped(tarotMeaningLocalized(card_, m.meaning.c_str()), boxX + 24, boxY + 88, boxW - 48, 6);
   }
-  const auto labels = mappedInput.mapLabels(uiTr("Back"), uiTr("History"), uiTr("Meaning"), uiTr("Draw"));
-  renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void TarotActivity::renderHistory() {
   const int w = renderer.getScreenWidth();
-  const int headerBottom = INX_THEME.drawPageHeader(renderer, uiTr("Tarot history"));
+  renderer.text.centered(LITERATA_16_FONT_ID, 44, uiTr("Tarot history"), true, EpdFontFamily::BOLD);
+  drawTarotDivider(renderer, 88);
+
   constexpr int cols = 4;
   constexpr int rows = 3;
   constexpr int thumbW = 80;
   constexpr int thumbH = 133;
   const int gapX = (w - cols * thumbW) / (cols + 1);
+  const int startY = 112;
   const int start = historyPage_ * cols * rows;
   const auto& history = deck_.history();
   for (int i = 0; i < cols * rows && start + i < static_cast<int>(history.size()); ++i) {
     const int col = i % cols;
     const int row = i / cols;
     const int x = gapX + col * (thumbW + gapX);
-    const int y = headerBottom + 18 + row * (thumbH + 18);
+    const int y = startY + row * (thumbH + 18);
     ImageRender::create(renderer, TarotAssets::thumbPath(history[static_cast<size_t>(start + i)]))
         .render(x, y, thumbW, thumbH, tarotImageOptions());
     renderer.rectangle.render(x, y, thumbW, thumbH, true);
   }
   const int pages = std::max(1, (static_cast<int>(history.size()) + cols * rows - 1) / (cols * rows));
   char page[24];
-  std::snprintf(page, sizeof(page), "%d / %d", historyPage_ + 1, pages);
-  renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, renderer.getScreenHeight() - 72, page, true);
-  const auto labels = mappedInput.mapLabels(uiTr("Back"), "", uiTr("Prev"), uiTr("Next"));
-  renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  std::snprintf(page, sizeof(page), "<   %d / %d   >", historyPage_ + 1, pages);
+  renderer.text.centered(LITERATA_10_FONT_ID, renderer.getScreenHeight() - 40, page, true);
 }
 
 void TarotActivity::render() {
   renderer.clearScreen();
   if (!TarotAssets::installed()) {
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, renderer.getScreenHeight() / 2 - 20,
+    renderer.text.centered(LITERATA_18_FONT_ID, 72, "Tarot", true, EpdFontFamily::BOLD);
+    drawTarotDivider(renderer, 120);
+    renderer.text.centered(LITERATA_12_FONT_ID, renderer.getScreenHeight() / 2 - 20,
                            uiTr("Tarot files missing"), true, EpdFontFamily::BOLD);
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, renderer.getScreenHeight() / 2 + 20,
+    renderer.text.centered(LITERATA_10_FONT_ID, renderer.getScreenHeight() / 2 + 24,
                            uiTr("Press Select or tap to download about 14 MB"), true);
-    const auto labels = mappedInput.mapLabels(uiTr("Back"), uiTr("Download"), "", "");
-    renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (view_ == View::Prompt) renderPrompt();
   else if (view_ == View::Card) renderCard();
   else renderHistory();
