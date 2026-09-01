@@ -24,23 +24,24 @@ int64_t daysFromCivil(int year, unsigned month, unsigned day) {
   year -= month <= 2;
   const int era = (year >= 0 ? year : year - 399) / 400;
   const unsigned yoe = static_cast<unsigned>(year - era * 400);
-  const unsigned doy = (153 * (month + (month > 2 ? static_cast<unsigned>(-3) : 9)) + 2) / 5 + day - 1;
-  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  const int adjustedMonth = static_cast<int>(month) + (month > 2 ? -3 : 9);
+  const unsigned doy = (153U * static_cast<unsigned>(adjustedMonth) + 2U) / 5U + day - 1U;
+  const unsigned doe = yoe * 365U + yoe / 4U - yoe / 100U + doy;
   return static_cast<int64_t>(era) * 146097 + static_cast<int64_t>(doe) - 719468;
 }
 
-// Inverse of daysFromCivil, adapted to the same Unix-epoch day numbering.
 void civilFromDays(int64_t z, int& year, unsigned& month, unsigned& day) {
   z += 719468;
   const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
   const unsigned doe = static_cast<unsigned>(z - era * 146097);
-  const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  const unsigned yoe = (doe - doe / 1460U + doe / 36524U - doe / 146096U) / 365U;
   year = static_cast<int>(yoe) + static_cast<int>(era) * 400;
-  const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-  const unsigned mp = (5 * doy + 2) / 153;
-  day = doy - (153 * mp + 2) / 5 + 1;
-  month = mp + (mp < 10 ? 3 : static_cast<unsigned>(-9));
-  year += month <= 2;
+  const unsigned doy = doe - (365U * yoe + yoe / 4U - yoe / 100U);
+  const unsigned mp = (5U * doy + 2U) / 153U;
+  day = doy - (153U * mp + 2U) / 5U + 1U;
+  const int calculatedMonth = static_cast<int>(mp) + (mp < 10U ? 3 : -9);
+  month = static_cast<unsigned>(calculatedMonth);
+  year += month <= 2U;
 }
 
 int64_t minuteStamp(const SleepClockRenderer::DateTimeView& now) {
