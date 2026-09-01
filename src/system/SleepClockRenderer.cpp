@@ -6,6 +6,7 @@
 #include <cstdio>
 
 #include "state/SystemSetting.h"
+#include "system/DeskCalendarRenderer.h"
 #include "system/Fonts.h"
 
 namespace {
@@ -211,7 +212,7 @@ const char* styleName(uint8_t style) {
     case SystemSetting::CLOCK_STACKED_CITY:
       return "Stacked";
     case SystemSetting::CLOCK_HORIZONTAL_CARD:
-      return "Card";
+      return "Desk Calendar";
     case SystemSetting::CLOCK_CENTERED_DATE:
     default:
       return "Centered";
@@ -232,7 +233,9 @@ void render(GfxRenderer& renderer, uint8_t style, const DateTimeView& dateTime, 
       renderStackedCity(renderer, dateTime, x, y, w, h);
       break;
     case SystemSetting::CLOCK_HORIZONTAL_CARD:
-      renderHorizontalCard(renderer, dateTime, x, y, w, h);
+      if (!DeskCalendarRenderer::render(renderer, dateTime, x, y, w, h)) {
+        renderHorizontalCard(renderer, dateTime, x, y, w, h);
+      }
       break;
     case SystemSetting::CLOCK_CENTERED_DATE:
     default:
