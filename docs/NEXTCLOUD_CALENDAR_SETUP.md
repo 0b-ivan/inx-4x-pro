@@ -100,6 +100,4 @@ If Wi-Fi, DNS, TLS, authentication, Nextcloud or parsing fails, the last known-g
 - app password is currently stored as plain JSON on the SD card;
 - recurring appointments rely on server-side CalDAV expansion;
 - local-time handling uses the reader's configured timezone offset;
-- autonomous timed wake/sync still depends on the X4 Pro RTC/deep-sleep hardware path being validated.
-
-The next step after the MVP is to move configuration into the local web UI and keep the credential in a less exposed device-side store.
+- autonomous timer wake is implemented but still needs validation on the physical X4 Pro together with the RTC/deep-sleep path.
