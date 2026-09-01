@@ -9,6 +9,7 @@
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
+
 #include <ctime>
 
 namespace {
@@ -183,7 +184,12 @@ bool HalGPIO::readDateTime(DateTime& out, const int timeZoneOffsetMinutes) const
 
 bool HalGPIO::writeDateTime(const DateTime& value) const {
   if (!rtcAvailable) return false;
-  const Rtc::DateTime raw{value.year, value.month, value.day, value.hour, value.minute, value.second,
+  const Rtc::DateTime raw{value.year,
+                          value.month,
+                          value.day,
+                          value.hour,
+                          value.minute,
+                          value.second,
                           static_cast<uint8_t>(value.weekday % 7)};
   return rtc.set(raw);
 }
@@ -194,8 +200,8 @@ bool HalGPIO::syncRtcFromSystemTime() const {
   struct tm utc{};
   if (gmtime_r(&now, &utc) == nullptr) return false;
   const Rtc::DateTime value{static_cast<uint16_t>(utc.tm_year + 1900), static_cast<uint8_t>(utc.tm_mon + 1),
-                            static_cast<uint8_t>(utc.tm_mday), static_cast<uint8_t>(utc.tm_hour),
-                            static_cast<uint8_t>(utc.tm_min), static_cast<uint8_t>(utc.tm_sec),
+                            static_cast<uint8_t>(utc.tm_mday),         static_cast<uint8_t>(utc.tm_hour),
+                            static_cast<uint8_t>(utc.tm_min),          static_cast<uint8_t>(utc.tm_sec),
                             static_cast<uint8_t>(utc.tm_wday)};
   return rtc.set(value);
 }
