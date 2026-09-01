@@ -469,7 +469,7 @@ void GameBoyActivity::loop() {
   }
 
   const unsigned long now = millis();
-  if (framesRun > 0 && now - lastDisplayAt_ >= kDisplayIntervalMs && !renderer.displayRefreshBusy()) {
+  if (framesRun > 0 && now - lastDisplayAt_ >= kDisplayIntervalMs) {
     const uint32_t hash = hashFrame();
     if (hash != lastFrameHash_) {
       lastFrameHash_ = hash;
@@ -477,14 +477,11 @@ void GameBoyActivity::loop() {
       ++displayedFrames_;
       const HalDisplay::RefreshMode mode =
           (displayedFrames_ % kGhostClearInterval == 0u) ? HalDisplay::STRONG_FAST_REFRESH : HalDisplay::FAST_REFRESH;
-      if (renderer.supportsAsyncRefresh()) {
-        renderer.displayBufferAsync(mode);
-      } else {
-        renderer.displayBuffer(mode);
-      }
+      renderer.displayBuffer(mode);
     }
-    // Async refresh keeps emulation and input alive while the panel waveform
-    // runs. Blocking-only targets retain the same pacing as before.
+    // The panel refresh blocks, but the next loop catches up the elapsed Game
+    // Boy time before drawing again. This preserves game speed without the
+    // async differential baseline that causes heavy ghosting on the X4 Pro.
     lastDisplayAt_ = millis();
   }
 
