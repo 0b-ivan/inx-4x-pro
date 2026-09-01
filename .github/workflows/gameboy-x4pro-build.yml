@@ -1,0 +1,74 @@
+name: Game Boy X4 Pro Build
+
+on:
+  push:
+    branches: [feature/gameboy-emulator]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gameboy-x4pro-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Apply Game Boy integration
+        run: python scripts/apply_gameboy_integration.py
+
+      - name: Check patch whitespace
+        run: git diff --check
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Build X4 Pro application
+        run: pio run -e x4pro
+
+      - name: Validate application artifact
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          firmware = Path('.pio/build/x4pro/firmware.bin')
+          if not firmware.is_file():
+              raise SystemExit('firmware.bin missing')
+          size = firmware.stat().st_size
+          limit = 0x640000
+          print(f'firmware.bin: {size} bytes; conservative limit: {limit} bytes')
+          if size > limit:
+              raise SystemExit('firmware.bin exceeds conservative OTA slot limit')
+          PY
+
+      - name: Commit validated integration
+        run: |
+          rm scripts/apply_gameboy_integration.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No integration changes to commit"
+          else
+            git commit -m "Integrate Game Boy emulator into X4 Pro settings"
+            git push origin HEAD:feature/gameboy-emulator
+          fi
+
+      - name: Upload application-only artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inx-x4pro-gameboy-${{ github.sha }}
+          path: .pio/build/x4pro/firmware.bin
+          if-no-files-found: error
