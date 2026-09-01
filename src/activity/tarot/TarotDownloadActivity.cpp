@@ -216,7 +216,9 @@ void TarotDownloadActivity::loop() {
     ActivityWithSubactivity::loop();
     return;
   }
-  if (state_ == State::Downloading) {
+  const State state = state_.load();
+  if (state != lastRenderedState_) render();
+  if (state == State::Downloading) {
     const int done = completed_.load();
     const int percent = filePercent_.load();
     if ((done != lastRenderedCompleted_ || percent / 20 != lastRenderedPercent_ / 20) && millis() - lastRender_ > 1200) {
@@ -252,6 +254,7 @@ bool TarotDownloadActivity::handleTouchTap(const int x, const int y) {
 
 void TarotDownloadActivity::render() {
   lastRender_ = millis();
+  lastRenderedState_ = state_.load();
   lastRenderedCompleted_ = completed_;
   lastRenderedPercent_ = filePercent_;
   renderer.clearScreen();
