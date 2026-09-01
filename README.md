@@ -3,8 +3,10 @@
 Experimental port of [Inx](https://github.com/obijuankenobiii/inx) to the **Xteink X4 Pro**.
 
 > [!WARNING]
-> **Do not flash the current alpha build yet.**
-> The firmware builds successfully for ESP32-S3, but the first real-device flash is deliberately gated behind a read-only hardware inspection and a complete flash backup.
+> **This is still experimental firmware. Do not use PlatformIO's generic upload command.**
+> Builds must be installed only through the guarded inactive-OTA-slot workflow in
+> [`docs/X4PRO_FLASHING_GUIDE.md`](docs/X4PRO_FLASHING_GUIDE.md). The workflow has been validated on a real X4 Pro,
+> including full-flash backup, readback verification, test boot and rollback to the factory slot.
 
 This fork targets the X4 Pro specifically:
 
@@ -27,19 +29,25 @@ Hardware definitions come from the pinned **FreeInk** X4 Pro board profile inste
 | --- | --- |
 | ESP32-S3 build | ✅ builds in CI |
 | FreeInk X4 Pro board profile | ✅ integrated |
-| Display controller detection | ✅ integrated |
+| Physical-device boot and display | ✅ validated |
+| Display controller detection | ✅ validated |
 | PSRAM | ✅ build configured |
 | SDMMC | ✅ backend integrated |
 | Physical side buttons | ✅ mapped |
-| GT911 touch | 🧪 compatibility mapping |
-| Capacitive Home key | 🧪 mapped to Back |
+| GT911 touch orientation | ✅ physically calibrated |
+| Direct touch UI | ✅ reader, library, recent, statistics, settings and device menus |
+| Capacitive Home key | ✅ mapped to Back / Menu |
+| Quick Settings | ✅ touch drawer with persistent controls |
+| Frontlight | ✅ warm/cold control, persistence and sleep handling |
+| Night mode | ✅ persistent display inversion |
+| German UI | ✅ integrated |
+| Tarot app and sleep screen | ✅ integrated with verified asset downloads |
 | Battery | 🧪 backend integrated, hardware validation pending |
-| Deep sleep / wake | 🧪 backend integrated, hardware validation pending |
-| Frontlight UI | ❌ not integrated yet |
-| RTC UI/integration | ❌ not integrated yet |
+| Deep sleep / wake | 🧪 basic hardware behavior confirmed; extended validation pending |
+| RTC clock UI | 🧪 available when a working RTC is detected |
 | Inx OTA updater | 🔒 disabled intentionally |
 | Generic PlatformIO upload | 🔒 blocked intentionally |
-| First hardware flash | ⛔ not approved yet |
+| Guarded inactive-slot flash and rollback | ✅ validated on hardware |
 
 ## Safety model
 
@@ -55,7 +63,7 @@ For this port the rules are therefore:
 6. **Never use the upstream Inx OTA updater on the X4 Pro.** It is compiled out.
 7. Before the first write, read the real device partition table.
 8. Before the first write, create a complete 16 MiB flash backup and SHA-256 checksum.
-9. First testing must write only an **inactive OTA application slot**.
+9. Testing must write only an **inactive OTA application slot** through the guarded helper.
 10. Keep the known-good application slot intact until Inx has passed boot, display, input, SD, sleep and restart tests.
 
 The detailed explanation is in [`docs/X4PRO_FLASHING_GUIDE.md`](docs/X4PRO_FLASHING_GUIDE.md).
@@ -124,7 +132,7 @@ Application image:
 .pio/build/x4pro/firmware.bin
 ```
 
-A successful build means only that the program can be compiled for the ESP32-S3 target. It is **not** permission to flash it.
+A successful build means only that the program can be compiled for the ESP32-S3 target. It is **not** permission to bypass the guarded flashing procedure.
 
 ## Read-only hardware preflight
 
@@ -163,51 +171,95 @@ x4pro-preflight/
 └── x4pro-full-16mb.bin.sha256
 ```
 
-**Stop after this step for the first device.** The actual inactive-slot write procedure will only be documented as approved after the real partition layout and recovery path have been validated.
+The backup directory is intentionally ignored by Git because it contains device-specific flash data and may contain credentials.
+After preflight, follow the staging and boot-selection steps in the flashing guide. The helpers validate the live partition
+layout, security state, backup consistency, inactive target slot and post-write readback before allowing a boot switch.
 
-## Input mapping during the port
+## Highlights
 
-Inx is currently button-oriented. The X4 Pro has only two discrete navigation buttons plus GT911 touch, so the HAL temporarily maps the hardware into the existing Inx input model:
+### Touch-first X4 Pro interface
+
+The original button-oriented screens now have a semantic touch layer. Taps are mapped into logical UI coordinates and
+dispatched to the active screen or modal dialog. This enables direct interaction with:
+
+- main tabs, library controls and book lists;
+- EPUB page-turn and reader-menu zones;
+- recent books, saved words and statistics;
+- settings rows, selectors and device-management actions;
+- nested activities and confirmation dialogs.
+
+Four-direction swipe navigation remains available where a screen uses list or content navigation. A swipe from the top
+edge opens the Quick Settings drawer.
+
+### Quick Settings, frontlight and night mode
+
+The CrossPoint-style Quick Settings drawer provides fast access to reader touch, display inversion/night mode and the
+X4 Pro frontlight. Warm and cold light levels, on/off state and quick-control preferences are persisted and restored after
+boot. Frontlight PWM is kept alive during light sleep where required by the hardware.
+
+### Tarot
+
+The Sync/Tools page includes a complete 78-card Tarot activity with card meanings, draw history, touch controls and a
+Tarot standby screen. If the deck is missing, the reader can download the manifest and assets over Wi-Fi, verify every
+file by size and SHA-256, and install them to `/tarot/` on the SD card. The same files can be copied manually from the
+repository's [`tarot/`](tarot/) directory.
+
+### Display, sleep and localization
+
+- FreeInk performs runtime display-controller detection and panel output inversion.
+- Sleep screens support Tarot, light/dark screens, recent-book covers, transparent covers, custom BMP/JPEG images and
+  an RTC-backed date/time screen when the board exposes a working clock.
+- Custom sleep images can be selected individually or randomized from `/sleep/`.
+- English and German UI languages are available in Settings.
+- Reader quick actions, presets, external SD-card fonts and selectable image quality remain available from upstream Inx.
+
+## Input mapping
+
+The semantic touch layer handles direct hit-testing on adapted screens. A compatibility mapping remains for screens that
+still use Inx's original button-oriented input model:
 
 | X4 Pro input | Inx action |
 | --- | --- |
 | side key 1 | Up / previous |
 | side key 2 | Down / next |
-| screen tap | Confirm |
-| capacitive Home tap | Back |
+| direct screen tap | Activate the touched control where supported |
+| fallback screen tap | Confirm |
+| capacitive Home tap | Back / Menu |
 | horizontal swipe | Left / Right |
+| vertical swipe | Up / Down |
+| top-edge swipe | Open Quick Settings |
 | power button | Power |
 
-Native touch hit-testing is planned later.
-
-## What will be tested on the first real boot?
+## Hardware validation checklist
 
 The first hardware test is intentionally boring. We are not testing every Inx feature at once.
 
 ```text
-[ ] ESP32-S3 boots the experimental application
+[x] ESP32-S3 boots the experimental application
 [ ] serial log remains available
-[ ] e-paper controller is detected
-[ ] display initializes without BUSY lockup
-[ ] screen orientation is correct
-[ ] side buttons work
-[ ] touch tap works
-[ ] Home key works
-[ ] horizontal swipe works
+[x] e-paper controller is detected
+[x] display initializes without BUSY lockup
+[x] screen orientation is correct
+[x] side buttons work
+[x] touch tap and corner calibration work
+[x] Home key works
+[ ] four-direction swipe behavior is fully validated
 [ ] SD card mounts
 [ ] EPUB can be opened
 [ ] battery value is plausible
-[ ] sleep works
-[ ] power-button wake works
+[x] basic sleep and power-button wake work
 [ ] restart works
-[ ] known-good OTA slot remains recoverable
+[x] known-good OTA slot remains recoverable
 ```
 
-Only after those tests pass do we expand hardware features such as frontlight and RTC integration.
+The checklist distinguishes implemented software from completed physical-device validation. See
+[`docs/X4PRO_PORT.md`](docs/X4PRO_PORT.md) for the detailed engineering status.
 
 ## Inx features
 
-The port keeps the Inx application layer, including EPUB/TXT/Markdown reading, library browsing, bookmarks, annotations, dictionary lookup, KOReader sync, OPDS, Calibre integration, image rendering, SD-card fonts, sleep screens, statistics and the local web interface.
+The port keeps the Inx application layer, including EPUB/TXT/Markdown reading, library browsing, bookmarks, annotations,
+dictionary lookup, KOReader sync, OPDS, Calibre integration, image rendering, SD-card fonts, reader presets and quick
+actions, sleep screens, statistics, backup/restore and the local web interface.
 
 Some features can remain temporarily unavailable while the X4 Pro hardware layer is being validated.
 
