@@ -268,6 +268,8 @@ bool OtaUpdateActivity::handleTouchTap(const int x, const int y) {
     }
     if (y >= bodyTop && y < bodyTop + 2 * kSourceItemHeight) {
       sourceSelectedIndex = (y - bodyTop) / kSourceItemHeight;
+      // A direct tap on either source is an explicit selection and activation.
+      touchConfirmRequested = true;
       updateRequired = true;
       return true;
     }
