@@ -88,34 +88,48 @@ void appendVevents(const std::string& calendarData, std::string& out) {
 std::string extractCalendar(const std::string& xml) {
   std::string merged = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Inx X4 Pro//Desk Calendar//EN\n";
   size_t search = 0;
-  size_t eventCount = 0;
+  bool sawCalendarData = false;
 
   while (true) {
     const size_t name = xml.find("calendar-data", search);
     if (name == std::string::npos) break;
+
+    const size_t tagStart = xml.rfind('<', name);
+    if (tagStart == std::string::npos) break;
+    if (tagStart + 1 < xml.size() && xml[tagStart + 1] == '/') {
+      search = name + 13;
+      continue;
+    }
+
     const size_t openEnd = xml.find('>', name);
     if (openEnd == std::string::npos) break;
-    const size_t closeStart = xml.find("</", openEnd + 1);
-    if (closeStart == std::string::npos) break;
 
+    const size_t closeTag = xml.find("calendar-data>", openEnd + 1);
+    if (closeTag == std::string::npos) break;
+    const size_t closeStart = xml.rfind("</", closeTag);
+    if (closeStart == std::string::npos || closeStart < openEnd) break;
+
+    sawCalendarData = true;
     std::string data = xml.substr(openEnd + 1, closeStart - openEnd - 1);
     const std::string cdataPrefix = "<![CDATA[";
     const std::string cdataSuffix = "]]>";
-    if (data.rfind(cdataPrefix, 0) == 0 && data.size() >= cdataPrefix.size() + cdataSuffix.size()) {
+    const size_t firstText = data.find_first_not_of(" \t\r\n");
+    if (firstText != std::string::npos && data.compare(firstText, cdataPrefix.size(), cdataPrefix) == 0) {
       const size_t cdataEnd = data.rfind(cdataSuffix);
-      data = data.substr(cdataPrefix.size(), cdataEnd - cdataPrefix.size());
+      if (cdataEnd != std::string::npos && cdataEnd >= firstText + cdataPrefix.size()) {
+        data = data.substr(firstText + cdataPrefix.size(), cdataEnd - firstText - cdataPrefix.size());
+      }
     } else {
       data = xmlDecode(data);
     }
 
-    const size_t before = merged.size();
     appendVevents(data, merged);
-    if (merged.size() > before) ++eventCount;
-    search = closeStart + 2;
+    search = closeTag + std::string("calendar-data>").size();
   }
 
+  if (!sawCalendarData) return {};
   merged += "END:VCALENDAR\n";
-  return eventCount > 0 || xml.find("calendar-data") != std::string::npos ? merged : std::string{};
+  return merged;
 }
 
 }  // namespace
