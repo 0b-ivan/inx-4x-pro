@@ -27,5 +27,9 @@ TarotMeaning TarotAssets::meaning(const int card) const {
 std::string TarotAssets::cardPath(const int card) { return "/tarot/cards/" + std::to_string(card) + ".bmp"; }
 std::string TarotAssets::thumbPath(const int card) { return "/tarot/thumbs/" + std::to_string(card) + ".bmp"; }
 bool TarotAssets::installed() {
-  return SdMan.exists("/tarot/cards/0.bmp") && SdMan.exists("/tarot/meanings.json") && SdMan.exists("/tarot/menu.png");
+  // The menu-v2 marker deliberately invalidates older Tarot installations.
+  // Existing cards stay on the SD card; the downloader only replaces the new
+  // E-Ink menu artwork and then writes this marker.
+  return SdMan.exists("/tarot/cards/0.bmp") && SdMan.exists("/tarot/meanings.json") &&
+         SdMan.exists("/tarot/menu.png") && SdMan.exists("/tarot/.menu-v2");
 }
