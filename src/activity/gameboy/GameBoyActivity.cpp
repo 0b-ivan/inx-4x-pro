@@ -33,6 +33,13 @@ constexpr int kDpadUpY = 520;
 constexpr int kDpadMiddleY = 586;
 constexpr int kDpadDownY = 652;
 constexpr int kControlSize = 58;
+constexpr int kDpadCenterPointX = kDpadCenterX + kControlSize / 2;
+constexpr int kDpadCenterPointY = kDpadMiddleY + kControlSize / 2;
+constexpr int kDpadZoneX = kDpadLeftX - 12;
+constexpr int kDpadZoneY = kDpadUpY - 12;
+constexpr int kDpadZoneW = kDpadRightX + kControlSize + 12 - kDpadZoneX;
+constexpr int kDpadZoneH = kDpadDownY + kControlSize + 12 - kDpadZoneY;
+constexpr int kDpadDeadZone = 18;
 constexpr int kButtonBX = 300;
 constexpr int kButtonBY = 600;
 constexpr int kButtonAX = 388;
@@ -108,6 +115,11 @@ void GameBoyActivity::onEnter() {
   lastAutoSaveAt_ = millis();
   renderShell();
   lastFrameHash_ = hashFrame();
+  lastEmulationAtUs_ = micros();
+  lastDisplayAt_ = millis();
+  touchHeldMask_ = 0;
+  touchPulseMask_ = 0;
+  touchPulseFrames_ = 0;
 }
 
 void GameBoyActivity::onExit() {
@@ -369,6 +381,37 @@ uint32_t GameBoyActivity::hashFrame() const {
   return hash;
 }
 
+uint8_t GameBoyActivity::dpadDirectionForPoint(const int x, const int y) const {
+  if (!inRect(x, y, kDpadZoneX, kDpadZoneY, kDpadZoneW, kDpadZoneH)) return 0;
+
+  const int dx = x - kDpadCenterPointX;
+  const int dy = y - kDpadCenterPointY;
+  const int absX = dx < 0 ? -dx : dx;
+  const int absY = dy < 0 ? -dy : dy;
+
+  // Crossing the center should not briefly release the held direction. The
+  // caller keeps the previous direction while the finger is inside this zone.
+  if (absX <= kDpadDeadZone && absY <= kDpadDeadZone) return 0;
+
+  if (absX > absY) return dx < 0 ? INPUT_LEFT : INPUT_RIGHT;
+  return dy < 0 ? INPUT_UP : INPUT_DOWN;
+}
+
+void GameBoyActivity::updateTouchHold() {
+  int x = 0;
+  int y = 0;
+  if (mappedInput.isScreenTouchHeld(x, y)) {
+    if (inRect(x, y, kDpadZoneX, kDpadZoneY, kDpadZoneW, kDpadZoneH)) {
+      const uint8_t direction = dpadDirectionForPoint(x, y);
+      if (direction != 0) touchHeldMask_ = direction;
+    } else {
+      touchHeldMask_ = 0;
+    }
+  } else if (mappedInput.wasScreenTouchReleased()) {
+    touchHeldMask_ = 0;
+  }
+}
+
 uint8_t GameBoyActivity::collectInput() {
   uint8_t input = 0;
   if (mappedInput.isPressed(MappedInputManager::Button::Right)) input |= INPUT_RIGHT;
@@ -379,6 +422,8 @@ uint8_t GameBoyActivity::collectInput() {
   if (mappedInput.isPressed(MappedInputManager::Button::Back)) input |= INPUT_B;
   if (mappedInput.isPressed(MappedInputManager::Button::PageBack)) input |= INPUT_SELECT;
   if (mappedInput.isPressed(MappedInputManager::Button::PageForward)) input |= INPUT_START;
+
+  input |= touchHeldMask_;
 
   if (touchPulseFrames_ > 0) {
     input |= touchPulseMask_;
@@ -406,46 +451,65 @@ void GameBoyActivity::loop() {
     return;
   }
 
-  emulator_->setInput(collectInput());
-  emulator_->runFrames(8);
+  updateTouchHold();
 
-  const uint32_t hash = hashFrame();
-  if (hash != lastFrameHash_) {
-    lastFrameHash_ = hash;
-    renderGameFrame();
-    ++displayedFrames_;
-    const HalDisplay::RefreshMode mode = (displayedFrames_ % 32u == 0u) ? HalDisplay::STRONG_FAST_REFRESH
-                                                                        : HalDisplay::FAST_REFRESH;
-    renderer.displayBuffer(mode);
+  const uint32_t nowUs = micros();
+  uint32_t elapsedUs = nowUs - lastEmulationAtUs_;
+  uint8_t framesRun = 0;
+
+  // Keep the Game Boy close to its native ~59.7 Hz without the old eight-frame
+  // burst. After a blocking e-ink refresh we catch up in small chunks so input
+  // gets another chance to update between batches.
+  while (elapsedUs >= kFramePeriodUs && framesRun < kMaxCatchUpFrames) {
+    emulator_->setInput(collectInput());
+    emulator_->runFrames(1);
+    lastEmulationAtUs_ += kFramePeriodUs;
+    ++framesRun;
+    elapsedUs = nowUs - lastEmulationAtUs_;
   }
 
   const unsigned long now = millis();
+  if (framesRun > 0 && now - lastDisplayAt_ >= kDisplayIntervalMs) {
+    const uint32_t hash = hashFrame();
+    if (hash != lastFrameHash_) {
+      lastFrameHash_ = hash;
+      renderGameFrame();
+      ++displayedFrames_;
+      const HalDisplay::RefreshMode mode = (displayedFrames_ % 64u == 0u) ? HalDisplay::STRONG_FAST_REFRESH
+                                                                         : HalDisplay::FAST_REFRESH;
+      renderer.displayBuffer(mode);
+    }
+    // Count from the end of the blocking refresh. That guarantees a short
+    // input/emulation window before the next panel update starts.
+    lastDisplayAt_ = millis();
+  }
+
   if (inputSinceSave_ && now - lastAutoSaveAt_ >= kAutoSaveMs) {
     if (saveSram()) inputSinceSave_ = false;
-    lastAutoSaveAt_ = now;
+    lastAutoSaveAt_ = millis();
   }
 }
 
 bool GameBoyActivity::handleTouchTap(const int x, const int y) {
+  // A completed tap means the held contact has ended. This also covers the
+  // release frame that main.cpp consumes before Activity::loop() is called.
+  touchHeldMask_ = 0;
+
   if (inRect(x, y, kExitX, kExitY, kExitW, kExitH)) {
     requestClose();
     return true;
   }
   if (!ready_) return true;
 
-  uint8_t pulse = 0;
-  if (inRect(x, y, kDpadCenterX, kDpadUpY, kControlSize, kControlSize)) pulse = INPUT_UP;
-  if (inRect(x, y, kDpadLeftX, kDpadMiddleY, kControlSize, kControlSize)) pulse = INPUT_LEFT;
-  if (inRect(x, y, kDpadRightX, kDpadMiddleY, kControlSize, kControlSize)) pulse = INPUT_RIGHT;
-  if (inRect(x, y, kDpadCenterX, kDpadDownY, kControlSize, kControlSize)) pulse = INPUT_DOWN;
-  if (inRect(x, y, kButtonBX, kButtonBY, kActionW, kActionH)) pulse = INPUT_B;
-  if (inRect(x, y, kButtonAX, kButtonAY, kActionW, kActionH)) pulse = INPUT_A;
-  if (inRect(x, y, kSelectX, kMetaY, kMetaW, kMetaH)) pulse = INPUT_SELECT;
-  if (inRect(x, y, kStartX, kMetaY, kMetaW, kMetaH)) pulse = INPUT_START;
+  uint8_t pulse = dpadDirectionForPoint(x, y);
+  if (pulse == 0 && inRect(x, y, kButtonBX, kButtonBY, kActionW, kActionH)) pulse = INPUT_B;
+  if (pulse == 0 && inRect(x, y, kButtonAX, kButtonAY, kActionW, kActionH)) pulse = INPUT_A;
+  if (pulse == 0 && inRect(x, y, kSelectX, kMetaY, kMetaW, kMetaH)) pulse = INPUT_SELECT;
+  if (pulse == 0 && inRect(x, y, kStartX, kMetaY, kMetaW, kMetaH)) pulse = INPUT_START;
 
   if (pulse != 0) {
     touchPulseMask_ = pulse;
-    touchPulseFrames_ = 2;
+    touchPulseFrames_ = kTouchTapFrames;
     inputSinceSave_ = true;
     return true;
   }
