@@ -34,6 +34,10 @@ class GameBoyActivity final : public Activity {
   static constexpr int kBankSize = 0x4000;
   static constexpr int kBankCacheSlots = 8;
   static constexpr uint32_t kMaxRomSize = 8u * 1024u * 1024u;
+  static constexpr uint32_t kFramePeriodUs = 16742u;
+  static constexpr uint8_t kMaxCatchUpFrames = 4;
+  static constexpr unsigned long kDisplayIntervalMs = 20;
+  static constexpr uint8_t kTouchTapFrames = 6;
   static constexpr unsigned long kExitHoldMs = 1200;
   static constexpr unsigned long kAutoSaveMs = 60000;
 
@@ -55,10 +59,13 @@ class GameBoyActivity final : public Activity {
   bool inputSinceSave_ = false;
   uint32_t lastFrameHash_ = 0;
   uint32_t displayedFrames_ = 0;
+  uint32_t lastEmulationAtUs_ = 0;
   unsigned long exitChordStartedAt_ = 0;
   unsigned long lastAutoSaveAt_ = 0;
+  unsigned long lastDisplayAt_ = 0;
   uint8_t touchPulseMask_ = 0;
   uint8_t touchPulseFrames_ = 0;
+  uint8_t touchHeldMask_ = 0;
   int previousOrientation_ = 0;
 
   bool initializeEmulator();
@@ -71,6 +78,8 @@ class GameBoyActivity final : public Activity {
   void drawTouchButton(int x, int y, int w, int h, const char* label) const;
   uint32_t hashFrame() const;
   uint8_t collectInput();
+  void updateTouchHold();
+  uint8_t dpadDirectionForPoint(int x, int y) const;
   void requestClose();
 
   bool loadSram();
