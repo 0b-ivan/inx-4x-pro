@@ -29,6 +29,9 @@ extern Activity* currentActivity;
 BootActivity::BootActivity(GfxRenderer& renderer, MappedInputManager& inputManager)
     : Activity("BootActivity", renderer, inputManager) {}
 
+/**
+ * @brief Initializes the boot activity when it becomes active.
+ */
 void BootActivity::onEnter() {
   Activity::onEnter();
 
@@ -48,24 +51,28 @@ void BootActivity::onEnter() {
   bootComplete = true;
 }
 
+/**
+ * @brief Main update loop for the boot activity.
+ */
 void BootActivity::loop() {
-  if (!bootComplete) return;
+  if (bootComplete) {
+    // A desk-calendar timer wake is maintenance, not a user boot. Re-enter the
+    // sleep path immediately; SleepActivity performs a due CalDAV refresh and
+    // redraws the cached appointments before deep sleep is armed again.
+    if (deskCalendarTimerWake) {
+      deskCalendarTimerWake = false;
+      enterDeepSleep();
+      return;
+    }
 
-  // A desk-calendar timer wake is maintenance, not a user boot. Re-enter the
-  // sleep path immediately; SleepActivity performs a due CalDAV refresh and
-  // redraws the cached appointments before deep sleep is armed again.
-  if (deskCalendarTimerWake) {
-    deskCalendarTimerWake = false;
-    enterDeepSleep();
+    if (APP_STATE.lastRead.empty() || SETTINGS.bootSetting == SystemSetting::HOME_PAGE) {
+      onGoToRecent();
+    } else {
+      const auto path = APP_STATE.lastRead;
+      APP_STATE.lastRead = "";
+      APP_STATE.saveToFile();
+      onGoToReader(path);
+    }
     return;
-  }
-
-  if (APP_STATE.lastRead.empty() || SETTINGS.bootSetting == SystemSetting::HOME_PAGE) {
-    onGoToRecent();
-  } else {
-    const auto path = APP_STATE.lastRead;
-    APP_STATE.lastRead = "";
-    APP_STATE.saveToFile();
-    onGoToReader(path);
   }
 }
