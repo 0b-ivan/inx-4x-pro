@@ -14,7 +14,7 @@ bool loadPath(const char* path, Calendar::Config& config) {
   if (!SdMan.exists(path)) return false;
 
   const String raw = SdMan.readFile(path);
-  if (raw.isEmpty() || raw.length() > kMaxConfigBytes) return false;
+  if (raw.length() == 0 || raw.length() > kMaxConfigBytes) return false;
 
   JsonDocument doc;
   if (deserializeJson(doc, raw) != DeserializationError::Ok) return false;
