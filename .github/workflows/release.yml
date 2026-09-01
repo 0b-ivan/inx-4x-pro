@@ -1,6 +1,7 @@
 name: Compile X4 Pro Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'v*'
@@ -40,6 +41,11 @@ jobs:
         run: |
           python -m py_compile scripts/x4pro_inspect.py
           python -m py_compile scripts/refuse_x4pro_upload.py
+          python -m py_compile scripts/validate_release.py
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: python scripts/validate_release.py --tag "${{ github.ref_name }}"
 
       - name: Build X4 Pro application
         run: pio run -e gh_release
@@ -76,6 +82,7 @@ jobs:
       # GitHub OTA updater consumes the latest release and looks for this
       # exact asset name. The first X4-Pro release is intentionally alpha.
       - name: Publish GitHub alpha release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           # Keep this as the latest release: the device queries GitHub's
