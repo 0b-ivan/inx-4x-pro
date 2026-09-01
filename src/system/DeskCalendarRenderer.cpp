@@ -1,6 +1,9 @@
 #include "system/DeskCalendarRenderer.h"
 
 #include <GfxRenderer.h>
+#ifndef SIMULATOR
+#include <esp_sleep.h>
+#endif
 
 #include <algorithm>
 #include <cstdio>
@@ -71,6 +74,17 @@ void renderHeader(GfxRenderer& renderer, const SleepClockRenderer::DateTimeView&
                        EpdFontFamily::BOLD);
 }
 
+void armNextCalendarWake(const SleepClockRenderer::DateTimeView& dateTime) {
+#ifndef SIMULATOR
+  const uint32_t seconds = CalendarSyncService::nextWakeSeconds(dateTime);
+  if (seconds > 0) {
+    esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(seconds) * 1000000ULL);
+  }
+#else
+  (void)dateTime;
+#endif
+}
+
 }  // namespace
 
 namespace DeskCalendarRenderer {
@@ -81,6 +95,7 @@ bool render(GfxRenderer& renderer, const SleepClockRenderer::DateTimeView& dateT
   // This is a no-op unless calendar.json exists, the feature is enabled and
   // the configured interval elapsed. Failures never invalidate the old cache.
   CalendarSyncService::syncIfDue(dateTime);
+  armNextCalendarWake(dateTime);
 
   Calendar::CalendarStore store;
   std::vector<Calendar::Event> events;
