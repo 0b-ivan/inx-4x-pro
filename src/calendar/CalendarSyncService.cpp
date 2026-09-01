@@ -51,7 +51,7 @@ int64_t minuteStamp(const SleepClockRenderer::DateTimeView& now) {
 bool isDue(const SleepClockRenderer::DateTimeView& now, uint16_t intervalMinutes) {
   if (!SdMan.exists(kLastSyncPath)) return true;
   const String raw = SdMan.readFile(kLastSyncPath);
-  if (raw.isEmpty()) return true;
+  if (raw.length() == 0) return true;
   char* end = nullptr;
   const int64_t previous = std::strtoll(raw.c_str(), &end, 10);
   if (end == raw.c_str()) return true;
