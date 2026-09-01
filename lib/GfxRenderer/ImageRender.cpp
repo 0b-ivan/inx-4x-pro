@@ -19,6 +19,12 @@
 #include "JpegRender.h"
 #include "PngRender.h"
 
+namespace {
+bool isTarotBitmapAsset(const std::string& path) {
+  return path.rfind("/tarot/cards/", 0) == 0 || path.rfind("/tarot/thumbs/", 0) == 0;
+}
+}  // namespace
+
 ImageRender ImageRender::create(GfxRenderer& renderer, const std::string& path) {
   return ImageRender(renderer, path, detectFormat(path));
 }
@@ -140,8 +146,15 @@ bool ImageRender::render(int x, int y, int width, int height, const Options& opt
           cropY = 1.0f - (imageRatio / targetRatio);
         }
       }
+
+      // The imported DogeReader Tarot BMPs use the opposite vertical row
+      // orientation from normal Inx image assets. Normalize that once here so
+      // every consumer (Tarot activity, history thumbnails and Tarot standby)
+      // sees the same upright card instead of each screen having to remember a
+      // private transform.
+      const bool effectiveFlipVertical = options.flipVertical || isTarotBitmapAsset(path_);
       renderer_.bitmap.render(bitmap, x, y, width, height, cropX, cropY, options.roundedOutside, options.mode,
-                              options.flipHorizontal, options.flipVertical);
+                              options.flipHorizontal, effectiveFlipVertical);
     }
     file.close();
   }
