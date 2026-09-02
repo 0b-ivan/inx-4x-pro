@@ -7,30 +7,14 @@
 
 void UiRender::buttonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
                            const char* btn4, const int topY) const {
-  const GfxRenderer::Orientation origOrientation = gfx.getOrientation();
-  gfx.setOrientation(GfxRenderer::Orientation::Portrait);
-
-  const int pageHeight = gfx.getScreenHeight();
-  constexpr int buttonWidth = 106;
-  constexpr int buttonHeight = 40;
-  constexpr int defaultButtonY = 40;
-  constexpr int textYOffset = 7;
-  constexpr int buttonPositions[] = {25, 130, 245, 350};
-  const char* labels[] = {uiTr(btn1), uiTr(btn2), uiTr(btn3), uiTr(btn4)};
-  const int y = topY >= 0 ? topY : pageHeight - defaultButtonY;
-
-  for (int i = 0; i < 4; i++) {
-    if (labels[i] != nullptr && labels[i][0] != '\0') {
-      const int x = buttonPositions[i];
-      gfx.rectangle.fill(x, y, buttonWidth, buttonHeight, false, true);
-      gfx.rectangle.render(x, y, buttonWidth, buttonHeight, true, true);
-      const int textWidth = gfx.text.getWidth(fontId, labels[i]);
-      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      gfx.text.render(fontId, textX, y + textYOffset, labels[i]);
-    }
-  }
-
-  gfx.setOrientation(origOrientation);
+  // X4 Pro uses direct touch controls and gestures. The legacy four-button
+  // footer is intentionally hidden globally; physical buttons still work.
+  (void)fontId;
+  (void)btn1;
+  (void)btn2;
+  (void)btn3;
+  (void)btn4;
+  (void)topY;
 }
 
 void UiRender::sideButtonHints(const int fontId, const char* powerBtn, const char* topBtn,

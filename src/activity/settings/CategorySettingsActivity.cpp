@@ -623,6 +623,14 @@ void CategorySettingsActivity::loop() {
   }
 
   const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Right) {
+    if (selectorOpen) {
+      closeSelector(false);
+    } else {
+      onGoBack();
+    }
+    return;
+  }
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
     const int direction = swipe == MappedInputManager::SwipeDir::Up ? 1 : -1;
     if (selectorOpen && !selectorOptions.empty()) {

@@ -884,9 +884,14 @@ void EpubActivity::loop() {
 
   if (X4ProQuickPrefs::readerTouchEnabled() && !menuDrawerVisible && !settingsDrawerVisible) {
     const auto swipe = mappedInput.wasSwipe();
-    if (swipe == MappedInputManager::SwipeDir::Left || swipe == MappedInputManager::SwipeDir::Right) {
+    if (swipe == MappedInputManager::SwipeDir::Right) {
+      pauseReadingStats();
+      onGoBack();
+      return;
+    }
+    if (swipe == MappedInputManager::SwipeDir::Left) {
       endPageTimer();
-      pageTurn(swipe == MappedInputManager::SwipeDir::Left);
+      pageTurn(true);
       lastAutoPageTurnTime = millis();
       return;
     }

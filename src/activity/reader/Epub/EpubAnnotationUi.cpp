@@ -632,7 +632,7 @@ void EpubAnnotationUi::drawUiOverlay(EpubActivity& act) {
   const GfxRenderer::Orientation o = act.renderer.getOrientation();
   drawHighlights(act);
   act.renderer.setOrientation(GfxRenderer::Portrait);
-  act.renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, "Cancel", "Highlight", "Dictionary", "Translate");
+  act.renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, "", "Highlight", "Dictionary", "Translate");
   act.renderer.ui.sideButtonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, "Reset", "Up", "Down");
   act.renderer.setOrientation(o);
   act.renderer.displayBuffer(HalDisplay::FAST_REFRESH);

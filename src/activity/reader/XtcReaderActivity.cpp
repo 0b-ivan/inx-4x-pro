@@ -533,7 +533,7 @@ void XtcReaderActivity::renderMenuMain() {
                          true);
   }
 
-  renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, "Back", "Select", "", "");
+  renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, "", "Select", "", "");
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 

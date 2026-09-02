@@ -48,7 +48,6 @@ constexpr SideLayoutMap kSideLayouts[] = {
     {HalGPIO::BTN_DOWN, HalGPIO::BTN_UP},
 };
 
-constexpr float kLeftEdgeBackGestureFracX = 0.25f;
 constexpr float kBottomEdgeHomeGestureFracY = 0.14f;
 constexpr float kTopEdgeMenuGestureFracY = 0.14f;
 constexpr unsigned long kTouchDownSelectDelayMs = 90;
@@ -241,8 +240,7 @@ bool MappedInputManager::wasBackGesture() const {
   int ex = 0;
   int ey = 0;
   if (!decodeSwipe(sx, sy, ex, ey)) return false;
-  const bool hit = sx <= static_cast<int>(renderer.getScreenWidth() * kLeftEdgeBackGestureFracX) && ex > sx &&
-                   std::abs(ex - sx) > std::abs(ey - sy);
+  const bool hit = ex > sx && std::abs(ex - sx) > std::abs(ey - sy);
   if (hit) rememberTouchHeldTime();
   return hit;
 }
@@ -329,6 +327,11 @@ MappedInputManager::SideLabels MappedInputManager::mapSideLabels() const {
 
 MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const char* confirm, const char* previous,
                                                          const char* next) const {
+  // Back is a global full-screen right-swipe gesture on touch devices. Keep
+  // the physical Back mapping active, but do not render a redundant button
+  // hint in any screen that uses the shared label mapper.
+  (void)back;
+  back = "";
   const char* p = previous;
   const char* n = next;
   if (invertDirectionalAxes180_) {
