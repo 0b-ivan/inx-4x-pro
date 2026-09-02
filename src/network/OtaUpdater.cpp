@@ -397,7 +397,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::downloadUpdate(const ProgressCallback& p
     processedSize = processed;
     const size_t total = totalSize.load();
     const unsigned percent = total > 0 ? static_cast<unsigned>((processed * 100U) / total) : 0;
-    if (percent >= lastLoggedPercent + 10 || (total > 0 && processed >= total)) {
+    if (percent >= lastLoggedPercent + 25 || (total > 0 && processed >= total)) {
       lastLoggedPercent = percent;
       Serial.printf("[%lu] [OTA] Download progress: %u%% (%u / %u bytes)\n", millis(), percent,
                     static_cast<unsigned>(processed), static_cast<unsigned>(total));
