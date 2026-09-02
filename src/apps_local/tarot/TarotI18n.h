@@ -1,12 +1,12 @@
 #pragma once
 
-#include "state/SystemSetting.h"
+#include <I18n.h>
 
 // Tarot card descriptions live on the SD card in English. Keep the asset pack
 // language-neutral and localize the displayed meaning in firmware so existing
 // installations do not need to download the deck again.
 inline const char* tarotMeaningLocalized(const int card, const char* english) {
-  if (SystemSetting::getInstance().uiLanguage != SystemSetting::UI_LANGUAGE_GERMAN) return english;
+  if (I18N.getLanguage() != Language::DE) return english;
 
   static constexpr const char* kGermanMeanings[] = {
       "Neuanfang, Optimismus, Vertrauen ins Leben und der Mut zu einem Sprung ins Ungewisse.",

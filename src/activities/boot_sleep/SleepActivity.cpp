@@ -13,6 +13,7 @@
 #include <PNGdec.h>
 #include <Txt.h>
 #include <Xtc.h>
+#include <esp_system.h>
 
 #include <algorithm>
 #include <cmath>
@@ -24,6 +25,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "activities/reader/ReaderUtils.h"
+#include "apps_local/tarot/TarotAssets.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
@@ -544,9 +546,40 @@ void SleepActivity::onEnter() {
       } else {
         return renderCustomSleepScreen();
       }
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::TAROT):
+      return renderTarotSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
+}
+
+void SleepActivity::renderTarotSleepScreen() const {
+  constexpr size_t kCardCount = 78;
+  if (!TarotAssets::installed()) {
+    LOG_ERR("SLP", "Tarot sleep screen selected without installed assets");
+    renderDefaultSleepScreen();
+    return;
+  }
+
+  const size_t card = static_cast<size_t>(esp_random()) % kCardCount;
+  const std::string path = TarotAssets::cardPath(static_cast<int>(card));
+  HalFile file;
+  if (!Storage.openFileForRead("SLP", path.c_str(), file)) {
+    LOG_ERR("SLP", "Failed to open tarot card %u", static_cast<unsigned>(card));
+    renderDefaultSleepScreen();
+    return;
+  }
+
+  Bitmap bitmap(file, true);
+  if (bitmap.parseHeaders() != BmpReaderError::Ok) {
+    LOG_ERR("SLP", "Invalid tarot card %u", static_cast<unsigned>(card));
+    renderDefaultSleepScreen();
+    return;
+  }
+
+  renderer.clearScreen();
+  renderer.drawBitmap(bitmap, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), 0, 0, false, true);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 void SleepActivity::renderCustomSleepScreen() const {

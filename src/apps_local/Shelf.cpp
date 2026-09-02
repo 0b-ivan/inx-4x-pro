@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 #include <Logging.h>
+#include <I18n.h>
 #include <strings.h>
 
 #include <cstdio>
@@ -273,6 +274,12 @@ namespace shelf {
 const Folder* folders() { return kFolders; }
 
 int folderCount() { return kFolderCount; }
+
+const char* folderTitle(const int index) {
+  if (index == 0) return tr(STR_GAMES);
+  if (index == 1) return tr(STR_APPS);
+  return index >= 0 && index < kFolderCount ? kFolders[index].title : "";
+}
 
 void openFolder(const int index, GfxRenderer& renderer, MappedInputManager& mappedInput) {
   if (index < 0 || index >= kFolderCount) {

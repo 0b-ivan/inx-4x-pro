@@ -1360,11 +1360,12 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                             const float cropX, const float cropY, const bool flipVertical) const {
+                             const float cropX, const float cropY, const bool flipVertical,
+                             const bool allowUpscale) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
-    drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight, flipVertical);
+    drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight, flipVertical, allowUpscale);
     return;
   }
 
@@ -1391,7 +1392,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     hasTargetBounds = true;
   }
 
-  if (hasTargetBounds && fitScale < 1.0f) {
+  if (hasTargetBounds && (fitScale < 1.0f || allowUpscale)) {
     scale = fitScale;
     isScaled = true;
   }
@@ -1454,12 +1455,28 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
+      const int pixelWidth = isScaled ? std::max(1, static_cast<int>(std::floor((bmpX - cropPixX + 1) * scale)) -
+                                                       static_cast<int>(std::floor((bmpX - cropPixX) * scale)))
+                                      : 1;
+      const int sourceY = topDown ? bmpY - cropPixY : bitmap.getHeight() - 1 - bmpY - cropPixY;
+      const int pixelHeight = isScaled ? std::max(1, static_cast<int>(std::floor((sourceY + 1) * scale)) -
+                                                        static_cast<int>(std::floor(sourceY * scale)))
+                                       : 1;
       if (renderMode == BW && val < 3) {
-        drawPixel(screenX, screenY);
+        if (pixelWidth == 1 && pixelHeight == 1)
+          drawPixel(screenX, screenY);
+        else
+          fillRect(screenX, screenY, pixelWidth, pixelHeight, true);
       } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
-        drawPixel(screenX, screenY, false);
+        if (pixelWidth == 1 && pixelHeight == 1)
+          drawPixel(screenX, screenY, false);
+        else
+          fillRect(screenX, screenY, pixelWidth, pixelHeight, false);
       } else if (renderMode == GRAYSCALE_LSB && val == 1) {
-        drawPixel(screenX, screenY, false);
+        if (pixelWidth == 1 && pixelHeight == 1)
+          drawPixel(screenX, screenY, false);
+        else
+          fillRect(screenX, screenY, pixelWidth, pixelHeight, false);
       }
     }
   }
@@ -1475,15 +1492,22 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 }
 
 void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
-                                 const int maxHeight, const bool flipVertical) const {
+                                 const int maxHeight, const bool flipVertical, const bool allowUpscale) const {
   float scale = 1.0f;
   bool isScaled = false;
-  if (maxWidth > 0 && bitmap.getWidth() > maxWidth) {
-    scale = static_cast<float>(maxWidth) / static_cast<float>(bitmap.getWidth());
-    isScaled = true;
+  bool hasTargetBounds = false;
+  float fitScale = 1.0f;
+  if (maxWidth > 0) {
+    fitScale = static_cast<float>(maxWidth) / static_cast<float>(bitmap.getWidth());
+    hasTargetBounds = true;
   }
-  if (maxHeight > 0 && bitmap.getHeight() > maxHeight) {
-    scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight()));
+  if (maxHeight > 0) {
+    const float heightScale = static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight());
+    fitScale = hasTargetBounds ? std::min(fitScale, heightScale) : heightScale;
+    hasTargetBounds = true;
+  }
+  if (hasTargetBounds && (fitScale < 1.0f || allowUpscale)) {
+    scale = fitScale;
     isScaled = true;
   }
 
@@ -1534,7 +1558,16 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
       // For 1-bit source: 0 or 1 -> map to black (0,1,2) or white (3)
       // val < 3 means black pixel (draw it)
       if (val < 3) {
-        drawPixel(screenX, screenY, true);
+        const int pixelWidth = isScaled ? std::max(1, static_cast<int>(std::floor((bmpX + 1) * scale)) -
+                                                         static_cast<int>(std::floor(bmpX * scale)))
+                                        : 1;
+        const int pixelHeight = isScaled ? std::max(1, static_cast<int>(std::floor((bmpYOffset + 1) * scale)) -
+                                                          static_cast<int>(std::floor(bmpYOffset * scale)))
+                                         : 1;
+        if (pixelWidth == 1 && pixelHeight == 1)
+          drawPixel(screenX, screenY, true);
+        else
+          fillRect(screenX, screenY, pixelWidth, pixelHeight, true);
       }
       // White pixels (val == 3) are not drawn (leave background)
     }

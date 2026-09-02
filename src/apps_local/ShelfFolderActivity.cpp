@@ -3,6 +3,7 @@
 #include <FreeInkUIIcon.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <I18n.h>
 
 #include "Shelf.h"
 #include "ShelfScreen.h"
@@ -191,6 +192,7 @@ void ShelfFolderActivity::render(RenderLock&&) {
   namespace fui = freeink::ui;
 
   const shelf::Folder& self = shelf::folders()[folder];
+  const char* localizedTitle = shelf::folderTitle(folder);
 
   renderer.clearScreen();
   fui::GfxRendererTarget target = toybox::makeTarget(renderer);
@@ -224,7 +226,7 @@ void ShelfFolderActivity::render(RenderLock&&) {
   // and the shout happens here, where our own design language starts.
   char shouted[24];
   size_t n = 0;
-  for (const char* c = self.title; *c != '\0' && n + 1 < sizeof(shouted); ++c, ++n) {
+  for (const char* c = localizedTitle; *c != '\0' && n + 1 < sizeof(shouted); ++c, ++n) {
     shouted[n] = *c >= 'a' && *c <= 'z' ? static_cast<char>(*c - 'a' + 'A') : *c;
   }
   shouted[n] = '\0';
@@ -243,7 +245,7 @@ void ShelfFolderActivity::render(RenderLock&&) {
   interactionsReady = true;
   toybox::reportOverflow(interactions, self.title);
 
-  const auto labels = mappedInput.mapLabels("Back", "Open", "Up", "Down");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

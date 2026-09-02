@@ -88,6 +88,7 @@ struct Folder {
 
 const Folder* folders();
 int folderCount();
+const char* folderTitle(int index);
 
 // Open folder `index` from Home. Out of range is a no-op and logged.
 void openFolder(int index, GfxRenderer& renderer, MappedInputManager& mappedInput);

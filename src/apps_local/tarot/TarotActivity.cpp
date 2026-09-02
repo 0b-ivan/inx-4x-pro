@@ -2,11 +2,13 @@
 #include <GfxRenderer.h>
 #include <Bitmap.h>
 #include <HalStorage.h>
+#include <I18n.h>
 #include <cstdio>
 #include <Memory.h>
 #include "../Shelf.h"
 #include "../ui/ToyboxFonts.h"
 #include "TarotDownloadActivity.h"
+#include "TarotI18n.h"
 #include "../../activities/network/WifiSelectionActivity.h"
 
 std::unique_ptr<Activity> TarotActivity::create(GfxRenderer& r, MappedInputManager& i) {
@@ -28,9 +30,9 @@ void TarotActivity::drawNext() {
 void TarotActivity::loop() {
   if (card_ < 0 && !TarotAssets::installed() &&
       (mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
-    startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput), [this](const ActivityResult& result) {
+      startActivityForResult(makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput), [this](const ActivityResult& result) {
       if (result.isCancelled) return;
-      startActivityForResult(std::make_unique<TarotDownloadActivity>(renderer, mappedInput), [this](const ActivityResult&) {
+      startActivityForResult(makeUniqueNoThrow<TarotDownloadActivity>(renderer, mappedInput), [this](const ActivityResult&) {
         assets_.load(); requestUpdate();
       });
     });
@@ -53,9 +55,9 @@ void TarotActivity::loop() {
   int x = 0, y = 0;
   if (!mappedInput.wasScreenTapped(x, y)) return;
   if (card_ < 0 && !TarotAssets::installed()) {
-    startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput), [this](const ActivityResult& result) {
+    startActivityForResult(makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput), [this](const ActivityResult& result) {
       if (result.isCancelled) return;
-      startActivityForResult(std::make_unique<TarotDownloadActivity>(renderer, mappedInput), [this](const ActivityResult&) {
+      startActivityForResult(makeUniqueNoThrow<TarotDownloadActivity>(renderer, mappedInput), [this](const ActivityResult&) {
         assets_.load(); requestUpdate();
       });
     });
@@ -76,48 +78,46 @@ void TarotActivity::drawTextCard() {
     if (Storage.openFileForRead("TAROT", TarotAssets::cardPath(card_).c_str(), file)) {
       Bitmap bitmap(file, true);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-        // Tarot card artwork uses the same aspect ratio as the X4 Pro panel.
-        // Match the main-branch renderer: cards own the complete framebuffer,
-        // with no inset card frame or footer stealing display area.
-        // Main-branch Tarot assets are stored vertically inverted. Keep the
-        // panel orientation correction local to Tarot (horizontal mirroring is
-        // intentionally disabled, matching main's ImageRender options).
-        renderer.drawBitmap(bitmap, 0, 0, w, h, 0, 0, true);
-        file.close();
+        // The asset aspect ratio matches the panel. Explicit upscaling is local
+        // to Tarot so book covers retain drawBitmap's no-upscale default.
+        renderer.drawBitmap(bitmap, 0, 0, w, h, 0, 0, false, true);
         const TarotMeaning meaning = assets_.meaning(card_);
         if (showMeaning_)
-          renderer.drawCenteredText(toybox::kUiFontId, h - 116, meaning.meaning.c_str(), true);
+          renderer.drawCenteredText(toybox::kUiFontId, h - 116,
+                                    tarotMeaningLocalized(card_, meaning.meaning.c_str()), true);
         return;
       }
-      file.close();
     }
   }
   renderer.drawRect(0, 0, w, h, true);
   if (card_ < 0) {
-    renderer.drawCenteredText(toybox::kDisplayFontId, h / 2 - 24, "TAROT", true);
-    renderer.drawCenteredText(toybox::kUiFontId, h / 2 + 30, "TAP OR SWIPE RIGHT TO DRAW", true);
+    renderer.drawCenteredText(toybox::kDisplayFontId, h / 2 - 24, tr(STR_TAROT), true);
+    renderer.drawCenteredText(toybox::kUiFontId, h / 2 + 30, tr(STR_TAROT_DRAW_HINT), true);
     return;
   }
   const TarotMeaning meaning = assets_.meaning(card_);
-  char title[32]; std::snprintf(title, sizeof(title), "CARD %d", card_ + 1);
+  char title[32]; std::snprintf(title, sizeof(title), tr(STR_TAROT_CARD_FORMAT), card_ + 1);
   renderer.drawCenteredText(toybox::kUiFontId, 108, title, true);
   renderer.drawCenteredText(toybox::kDisplayFontId, h / 2 - 45, meaning.name.c_str(), true);
   if (showMeaning_)
-    renderer.drawCenteredText(toybox::kUiFontId, h / 2 + 26, meaning.meaning.c_str(), true);
+    renderer.drawCenteredText(toybox::kUiFontId, h / 2 + 26,
+                              tarotMeaningLocalized(card_, meaning.meaning.c_str()), true);
   else
-    renderer.drawCenteredText(toybox::kUiFontId, h - 116, "TAP LEFT: MEANING   TAP RIGHT: HISTORY", true);
+    renderer.drawCenteredText(toybox::kUiFontId, h - 116, tr(STR_TAROT_CONTROL_HINT), true);
 }
 
 void TarotActivity::render(RenderLock&&) {
   renderer.clearScreen();
   if (history_) {
-    renderer.drawCenteredText(toybox::kDisplayFontId, 56, "TAROT HISTORY", true);
+    renderer.drawCenteredText(toybox::kDisplayFontId, 56, tr(STR_TAROT_HISTORY), true);
     const auto& history = deck_.history();
     for (size_t i = 0; i < history.size() && i < 12; ++i) {
-      char line[32]; std::snprintf(line, sizeof(line), "%2u. CARD %d", static_cast<unsigned>(i + 1), history[i] + 1);
+      char line[32];
+      std::snprintf(line, sizeof(line), tr(STR_TAROT_HISTORY_CARD_FORMAT), static_cast<unsigned>(i + 1),
+                    history[i] + 1);
       renderer.drawText(toybox::kUiFontId, 70, 120 + static_cast<int>(i) * 42, line, true);
     }
-    renderer.drawCenteredText(toybox::kUiFontId, renderer.getScreenHeight() - 54, "TAP OR BACK TO RETURN", true);
+    renderer.drawCenteredText(toybox::kUiFontId, renderer.getScreenHeight() - 54, tr(STR_TAROT_RETURN_HINT), true);
   } else drawTextCard();
   renderer.displayBuffer();
 }

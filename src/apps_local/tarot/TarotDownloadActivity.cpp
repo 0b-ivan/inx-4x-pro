@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <SDCardManager.h>
 #include <cstdio>
 
@@ -11,6 +12,18 @@
 namespace {
 constexpr char kManifest[] = "https://raw.githubusercontent.com/0b-ivan/inx-4x-pro/main/tarot/manifest.json";
 constexpr char kBase[] = "https://raw.githubusercontent.com/0b-ivan/inx-4x-pro/main/tarot/";
+
+const char* localizedError(const std::string& error) {
+  if (error == "Manifest download failed") return tr(STR_TAROT_ERR_MANIFEST_DOWNLOAD);
+  if (error == "Invalid manifest") return tr(STR_TAROT_ERR_MANIFEST_INVALID);
+  if (error == "Unsafe manifest") return tr(STR_TAROT_ERR_MANIFEST_UNSAFE);
+  if (error == "Asset download failed") return tr(STR_TAROT_ERR_ASSET_DOWNLOAD);
+  if (error == "Asset size check failed") return tr(STR_TAROT_ERR_ASSET_SIZE);
+  if (error == "Asset install failed") return tr(STR_TAROT_ERR_ASSET_INSTALL);
+  if (error == "Menu artwork download failed") return tr(STR_TAROT_ERR_MENU_DOWNLOAD);
+  if (error == "Menu install failed") return tr(STR_TAROT_ERR_MENU_INSTALL);
+  return tr(STR_TAROT_DOWNLOAD_FAILED);
+}
 }
 
 TarotDownloadActivity::~TarotDownloadActivity() { onExit(); }
@@ -118,15 +131,17 @@ void TarotDownloadActivity::render(RenderLock&&) {
   const State state = state_.load();
   if (state == State::Downloading) {
     char line[64];
-    std::snprintf(line, sizeof(line), "DOWNLOADING %d/%d  %d%%", completed_.load(), total_.load(), percent_.load());
+    std::snprintf(line, sizeof(line), tr(STR_TAROT_DOWNLOADING_FORMAT), completed_.load(), total_.load(),
+                  percent_.load());
     renderer.drawCenteredText(toybox::kDisplayFontId, renderer.getScreenHeight() / 2 - 25, line, true);
-    renderer.drawCenteredText(toybox::kUiFontId, renderer.getScreenHeight() / 2 + 30, "BACK TO CANCEL", true);
+    renderer.drawCenteredText(toybox::kUiFontId, renderer.getScreenHeight() / 2 + 30, tr(STR_TAROT_BACK_CANCEL), true);
   } else if (state == State::Finished) {
-    renderer.drawCenteredText(toybox::kDisplayFontId, renderer.getScreenHeight() / 2 - 25, "TAROT READY", true);
-    renderer.drawCenteredText(toybox::kUiFontId, renderer.getScreenHeight() / 2 + 30, "SELECT TO CONTINUE", true);
+    renderer.drawCenteredText(toybox::kDisplayFontId, renderer.getScreenHeight() / 2 - 25, tr(STR_TAROT_READY), true);
+    renderer.drawCenteredText(toybox::kUiFontId, renderer.getScreenHeight() / 2 + 30, tr(STR_TAROT_SELECT_CONTINUE), true);
   } else {
-    renderer.drawCenteredText(toybox::kDisplayFontId, renderer.getScreenHeight() / 2 - 25, error_.empty() ? "DOWNLOAD FAILED" : error_.c_str(), true);
-    renderer.drawCenteredText(toybox::kUiFontId, renderer.getScreenHeight() / 2 + 30, "SELECT TO CLOSE", true);
+    renderer.drawCenteredText(toybox::kDisplayFontId, renderer.getScreenHeight() / 2 - 25,
+                              error_.empty() ? tr(STR_TAROT_DOWNLOAD_FAILED) : localizedError(error_), true);
+    renderer.drawCenteredText(toybox::kUiFontId, renderer.getScreenHeight() / 2 + 30, tr(STR_TAROT_SELECT_CLOSE), true);
   }
   renderer.displayBuffer();
 }

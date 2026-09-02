@@ -368,7 +368,7 @@ void HomeActivity::render(RenderLock&&) {
   // hold. Raw titles rather than tr(): routing them through i18n would mean
   // editing lib/I18n/translations/*.yaml per folder.
   for (int i = 0; i < shelf::folderCount(); ++i) {
-    menuItems.push_back(shelf::folders()[i].title);
+    menuItems.push_back(shelf::folderTitle(i));
     menuIcons.push_back(shelf::folders()[i].icon);
   }
 
