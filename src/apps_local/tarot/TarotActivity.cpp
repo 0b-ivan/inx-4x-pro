@@ -79,7 +79,10 @@ void TarotActivity::drawTextCard() {
         // Tarot card artwork uses the same aspect ratio as the X4 Pro panel.
         // Match the main-branch renderer: cards own the complete framebuffer,
         // with no inset card frame or footer stealing display area.
-        renderer.drawBitmap(bitmap, 0, 0, w, h);
+        // Main-branch Tarot assets are stored vertically inverted. Keep the
+        // panel orientation correction local to Tarot (horizontal mirroring is
+        // intentionally disabled, matching main's ImageRender options).
+        renderer.drawBitmap(bitmap, 0, 0, w, h, 0, 0, true);
         file.close();
         const TarotMeaning meaning = assets_.meaning(card_);
         if (showMeaning_)
