@@ -34,6 +34,15 @@ constexpr size_t kMaxReleaseJsonBytes = 12288;
 
 constexpr int kGithubCheckTaskStack = 16384;
 constexpr int kGithubCheckTaskPrio = 3;
+constexpr int kOtaDownloadTaskStack = 16384;
+constexpr int kOtaDownloadTaskPrio = 3;
+
+struct OtaDownloadTaskCtx {
+  OtaUpdater* updater;
+  OtaUpdater::ProgressCallback progress;
+  OtaUpdater::OtaUpdaterError result = OtaUpdater::INTERNAL_UPDATE_ERROR;
+  SemaphoreHandle_t done;
+};
 
 struct ParsedVersion {
   int major = 0;
@@ -353,8 +362,43 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
   return finalizeDownloadedUpdate();
 }
 
+void otaDownloadTask(void* param) {
+  auto* ctx = static_cast<OtaDownloadTaskCtx*>(param);
+  ctx->result = ctx->updater->downloadUpdateWorker(ctx->progress);
+  xSemaphoreGive(ctx->done);
+  vTaskDelete(nullptr);
+}
+
 /** Download the latest update without activating the new OTA partition. */
 OtaUpdater::OtaUpdaterError OtaUpdater::downloadUpdate(const ProgressCallback& progress) {
+  SemaphoreHandle_t done = xSemaphoreCreateBinary();
+  if (done == nullptr) return OOM_ERROR;
+
+  auto* ctx = new (std::nothrow) OtaDownloadTaskCtx{this, progress, INTERNAL_UPDATE_ERROR, done};
+  if (ctx == nullptr) {
+    vSemaphoreDelete(done);
+    return OOM_ERROR;
+  }
+
+  if (xTaskCreate(otaDownloadTask, "otaDownload", kOtaDownloadTaskStack, ctx, kOtaDownloadTaskPrio, nullptr) !=
+      pdPASS) {
+    delete ctx;
+    vSemaphoreDelete(done);
+    Serial.printf("[%lu] [OTA] Failed to spawn download task (stack %d)\n", millis(), kOtaDownloadTaskStack);
+    return OOM_ERROR;
+  }
+
+  while (xSemaphoreTake(done, pdMS_TO_TICKS(500)) != pdTRUE) {
+    taskYIELD();
+  }
+  const OtaUpdaterError result = ctx->result;
+  delete ctx;
+  vSemaphoreDelete(done);
+  return result;
+}
+
+/** Worker running the HTTPS OTA download on a dedicated, large-stack task. */
+OtaUpdater::OtaUpdaterError OtaUpdater::downloadUpdateWorker(const ProgressCallback& progress) {
   if (!isUpdateNewer()) {
     return UPDATE_OLDER_ERROR;
   }
