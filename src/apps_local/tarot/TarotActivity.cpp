@@ -76,19 +76,20 @@ void TarotActivity::drawTextCard() {
     if (Storage.openFileForRead("TAROT", TarotAssets::cardPath(card_).c_str(), file)) {
       Bitmap bitmap(file, true);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-        renderer.drawBitmap(bitmap, 28, 74, w - 56, h - 148);
+        // Tarot card artwork uses the same aspect ratio as the X4 Pro panel.
+        // Match the main-branch renderer: cards own the complete framebuffer,
+        // with no inset card frame or footer stealing display area.
+        renderer.drawBitmap(bitmap, 0, 0, w, h);
         file.close();
         const TarotMeaning meaning = assets_.meaning(card_);
         if (showMeaning_)
           renderer.drawCenteredText(toybox::kUiFontId, h - 116, meaning.meaning.c_str(), true);
-        else
-          renderer.drawCenteredText(toybox::kUiFontId, h - 116, "TAP LEFT: MEANING   TAP RIGHT: HISTORY", true);
         return;
       }
       file.close();
     }
   }
-  renderer.drawRect(28, 74, w - 56, h - 148, true);
+  renderer.drawRect(0, 0, w, h, true);
   if (card_ < 0) {
     renderer.drawCenteredText(toybox::kDisplayFontId, h / 2 - 24, "TAROT", true);
     renderer.drawCenteredText(toybox::kUiFontId, h / 2 + 30, "TAP OR SWIPE RIGHT TO DRAW", true);
