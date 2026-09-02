@@ -350,7 +350,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
   esp_https_ota_handle_t ota_handle = NULL;
   esp_err_t esp_err;
 
-  render = false;
+  unsigned lastLoggedPercent = 0;
 
   esp_http_client_config_t client_config = {};
   client_config.url = otaUrl.c_str();
@@ -375,9 +375,15 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
 
   do {
     esp_err = esp_https_ota_perform(ota_handle);
-    processedSize = esp_https_ota_get_image_len_read(ota_handle);
-
-    render = true;
+    const size_t processed = esp_https_ota_get_image_len_read(ota_handle);
+    processedSize = processed;
+    const size_t total = totalSize.load();
+    const unsigned percent = total > 0 ? static_cast<unsigned>((processed * 100U) / total) : 0;
+    if (percent >= lastLoggedPercent + 10 || (total > 0 && processed >= total)) {
+      lastLoggedPercent = percent;
+      Serial.printf("[%lu] [OTA] Download progress: %u%% (%u / %u bytes)\n", millis(), percent,
+                    static_cast<unsigned>(processed), static_cast<unsigned>(total));
+    }
     vTaskDelay(10 / portTICK_PERIOD_MS);
   } while (esp_err == ESP_ERR_HTTPS_OTA_IN_PROGRESS);
 
@@ -446,7 +452,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdateFromSd(const char* firmware
   uint8_t buffer[1024];
   processedSize = 0;
   totalSize = firmwareSize;
-  render = false;
+  unsigned lastLoggedPercent = 0;
 
   while (processedSize < firmwareSize) {
     const size_t toRead = std::min(sizeof(buffer), firmwareSize - processedSize);
@@ -467,8 +473,14 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdateFromSd(const char* firmware
       return INTERNAL_UPDATE_ERROR;
     }
 
-    processedSize += static_cast<size_t>(readBytes);
-    render = true;
+    const size_t processed = processedSize.load() + static_cast<size_t>(readBytes);
+    processedSize = processed;
+    const unsigned percent = static_cast<unsigned>((processed * 100U) / firmwareSize);
+    if (percent >= lastLoggedPercent + 10 || processed >= firmwareSize) {
+      lastLoggedPercent = percent;
+      Serial.printf("[%lu] [OTA] SD install progress: %u%% (%u / %u bytes)\n", millis(), percent,
+                    static_cast<unsigned>(processed), static_cast<unsigned>(firmwareSize));
+    }
     esp_task_wdt_reset();
     vTaskDelay(1);
   }

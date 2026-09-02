@@ -294,7 +294,7 @@ bool OtaUpdateActivity::handleTouchTap(const int x, const int y) {
 
 void OtaUpdateActivity::displayTaskLoop() {
   while (true) {
-    if (updateRequired || updater.getRender()) {
+    if (updateRequired) {
       updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       render();
@@ -512,9 +512,9 @@ void OtaUpdateActivity::loop() {
       Serial.printf("[%lu] [OTA] New update available, starting download...\n", millis());
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = UPDATE_IN_PROGRESS;
+      updateRequired = false;
+      render();
       xSemaphoreGive(renderingMutex);
-      updateRequired = true;
-      vTaskDelay(10 / portTICK_PERIOD_MS);
       const auto res = updater.installUpdate();
 
       if (res != OtaUpdater::OK) {
@@ -593,9 +593,9 @@ void OtaUpdateActivity::loop() {
       Serial.printf("[%lu] [OTA] Installing firmware from SD: %s\n", millis(), firmwarePath.c_str());
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = UPDATE_IN_PROGRESS;
+      updateRequired = false;
+      render();
       xSemaphoreGive(renderingMutex);
-      updateRequired = true;
-      vTaskDelay(10 / portTICK_PERIOD_MS);
       const auto res = updater.installUpdateFromSd(firmwarePath.c_str());
 
       if (res != OtaUpdater::OK) {
