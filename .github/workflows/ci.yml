@@ -31,6 +31,7 @@ jobs:
         run: |
           python -m py_compile scripts/x4pro_inspect.py
           python -m py_compile scripts/refuse_x4pro_upload.py
+          python -m py_compile scripts/validate_release.py
 
       - name: Install clang-format-21
         run: |

@@ -18,9 +18,9 @@
 
 namespace {
 constexpr const char* kManifestUrl =
-    "https://raw.githubusercontent.com/0b-ivan/inx-4x-pro/x4pro-port/tarot/manifest.json";
+    "https://raw.githubusercontent.com/0b-ivan/inx-4x-pro/main/tarot/manifest.json";
 constexpr const char* kAssetBaseUrl =
-    "https://raw.githubusercontent.com/0b-ivan/inx-4x-pro/x4pro-port/tarot/";
+    "https://raw.githubusercontent.com/0b-ivan/inx-4x-pro/main/tarot/";
 constexpr const char* kMenuRelativePath = "menu.png";
 constexpr size_t kMenuSize = 8101;
 constexpr const char* kMenuSha256 = "f071fac66c63e5a7e52cf5aea7428d59bca3123d64e3aaa152dda214d56c4241";

@@ -2,7 +2,7 @@ name: X4 Pro Build
 
 on:
   push:
-    branches: [x4pro-port]
+    branches: [main]
 
 concurrency:
   group: x4pro-build-${{ github.ref }}
@@ -31,6 +31,7 @@ jobs:
           python -m py_compile scripts/x4pro_stage_inactive.py
           python -m py_compile scripts/x4pro_boot_slot.py
           python -m py_compile scripts/refuse_x4pro_upload.py
+          python -m py_compile scripts/validate_release.py
 
       - name: Build X4 Pro application
         run: pio run -e x4pro

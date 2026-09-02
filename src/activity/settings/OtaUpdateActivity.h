@@ -34,6 +34,7 @@ class OtaUpdateActivity : public ActivityWithSubactivity, public Menu {
   TaskHandle_t displayTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
+  bool touchConfirmRequested = false;
   int sourceSelectedIndex = 0;
   int sdFirmwareSelectedIndex = 0;
   int sdFirmwareScrollOffset = 0;
@@ -60,5 +61,6 @@ class OtaUpdateActivity : public ActivityWithSubactivity, public Menu {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  bool handleTouchTap(int x, int y) override;
   bool preventAutoSleep() override { return state == CHECKING_FOR_UPDATE || state == UPDATE_IN_PROGRESS; }
 };
