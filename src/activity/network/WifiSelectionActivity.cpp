@@ -416,6 +416,10 @@ void WifiSelectionActivity::loop() {
       return;
     }
     const auto swipe = mappedInput.wasSwipe();
+    if (swipe == MappedInputManager::SwipeDir::Right) {
+      onComplete(false);
+      return;
+    }
     if (!networks.empty() && (swipe == MappedInputManager::SwipeDir::Up ||
                               swipe == MappedInputManager::SwipeDir::Down)) {
       const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows;

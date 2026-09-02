@@ -255,12 +255,6 @@ bool OtaUpdateActivity::handleTouchTap(const int x, const int y) {
   if (x < 0 || x >= width || y < 0 || y >= height) return false;
   const int bodyTop = INX_THEME.drawPageHeader(renderer, "Update", 0);
 
-  // The bottom hint row is the touch equivalent of the physical Confirm key.
-  if (y >= height - 70 && x >= width / 4 && x < width * 3 / 4) {
-    touchConfirmRequested = true;
-    return true;
-  }
-
   if (state == SOURCE_SELECTION) {
     if (y >= bodyTop + 2 * kSourceItemHeight) {
       touchConfirmRequested = true;
