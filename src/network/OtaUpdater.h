@@ -12,6 +12,10 @@
 typedef void* esp_https_ota_handle_t;
 
 class OtaUpdater {
+ public:
+  using ProgressCallback = std::function<void(size_t processed, size_t total)>;
+
+ private:
   bool updateAvailable = false;
   std::string latestVersion;
   std::string otaUrl;
@@ -37,6 +41,8 @@ class OtaUpdater {
   friend void otaGithubCheckTask(void* param);
   /** Query the GitHub releases API and record whether a firmware update is available. */
   OtaUpdaterError checkForUpdateWorker();
+  OtaUpdaterError downloadUpdateWorker(const ProgressCallback& progress);
+  friend void otaDownloadTask(void* param);
 
  public:
   /** Return the size in bytes of the available OTA update asset. */
@@ -59,7 +65,6 @@ class OtaUpdater {
   /** Download and install the latest update over HTTPS. */
   OtaUpdaterError installUpdate();
   /** Download the update into the inactive OTA partition without activating it. */
-  using ProgressCallback = std::function<void(size_t processed, size_t total)>;
   OtaUpdaterError downloadUpdate(const ProgressCallback& progress = {});
   /** Activate a previously downloaded update after explicit user confirmation. */
   OtaUpdaterError finalizeDownloadedUpdate();
