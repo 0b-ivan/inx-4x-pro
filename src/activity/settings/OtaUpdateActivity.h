@@ -22,6 +22,7 @@ class OtaUpdateActivity : public ActivityWithSubactivity, public Menu {
     WIFI_SELECTION,
     CHECKING_FOR_UPDATE,
     WAITING_CONFIRMATION,
+    WAITING_INSTALL_CONFIRMATION,
     WAITING_SD_SELECTION,
     WAITING_SD_CONFIRMATION,
     UPDATE_IN_PROGRESS,
@@ -36,6 +37,7 @@ class OtaUpdateActivity : public ActivityWithSubactivity, public Menu {
   bool updateRequired = false;
   bool touchConfirmRequested = false;
   int sourceSelectedIndex = 0;
+  int confirmActionIndex = 0;
   int sdFirmwareSelectedIndex = 0;
   int sdFirmwareScrollOffset = 0;
   std::vector<std::string> sdFirmwareFiles;

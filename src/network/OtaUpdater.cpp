@@ -16,6 +16,9 @@
 #include <cctype>
 #include <cstdlib>
 #include <new>
+#ifndef SIMULATOR
+#include <Preferences.h>
+#endif
 
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
@@ -343,11 +346,22 @@ const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; 
 
 /** Download and install the latest update over HTTPS. */
 OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
+  const auto result = downloadUpdate();
+  if (result != OK) {
+    return result;
+  }
+  return finalizeDownloadedUpdate();
+}
+
+/** Download the latest update without activating the new OTA partition. */
+OtaUpdater::OtaUpdaterError OtaUpdater::downloadUpdate(const ProgressCallback& progress) {
   if (!isUpdateNewer()) {
     return UPDATE_OLDER_ERROR;
   }
 
-  esp_https_ota_handle_t ota_handle = NULL;
+  if (otaHandle != nullptr) {
+    return INTERNAL_UPDATE_ERROR;
+  }
   esp_err_t esp_err;
 
   unsigned lastLoggedPercent = 0;
@@ -367,15 +381,19 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
 
   esp_wifi_set_ps(WIFI_PS_NONE);
 
-  esp_err = esp_https_ota_begin(&ota_config, &ota_handle);
+  otaPartition = esp_ota_get_next_update_partition(nullptr);
+
+  esp_err = esp_https_ota_begin(&ota_config, &otaHandle);
   if (esp_err != ESP_OK) {
     Serial.printf("[%lu] [OTA] HTTP OTA Begin Failed: %s\n", millis(), esp_err_to_name(esp_err));
+    otaHandle = nullptr;
+    otaPartition = nullptr;
     return INTERNAL_UPDATE_ERROR;
   }
 
   do {
-    esp_err = esp_https_ota_perform(ota_handle);
-    const size_t processed = esp_https_ota_get_image_len_read(ota_handle);
+    esp_err = esp_https_ota_perform(otaHandle);
+    const size_t processed = esp_https_ota_get_image_len_read(otaHandle);
     processedSize = processed;
     const size_t total = totalSize.load();
     const unsigned percent = total > 0 ? static_cast<unsigned>((processed * 100U) / total) : 0;
@@ -383,6 +401,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
       lastLoggedPercent = percent;
       Serial.printf("[%lu] [OTA] Download progress: %u%% (%u / %u bytes)\n", millis(), percent,
                     static_cast<unsigned>(processed), static_cast<unsigned>(total));
+      if (progress) {
+        progress(processed, total);
+      }
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
   } while (esp_err == ESP_ERR_HTTPS_OTA_IN_PROGRESS);
@@ -391,25 +412,63 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
 
   if (esp_err != ESP_OK) {
     Serial.printf("[%lu] [OTA] esp_https_ota_perform Failed: %s\n", millis(), esp_err_to_name(esp_err));
-    esp_https_ota_finish(ota_handle);
+    esp_https_ota_abort(otaHandle);
+    otaHandle = nullptr;
+    otaPartition = nullptr;
     return HTTP_ERROR;
   }
 
-  if (!esp_https_ota_is_complete_data_received(ota_handle)) {
+  if (!esp_https_ota_is_complete_data_received(otaHandle)) {
     Serial.printf("[%lu] [OTA] esp_https_ota_is_complete_data_received Failed: %s\n", millis(),
                   esp_err_to_name(esp_err));
-    esp_https_ota_finish(ota_handle);
+    esp_https_ota_abort(otaHandle);
+    otaHandle = nullptr;
+    otaPartition = nullptr;
     return INTERNAL_UPDATE_ERROR;
   }
 
-  esp_err = esp_https_ota_finish(ota_handle);
+  Serial.printf("[%lu] [OTA] Download completed; waiting for installation confirmation\n", millis());
+  return OK;
+}
+
+/** Activate the downloaded OTA image after explicit user confirmation. */
+OtaUpdater::OtaUpdaterError OtaUpdater::finalizeDownloadedUpdate() {
+  if (otaHandle == nullptr) {
+    return INTERNAL_UPDATE_ERROR;
+  }
+
+  const esp_err_t esp_err = esp_https_ota_finish(otaHandle);
+  otaHandle = nullptr;
+  otaPartition = nullptr;
   if (esp_err != ESP_OK) {
     Serial.printf("[%lu] [OTA] esp_https_ota_finish Failed: %s\n", millis(), esp_err_to_name(esp_err));
     return INTERNAL_UPDATE_ERROR;
   }
 
   Serial.printf("[%lu] [OTA] Update completed\n", millis());
+#ifndef SIMULATOR
+  Preferences prefs;
+  if (prefs.begin("inx-ota", false)) {
+    prefs.putString("changelog", latestVersion.c_str());
+    prefs.end();
+  }
+#endif
   return OK;
+}
+
+/** Abort a downloaded OTA image without changing the active boot slot. */
+void OtaUpdater::abortDownloadedUpdate() {
+  if (otaHandle != nullptr) {
+    esp_https_ota_abort(otaHandle);
+    otaHandle = nullptr;
+    if (otaPartition != nullptr) {
+      const auto* partition = static_cast<const esp_partition_t*>(otaPartition);
+      const esp_err_t eraseErr = esp_partition_erase_range(partition, 0, partition->size);
+      Serial.printf("[%lu] [OTA] Inactive partition cleanup: %s\n", millis(), esp_err_to_name(eraseErr));
+    }
+    otaPartition = nullptr;
+    Serial.printf("[%lu] [OTA] Download aborted\n", millis());
+  }
 }
 
 /** Install a firmware image read from the SD card. */

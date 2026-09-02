@@ -45,4 +45,7 @@ class BootActivity : public Activity {
  private:
   int bootProgress = 0;       ///< Current boot progress percentage (0-100)
   bool bootComplete = false;  ///< Flag indicating if boot sequence has finished
+  bool showChangelog = false;
+
+  void renderChangelog();
 };
