@@ -172,6 +172,7 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
 
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   state = WAITING_CONFIRMATION;
+  confirmActionIndex = 0;
   xSemaphoreGive(renderingMutex);
   updateRequired = true;
 }
@@ -234,6 +235,8 @@ const std::string& OtaUpdateActivity::selectedSdFirmwarePath() const {
 void OtaUpdateActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
+  updater.abortDownloadedUpdate();
+
   WiFi.disconnect(false);
   delay(100);
   WiFi.mode(WIFI_OFF);
@@ -268,11 +271,20 @@ bool OtaUpdateActivity::handleTouchTap(const int x, const int y) {
       return true;
     }
   } else if (state == WAITING_CONFIRMATION) {
-    if (y >= bodyTop + 2 * kFirmwareItemHeight) {
+    const int actionTop = bodyTop + 3 * kFirmwareItemHeight + 28;
+    if (y >= actionTop && y < actionTop + 2 * kFirmwareItemHeight) {
+      confirmActionIndex = (y - actionTop) / kFirmwareItemHeight;
       touchConfirmRequested = true;
+      updateRequired = true;
       return true;
     }
-    if (y >= bodyTop + kFirmwareItemHeight && y < bodyTop + 2 * kFirmwareItemHeight) {
+  } else if (state == WAITING_INSTALL_CONFIRMATION) {
+    const int centerY = bodyTop + (height - bodyTop - 80) / 2;
+    const int actionTop = centerY + 52;
+    if (y >= actionTop && y < actionTop + 2 * kFirmwareItemHeight) {
+      confirmActionIndex = (y - actionTop) / kFirmwareItemHeight;
+      touchConfirmRequested = true;
+      updateRequired = true;
       return true;
     }
   } else if (state == WAITING_SD_SELECTION && !sdFirmwareFiles.empty()) {
@@ -355,8 +367,17 @@ void OtaUpdateActivity::render() {
     drawUpdateListRow(renderer, pageWidth, bodyTop + kFirmwareItemHeight, "AVAILABLE UPDATE",
                       updater.getLatestVersion().c_str(), true);
     drawUpdateListRow(renderer, pageWidth, bodyTop + kFirmwareItemHeight * 2, "PACKAGE", sizeLine.c_str(), false);
-    const auto labels = mappedInput.mapLabels("Cancel", "Update", "", "");
-    renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    const int actionTop = bodyTop + 3 * kFirmwareItemHeight + 28;
+    drawUpdateListRow(renderer, pageWidth, actionTop, "", "Update starten", confirmActionIndex == 0);
+    drawUpdateListRow(renderer, pageWidth, actionTop + kFirmwareItemHeight, "", "Abbruch", confirmActionIndex == 1);
+  } else if (state == WAITING_INSTALL_CONFIRMATION) {
+    const int centerY = dividerY + (screenHeight - dividerY - 80) / 2;
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY - 42, "Download complete", true, EpdFontFamily::BOLD);
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY - 12, "Install the downloaded update?", true,
+                           EpdFontFamily::REGULAR);
+    const int actionTop = centerY + 52;
+    drawUpdateListRow(renderer, pageWidth, actionTop, "", "Installation starten", confirmActionIndex == 0);
+    drawUpdateListRow(renderer, pageWidth, actionTop + kFirmwareItemHeight, "", "Abbruch", confirmActionIndex == 1);
   } else if (state == WAITING_SD_SELECTION) {
     const int totalFiles = static_cast<int>(sdFirmwareFiles.size());
     if (totalFiles == 0) {
@@ -507,15 +528,29 @@ void OtaUpdateActivity::loop() {
   }
 
   if (state == WAITING_CONFIRMATION) {
+    if (mappedInput.wasPressed(MenuNav::itemPrev()) || mappedInput.wasPressed(MenuNav::itemNext())) {
+      confirmActionIndex = confirmActionIndex == 0 ? 1 : 0;
+      updateRequired = true;
+      return;
+    }
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) || touchConfirmRequested) {
       touchConfirmRequested = false;
-      Serial.printf("[%lu] [OTA] New update available, starting download...\n", millis());
+      if (confirmActionIndex == 1) {
+        goBack();
+        return;
+      }
+      Serial.printf("[%lu] [OTA] Update start confirmed, downloading...\n", millis());
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = UPDATE_IN_PROGRESS;
       updateRequired = false;
       render();
       xSemaphoreGive(renderingMutex);
-      const auto res = updater.installUpdate();
+      const auto res = updater.downloadUpdate([this](const size_t, const size_t) {
+        xSemaphoreTake(renderingMutex, portMAX_DELAY);
+        updateRequired = false;
+        render();
+        xSemaphoreGive(renderingMutex);
+      });
 
       if (res != OtaUpdater::OK) {
         Serial.printf("[%lu] [OTA] Update failed: %d\n", millis(), res);
@@ -527,7 +562,8 @@ void OtaUpdateActivity::loop() {
       }
 
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      state = FINISHED;
+      state = WAITING_INSTALL_CONFIRMATION;
+      confirmActionIndex = 0;
       xSemaphoreGive(renderingMutex);
       updateRequired = true;
     }
@@ -536,6 +572,37 @@ void OtaUpdateActivity::loop() {
       goBack();
     }
 
+    return;
+  }
+
+  if (state == WAITING_INSTALL_CONFIRMATION) {
+    if (mappedInput.wasPressed(MenuNav::itemPrev()) || mappedInput.wasPressed(MenuNav::itemNext())) {
+      confirmActionIndex = confirmActionIndex == 0 ? 1 : 0;
+      updateRequired = true;
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) || touchConfirmRequested) {
+      touchConfirmRequested = false;
+      if (confirmActionIndex == 1) {
+        updater.abortDownloadedUpdate();
+        goBack();
+        return;
+      }
+      Serial.printf("[%lu] [OTA] Installation confirmation received\n", millis());
+      const auto res = updater.finalizeDownloadedUpdate();
+      if (res != OtaUpdater::OK) {
+        Serial.printf("[%lu] [OTA] Update finalization failed: %d\n", millis(), res);
+        state = FAILED;
+        updateRequired = true;
+        return;
+      }
+      state = FINISHED;
+      updateRequired = true;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      updater.abortDownloadedUpdate();
+      goBack();
+    }
     return;
   }
 

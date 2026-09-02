@@ -9,6 +9,8 @@
 #include <functional>
 #include <string>
 
+typedef void* esp_https_ota_handle_t;
+
 class OtaUpdater {
   bool updateAvailable = false;
   std::string latestVersion;
@@ -16,6 +18,8 @@ class OtaUpdater {
   size_t otaSize = 0;
   std::atomic_size_t processedSize{0};
   std::atomic_size_t totalSize{0};
+  esp_https_ota_handle_t otaHandle = nullptr;
+  const void* otaPartition = nullptr;
 
  public:
   enum OtaUpdaterError {
@@ -54,6 +58,13 @@ class OtaUpdater {
   OtaUpdaterError checkForUpdate();
   /** Download and install the latest update over HTTPS. */
   OtaUpdaterError installUpdate();
+  /** Download the update into the inactive OTA partition without activating it. */
+  using ProgressCallback = std::function<void(size_t processed, size_t total)>;
+  OtaUpdaterError downloadUpdate(const ProgressCallback& progress = {});
+  /** Activate a previously downloaded update after explicit user confirmation. */
+  OtaUpdaterError finalizeDownloadedUpdate();
+  /** Abort a downloaded-but-not-yet-activated update. */
+  void abortDownloadedUpdate();
   /** Install a firmware image read from the SD card. */
   OtaUpdaterError installUpdateFromSd(const char* firmwarePath = "/firmware.bin");
 };
