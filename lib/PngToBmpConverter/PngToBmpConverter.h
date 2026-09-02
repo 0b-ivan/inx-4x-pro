@@ -1,35 +1,21 @@
-/**
- * @file PngToBmpConverter.h
- * @brief Public interface and types for PngToBmpConverter.
- */
+#pragma once
 
-#ifndef PngToBmpConverter_h
-#define PngToBmpConverter_h
+#include <HalStorage.h>
 
-#include <Arduino.h>
-#include <SdFat.h>
+class Print;
 
 class PngToBmpConverter {
- private:
-  static bool pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight, bool oneBit,
-                                         bool crop);
+  static bool pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
+                                         bool oneBit, bool crop = true);
 
  public:
-  static bool pngFileTo1BitBmpStream(FsFile& pngFile, Print& bmpOut);
-  static bool pngFileTo1BitBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth, int targetMaxHeight,
-                                             bool cropToFill = true);
-  static bool pngFileTo1BitBmpStreamCentered(FsFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                             bool cropToFill = true);
-  /** 2bpp BMP (four ink levels) with Floyd–Steinberg; matches JPEG thumbnail look for library/recent covers. */
-  static bool pngFileTo2BitBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth, int targetMaxHeight,
-                                             bool cropToFill = true);
-
-  /** EPUB body images: 2-bit BMP matching web reader (contain to max 500x820, same as JPEG path). */
-  static bool pngFileToEpubWebStyle2BitBmpStream(FsFile& pngFile, Print& bmpOut);
-
-  static bool pngFileToThumbnailBmp(FsFile& pngFile, Print& bmpOut, int targetMaxWidth = 0, int targetMaxHeight = 0);
-  static bool pngFileTo1BitThumbnailBmp(FsFile& pngFile, Print& bmpOut, int targetMaxWidth = 0,
-                                        int targetMaxHeight = 0);
+  static bool pngFileToBmpStream(HalFile& pngFile, Print& bmpOut, bool crop = true);
+  static bool pngFileToBmpStreamWithSize(HalFile& pngFile, Print& bmpOut, int targetMaxWidth, int targetMaxHeight);
+  static bool pngFileTo1BitBmpStreamWithSize(HalFile& pngFile, Print& bmpOut, int targetMaxWidth, int targetMaxHeight);
+  // Contain, not cover. `...WithSize` above crops to FILL the target box
+  // despite the "Max" in its parameter names, so passing a generous height
+  // bound scales the image UP to meet it: a normal comic asked to fit
+  // 480x16384 came out 14845x16384. This one scales to fit INSIDE the box,
+  // which is what a caller bounding a download actually wants.
+  static bool pngFileTo1BitBmpStreamFitWithin(HalFile& pngFile, Print& bmpOut, int maxWidth, int maxHeight);
 };
-
-#endif

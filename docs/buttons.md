@@ -1,0 +1,216 @@
+# The buttons
+
+What the physical buttons are for in our apps. The answer turned out to be
+almost entirely a hardware question, and once the hardware is right the design
+question mostly disappears.
+
+---
+
+## 1. The X4 Pro has two buttons
+
+Not six. Our own board profile says so, and it is confirmed on hardware:
+
+```cpp
+// {back, confirm, left, right, up, down, power, powerActiveHigh}
+{PIN_UNASSIGNED, PIN_UNASSIGNED, PIN_UNASSIGNED, PIN_UNASSIGNED, 0, 7, 3, false},
+```
+
+`freeink-sdk/.../BoardConfig.h`, `XTEINK_X4_PRO`
+
+- **Two side keys.** Physically left is GPIO0, physically right is GPIO7. They
+  are wired to logical **Up** and **Down**, and the comment beside them says
+  what they are for: _"The two keys map to the reader's page pair (Up=prev /
+  Down=next)."_ On the device they are moulded page-turn keys.
+- **Power**, GPIO3.
+- **No Back. No Confirm. No Left. No Right.** All four are `PIN_UNASSIGNED`,
+  which `InputManager::begin` skips entirely (`if (pin >= 0)`), so they are
+  never even configured as inputs. They cannot fire. They do not exist.
+
+The X4 Pro dropped the front button row the older C3 X4 had. The
+`frontButtonBack` / `frontButtonConfirm` settings still exist and still remap,
+they just remap indices onto pins that are not connected to anything.
+
+**So the entire button budget available to a game on this device is two keys
+that the case labels as previous and next page.**
+
+### The Sticky has three, and it changes nothing
+
+The Seeed reTerminal Sticky (the second supported device) carries the same two
+page keys (Up=GPIO5, Down=GPIO6) plus one more: a shared **Confirm/Power** key
+on GPIO4 -- a click is Confirm, a hold is sleep
+(`InputStyle::DigitalConfirmPowerHold` in its board profile). That key maps
+onto the logical Confirm that every screen already accepts, so it works
+everywhere without any app knowing it exists.
+
+The design rule does not move: **design for the X4 Pro's two keys plus touch.**
+An interaction that _requires_ the third key would be unreachable on the X4
+Pro, so the Sticky's Confirm is a convenience alias for a tap, never the only
+way to do something.
+
+## 2. Back is a swipe, and it already works
+
+Worth stating plainly, because the pin map above looks alarming and it is not.
+`MappedInputManager::wasReleased` opens with:
+
+```cpp
+if (button == Button::Back && wasBackGesture()) return true;
+```
+
+and `wasBackGesture()` is a left-to-right swipe anchored near the left edge. So
+every `mappedInput.wasReleased(Button::Back)` in `apps_local` -- all seventeen
+apps -- resolves through the gesture on this device, and every game is
+exitable. The physical half of that call has been dead since the X4 Pro was
+targeted and nothing depended on it.
+
+## 3. What we actually use
+
+Counted across `src/apps_local/`:
+
+| Button       | Apps that read it | Exists on X4 Pro |
+| ------------ | ----------------- | ---------------- |
+| Back         | 17                | as a swipe       |
+| Confirm      | 3                 | **no**           |
+| Left / Right | 1                 | **no**           |
+| Up / Down    | 3                 | **yes**          |
+
+Thirteen of seventeen apps use Back and nothing else. **The two buttons the
+device actually has are unused by every game we have built.** The only apps that
+touch them are the reader-shaped ones: hackernews, xkcd, and chess.
+
+That is the whole finding. Not "we should use the buttons more" as a matter of
+taste -- the device ships with two physical keys, they are page keys, and our
+games ignore them.
+
+### One game since then does not, and it is the exception that proves the rule
+
+FOREHEAD (2026-08-28) is the first game here where the two keys are the primary
+input rather than a page turn, and it earns that by satisfying section 4 exactly
+rather than by making an exception to it. The player holds the panel against
+their own forehead and **cannot see the screen**, so there is no "where" to
+point at: GOT IT and PASS are answers, not positions. That is the one shape a
+button is for, and it is why the game has no cursor either.
+
+It also shows what the rule's second half costs when taken seriously. "Never
+only a button" still holds and the two halves of the round screen are tappable
+-- but not as halves, because the guesser's fingers curl over the long edges to
+reach the keys and would answer their own card. The touch targets are bands
+across the middle of each half instead. See [apps/forehead.md](apps/forehead.md).
+
+Its landscape key mapping -- `Button::Up` is the BOTTOM key and `Button::Down`
+the TOP one, once the panel is turned counter-clockwise -- was **confirmed on
+hardware on 2026-08-30**. Reuse it rather than re-deriving it: it is the same
+rotation for any app that turns the panel this way.
+
+Worth knowing before writing another landscape app: `ScreenUp` / `ScreenDown`
+look like exactly the right API for a rotated screen and are a trap here. In
+`LandscapeCounterClockwise`, `mapScreenDirection()` resolves them to
+`Button::Left` and `Button::Right`, which are `PIN_UNASSIGNED` on this board and
+can never fire -- and the whole mapping is gated on
+`SETTINGS.frontButtonFollowOrientation`, a reader preference most players have
+never opened. Read `Button::Up` and `Button::Down` and do the rotation
+arithmetic yourself.
+
+---
+
+## 4. The rule
+
+**A button may only do something that has no "where".** Every action is one of:
+
+- **Pointing** -- which cell, column, card, category. The answer is a position,
+  the finger names it exactly, and a button can only express it by inventing a
+  cursor. design-language.md removed cursors from Chess and Connections for
+  cause and that stays removed.
+- **Stepping** -- next page, previous page. No position at all. Drawing a
+  control for these is drawing a place for something that does not live
+  anywhere, which is why the shelf's page marks felt wrong as buttons.
+
+On this hardware the rule is almost self-executing, because the only two buttons
+are page keys. **Up and Down page. Nothing else is a button, because nothing
+else is a button.**
+
+**And paging by button is never the only route.** The page marks stay tappable,
+and a swipe steps a page too -- it is the first thing every hand reaches for on
+a touch panel showing a page indicator or a scrollbar. Three cold testers tried
+it on the shelf before anything else, and a fourth tried it on Hacker News's
+story list and reported the list broken when nothing moved. Not because touch
+is better, but because the
+moment a button is the only way to reach something we have two input models
+again, and the invisible one wins arguments it should not.
+
+**Paging is VERTICAL, everywhere.** Up for the next page, the way the page
+moves under the finger; down for the previous one. One rule per app, never two,
+and the same rule in an app's list as in its reader -- learn it once.
+
+That used to read "the swipe follows the axis the content moves on", with the
+shelf taking a horizontal swipe because its pages slide sideways, and it ended
+with the line "Back is a left-EDGE swipe, so it never collides with either."
+**That last sentence is false on the horizontal axis, and the shelf paid for
+it.** Back is a left-to-RIGHT swipe anchored in the left 25% of the width
+(`EDGE_SWIPE_SIDE_FRAC`, 120px of 480), which is the same visible gesture as a
+horizontal page-BACK and differs from it only by where the finger started.
+Nothing draws that boundary, so on the shelf a cold tester swiping back from
+page two landed on Home, concluded that back meant exit, and went forward until
+the pages came round -- onto a page they had not noticed, whose second row was
+a different game.
+
+So a horizontal paging axis cannot be symmetrical while Back owns left-to-right,
+and a one-way axis is the asymmetry that was reported. The vertical axis
+collides with nothing: it is orthogonal to Back, which is why the story list and
+the reader never had this problem. The shelf moved onto it, and nothing in
+`apps_local` pages sideways now.
+
+Two vertical bands are consumed above the activity and are worth knowing before
+using them for anything: a down-swipe starting in the top 14% is the light-panel
+gesture, and an up-swipe starting in the bottom 14% is the Home gesture **on
+boards with no home key**. The X4 Pro has a capacitive home key
+(`BoardConfig` `hasHomeKey = true`), so its bottom edge is free and its Home
+gesture is the key; the Sticky has no key and does spend that band.
+
+---
+
+## 5. The affordance is moulded into the case
+
+This is where the iPhone comparison lands, and the answer is that we do not need
+one.
+
+The iPhone shows a transient indicator at the edge, aligned to the key, that
+fades. E-ink cannot fade, and a refresh is a visible blink, so an appear/dismiss
+indicator costs two full repaints to tell you about something you just did.
+
+We do not need it because **the buttons are already labelled -- by the
+hardware.** They are physical page-turn keys on a device whose primary app is a
+reader that uses them to turn pages. A user who has read one book on this device
+has already learned them. Making them page the shelf and the HOW TO PLAY pages
+is _consistency with the thing they already do_, not a new capability that needs
+teaching.
+
+An on-screen tick would be permanent ink -- on every screen, forever -- to teach
+something the case already teaches. That fails the ink-budget rule (black is
+inversely proportional to how often it changes) for no gain.
+
+**So: no affordance. Just make the page keys page.** If the buttons ever gain a
+job the case does not imply, that decision comes back.
+
+---
+
+## 6. What this changes
+
+1. **Up/Down page wherever there are pages**: the shelf folder, HOW TO PLAY in
+   every game, and Hacker News's story list and reader. Behaviour only; nothing
+   is drawn or removed. The shelf takes Left/Right too, which are
+   `PIN_UNASSIGNED` on both target boards and exist only in the simulator and
+   the browser emulator -- where all six keys are wired to the arrow keys, and
+   where every arrow moves a cursor on Home. Two of the four doing nothing one
+   level in is the only place a person meets these keys at all.
+2. **design-language.md is wrong and gets corrected.** It says "Keep the
+   physical buttons for Back and system functions", and on this device there is
+   no physical Back button. The corrected rule is the one in section 4.
+3. **The `mapLabels(...)` calls stay, and are documented as inert here.** All
+   fifteen feed `drawButtonHints`, which returns immediately when
+   `gpio.hasTouch()`. They are not dead code in the fork's other targets -- the
+   C3 X4 and X3 have the front row and do draw hints -- but on the X4 Pro they
+   have never drawn anything, and twelve of them pass `("Back", "", "", "")`,
+   which would label a button that is not there.
+
+Nothing here needs the device in hand. The pin map is committed, the gesture
+path is testable in the simulator, and paging is verifiable with a screenshot.

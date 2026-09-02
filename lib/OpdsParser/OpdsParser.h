@@ -1,10 +1,4 @@
 #pragma once
-
-/**
- * @file OpdsParser.h
- * @brief Public interface and types for OpdsParser.
- */
-
 #include <Print.h>
 #include <expat.h>
 
@@ -14,7 +8,10 @@
 /**
  * Type of OPDS entry.
  */
-enum class OpdsEntryType { NAVIGATION, BOOK };
+enum class OpdsEntryType {
+  NAVIGATION,  // Link to another catalog
+  BOOK         // Downloadable book
+};
 
 /**
  * Represents an entry from an OPDS feed (either a navigation link or a book).
@@ -22,11 +19,20 @@ enum class OpdsEntryType { NAVIGATION, BOOK };
 struct OpdsEntry {
   OpdsEntryType type = OpdsEntryType::NAVIGATION;
   std::string title;
-  std::string author;
-  std::string href;
+  std::string author;  // Only for books
+  std::string href;    // Navigation URL or epub download URL
   std::string id;
+  // Primary subtag of dc:language / dcterms:language, lowercased ("en" from
+  // "en-US"). Empty when the feed does not say, which must always read as
+  // "keep" -- a filter that hides untagged books hides most of a catalog.
+  std::string language;
+  // Thumbnail preferred over the full-size image: the detail screen draws into
+  // a small box and a 2000px cover costs seconds to fetch and decode.
+  std::string coverHref;
+  std::string summary;
 };
 
+// Legacy alias for backward compatibility
 using OpdsBook = OpdsEntry;
 
 /**
@@ -50,6 +56,17 @@ class OpdsParser final : public Print {
   OpdsParser();
   ~OpdsParser();
 
+  // Disable copy
+  const std::string& getSearchTemplate() const { return searchTemplate; }
+  // The feed's own <subtitle>. A catalog with nothing to list uses it to say
+  // why -- "No EPUBs found for dune" -- which is the only thing worth drawing
+  // on an otherwise empty screen.
+  const std::string& getSubtitle() const { return subtitle; }
+  // Set only when the feed's search link points at an OpenSearch description
+  // document instead of inlining {searchTerms}. Resolve it with OpenSearchParser.
+  const std::string& getSearchDescriptionUrl() const { return searchDescriptionUrl; }
+  const std::string& getNextPageUrl() const { return nextPageUrl; }
+  const std::string& getPrevPageUrl() const { return prevPageUrl; }
   OpdsParser(const OpdsParser&) = delete;
   OpdsParser& operator=(const OpdsParser&) = delete;
 
@@ -59,6 +76,7 @@ class OpdsParser final : public Print {
   void flush() override;
 
   bool error() const;
+  bool truncated() const { return feedTruncated; }
 
   operator bool() { return !error(); }
 
@@ -81,22 +99,38 @@ class OpdsParser final : public Print {
   void clear();
 
  private:
+  // Expat callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL endElement(void* userData, const XML_Char* name);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
 
+  std::string searchTemplate;
+  std::string subtitle;
+  std::string searchDescriptionUrl;
+  std::string nextPageUrl;
+  std::string prevPageUrl;
+  // Helper to find attribute value
   static const char* findAttribute(const XML_Char** atts, const char* name);
+  static void assignBounded(std::string& target, const char* value, size_t maxLen);
+  static void appendBounded(std::string& target, const char* value, size_t len, size_t maxLen);
 
   XML_Parser parser = nullptr;
   std::vector<OpdsEntry> entries;
   OpdsEntry currentEntry;
   std::string currentText;
 
+  // Parser state
   bool inEntry = false;
   bool inTitle = false;
   bool inAuthor = false;
   bool inAuthorName = false;
   bool inId = false;
+  bool inLanguage = false;
+  bool inSummary = false;
+  bool inSubtitle = false;
+  bool coverIsThumbnail = false;
+  bool collectCurrentEntry = false;
 
   bool errorOccured = false;
+  bool feedTruncated = false;
 };

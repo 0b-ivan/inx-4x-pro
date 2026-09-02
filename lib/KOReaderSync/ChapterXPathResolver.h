@@ -1,10 +1,5 @@
 #pragma once
 
-/**
- * @file ChapterXPathResolver.h
- * @brief Public interface and types for ChapterXPathResolver.
- */
-
 #include <Epub.h>
 
 #include <cstdint>

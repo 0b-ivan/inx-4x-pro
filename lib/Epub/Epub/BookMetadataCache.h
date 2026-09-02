@@ -1,13 +1,11 @@
 #pragma once
 
-/**
- * @file BookMetadataCache.h
- * @brief Public interface and types for BookMetadataCache.
- */
-
-#include <SDCardManager.h>
+#include <BufferedFile.h>
+#include <HalStorage.h>
 
 #include <algorithm>
+#include <deque>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -23,11 +21,11 @@ class BookMetadataCache {
 
   struct SpineEntry {
     std::string href;
-    size_t cumulativeSize;
+    uint32_t cumulativeSize;
     int16_t tocIndex;
 
     SpineEntry() : cumulativeSize(0), tocIndex(-1) {}
-    SpineEntry(std::string href, const size_t cumulativeSize, const int16_t tocIndex)
+    SpineEntry(std::string href, const uint32_t cumulativeSize, const int16_t tocIndex)
         : href(std::move(href)), cumulativeSize(cumulativeSize), tocIndex(tocIndex) {}
   };
 
@@ -47,33 +45,41 @@ class BookMetadataCache {
           spineIndex(spineIndex) {}
   };
 
-  struct CssEntry {
-    std::string path;
-    std::string content;
-    uint32_t size;
-
-    CssEntry() : size(0) {}
-    CssEntry(std::string path, std::string content, const uint32_t size)
-        : path(std::move(path)), content(std::move(content)), size(size) {}
-  };
-
  private:
   std::string cachePath;
   uint32_t lutOffset;
   uint16_t spineCount;
   uint16_t tocCount;
-  uint16_t cssCount;
   bool loaded;
   bool buildMode;
 
-  FsFile bookFile;
+  HalFile bookFile;
+  // Temp file handles during build
+  HalFile spineFile;
+  HalFile tocFile;
+  // Buffers the per-entry tmp-file writes during the OPF/TOC passes: those
+  // writes interleave with zip-inflate SD reads, and unbuffered they thrash
+  // SdFat's shared sector cache (one 512B transaction per 4-byte pod). One
+  // wrapper serves whichever pass is active (spine, then toc).
+  std::unique_ptr<serialization::BufferedFileWriter> passOut;
 
-  FsFile spineFile;
-  FsFile tocFile;
-  FsFile cssFile;
+  // Cumulative spine sizes, cached in RAM at load() so progress/percent lookups are
+  // O(1) instead of 2 seeks + a heap-allocating SpineEntry read per access (4 bytes
+  // per spine item; <1KB for typical books).
+  std::vector<uint32_t> cumulativeSizes;
 
-  static constexpr uint32_t MAX_CSS_SIZE = 1024 * 1024;
+  // Index for fast href→spineIndex lookup (used only for large EPUBs)
+  struct SpineHrefIndexEntry {
+    uint64_t hrefHash;  // FNV-1a 64-bit hash
+    uint16_t hrefLen;   // length for collision reduction
+    int16_t spineIndex;
+  };
+  std::deque<SpineHrefIndexEntry> spineHrefIndex;
+  bool useSpineHrefIndex = false;
 
+  static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
+
+  // FNV-1a 64-bit hash function
   static uint64_t fnvHash64(const std::string& s) {
     uint64_t hash = 14695981039346656037ull;
     for (char c : s) {
@@ -83,57 +89,40 @@ class BookMetadataCache {
     return hash;
   }
 
-  uint32_t writeSpineEntry(FsFile& file, const SpineEntry& entry) const;
-  uint32_t writeTocEntry(FsFile& file, const TocEntry& entry) const;
-  uint32_t writeCssEntry(FsFile& file, const CssEntry& entry) const;
-  SpineEntry readSpineEntry(FsFile& file) const;
-  TocEntry readTocEntry(FsFile& file) const;
-  CssEntry readCssEntry(FsFile& file) const;
+  uint32_t writeSpineEntry(HalFile& file, const SpineEntry& entry) const;
+  uint32_t writeTocEntry(HalFile& file, const TocEntry& entry) const;
+  SpineEntry readSpineEntry(HalFile& file) const;
+  TocEntry readTocEntry(HalFile& file) const;
 
  public:
   BookMetadata coreMetadata;
 
   explicit BookMetadataCache(std::string cachePath)
-      : cachePath(std::move(cachePath)),
-        lutOffset(0),
-        spineCount(0),
-        tocCount(0),
-        cssCount(0),
-        loaded(false),
-        buildMode(false) {}
+      : cachePath(std::move(cachePath)), lutOffset(0), spineCount(0), tocCount(0), loaded(false), buildMode(false) {}
   ~BookMetadataCache() = default;
 
+  // Building phase (stream to disk immediately)
   bool beginWrite();
   bool beginContentOpfPass();
   void createSpineEntry(const std::string& href);
   bool endContentOpfPass();
   bool beginTocPass();
   void createTocEntry(const std::string& title, const std::string& href, const std::string& anchor, uint8_t level);
-  /** If no TOC rows were produced from nav/ncx, add one entry per spine item so readers can still navigate. */
-  void appendSyntheticTocFromSpineIfEmpty();
   bool endTocPass();
-
-  bool beginCssPass();
-  void createCssEntry(const std::string& path, const std::string& content);
-  bool endCssPass();
-
-  bool extractAndCacheCssFiles(const std::string& epubPath);
-
   bool endWrite();
   bool cleanupTmpFiles() const;
 
+  // Post-processing to update mappings and sizes
   bool buildBookBin(const std::string& epubPath, const BookMetadata& metadata);
 
+  // Reading phase (read mode)
   bool load();
   SpineEntry getSpineEntry(int index);
   TocEntry getTocEntry(int index);
-
-  CssEntry getCssEntry(int index);
-  std::string getCssContent(const std::string& cssPath);
-  std::vector<std::string> getAllCssPaths();
-
+  // Cumulative byte size up to and including the given spine item (0 if out of range
+  // or not loaded). Backed by the in-RAM cumulativeSizes cache populated in load().
+  uint32_t getCumulativeSize(int index) const;
   int getSpineCount() const { return spineCount; }
   int getTocCount() const { return tocCount; }
-  int getCssCount() const { return cssCount; }
   bool isLoaded() const { return loaded; }
 };

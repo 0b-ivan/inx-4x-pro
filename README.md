@@ -1,299 +1,242 @@
-# Inx for Xteink X4 Pro
+<h1 align="center">
+  <img src="site/assets/logo.svg#gh-light-mode-only" width="72" alt="CrossPlay"><img src="site/assets/logo-dark.svg#gh-dark-mode-only" width="72" alt="CrossPlay"><br>
+  CrossPlay
+</h1>
 
-Experimental port of [Inx](https://github.com/obijuankenobiii/inx) to the **Xteink X4 Pro**.
+<p align="center">
+  <strong>E-ink is good at waiting.</strong><br>
+  So is a chess position, a flashcard, a puzzle you are halfway through.
+</p>
 
-> [!WARNING]
-> **This is still experimental firmware. Do not use PlatformIO's generic upload command.**
-> Builds must be installed only through the guarded inactive-OTA-slot workflow in
-> [`docs/X4PRO_FLASHING_GUIDE.md`](docs/X4PRO_FLASHING_GUIDE.md). The workflow has been validated on a real X4 Pro,
-> including full-flash backup, readback verification, test boot and rollback to the factory slot.
+<p align="center">
+  <a href="https://github.com/ma-r-s/crossplay/releases">Releases</a> &middot;
+  <a href="docs/shelf.md">What is on it</a> &middot;
+  <a href="docs/identity.md">Identity</a> &middot;
+  <a href="LOCAL_SCOPE.md">Scope</a>
+</p>
 
-This fork targets the X4 Pro specifically:
+<p align="center">
+  <a href="https://github.com/ma-r-s/crossplay/actions/workflows/crossplay-ci.yml"><img src="https://github.com/ma-r-s/crossplay/actions/workflows/crossplay-ci.yml/badge.svg?branch=xteink" alt="Build status for the xteink branch"></a>
+</p>
 
-- ESP32-S3
-- 16 MiB flash
-- 8 MiB PSRAM
-- 800x480 e-paper display
-- GT911 capacitive touch
-- two physical navigation keys
-- capacitive Home key
-- 1-bit SDMMC microSD
-- CW2017 battery gauge
-- warm/cold frontlight hardware
+![CrossPlay on the Xteink X4 Pro](site/assets/shots/og.png)
 
-Hardware definitions come from the pinned **FreeInk** X4 Pro board profile instead of hard-coded GPIO numbers in Inx.
+CrossPlay is a fork of [CrossPoint](https://crosspointreader.com/) for the
+**Xteink X4 Pro** and the **Seeed reTerminal Sticky**. CrossPoint turns the
+device into an excellent e-reader. CrossPlay keeps all of that and adds the
+other things a screen that holds still is good at: games you think about rather
+than react to, spaced-repetition flashcards, comics, and two devices that play
+together with nothing to set up.
 
-## Project status
+It is a personal fork, built in the open. Upstream lands on a `base` branch and
+is merged in continuously. The reading side is CrossPoint's and stays CrossPoint's:
+the EPUB engine, sync and the file browser are theirs, and the reader's chrome is
+restyled to match the design language the apps use.
 
-| Area | Status |
-| --- | --- |
-| ESP32-S3 build | ✅ builds in CI |
-| FreeInk X4 Pro board profile | ✅ integrated |
-| Physical-device boot and display | ✅ validated |
-| Display controller detection | ✅ validated |
-| PSRAM | ✅ build configured |
-| SDMMC | ✅ backend integrated |
-| Physical side buttons | ✅ mapped |
-| GT911 touch orientation | ✅ physically calibrated |
-| Direct touch UI | ✅ reader, library, recent, statistics, settings and device menus |
-| Capacitive Home key | ✅ mapped to Back / Menu |
-| Quick Settings | ✅ touch drawer with persistent controls |
-| Frontlight | ✅ warm/cold control, persistence and sleep handling |
-| Night mode | ✅ persistent display inversion |
-| German UI | ✅ integrated |
-| Tarot app and sleep screen | ✅ integrated with verified asset downloads |
-| Battery | 🧪 backend integrated, hardware validation pending |
-| Deep sleep / wake | 🧪 basic hardware behavior confirmed; extended validation pending |
-| RTC clock UI | 🧪 available when a working RTC is detected |
-| X4 Pro OTA updater | 🧪 enabled for application-only alpha releases |
-| Generic PlatformIO upload | 🔒 blocked intentionally |
-| Guarded inactive-slot flash and rollback | ✅ validated on hardware |
+## What is on it
 
-## Safety model
+|                  |                                                                              |
+| ---------------- | ---------------------------------------------------------------------------- |
+| **Chess**        | A full engine on the device, or a board between two of them.                 |
+| **Battleship**   | Lay out a fleet, then hunt someone else's.                                   |
+| **Connections**  | The daily word grid, with an archive of past boards.                         |
+| **Solitaire**    | Klondike, turned sideways because that is the shape of a tableau.            |
+| **D&Diagrams**   | A nonogram whose clues are a dungeon. 64 of them.                            |
+| **Insider**      | A party game for a table and one device.                                     |
+| **Jaipur**       | The two-player trading game, solo or nearby.                                 |
+| **Murdle**       | A logic grid built through the solver, so you never have to guess.           |
+| **Checkers**     | English draughts, where taking is compulsory and the board says so.          |
+| **Connect Four** | Drop a disc, get four in a line. Seven columns, one tap each.                |
+| **Yahtzee**      | Thirteen boxes, three rolls a turn, and the Joker rules in full.             |
+| **Knucklebones** | Cult of the Lamb's dice game. Matching dice multiply; yours destroy theirs.  |
+| **Minesweeper**  | Tap to dig, hold to flag. The first dig is always safe.                      |
+| **Sudoku**       | Generated on the device and graded by the technique it needs, not the clues. |
+| **Sea Salt**     | Sea Salt & Paper: collect duos, bet on STOP or LAST CHANCE.                  |
+| **Toy Battle**   | Nine boards of bases and paths. Hold regions, take medals, solo or nearby.   |
+| **Forehead**     | Screen against your forehead, the room shouts clues, sixty seconds.          |
+| **Trivia**       | 50,000 questions off 42 years of Jeopardy. Read them out, or play alone.     |
+| **Wavelength**   | A hidden point on a spectrum, one clue, and the whole table arguing.         |
+| **Study**        | Anki decks with the FSRS scheduler, offline.                                 |
+| **Hacker News**  | The front page in a reading serif, articles kept on the card.                |
+| **xkcd**         | The archive, packed for the card and drawn one to one.                       |
+| **Get Books**    | Browse any OPDS catalog and download straight to the card, no computer.      |
+| **Instapaper**   | Your read-later queue, synced both ways: reading position and archiving.     |
 
-The X4 Pro has flash memory containing much more than the Inx application. A careless full-device flash can overwrite the bootloader, partition table, factory calibration or the only known-good application.
+Nine of them play over **PLAY NEARBY**: Chess, Checkers, Connect Four,
+Yahtzee, Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle. Put two
+devices next to each other and they find one another. No pairing screen, no room code, no
+account, no router, no internet.
 
-For this port the rules are therefore:
+Each game's rules, its state machines and the decisions behind them:
+[Checkers](docs/apps/checkers.md) &middot;
+[Connect Four](docs/apps/connectfour.md) &middot;
+[Yahtzee](docs/apps/yahtzee.md) &middot;
+[Knucklebones](docs/apps/knucklebones.md) &middot;
+[Minesweeper](docs/apps/minesweeper.md) &middot;
+[Sudoku](docs/apps/sudoku.md) &middot;
+[Trivia](docs/apps/trivia.md) &middot;
+[Jaipur](docs/apps/jaipur.md) &middot;
+[Sea Salt](docs/apps/seasalt.md) &middot;
+[Murdle](docs/apps/murdle.md) &middot;
+[Toy Battle](docs/apps/toybattle.md).
+How the two physical buttons are used, and why there are only two:
+[buttons](docs/buttons.md).
 
-1. **Never erase the complete flash for a normal test.**
-2. **Never overwrite the bootloader.**
-3. **Never overwrite the live partition table.**
-4. **Never erase NVS or `otadata` during a normal test.**
-5. **Never use `pio run -t upload`.** The project blocks this on purpose.
-6. **Only install this repository's X4 Pro releases.** The updater accepts the application-only `firmware.bin`; never flash bootloader or partition files.
-7. Before the first write, read the real device partition table.
-8. Before the first write, create a complete 16 MiB flash backup and SHA-256 checksum.
-9. Testing must write only an **inactive OTA application slot** through the guarded helper.
-10. Keep the known-good application slot intact until Inx has passed boot, display, input, SD, sleep and restart tests.
+## Install it
 
-The detailed explanation is in [`docs/X4PRO_FLASHING_GUIDE.md`](docs/X4PRO_FLASHING_GUIDE.md).
+CrossPlay targets two devices: the **Xteink X4 Pro** and the **Seeed
+reTerminal Sticky**, both ESP32-S3 with the same 800x480 panel and capacitive
+touch. For every other device CrossPoint supports, CrossPoint upstream is the
+right answer and is excellent.
 
-Technical port status is documented in [`docs/X4PRO_PORT.md`](docs/X4PRO_PORT.md).
+> **This runs on real hardware.** One tester flashed v1.2.1 and played most
+> of the shelf; the three problems they hit were fixed in v1.2.2. As of
+> v1.3.0 I have an X4 Pro of my own on the desk, and since 2026-08-25 a
+> Sticky next to it, so releases are flashed to both before they ship. That
+> is still a small record: if you flash it, please
+> [say what happened](https://github.com/ma-r-s/crossplay/issues), either way.
 
-## Why an inactive OTA slot?
+You do not need to have installed CrossPoint first.
 
-A simplified X4 Pro flash layout looks conceptually like this:
+### From the browser
 
-```text
-ESP32-S3 flash
+Open [**crossplay.ma-r-s.com/#get**](https://crossplay.ma-r-s.com/#get) in
+Chrome or Edge on a computer, plug the device in, wake it, and press **Install**.
+The page downloads the current release and writes it over USB itself; there is
+nothing to install first and no command to type. Safari and Firefox have no Web
+Serial, and no phone or tablet does either, so the button says so rather than
+failing when pressed.
 
-+----------------------------+
-| Bootloader                 |  keep
-+----------------------------+
-| Partition table            |  keep
-+----------------------------+
-| NVS / device data          |  keep
-+----------------------------+
-| OTA metadata               |  keep
-+----------------------------+
-| Application slot A         |  known-good firmware
-+----------------------------+
-| Application slot B         |  experimental Inx
-+----------------------------+
-| Other device data          |  keep
-+----------------------------+
-```
+### By hand
 
-The exact offsets are **not assumed**. They are read from the physical device before the first test.
+1. Download your device's full image from the
+   [releases page](https://github.com/ma-r-s/crossplay/releases):
+   `crossplay-<version>-x4pro-full.bin` for the X4 Pro,
+   `crossplay-<version>-sticky-full.bin` for the Sticky. Each is the whole
+   firmware: second-stage bootloader at `0x0`, partition table at `0x8000`,
+   application at `0x10000`, in one file.
+2. Plug the device into a computer over USB.
+3. Install [esptool](https://github.com/espressif/esptool) if you have not
+   (`pip install esptool`, same on Windows, macOS and Linux) and run the line
+   for your device:
 
-## Build
+   ```bash
+   esptool.py --chip esp32s3 --baud 921600 write_flash 0x0 crossplay-<version>-x4pro-full.bin
+   ```
 
-### Requirements
+   ```bash
+   esptool.py --chip esp32s3 --baud 921600 write_flash 0x0 crossplay-<version>-sticky-full.bin
+   ```
 
-- macOS, Linux or Windows
-- Python 3
-- PlatformIO Core
-- Git
+### Updating an install you already have
 
-On macOS:
+The release also carries `firmware.bin`, which is the application on its own.
+That is the file for a device that already has a bootloader, and it needs no
+cable: **Settings -> Check for updates** fetches it over Wi-Fi, or you can copy
+it onto the SD card and choose it from the same screen. The updater matches that
+exact filename, so do not rename it.
+
+`-full.bin` is for the USB install only. Do not hand it to the on-device
+updater: that would be writing a bootloader into a slot meant for the
+application.
+
+### Reflashing without a cable
+
+**Settings > System > Developer Mode** turns any device into one you can flash
+over Wi-Fi, including a device that has only ever run shipped releases: it is a
+setting, not a build flag. Pair once with the six-digit code the screen shows,
+then every flash after that is one command.
 
 ```bash
-python3 -m pip install --upgrade platformio esptool
+./scripts_local/wifi-flash.sh --pair 123456
+./scripts_local/wifi-flash.sh
+./scripts_local/wifi-flash.sh --disable
 ```
 
-Clone the repository including submodules:
+It is off until you turn it on, it says on the panel that the device will not
+sleep while it is on, and `--disable` closes it again. It also serves the last
+panic, its backtrace and the log lines from before the reset at
+`GET /api/dev/crash`, which used to need a cable to read.
+[docs/developer-mode.md](docs/developer-mode.md) has the rest, including what
+protects it.
+
+Two things worth knowing before you start:
+
+- **`--chip esp32s3`, and only these two devices.** The X4 and X3 are
+  ESP32-C3: these binaries are not for them and flashing one there is a
+  cross-chip flash. Install [CrossPoint](https://crosspointreader.com/) on
+  those instead: it is excellent and it is what this is built on. Between the
+  two S3 devices the firmware protects you -- every image carries its board
+  name, and both updaters refuse an image built for the other board.
+- **Flashing replaces the firmware, not the SD card.** Your library, your
+  reading positions and your fonts are files on that card and are left alone.
+  Installing stock CrossPoint over the top puts the device back where it was,
+  which makes this cheap to try. If a flash goes wrong,
+  [docs/fix-bricked-xteink.md](docs/fix-bricked-xteink.md) is the way back.
+
+## Try it without a device
+
+[**crossplay.ma-r-s.com**](https://crossplay.ma-r-s.com) runs the real firmware
+in the browser: the same `src/` and `lib/` the device build compiles, put
+through `em++` instead of `g++`, against an SD card of its own. Click the screen
+in the hero, or ask for two devices and watch them find each other.
+
+The browser build fakes three things, all documented in
+[site/README.md](site/README.md): the network answers from a snapshot, Study's
+headword font is the small cut under the big one's name, and sleep is off.
+
+## Build it
 
 ```bash
-git clone --recursive https://github.com/0b-ivan/inx-4x-pro.git
-cd inx-4x-pro
-git submodule update --init --recursive
+pio run -e x4pro                 # the firmware
+pio run -e simulator_x4_pro      # a desktop simulator, SDL2 + a FreeRTOS shim
+./scripts_local/check.sh         # host tests and both builds
 ```
 
-Build:
+Every suite green is the only green; nothing is a known failure.
 
-```bash
-pio run -e x4pro
-```
+The apps live in `src/apps_local/`, which is what keeps the merge with upstream
+close to conflict-free. It is not the whole diff: the settings screens, the
+reader's menus and parts of `lib/` are reworked too, and those are where a merge
+conflict will come from if one does. Read
+[LOCAL_SCOPE.md](LOCAL_SCOPE.md) and [docs/shelf.md](docs/shelf.md) before
+adding anything, and [docs/building-apps.md](docs/building-apps.md) for how an
+app is put together.
 
-Application image:
+## The website
 
-```text
-.pio/build/x4pro/firmware.bin
-```
+`site/` is static: the landing page, the [Study deck
+installer](https://crossplay.ma-r-s.com/study/) (Pyodide converting Anki decks
+in the browser, previewed on the real firmware), their stylesheet and scripts,
+the assets they name, and the browser build under `site/emulator/`. See
+[site/README.md](site/README.md) for how to serve it (a plain `http.server`
+will not do, the threads need COOP/COEP) and what has to be true before it
+deploys.
 
-A successful build means only that the program can be compiled for the ESP32-S3 target. It is **not** permission to bypass the guarded flashing procedure.
+## Credit and licence
 
-## Read-only hardware preflight
+CrossPlay is MIT, like the project it forks, and it is a fork in git's sense as
+well as in the README's: this repository is a GitHub fork of
+[crosspoint-reader/crosspoint-reader](https://github.com/crosspoint-reader/crosspoint-reader),
+shares its commit history, and merges every upstream release rather than
+re-implementing it. It stands on
+[CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader) and the
+[FreeInk SDK](https://freeink.org/); upstream's own README is kept at
+[docs/crosspoint-readme.md](docs/crosspoint-readme.md).
 
-Before any write to the X4 Pro, connect it over USB and identify the serial port.
+xkcd comics are by Randall Munroe, [CC BY-NC 2.5](https://xkcd.com/license.html),
+fetched by the device from [xkcd.com](https://xkcd.com). Connections puzzles are
+the New York Times'; CrossPlay ships none of them and downloads only what you
+ask for. Type is Jersey 25 and Instrument Serif, both SIL OFL.
 
-macOS:
+Jaipur, Insider, Murdle, Battleship, Connections, Knucklebones, Sea Salt &
+Paper and Toy Battle are trademarks of their respective owners. Sea Salt & Paper
+was designed by Bruno Cathala and Theo Riviere and is published by Bombyx. Toy
+Battle was designed by Paolo Mori and Alessandro Zucchini and is published by
+Repos Production. CrossPlay implements the games; it is not affiliated with,
+endorsed by or sponsored by any of them.
 
-```bash
-ls /dev/cu.*
-```
-
-Then run:
-
-```bash
-python3 scripts/x4pro_inspect.py \
-  --port /dev/cu.usbmodemXXXX \
-  --firmware .pio/build/x4pro/firmware.bin \
-  --backup
-```
-
-The inspector intentionally contains **no flash write, erase or boot-selection command**. It:
-
-- verifies that the connected MCU is an ESP32-S3;
-- reads the live partition table from flash;
-- validates that multiple OTA application slots exist;
-- checks that `firmware.bin` fits those slots;
-- optionally reads the complete 16 MiB flash;
-- creates a SHA-256 checksum of that backup.
-
-Expected backup files:
-
-```text
-x4pro-preflight/
-├── partition-table.bin
-├── x4pro-full-16mb.bin
-└── x4pro-full-16mb.bin.sha256
-```
-
-The backup directory is intentionally ignored by Git because it contains device-specific flash data and may contain credentials.
-After preflight, follow the staging and boot-selection steps in the flashing guide. The helpers validate the live partition
-layout, security state, backup consistency, inactive target slot and post-write readback before allowing a boot switch.
-
-## Highlights
-
-### Touch-first X4 Pro interface
-
-The original button-oriented screens now have a semantic touch layer. Taps are mapped into logical UI coordinates and
-dispatched to the active screen or modal dialog. This enables direct interaction with:
-
-- main tabs, library controls and book lists;
-- EPUB page-turn and reader-menu zones;
-- recent books, saved words and statistics;
-- settings rows, selectors and device-management actions;
-- nested activities and confirmation dialogs.
-
-Four-direction swipe navigation remains available where a screen uses list or content navigation. A swipe from the top
-edge opens the Quick Settings drawer.
-
-### Quick Settings, frontlight and night mode
-
-The CrossPoint-style Quick Settings drawer provides fast access to reader touch, display inversion/night mode and the
-X4 Pro frontlight. Warm and cold light levels, on/off state and quick-control preferences are persisted and restored after
-boot. Frontlight PWM is kept alive during light sleep where required by the hardware.
-
-### Tarot
-
-The Sync/Tools page includes a complete 78-card Tarot activity with card meanings, draw history, touch controls and a
-Tarot standby screen. If the deck is missing, the reader can download the manifest and assets over Wi-Fi, verify every
-file by size and SHA-256, and install them to `/tarot/` on the SD card. The same files can be copied manually from the
-repository's [`tarot/`](tarot/) directory.
-
-### Display, sleep and localization
-
-- FreeInk performs runtime display-controller detection and panel output inversion.
-- Sleep screens support Tarot, light/dark screens, recent-book covers, transparent covers, custom BMP/JPEG images and
-  an RTC-backed date/time screen when the board exposes a working clock.
-- Custom sleep images can be selected individually or randomized from `/sleep/`.
-- English and German UI languages are available in Settings.
-- Reader quick actions, presets, external SD-card fonts and selectable image quality remain available from upstream Inx.
-
-## Input mapping
-
-The semantic touch layer handles direct hit-testing on adapted screens. A compatibility mapping remains for screens that
-still use Inx's original button-oriented input model:
-
-| X4 Pro input | Inx action |
-| --- | --- |
-| side key 1 | Up / previous |
-| side key 2 | Down / next |
-| direct screen tap | Activate the touched control where supported |
-| fallback screen tap | Confirm |
-| capacitive Home tap | Back / Menu |
-| horizontal swipe | Left / Right |
-| vertical swipe | Up / Down |
-| top-edge swipe | Open Quick Settings |
-| power button | Power |
-
-## Hardware validation checklist
-
-The first hardware test is intentionally boring. We are not testing every Inx feature at once.
-
-```text
-[x] ESP32-S3 boots the experimental application
-[ ] serial log remains available
-[x] e-paper controller is detected
-[x] display initializes without BUSY lockup
-[x] screen orientation is correct
-[x] side buttons work
-[x] touch tap and corner calibration work
-[x] Home key works
-[ ] four-direction swipe behavior is fully validated
-[ ] SD card mounts
-[ ] EPUB can be opened
-[ ] battery value is plausible
-[x] basic sleep and power-button wake work
-[ ] restart works
-[x] known-good OTA slot remains recoverable
-```
-
-The checklist distinguishes implemented software from completed physical-device validation. See
-[`docs/X4PRO_PORT.md`](docs/X4PRO_PORT.md) for the detailed engineering status.
-
-## Inx features
-
-The port keeps the Inx application layer, including EPUB/TXT/Markdown reading, library browsing, bookmarks, annotations,
-dictionary lookup, KOReader sync, OPDS, Calibre integration, image rendering, SD-card fonts, reader presets and quick
-actions, sleep screens, statistics, backup/restore and the local web interface.
-
-Some features can remain temporarily unavailable while the X4 Pro hardware layer is being validated.
-
-## Development
-
-Useful targets:
-
-```bash
-# X4 Pro firmware
-pio run -e x4pro
-
-# SDL simulator
-CROSSPOINT_SIM_SD=./fs_ pio run -e simulator -t run_simulator
-
-# web-only simulator
-CROSSPOINT_SIM_SD=./fs_ pio run -e simulator_web -t run_simulator
-```
-
-### Important: upload is intentionally blocked
-
-This is expected to fail:
-
-```bash
-pio run -e x4pro -t upload
-```
-
-That failure is a safety feature, not a bug.
-
-## Documentation
-
-- [`docs/X4PRO_FLASHING_GUIDE.md`](docs/X4PRO_FLASHING_GUIDE.md) — beginner-friendly explanation of bootloader, partitions, OTA slots, backup, flashing, rollback and the planned first test.
-- [`docs/X4PRO_PORT.md`](docs/X4PRO_PORT.md) — technical implementation status and port constraints.
-
-## Upstream
-
-This repository is based on Inx and uses FreeInk hardware support for the Xteink X4 Pro.
-
-It is a community project and is not affiliated with Xteink.
+Reading positions sync to CrossPoint's own server by default. That is
+upstream's infrastructure rather than this fork's, inherited so that flashing
+CrossPlay over CrossPoint does not orphan an existing sync; the address is a
+setting and can be pointed at any KOSync server.

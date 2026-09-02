@@ -1,108 +1,95 @@
-/**
- * @file KOReaderCredentialStore.cpp
- * @brief Definitions for KOReaderCredentialStore.
- */
-
 #include "KOReaderCredentialStore.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <MD5Builder.h>
-#include <SDCardManager.h>
-#include <Serialization.h>
-
-KOReaderCredentialStore KOReaderCredentialStore::instance;
+#include <ObfuscationUtils.h>
 
 namespace {
+// Default sync server URL. crosspoint-sync speaks the full KOSync protocol, so
+// pointing at any other kosync server (e.g. https://sync.koreader.rocks:443)
+// still works via the custom server URL setting.
+//
+// FORK NOTE: this is upstream's server, running on upstream's infrastructure,
+// and CrossPlay inherits it so that flashing this over CrossPoint does not
+// silently orphan someone's existing sync. It is left alone rather than
+// repointed for that reason, but it means reading positions leave this device
+// for a host neither the user nor upstream chose on our behalf, so the site and
+// the README say so out loud rather than leaving it to be discovered here.
+constexpr char DEFAULT_SERVER_URL[] = "https://sync.crosspointreader.com";
 
-constexpr uint8_t KOREADER_FILE_VERSION = 1;
+// Default before config version 2. Configs saved without a version stamp and an
+// empty serverUrl were implicitly syncing here — they get pinned on upgrade.
+constexpr char LEGACY_DEFAULT_SERVER_URL[] = "https://sync.koreader.rocks:443";
 
-constexpr char DEFAULT_SERVER_URL[] = "https://sync.koreader.rocks:443";
-
-constexpr uint8_t OBFUSCATION_KEY[] = {0x4B, 0x4F, 0x52, 0x65, 0x61, 0x64, 0x65, 0x72};
-constexpr size_t KEY_LENGTH = sizeof(OBFUSCATION_KEY);
+// Bumped when a change to defaults would alter behavior for existing configs.
+constexpr uint8_t CONFIG_VERSION = 2;
 }  // namespace
 
-void KOReaderCredentialStore::obfuscate(std::string& data) const {
-  for (size_t i = 0; i < data.size(); i++) {
-    data[i] ^= OBFUSCATION_KEY[i % KEY_LENGTH];
-  }
+void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
+  doc["cfgVersion"] = CONFIG_VERSION;
+  doc["username"] = getUsername();
+  doc["password_obf"] = obfuscation::obfuscateToBase64(getPassword());
+  doc["serverUrl"] = getServerUrl();
+  doc["matchMethod"] = static_cast<uint8_t>(getMatchMethod());
+  doc["sendMetadata"] = getSendMetadata();
+  doc["syncBehavior"] = static_cast<uint8_t>(getSyncBehavior());
 }
 
-bool KOReaderCredentialStore::saveToFile() const {
-  SdMan.mkdir("/.system");
+bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
+  std::string user = doc["username"] | "";
 
-  FsFile file;
-  if (!SdMan.openFileForWrite("KRS", KOReaderCredentialStore::SYSTEM_SETTINGS_PATH, file)) {
-    return false;
+  bool needsResave = false;
+  std::string pass = extractPassword(doc, needsResave);
+
+  setCredentials(user, pass);
+  setServerUrl(doc["serverUrl"] | "");
+
+  // The default server changed in config v2 (sync.koreader.rocks -> crosspoint-sync).
+  // A pre-v2 config with credentials and no explicit URL was actively syncing
+  // against the old default — pin that URL so the upgrade doesn't switch servers
+  // out from under the user. Fresh setups get the new default.
+  const uint8_t cfgVersion = doc["cfgVersion"] | (uint8_t)1;
+  if (cfgVersion < CONFIG_VERSION) {
+    if (getServerUrl().empty() && hasCredentials()) {
+      LOG_DBG("KRS", "Pre-v2 config used the old default server; pinning %s", LEGACY_DEFAULT_SERVER_URL);
+      setServerUrl(LEGACY_DEFAULT_SERVER_URL);
+    }
+    needsResave = true;  // stamp cfgVersion so this migration runs once
   }
 
-  serialization::writePod(file, KOREADER_FILE_VERSION);
-
-  serialization::writeString(file, username);
-  Serial.printf("[%lu] [KRS] Saving username: %s\n", millis(), username.c_str());
-
-  std::string obfuscatedPwd = password;
-  obfuscate(obfuscatedPwd);
-  serialization::writeString(file, obfuscatedPwd);
-
-  serialization::writeString(file, serverUrl);
-
-  serialization::writePod(file, static_cast<uint8_t>(matchMethod));
-
-  file.close();
-  Serial.printf("[%lu] [KRS] Saved KOReader credentials to file\n", millis());
-  return true;
-}
-
-bool KOReaderCredentialStore::loadFromFile() {
-  FsFile file;
-  if (!SdMan.openFileForRead("KRS", KOReaderCredentialStore::SYSTEM_SETTINGS_PATH, file)) {
-    saveToFile();
-    return false;
-  }
-
-  uint8_t version;
-  serialization::readPod(file, version);
-  if (version != KOREADER_FILE_VERSION) {
-    file.close();
-    return false;
-  }
-
-  if (file.available()) {
-    serialization::readString(file, username);
+  uint8_t method = doc["matchMethod"] | (uint8_t)0;
+  if (method <= static_cast<uint8_t>(DocumentMatchMethod::BINARY)) {
+    setMatchMethod(static_cast<DocumentMatchMethod>(method));
   } else {
-    username.clear();
+    LOG_DBG("KRS", "Invalid matchMethod %u in JSON, resetting to FILENAME", method);
+    setMatchMethod(DocumentMatchMethod::FILENAME);
   }
+  setSendMetadata(doc["sendMetadata"] | false);
 
-  if (file.available()) {
-    serialization::readString(file, password);
-    obfuscate(password);
+  const JsonVariantConst behaviorValue = doc["syncBehavior"];
+  const bool missingBehavior = behaviorValue.isNull();
+  uint8_t behavior = behaviorValue | static_cast<uint8_t>(KOReaderSyncBehavior::ASK_EVERY_TIME);
+  if (behavior <= static_cast<uint8_t>(KOReaderSyncBehavior::SMART)) {
+    setSyncBehavior(static_cast<KOReaderSyncBehavior>(behavior));
+    needsResave = needsResave || missingBehavior;
   } else {
-    password.clear();
+    LOG_DBG("KRS", "Invalid syncBehavior %u in JSON, resetting to ASK_EVERY_TIME", behavior);
+    setSyncBehavior(KOReaderSyncBehavior::ASK_EVERY_TIME);
+    needsResave = true;
   }
 
-  if (file.available()) {
-    serialization::readString(file, serverUrl);
-  } else {
-    serverUrl.clear();
+  if (needsResave) {
+    LOG_DBG("KRS", "Resaving KOReader credentials to update format");
+    requestResave();
   }
 
-  if (file.available()) {
-    uint8_t method;
-    serialization::readPod(file, method);
-    matchMethod = static_cast<DocumentMatchMethod>(method);
-  } else {
-    matchMethod = DocumentMatchMethod::FILENAME;
-  }
-
-  file.close();
   return true;
 }
 
 void KOReaderCredentialStore::setCredentials(const std::string& user, const std::string& pass) {
   username = user;
   password = pass;
-  Serial.printf("[%lu] [KRS] Set credentials for user: %s\n", millis(), user.c_str());
+  LOG_DBG("KRS", "Set credentials for user: %s", user.c_str());
 }
 
 std::string KOReaderCredentialStore::getMd5Password() const {
@@ -110,6 +97,7 @@ std::string KOReaderCredentialStore::getMd5Password() const {
     return "";
   }
 
+  // Calculate MD5 hash of password using ESP32's MD5Builder
   MD5Builder md5;
   md5.begin();
   md5.add(password.c_str());
@@ -124,28 +112,49 @@ void KOReaderCredentialStore::clearCredentials() {
   username.clear();
   password.clear();
   saveToFile();
-  Serial.printf("[%lu] [KRS] Cleared KOReader credentials\n", millis());
+  LOG_DBG("KRS", "Cleared KOReader credentials");
 }
 
 void KOReaderCredentialStore::setServerUrl(const std::string& url) {
   serverUrl = url;
-  Serial.printf("[%lu] [KRS] Set server URL: %s\n", millis(), url.empty() ? "(default)" : url.c_str());
+  LOG_DBG("KRS", "Set server URL: %s", url.empty() ? "(default)" : url.c_str());
 }
 
 std::string KOReaderCredentialStore::getBaseUrl() const {
+  std::string url;
   if (serverUrl.empty()) {
-    return DEFAULT_SERVER_URL;
+    url = DEFAULT_SERVER_URL;
+  } else if (serverUrl.find("://") == std::string::npos) {
+    // Normalize URL: add http:// if no protocol specified (local servers typically don't have SSL)
+    url = "http://" + serverUrl;
+  } else {
+    url = serverUrl;
   }
 
-  if (serverUrl.find("://") == std::string::npos) {
-    return "http://" + serverUrl;
+  // Strip trailing slashes to avoid double-slash in API paths
+  while (!url.empty() && url.back() == '/') {
+    url.pop_back();
   }
 
-  return serverUrl;
+  return url;
 }
+
+bool KOReaderCredentialStore::usesCrossPointSyncServer() const { return getBaseUrl() == DEFAULT_SERVER_URL; }
 
 void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) {
   matchMethod = method;
-  Serial.printf("[%lu] [KRS] Set match method: %s\n", millis(),
-                method == DocumentMatchMethod::FILENAME ? "Filename" : "Binary");
+  LOG_DBG("KRS", "Set match method: %s", method == DocumentMatchMethod::FILENAME ? "Filename" : "Binary");
+}
+
+void KOReaderCredentialStore::setSendMetadata(bool enabled) {
+  sendMetadata = enabled;
+  LOG_DBG("KRS", "Set send metadata: %s", enabled ? "true" : "false");
+}
+
+void KOReaderCredentialStore::setSyncBehavior(KOReaderSyncBehavior behavior) {
+  if (static_cast<uint8_t>(behavior) > static_cast<uint8_t>(KOReaderSyncBehavior::SMART)) {
+    behavior = KOReaderSyncBehavior::ASK_EVERY_TIME;
+  }
+  syncBehavior = behavior;
+  LOG_DBG("KRS", "Set sync behavior: %s", behavior == KOReaderSyncBehavior::SMART ? "Smart" : "Ask");
 }

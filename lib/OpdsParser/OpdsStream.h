@@ -1,10 +1,5 @@
 #pragma once
 
-/**
- * @file OpdsStream.h
- * @brief Public interface and types for OpdsStream.
- */
-
 #include <Stream.h>
 
 #include "OpdsParser.h"
@@ -13,6 +8,7 @@ class OpdsParserStream : public Stream {
  public:
   explicit OpdsParserStream(OpdsParser& parser);
 
+  // That functions are not implemented for that stream
   int available() override;
   int peek() override;
   int read() override;

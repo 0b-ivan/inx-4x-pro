@@ -1,14 +1,11 @@
 #pragma once
 
-/**
- * @file SerializedHyphenationTrie.h
- * @brief Public interface and types for SerializedHyphenationTrie.
- */
-
 #include <cstddef>
 #include <cstdint>
 
+// Lightweight descriptor that points at a serialized Liang hyphenation trie stored in flash.
 struct SerializedHyphenationPatterns {
+  size_t rootOffset;
   const std::uint8_t* data;
   size_t size;
 };

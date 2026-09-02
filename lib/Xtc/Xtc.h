@@ -1,12 +1,7 @@
 /**
- * @file Xtc.h
- * @brief Public interface and types for Xtc.
- */
-
-/**
  * Xtc.h
  *
- * Main XTC ebook class for Inx Reader
+ * Main XTC ebook class for CrossPoint Reader
  * Provides EPUB-like interface for XTC file handling
  */
 
@@ -33,7 +28,8 @@ class Xtc {
 
  public:
   explicit Xtc(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)), loaded(false) {
-    cachePath = cacheDir + "/" + std::to_string(std::hash<std::string>{}(this->filepath));
+    // Create cache key based on filepath (same as Epub)
+    cachePath = cacheDir + "/xtc_" + std::to_string(std::hash<std::string>{}(this->filepath));
   }
   ~Xtc() = default;
 
@@ -54,24 +50,29 @@ class Xtc {
    */
   void setupCacheDir() const;
 
+  // Path accessors
   const std::string& getCachePath() const { return cachePath; }
   const std::string& getPath() const { return filepath; }
 
+  // Metadata
   std::string getTitle() const;
   std::string getAuthor() const;
   bool hasChapters() const;
-  const std::vector<xtc::ChapterInfo>& getChapters() const;
+  const std::vector<xtc::ChapterInfo>& getChapters();
 
+  // Cover image support (for sleep screen)
   std::string getCoverBmpPath() const;
   bool generateCoverBmp() const;
-
+  // Thumbnail support (for Continue Reading card)
   std::string getThumbBmpPath() const;
-  bool generateThumbBmp() const;
+  std::string getThumbBmpPath(int height) const;
+  bool generateThumbBmp(int height) const;
 
+  // Page access
   uint32_t getPageCount() const;
   uint16_t getPageWidth() const;
   uint16_t getPageHeight() const;
-  uint8_t getBitDepth() const;
+  uint8_t getBitDepth() const;  // 1 = XTC (1-bit), 2 = XTCH (2-bit)
 
   /**
    * Load page bitmap data
@@ -93,9 +94,12 @@ class Xtc {
                                   std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
                                   size_t chunkSize = 1024) const;
 
+  // Progress calculation
   uint8_t calculateProgress(uint32_t currentPage) const;
 
+  // Check if file is loaded
   bool isLoaded() const { return loaded; }
 
+  // Error information
   xtc::XtcError getLastError() const;
 };

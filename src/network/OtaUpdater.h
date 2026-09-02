@@ -1,31 +1,18 @@
 #pragma once
 
-/**
- * @file OtaUpdater.h
- * @brief Public interface and types for OtaUpdater.
- */
-
-#include <atomic>
-#include <functional>
 #include <string>
 
-typedef void* esp_https_ota_handle_t;
-
 class OtaUpdater {
- public:
-  using ProgressCallback = std::function<void(size_t processed, size_t total)>;
-
- private:
   bool updateAvailable = false;
   std::string latestVersion;
   std::string otaUrl;
   size_t otaSize = 0;
-  std::atomic_size_t processedSize{0};
-  std::atomic_size_t totalSize{0};
-  esp_https_ota_handle_t otaHandle = nullptr;
-  const void* otaPartition = nullptr;
+  size_t processedSize = 0;
+  size_t totalSize = 0;
 
  public:
+  using ProgressCallback = void (*)(void* ctx);
+
   enum OtaUpdaterError {
     OK = 0,
     NO_UPDATE,
@@ -34,42 +21,19 @@ class OtaUpdater {
     UPDATE_OLDER_ERROR,
     INTERNAL_UPDATE_ERROR,
     OOM_ERROR,
+    WRONG_DEVICE_ERROR,
+    TOO_LARGE_ERROR,
   };
 
- private:
-  /** Task entry point that runs checkForUpdateWorker() on a background FreeRTOS task. */
-  friend void otaGithubCheckTask(void* param);
-  /** Query the GitHub releases API and record whether a firmware update is available. */
-  OtaUpdaterError checkForUpdateWorker();
-  OtaUpdaterError downloadUpdateWorker(const ProgressCallback& progress);
-  friend void otaDownloadTask(void* param);
-
- public:
-  /** Return the size in bytes of the available OTA update asset. */
   size_t getOtaSize() const { return otaSize; }
 
-  /** Return the number of bytes processed so far during an in-progress update. */
-  size_t getProcessedSize() const { return processedSize.load(); }
+  size_t getProcessedSize() const { return processedSize; }
 
-  /** Return the total size in bytes of the update currently being installed. */
-  size_t getTotalSize() const { return totalSize.load(); }
+  size_t getTotalSize() const { return totalSize; }
 
-  /** Construct an OtaUpdater with no update state. */
   OtaUpdater() = default;
-  /** Check whether the latest known release version is newer than the running firmware. */
   bool isUpdateNewer() const;
-  /** Return the version string of the latest release found. */
   const std::string& getLatestVersion() const;
-  /** Check GitHub for the latest release, running the request on a background task. */
   OtaUpdaterError checkForUpdate();
-  /** Download and install the latest update over HTTPS. */
-  OtaUpdaterError installUpdate();
-  /** Download the update into the inactive OTA partition without activating it. */
-  OtaUpdaterError downloadUpdate(const ProgressCallback& progress = {});
-  /** Activate a previously downloaded update after explicit user confirmation. */
-  OtaUpdaterError finalizeDownloadedUpdate();
-  /** Abort a downloaded-but-not-yet-activated update. */
-  void abortDownloadedUpdate();
-  /** Install a firmware image read from the SD card. */
-  OtaUpdaterError installUpdateFromSd(const char* firmwarePath = "/firmware.bin");
+  OtaUpdaterError installUpdate(ProgressCallback onProgress = nullptr, void* ctx = nullptr);
 };

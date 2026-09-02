@@ -1,19 +1,10 @@
-/**
- * @file ChapterXPathResolver.cpp
- * @brief Definitions for ChapterXPathResolver.
- */
-
 #include "ChapterXPathResolver.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <Print.h>
 #include <Utf8.h>
+#include <XmlParserUtils.h>
 #include <expat.h>
-
-#include "XmlParserUtils.h"
-
-#define KOX_LOG_DBG(fmt, ...) ((void)0)
-#define KOX_LOG_ERR(fmt, ...) Serial.printf("[%lu] [KOX] " fmt "\n", millis(), ##__VA_ARGS__)
 
 #include <algorithm>
 #include <cmath>
@@ -91,7 +82,7 @@ class ParagraphTextCounter final : public Print {
   ParagraphTextCounter() {
     parser = XML_ParserCreate(nullptr);
     if (!parser) {
-      KOX_LOG_ERR("Failed to create XML parser");
+      LOG_ERR("KOX", "Failed to create XML parser");
       return;
     }
 
@@ -110,7 +101,7 @@ class ParagraphTextCounter final : public Print {
     }
 
     if (XML_Parse(parser, "", 0, XML_TRUE) == XML_STATUS_ERROR) {
-      KOX_LOG_ERR("Final XML parse error: %s", XML_ErrorString(XML_GetErrorCode(parser)));
+      LOG_ERR("KOX", "Final XML parse error: %s", XML_ErrorString(XML_GetErrorCode(parser)));
       parseOk = false;
     }
     return parseOk;
@@ -126,7 +117,7 @@ class ParagraphTextCounter final : public Print {
     if (XML_Parse(parser, reinterpret_cast<const char*>(buffer), static_cast<int>(size), XML_FALSE) != XML_STATUS_OK) {
       const enum XML_Error error = XML_GetErrorCode(parser);
       if (error != XML_ERROR_ABORTED) {
-        KOX_LOG_ERR("XML parse error: %s", XML_ErrorString(error));
+        LOG_ERR("KOX", "XML parse error: %s", XML_ErrorString(error));
         parseOk = false;
       }
     }
@@ -212,7 +203,7 @@ class XPathParagraphResolver final : public Print {
   explicit XPathParagraphResolver(const int targetParagraph) : targetParagraph(targetParagraph) {
     parser = XML_ParserCreate(nullptr);
     if (!parser) {
-      KOX_LOG_ERR("Failed to create XML parser");
+      LOG_ERR("KOX", "Failed to create XML parser");
       return;
     }
 
@@ -230,7 +221,7 @@ class XPathParagraphResolver final : public Print {
     }
 
     if (XML_Parse(parser, "", 0, XML_TRUE) == XML_STATUS_ERROR) {
-      KOX_LOG_ERR("Final XML parse error: %s", XML_ErrorString(XML_GetErrorCode(parser)));
+      LOG_ERR("KOX", "Final XML parse error: %s", XML_ErrorString(XML_GetErrorCode(parser)));
       parseOk = false;
     }
     return parseOk;
@@ -249,7 +240,7 @@ class XPathParagraphResolver final : public Print {
     if (XML_Parse(parser, reinterpret_cast<const char*>(buffer), static_cast<int>(size), XML_FALSE) != XML_STATUS_OK) {
       const enum XML_Error error = XML_GetErrorCode(parser);
       if (error != XML_ERROR_ABORTED) {
-        KOX_LOG_ERR("XML parse error: %s", XML_ErrorString(error));
+        LOG_ERR("KOX", "XML parse error: %s", XML_ErrorString(error));
         parseOk = false;
       }
     }
@@ -287,13 +278,18 @@ class XPathParagraphResolver final : public Print {
     path.push_back({name, siblingIndex});
     parentStates.emplace_back();
 
+    // Count both <p> and <li> as paragraph-like positions, matching how the section
+    // layout tracks them (xpathParagraphIndex and xpathListItemIndex). This ensures
+    // KOReader progress in list items maps to the correct XPath.
     if (name == "p") {
       paragraphCount++;
-      if (paragraphCount == targetParagraph) {
-        xpath = buildParagraphXPath(spineIndex, path, 0, 0);
-        stopped = true;
-        XML_StopParser(parser, XML_FALSE);
-      }
+    } else if (name == "li") {
+      paragraphCount++;
+    }
+    if (paragraphCount == targetParagraph) {
+      xpath = buildParagraphXPath(spineIndex, path, 0, 0);
+      stopped = true;
+      XML_StopParser(parser, XML_FALSE);
     }
 
     depth++;
@@ -340,7 +336,7 @@ class XPathProgressResolver final : public Print {
   explicit XPathProgressResolver(const size_t targetVisibleChar) : targetVisibleChar(targetVisibleChar) {
     parser = XML_ParserCreate(nullptr);
     if (!parser) {
-      KOX_LOG_ERR("Failed to create XML parser");
+      LOG_ERR("KOX", "Failed to create XML parser");
       return;
     }
 
@@ -359,7 +355,7 @@ class XPathProgressResolver final : public Print {
     }
 
     if (XML_Parse(parser, "", 0, XML_TRUE) == XML_STATUS_ERROR) {
-      KOX_LOG_ERR("Final XML parse error: %s", XML_ErrorString(XML_GetErrorCode(parser)));
+      LOG_ERR("KOX", "Final XML parse error: %s", XML_ErrorString(XML_GetErrorCode(parser)));
       parseOk = false;
     }
     return parseOk;
@@ -378,7 +374,7 @@ class XPathProgressResolver final : public Print {
     if (XML_Parse(parser, reinterpret_cast<const char*>(buffer), static_cast<int>(size), XML_FALSE) != XML_STATUS_OK) {
       const enum XML_Error error = XML_GetErrorCode(parser);
       if (error != XML_ERROR_ABORTED) {
-        KOX_LOG_ERR("XML parse error: %s", XML_ErrorString(error));
+        LOG_ERR("KOX", "XML parse error: %s", XML_ErrorString(error));
         parseOk = false;
       }
     }
@@ -462,7 +458,6 @@ class XPathProgressResolver final : public Print {
     if (paragraphDepth > 0 || liDepth > 0) {
       pendingTextNode = true;
     }
-
     if (!path.empty()) {
       path.pop_back();
     }
@@ -482,7 +477,8 @@ class XPathProgressResolver final : public Print {
     }
 
     // Start a new text node on first non-empty content after any element boundary.
-    // This matches KOReader's text()[N] indexing and skips empty text nodes from anchors.
+    // Only counting non-empty nodes matches KOReader's text()[N] indexing behavior,
+    // which skips empty text nodes created by bare <a id="anchor"/> anchors.
     if (pendingTextNode) {
       if (!textNodeIndexStack.empty()) {
         textNodeIndexStack.back()++;
@@ -494,9 +490,9 @@ class XPathProgressResolver final : public Print {
     const size_t nextVisibleChars = visibleChars + codepointCount;
     if (targetVisibleChar <= nextVisibleChars) {
       const size_t delta = targetVisibleChar - visibleChars;
-      const int textNode = textNodeIndexStack.empty() ? 0 : textNodeIndexStack.back();
-      const size_t charOffset = visibleChars - textNodeStartChars + delta;
-      xpath = buildParagraphXPath(spineIndex, path, textNode, charOffset);
+      const int texNode = textNodeIndexStack.empty() ? 0 : textNodeIndexStack.back();
+      const size_t charOff = visibleChars - textNodeStartChars + delta;
+      xpath = buildParagraphXPath(spineIndex, path, texNode, charOff);
       stopped = true;
       XML_StopParser(parser, XML_FALSE);
       return;
@@ -546,11 +542,11 @@ std::string ChapterXPathResolver::findXPathForParagraph(const std::shared_ptr<Ep
   }
 
   if (resolver.hasMatch()) {
-    KOX_LOG_DBG("Resolved paragraph %u in spine %d -> %s", paragraphIndex, spineIndex, resolver.getXPath().c_str());
+    LOG_DBG("KOX", "Resolved paragraph %u in spine %d -> %s", paragraphIndex, spineIndex, resolver.getXPath().c_str());
     return resolver.getXPath();
   }
 
-  KOX_LOG_DBG("Paragraph %u not found in spine %d", paragraphIndex, spineIndex);
+  LOG_DBG("KOX", "Paragraph %u not found in spine %d", paragraphIndex, spineIndex);
   return "";
 }
 
@@ -594,11 +590,11 @@ std::string ChapterXPathResolver::findXPathForProgress(const std::shared_ptr<Epu
   }
 
   if (resolver.hasMatch()) {
-    KOX_LOG_DBG("Resolved progress %.3f in spine %d -> %s", intraSpineProgress, spineIndex,
-                resolver.getXPath().c_str());
+    LOG_DBG("KOX", "Resolved progress %.3f in spine %d -> %s", intraSpineProgress, spineIndex,
+            resolver.getXPath().c_str());
     return resolver.getXPath();
   }
 
-  KOX_LOG_DBG("Could not resolve progress %.3f in spine %d", intraSpineProgress, spineIndex);
+  LOG_DBG("KOX", "Could not resolve progress %.3f in spine %d", intraSpineProgress, spineIndex);
   return "";
 }

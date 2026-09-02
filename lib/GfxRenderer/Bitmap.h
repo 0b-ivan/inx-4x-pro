@@ -1,15 +1,10 @@
 #pragma once
 
-/**
- * @file Bitmap.h
- * @brief Public interface and types for Bitmap.
- */
-
-#include <SdFat.h>
+#include <HalStorage.h>
 
 #include <cstdint>
 
-#include "BitmapUtil.h"
+#include "BitmapHelpers.h"
 
 #pragma pack(push, 1)
 struct BmpHeader {
@@ -69,11 +64,10 @@ class Bitmap {
  public:
   static const char* errorToString(BmpReaderError err);
 
-  explicit Bitmap(FsFile& file) : file(file) {}
+  explicit Bitmap(HalFile& file, bool dithering = false) : file(file), dithering(dithering) {}
   ~Bitmap();
   BmpReaderError parseHeaders();
   BmpReaderError readNextRow(uint8_t* data, uint8_t* rowBuffer) const;
-  BmpReaderError readNextRowOneBit(uint8_t* data, uint8_t* rowBuffer) const;
   BmpReaderError rewindToData() const;
   int getWidth() const { return width; }
   int getHeight() const { return height; }
@@ -84,24 +78,26 @@ class Bitmap {
   uint16_t getBpp() const { return bpp; }
 
  private:
-  static uint16_t readLE16(FsFile& f);
-  static uint32_t readLE32(FsFile& f);
+  static uint16_t readLE16(HalFile& f);
+  static uint32_t readLE32(HalFile& f);
 
-  FsFile& file;
+  HalFile& file;
+  bool dithering = false;
   int width = 0;
   int height = 0;
   bool topDown = false;
   uint32_t bfOffBits = 0;
   uint16_t bpp = 0;
   uint32_t colorsUsed = 0;
-  bool nativePalette = false;
+  bool nativePalette = false;  // true if all palette entries map to native gray levels
   int rowBytes = 0;
   uint8_t paletteLum[256] = {};
 
+  // Dithering state (mutable for const methods)
   mutable int16_t* errorCurRow = nullptr;
   mutable int16_t* errorNextRow = nullptr;
-  mutable int prevRowY = -1;
+  mutable int prevRowY = -1;  // Track row progression for error propagation
 
-  mutable FourToneImageDitherer* imageDitherer = nullptr;
-  mutable Atkinson1BitDitherer* oneBitDitherer = nullptr;
+  mutable AtkinsonDitherer* atkinsonDitherer = nullptr;
+  mutable FloydSteinbergDitherer* fsDitherer = nullptr;
 };

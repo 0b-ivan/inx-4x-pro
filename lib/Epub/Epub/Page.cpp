@@ -1,1174 +1,235 @@
-/**
- * @file Page.cpp
- * @brief Definitions for Page.
- */
-
 #include "Page.h"
 
 #include <GfxRenderer.h>
-#include <HardwareSerial.h>
-#include <ImageRender.h>
-#include <JpegRender.h>
-#include <SDCardManager.h>
+#include <Logging.h>
 #include <Serialization.h>
-#include <Utf8.h>
 
-#include <algorithm>
-#include <climits>
-#include <cmath>
 #include <new>
-
-#include "../../../src/images/Hr.h"
-#include "../../../src/util/StringUtils.h"
 
 namespace {
 
-constexpr int16_t kSmallImageGrayscaleLimit = 100;
-
-bool needsGrayscalePass(const PageImage& image) {
-  return image.needsGrayscale() && image.getWidth() > kSmallImageGrayscaleLimit &&
-         image.getHeight() > kSmallImageGrayscaleLimit;
-}
-
-struct PackedRectSnapshot {
-  int x = 0;
-  int y = 0;
-  int width = 0;
-  int height = 0;
-  int rowBytes = 0;
-  std::unique_ptr<uint8_t[]> rows;
-
-  bool capture(GfxRenderer& renderer, const int rectX, const int rectY, const int rectW, const int rectH) {
-    const int x1 = std::max(0, rectX);
-    const int y1 = std::max(0, rectY);
-    const int x2 = std::min(renderer.getScreenWidth(), rectX + rectW);
-    const int y2 = std::min(renderer.getScreenHeight(), rectY + rectH);
-    if (x2 <= x1 || y2 <= y1) {
-      return false;
-    }
-
-    x = x1;
-    y = y1;
-    width = x2 - x1;
-    height = y2 - y1;
-    rowBytes = (width + 7) / 8;
-    rows.reset(new (std::nothrow) uint8_t[static_cast<size_t>(rowBytes) * static_cast<size_t>(height)]);
-    if (!rows) {
-      return false;
-    }
-
-    for (int row = 0; row < height; ++row) {
-      renderer.readPackedRow1bpp(x, y + row, width, rows.get() + static_cast<size_t>(row) * rowBytes);
-    }
-    return true;
-  }
-
-  void restore(GfxRenderer& renderer) const {
-    if (!rows) {
-      return;
-    }
-    for (int row = 0; row < height; ++row) {
-      renderer.drawPackedRow1bpp(x, y + row, width, rows.get() + static_cast<size_t>(row) * rowBytes);
-    }
-  }
-};
-
-bool warmImagePlane(GfxRenderer& renderer, const std::string& path, const int x, const int y, const int width,
-                    const int height, const ImageRender::Options& options, const GfxRenderer::RenderMode renderMode,
-                    const bool baseInk) {
-  PackedRectSnapshot snapshot;
-  if (!snapshot.capture(renderer, x, y, width, height)) {
-    return false;
-  }
-
-  const GfxRenderer::RenderMode savedMode = renderer.getRenderMode();
-  renderer.setRenderMode(renderMode);
-  renderer.rectangle.fill(x, y, width, height, baseInk);
-  const bool ok = ImageRender::create(renderer, path).render(x, y, width, height, options);
-  renderer.setRenderMode(savedMode);
-  snapshot.restore(renderer);
-  return ok;
-}
-
-bool drawTonePixel(GfxRenderer& renderer, const int x, const int y, const uint8_t tone) {
-  if (tone == 0) return false;
-  if (tone == 2) {
-    renderer.drawPixel(x, y, ((x + y) & 1) == 0);
-    return true;
-  }
-  renderer.drawPixel(x, y, true);
-  return true;
-}
-
-void drawStyledHorizontal(GfxRenderer& renderer, const int left, const int right, const int y, const uint8_t style,
-                          const uint8_t tone) {
-  if (right < left) {
-    return;
-  }
-  if (style == PageCssBorderLine::DOTTED) {
-    for (int xx = left; xx <= right; xx += 3) {
-      drawTonePixel(renderer, xx, y, tone);
-    }
-  } else if (style == PageCssBorderLine::DASHED) {
-    for (int xx = left; xx <= right; xx += 9) {
-      for (int px = xx; px <= std::min(right, xx + 5); ++px) drawTonePixel(renderer, px, y, tone);
-    }
-  } else {
-    for (int px = left; px <= right; ++px) drawTonePixel(renderer, px, y, tone);
-  }
-}
-
-void drawStyledVertical(GfxRenderer& renderer, const int x, const int top, const int bottom, const uint8_t style,
-                        const uint8_t tone) {
-  if (bottom < top) {
-    return;
-  }
-  if (style == PageCssBorderLine::DOTTED) {
-    for (int yy = top; yy <= bottom; yy += 3) {
-      drawTonePixel(renderer, x, yy, tone);
-    }
-  } else if (style == PageCssBorderLine::DASHED) {
-    for (int yy = top; yy <= bottom; yy += 9) {
-      for (int py = yy; py <= std::min(bottom, yy + 5); ++py) drawTonePixel(renderer, x, py, tone);
-    }
-  } else {
-    for (int py = top; py <= bottom; ++py) drawTonePixel(renderer, x, py, tone);
-  }
-}
-
-void drawHorizontalBorder(GfxRenderer& renderer, const int left, const int right, const int top, const int thickness,
-                          const uint8_t style, const uint8_t tone = 1) {
-  if (thickness <= 0) {
-    return;
-  }
-  const int drawThickness = std::max(1, thickness);
-  if (style == PageCssBorderLine::DOUBLE) {
-    const int total = std::max(3, drawThickness);
-    const int lineW = std::max(1, total / 3);
-    for (int i = 0; i < lineW; ++i) drawStyledHorizontal(renderer, left, right, top + i, style, tone);
-    for (int i = 0; i < lineW; ++i) drawStyledHorizontal(renderer, left, right, top + total - 1 - i, style, tone);
-  } else {
-    for (int i = 0; i < drawThickness; ++i) {
-      drawStyledHorizontal(renderer, left, right, top + i, style, tone);
-    }
-  }
-}
-
-void drawVerticalBorder(GfxRenderer& renderer, const int left, const int top, const int bottom, const int thickness,
-                        const uint8_t style, const uint8_t tone = 1) {
-  if (thickness <= 0) {
-    return;
-  }
-  const int drawThickness = std::max(1, thickness);
-  if (style == PageCssBorderLine::DOUBLE) {
-    const int total = std::max(3, drawThickness);
-    const int lineW = std::max(1, total / 3);
-    for (int i = 0; i < lineW; ++i) drawStyledVertical(renderer, left + i, top, bottom, style, tone);
-    for (int i = 0; i < lineW; ++i) drawStyledVertical(renderer, left + total - 1 - i, top, bottom, style, tone);
-  } else {
-    for (int i = 0; i < drawThickness; ++i) {
-      drawStyledVertical(renderer, left + i, top, bottom, style, tone);
-    }
-  }
-}
-
-void drawRoundedBorder(GfxRenderer& renderer, const int x, const int y, const int width, const int height,
-                       const int thickness, const uint8_t tone) {
-  if (width <= 0 || height <= 0 || thickness <= 0 || tone == 0) {
-    return;
-  }
-  const int r = std::max(1, std::min(width, height) / 15);
-  const int right = x + width - 1;
-  const int bottom = y + height - 1;
-  for (int t = 0; t < thickness; ++t) {
-    const int rr = std::max(1, r - t);
-    drawStyledHorizontal(renderer, x + rr, right - rr, y + t, PageCssBorderLine::SOLID, tone);
-    drawStyledHorizontal(renderer, x + rr, right - rr, bottom - t, PageCssBorderLine::SOLID, tone);
-    drawStyledVertical(renderer, x + t, y + rr, bottom - rr, PageCssBorderLine::SOLID, tone);
-    drawStyledVertical(renderer, right - t, y + rr, bottom - rr, PageCssBorderLine::SOLID, tone);
-    for (int cy = 0; cy <= rr; ++cy) {
-      const int span = static_cast<int>(std::sqrt(rr * rr - (rr - cy) * (rr - cy)));
-      drawTonePixel(renderer, x + rr - span, y + cy, tone);
-      drawTonePixel(renderer, right - rr + span, y + cy, tone);
-      drawTonePixel(renderer, x + rr - span, bottom - cy, tone);
-      drawTonePixel(renderer, right - rr + span, bottom - cy, tone);
+template <typename Predicate>
+void renderFilteredPageElements(const std::vector<std::shared_ptr<PageElement>>& elements, GfxRenderer& renderer,
+                                const int fontId, const int xOffset, const int yOffset, Predicate&& predicate) {
+  for (const auto& element : elements) {
+    if (predicate(*element)) {
+      element->render(renderer, fontId, xOffset, yOffset);
     }
   }
 }
 
 }  // namespace
 
-/**
- * Renders a text line on the screen.
- *
- * @param renderer The graphics renderer
- * @param fontId Base font ID for text rendering
- * @param xOffset Horizontal offset for page margins
- * @param yOffset Vertical offset for page margins
- */
-void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset, ImageRenderMode) {
-  block.render(renderer, fontId, xPos + xOffset, yPos + yOffset);
-}
-/**
- * Serializes a PageLine to a file.
- *
- * @param file The file to write to
- * @return true if serialization was successful
- */
-bool PageLine::serialize(FsFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
-  return block.serialize(file);
+void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
+  block->render(renderer, fontId, xPos + xOffset, yPos + yOffset);
 }
 
-/**
- * Deserializes a PageLine from a file.
- *
- * @param file The file to read from
- * @return Unique pointer to the deserialized PageLine
- */
-std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file) {
-  int16_t x, y;
-  serialization::readPod(file, x);
-  serialization::readPod(file, y);
+bool PageLine::serialize(HalFile& file) {
+  serialization::writePod(file, xPos);
+  serialization::writePod(file, yPos);
+
+  // serialize TextBlock pointed to by PageLine
+  return block->serialize(file);
+}
+
+std::unique_ptr<PageLine> PageLine::deserialize(HalFile& file) {
+  int16_t xPos;
+  int16_t yPos;
+  serialization::readPod(file, xPos);
+  serialization::readPod(file, yPos);
+
   auto tb = TextBlock::deserialize(file);
-  if (!tb) return nullptr;
-  return std::unique_ptr<PageLine>(new PageLine(std::move(*tb), x, y));
-}
-
-/**
- * Renders a small-caps line using the active body font; small-caps are synthesized from that font.
- */
-void PageSmallCaps::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
-                           ImageRenderMode) {
-  block.render(renderer, fontId, xPos + xOffset, yPos + yOffset);
-}
-
-bool PageSmallCaps::serialize(FsFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
-  serialization::writePod(file, compatFontId);
-  return block.serialize(file);
-}
-
-std::unique_ptr<PageSmallCaps> PageSmallCaps::deserialize(FsFile& file) {
-  int16_t x, y;
-  int scId = 0;
-  serialization::readPod(file, x);
-  serialization::readPod(file, y);
-  serialization::readPod(file, scId);
-  auto tb = TextBlock::deserialize(file);
-  if (!tb) return nullptr;
-  return std::unique_ptr<PageSmallCaps>(new PageSmallCaps(std::move(*tb), x, y, scId));
-}
-
-/**
- * Renders a header on the screen.
- * Uses the stored headerFontId for rendering.
- *
- * @param renderer The graphics renderer
- * @param fontId Ignored (kept for interface)
- * @param xOffset Horizontal offset for page margins
- * @param yOffset Vertical offset for page margins
- */
-void PageHeader::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
-                        ImageRenderMode) {
-  block.render(renderer, headerFontId, xPos + xOffset, yPos + yOffset);
-}
-
-/**
- * Serializes a PageHeader to a file.
- *
- * @param file The file to write to
- * @return true if serialization was successful
- */
-bool PageHeader::serialize(FsFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
-  serialization::writePod(file, headerFontId);
-  return block.serialize(file);
-}
-
-/**
- * Deserializes a PageHeader from a file.
- * Reads headerFontId from the file.
- *
- * @param file The file to read from
- * @return Unique pointer to the deserialized PageHeader
- */
-std::unique_ptr<PageHeader> PageHeader::deserialize(FsFile& file) {
-  int16_t x, y;
-  int headerId = 0;
-  serialization::readPod(file, x);
-  serialization::readPod(file, y);
-  if (file.available()) {
-    serialization::readPod(file, headerId);
+  if (!tb) {
+    LOG_ERR("PGE", "Deserialization failed: null TextBlock");
+    return nullptr;
   }
-  auto textBlock = TextBlock::deserialize(file);
-  if (!textBlock) return nullptr;
-  return std::unique_ptr<PageHeader>(new PageHeader(std::move(*textBlock), x, y, headerId));
-}
 
-/**
- * Renders a drop cap on the screen.
- * Uses a specific large font and renders the single character at the start of a paragraph.
- */
-void PageDropCap::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
-                         ImageRenderMode) {
-  // The drop cap and the first body line both start at yPos, but their fonts have different space above the
-  // caps (ascender - glyph.top). Align the drop cap's cap-top with the body cap-top by that inset difference.
-  const uint8_t* p = reinterpret_cast<const uint8_t*>(text.c_str());
-  const uint32_t dropCp = utf8NextCodepoint(&p);
-  int alignY = yPos + yOffset - 2;
-  if (inlineFirstLine) {
-    const int bodyBaseline = yPos + yOffset + renderer.text.getFontAscenderSize(fontId);
-    alignY = bodyBaseline - renderer.text.getFontAscenderSize(dropCapFontId);
-  } else {
-    const int dropInset = renderer.text.getGlyphTopInset(dropCapFontId, dropCp, EpdFontFamily::BOLD);
-    const int bodyInset = renderer.text.getGlyphTopInset(fontId, 'H', EpdFontFamily::REGULAR);
-    alignY += (bodyInset - dropInset) + PageDropCap::VERTICAL_ADJUSTMENT;
+  auto* line = new (std::nothrow) PageLine(std::move(tb), xPos, yPos);
+  if (!line) {
+    LOG_ERR("PGE", "Deserialization failed: could not allocate PageLine");
+    return nullptr;
   }
-  renderer.text.render(dropCapFontId, xPos + xOffset, alignY, text.c_str(), EpdFontFamily::BOLD);
+  return std::unique_ptr<PageLine>(line);
 }
 
-/**
- * Serializes a PageDropCap to a file.
- *
- * @param file The file to write to
- * @return true if serialization was successful
- */
-bool PageDropCap::serialize(FsFile& file) {
+void PageImage::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
+  // Images don't use fontId or text rendering
+  imageBlock->render(renderer, xPos + xOffset, yPos + yOffset);
+}
+
+void PageImage::renderPlaceholder(GfxRenderer& renderer, const int xOffset, const int yOffset) const {
+  imageBlock->renderPlaceholder(renderer, xPos + xOffset, yPos + yOffset);
+}
+
+bool PageImage::serialize(HalFile& file) {
   serialization::writePod(file, xPos);
   serialization::writePod(file, yPos);
-  serialization::writePod(file, dropCapFontId);
-  serialization::writePod(file, inlineFirstLine);
-  serialization::writeString(file, text);
-  return true;
+
+  // serialize ImageBlock
+  return imageBlock->serialize(file);
 }
 
-/**
- * Serializes a PageDropCap to a file.
- *
- * @param file The file to write to
- * @return true if serialization was successful
- */
-std::unique_ptr<PageDropCap> PageDropCap::deserialize(FsFile& file) {
-  int16_t x, y;
-  int dcFontId;
-  std::string text;
-  serialization::readPod(file, x);
-  serialization::readPod(file, y);
-  serialization::readPod(file, dcFontId);
-  bool inlineFirstLine = false;
-  serialization::readPod(file, inlineFirstLine);
-  serialization::readString(file, text);
-  return std::unique_ptr<PageDropCap>(new PageDropCap(text, x, y, dcFontId, inlineFirstLine));
+std::unique_ptr<PageImage> PageImage::deserialize(HalFile& file) {
+  int16_t xPos;
+  int16_t yPos;
+  serialization::readPod(file, xPos);
+  serialization::readPod(file, yPos);
+
+  auto ib = ImageBlock::deserialize(file);
+  return std::unique_ptr<PageImage>(new PageImage(std::move(ib), xPos, yPos));
 }
 
-void PageListMarker::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
-                            ImageRenderMode) {
-  // Drawn as a plain filled circle rather than a font glyph - some fonts render "." or "•" too small, too
-  // faint, or positioned oddly (this reader has no dedicated bullet glyph), so a drawn shape sized off the
-  // item's own font metrics is the only way to guarantee a clearly visible, correctly placed marker.
-  const int ascender = renderer.text.getFontAscenderSize(markerFontId);
-  const int radius = std::max(3, ascender / 4);
-  const int bodyBaseline = yPos + yOffset + renderer.text.getFontAscenderSize(fontId);
-  const int centerX = xPos + xOffset + radius;
-  const int centerY = bodyBaseline - ascender / 2;
-  for (int dy = -radius; dy <= radius; ++dy) {
-    const int span = static_cast<int>(std::sqrt(static_cast<double>(radius * radius - dy * dy)));
-    for (int dx = -span; dx <= span; ++dx) {
-      renderer.drawPixel(centerX + dx, centerY + dy, true);
-    }
-  }
-}
-
-bool PageListMarker::serialize(FsFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
-  serialization::writePod(file, markerFontId);
-  serialization::writeString(file, text);
-  return true;
-}
-
-std::unique_ptr<PageListMarker> PageListMarker::deserialize(FsFile& file) {
-  int16_t x, y;
-  int fontId;
-  std::string text;
-  serialization::readPod(file, x);
-  serialization::readPod(file, y);
-  serialization::readPod(file, fontId);
-  serialization::readString(file, text);
-  return std::unique_ptr<PageListMarker>(new PageListMarker(text, x, y, fontId));
-}
-
-/**
- * Renders an image on the screen.
- * Scales the image to fit within the available content area while maintaining aspect ratio.
- * Centers the image horizontally within the margins.
- *
- * @param renderer The graphics renderer
- * @param fontId Unused parameter (kept for interface compatibility)
- * @param xOffset Horizontal offset for page margins
- * @param yOffset Vertical offset for page margins
- */
-void PageImage::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
-                       const ImageRenderMode imageMode) {
-  renderImage(renderer, fontId, xOffset, yOffset, imageMode, /*quality=*/false);
-}
-
-void PageImage::renderImage(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
-                            const ImageRenderMode imageMode, const bool quality) {
-  (void)xOffset;
+void PageHorizontalRule::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
   (void)fontId;
-  const uint32_t tImageStart = millis();
-  const int screenW = renderer.getScreenWidth();
-  int renderX = (screenW - width) / 2;
-  // The viewport top margin is reduced by the font's glyph top inset so text starts at the visual margin
-  // (glyphs carry that whitespace themselves). Images have no such whitespace, so add the inset back here —
-  // otherwise an image at the top of a page sits flush against the margin with no gap above it.
-  int renderY = yPos + yOffset;
-  if (renderX < 0) renderX = 0;
-  if (renderY < 0) renderY = 0;
-
-  ImageRender::Options options;
-  options.mode = imageMode;
-  options.quality = quality;
-  options.fastQuality = quality;
-  const ImageRender image = ImageRender::create(renderer, cachePath);
-
-  // Two-pass grayscale composites (renderGrayscalePasses) call this twice per image: once with the
-  // renderer set to the LSB plane, once for MSB. A plain render() would decode the source file fresh
-  // both times; capture the LSB pass's dither output instead and replay it for MSB (JPEG only - PNG/BMP
-  // and oversized images just leave grayscaleCaptureValid_ false and fall through unchanged below).
-  const GfxRenderer::RenderMode renderMode = renderer.getRenderMode();
-  const bool isLsbPass = renderMode == GfxRenderer::GRAY2_LSB || renderMode == GfxRenderer::GRAYSCALE_LSB;
-  const bool isMsbPass = renderMode == GfxRenderer::GRAY2_MSB || renderMode == GfxRenderer::GRAYSCALE_MSB;
-
-  if (imageMode == ImageRenderMode::TwoBit && isMsbPass && grayscaleCaptureValid_) {
-    JpegLevelCapture capture;
-    capture.values = grayscaleCaptureBuffer_.get();
-    capture.capacity = grayscaleCaptureCapacity_;
-    capture.width = grayscaleCaptureWidth_;
-    capture.height = grayscaleCaptureHeight_;
-    capture.drawOffsetX = grayscaleCaptureOffsetX_;
-    capture.drawOffsetY = grayscaleCaptureOffsetY_;
-    capture.captured = true;
-    grayscaleCaptureValid_ = false;  // one-shot: consumed by this MSB pass
-    if (!image.render(renderX, renderY, width, height, options, &capture)) {
-      Serial.printf("[PAGEIMG] Failed to draw image: %s\n", cachePath.c_str());
-    }
-    Serial.printf("[%lu] [IMG-TIMING] renderImage(%s) msb-replay-path: %lums\n", millis(), cachePath.c_str(),
-                  static_cast<unsigned long>(millis() - tImageStart));
+  if (width == 0 || thickness == 0) {
     return;
   }
 
-  if (imageMode == ImageRenderMode::TwoBit && isLsbPass) {
-    // Packed 2 bits/pixel (4 pixels/byte - see JpegLevelCapture), so this pixel-count cap covers a
-    // full-page image (e.g. 480x720) in a bounded, page-lifetime buffer instead of never fitting one.
-    constexpr size_t kMaxGrayscaleCapturePixels = 400000;
-    const size_t pixelCount = static_cast<size_t>(width) * static_cast<size_t>(height);
-    const size_t needed = (pixelCount + 3) / 4;
-    if (pixelCount > 0 && pixelCount <= kMaxGrayscaleCapturePixels) {
-      if (!grayscaleCaptureBuffer_ || grayscaleCaptureCapacity_ < needed) {
-        grayscaleCaptureBuffer_.reset(new (std::nothrow) uint8_t[needed]);
-        grayscaleCaptureCapacity_ = grayscaleCaptureBuffer_ ? needed : 0;
-      }
-      if (grayscaleCaptureBuffer_) {
-        JpegLevelCapture capture;
-        capture.values = grayscaleCaptureBuffer_.get();
-        capture.capacity = grayscaleCaptureCapacity_;
-        if (!image.render(renderX, renderY, width, height, options, &capture)) {
-          Serial.printf("[PAGEIMG] Failed to draw image: %s\n", cachePath.c_str());
-        }
-        grayscaleCaptureValid_ = capture.captured;
-        grayscaleCaptureWidth_ = capture.width;
-        grayscaleCaptureHeight_ = capture.height;
-        grayscaleCaptureOffsetX_ = capture.drawOffsetX;
-        grayscaleCaptureOffsetY_ = capture.drawOffsetY;
-        Serial.printf("[%lu] [IMG-TIMING] renderImage(%s) lsb-capture-path captured=%d: %lums\n", millis(),
-                      cachePath.c_str(), capture.captured ? 1 : 0, static_cast<unsigned long>(millis() - tImageStart));
-        return;
-      }
-    }
-  }
-
-  if (!image.render(renderX, renderY, width, height, options)) {
-    Serial.printf("[PAGEIMG] Failed to draw image: %s\n", cachePath.c_str());
-  }
-  Serial.printf("[%lu] [IMG-TIMING] renderImage(%s) plain-path: %lums\n", millis(), cachePath.c_str(),
-                static_cast<unsigned long>(millis() - tImageStart));
+  renderer.drawLine(xPos + xOffset, yPos + yOffset, xPos + xOffset + width - 1, yPos + yOffset, thickness, true);
 }
 
-bool PageImage::hasCachedTwoBitImage(GfxRenderer& renderer, const int xOffset, const int yOffset,
-                                     const bool quality) const {
-  (void)xOffset;
-  const int screenW = renderer.getScreenWidth();
-  int renderX = (screenW - width) / 2;
-  int renderY = yPos + yOffset;
-  if (renderX < 0) renderX = 0;
-  if (renderY < 0) renderY = 0;
-
-  ImageRender::Options options;
-  options.mode = ImageRenderMode::TwoBit;
-  options.quality = quality;
-  options.fastQuality = quality;
-  return ImageRender::create(renderer, cachePath).hasCachedTwoBit(renderX, renderY, width, height, options, quality);
-}
-
-bool PageImage::warmDisplayCache(GfxRenderer& renderer, const int xOffset, const int yOffset,
-                                 const ImageRenderMode imageMode, const bool quality) const {
-  (void)xOffset;
-  const int screenW = renderer.getScreenWidth();
-  int renderX = (screenW - width) / 2;
-  int renderY = yPos + yOffset;
-  if (renderX < 0) renderX = 0;
-  if (renderY < 0) renderY = 0;
-
-  ImageRender::Options options;
-  options.mode = imageMode;
-  options.quality = quality;
-  options.fastQuality = quality;
-  options.useDisplayCache = true;
-
-  if (imageMode == ImageRenderMode::TwoBit) {
-    if (hasCachedTwoBitImage(renderer, xOffset, yOffset, quality)) {
-      return true;
-    }
-    const bool baseInk = !quality;
-    const bool lsbOk = warmImagePlane(renderer, cachePath, renderX, renderY, width, height, options,
-                                      quality ? GfxRenderer::GRAY2_LSB : GfxRenderer::GRAYSCALE_LSB, baseInk);
-    yield();
-    const bool msbOk = warmImagePlane(renderer, cachePath, renderX, renderY, width, height, options,
-                                      quality ? GfxRenderer::GRAY2_MSB : GfxRenderer::GRAYSCALE_MSB, baseInk);
-    yield();
-    return lsbOk && msbOk;
-  }
-
-  const bool ok = warmImagePlane(renderer, cachePath, renderX, renderY, width, height, options, GfxRenderer::BW, false);
-  yield();
-  return ok;
-}
-
-void PageTable::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset, ImageRenderMode) {
-  const int originX = xPos + xOffset;
-  const int originY = yPos + yOffset;
-  // Use the effective line height baked at layout time (respects the line-spacing setting); fall back
-  // to the raw font line height for older caches that didn't store it.
-  const int lineHeight = this->lineHeight > 0 ? this->lineHeight : renderer.text.getLineHeight(fontId);
-  constexpr int kCellPadX = 4;
-  constexpr int kCellPadY = 3;
-
-  if (showBorders) {
-    renderer.rectangle.render(originX, originY, tableWidth, tableHeight, true, false);
-  }
-
-  int yCursor = originY;
-  for (size_t rowIndex = 0; rowIndex < rows.size() && rowIndex < rowHeights.size(); ++rowIndex) {
-    const auto& row = rows[rowIndex];
-    const int rowHeight = rowHeights[rowIndex];
-    int xCursor = originX;
-
-    if (showBorders && rowIndex > 0) {
-      renderer.line.render(originX, yCursor, originX + tableWidth - 1, yCursor, true);
-    }
-
-    size_t gridCol = 0;
-    for (size_t cellIndex = 0; cellIndex < row.size() && gridCol < columnWidths.size(); ++cellIndex) {
-      const auto& cell = row[cellIndex];
-      int span = std::max<uint16_t>(1, cell.colspan);
-      if (gridCol + static_cast<size_t>(span) > columnWidths.size()) {
-        span = static_cast<int>(columnWidths.size() - gridCol);
-      }
-      int colWidth = 0;
-      for (int s = 0; s < span; ++s) {
-        colWidth += columnWidths[gridCol + s];
-      }
-
-      if (showBorders && gridCol > 0) {
-        renderer.line.render(xCursor, yCursor, xCursor, yCursor + rowHeight, true);
-      }
-
-      const auto style = cell.header ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
-      int textY = yCursor + kCellPadY;
-      for (const auto& line : cell.lines) {
-        renderer.text.render(fontId, xCursor + kCellPadX, textY, line.c_str(), true, style);
-        textY += lineHeight;
-        if (textY > yCursor + rowHeight - kCellPadY) {
-          break;
-        }
-      }
-
-      xCursor += colWidth;
-      gridCol += span;
-    }
-
-    yCursor += rowHeight;
-  }
-}
-
-void PageHorizontalRule::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
-                                ImageRenderMode) {
-  (void)fontId;
-  const int renderX = xPos + xOffset;
-  const int renderY = yPos + yOffset;
-  renderer.bitmap.icon(Hr, renderX, renderY, WIDTH, HEIGHT);
-}
-
-/**
- * Serializes a PageImage to a file.
- *
- * @param file The file to write to
- * @return true if serialization was successful
- */
-bool PageImage::serialize(FsFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
-  serialization::writePod(file, width);
-  serialization::writePod(file, height);
-  serialization::writePod(file, static_cast<uint8_t>(grayscale ? 1 : 0));
-  serialization::writeString(file, cachePath);
-  return true;
-}
-
-/**
- * Deserializes a PageImage from a file.
- *
- * @param file The file to read from
- * @return Unique pointer to the deserialized PageImage
- */
-std::unique_ptr<PageImage> PageImage::deserialize(FsFile& file) {
-  int16_t x, y, w, h;
-  serialization::readPod(file, x);
-  serialization::readPod(file, y);
-  serialization::readPod(file, w);
-  serialization::readPod(file, h);
-  uint8_t grayscale = 1;
-  serialization::readPod(file, grayscale);
-  std::string path;
-  serialization::readString(file, path);
-  return std::unique_ptr<PageImage>(new PageImage(path, w, h, x, y, grayscale != 0));
-}
-
-bool PageTable::serialize(FsFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
-  serialization::writePod(file, tableWidth);
-  serialization::writePod(file, tableHeight);
-  serialization::writePod(file, lineHeight);
-  serialization::writePod(file, static_cast<uint8_t>(showBorders ? 1 : 0));
-  serialization::writePod(file, static_cast<uint16_t>(columnWidths.size()));
-  for (const auto width : columnWidths) {
-    serialization::writePod(file, width);
-  }
-  serialization::writePod(file, static_cast<uint16_t>(rowHeights.size()));
-  for (const auto height : rowHeights) {
-    serialization::writePod(file, height);
-  }
-  serialization::writePod(file, static_cast<uint16_t>(rows.size()));
-  for (const auto& row : rows) {
-    serialization::writePod(file, static_cast<uint16_t>(row.size()));
-    for (const auto& cell : row) {
-      serialization::writePod(file, static_cast<uint8_t>(cell.header ? 1 : 0));
-      serialization::writePod(file, static_cast<uint16_t>(cell.colspan));
-      serialization::writePod(file, static_cast<uint16_t>(cell.lines.size()));
-      for (const auto& line : cell.lines) {
-        serialization::writeString(file, line);
-      }
-    }
-  }
-  return true;
-}
-
-bool PageHorizontalRule::serialize(FsFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
-  return true;
-}
-
-std::unique_ptr<PageTable> PageTable::deserialize(FsFile& file) {
-  int16_t x = 0, y = 0, width = 0, height = 0;
-  serialization::readPod(file, x);
-  serialization::readPod(file, y);
-  serialization::readPod(file, width);
-  serialization::readPod(file, height);
-  int16_t lineHeight = 0;
-  serialization::readPod(file, lineHeight);
-  uint8_t showBordersValue = 0;
-  serialization::readPod(file, showBordersValue);
-
-  uint16_t colCount = 0;
-  serialization::readPod(file, colCount);
-  std::vector<uint16_t> colWidths(colCount);
-  for (auto& colWidth : colWidths) {
-    serialization::readPod(file, colWidth);
-  }
-
-  uint16_t rowHeightCount = 0;
-  serialization::readPod(file, rowHeightCount);
-  std::vector<uint16_t> rowHeights(rowHeightCount);
-  for (auto& rowHeight : rowHeights) {
-    serialization::readPod(file, rowHeight);
-  }
-
-  uint16_t rowCount = 0;
-  serialization::readPod(file, rowCount);
-  std::vector<std::vector<PageTable::Cell>> rows(rowCount);
-  for (auto& row : rows) {
-    uint16_t cellCount = 0;
-    serialization::readPod(file, cellCount);
-    row.resize(cellCount);
-    for (auto& cell : row) {
-      uint8_t header = 0;
-      serialization::readPod(file, header);
-      cell.header = header != 0;
-      uint16_t colspan = 1;
-      serialization::readPod(file, colspan);
-      cell.colspan = colspan < 1 ? 1 : colspan;
-      uint16_t lineCount = 0;
-      serialization::readPod(file, lineCount);
-      cell.lines.resize(lineCount);
-      for (auto& line : cell.lines) {
-        serialization::readString(file, line);
-      }
-    }
-  }
-  return std::unique_ptr<PageTable>(new PageTable(std::move(rows), std::move(colWidths), std::move(rowHeights),
-                                                  showBordersValue != 0, width, height, lineHeight, x, y));
-}
-
-std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(FsFile& file) {
-  int16_t x = 0;
-  int16_t y = 0;
-  serialization::readPod(file, x);
-  serialization::readPod(file, y);
-  return std::unique_ptr<PageHorizontalRule>(new PageHorizontalRule(x, y));
-}
-
-void PageCssBorderLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
-                               ImageRenderMode) {
-  (void)fontId;
-  const int left = xPos + xOffset;
-  const int top = yPos + yOffset;
-  const int right = left + std::max<int>(1, width) - 1;
-  const int drawThickness = std::max<int>(1, thickness);
-
-  // Draws one horizontal rule row honoring the CSS border-style (dotted/dashed pattern the run).
-  auto drawStyledRow = [&](const int rowY) {
-    if (style == DOTTED) {
-      for (int xx = left; xx <= right; xx += 3) {  // 1px on, 2px off
-        renderer.drawPixel(xx, rowY, true);
-      }
-    } else if (style == DASHED) {
-      for (int xx = left; xx <= right; xx += 9) {  // 6px dash, 3px gap
-        renderer.line.render(xx, rowY, std::min(right, xx + 5), rowY, true);
-      }
-    } else {
-      renderer.line.render(left, rowY, right, rowY, true);
-    }
-  };
-
-  if (style == DOUBLE) {
-    // Two thin rules separated by a gap (classic CSS double). Needs >=3px total or the two lines touch and
-    // look solid (CSS "medium" is only ~2px), so enforce a minimum height with a 1px gap between the rules.
-    const int total = std::max(3, drawThickness);
-    const int lineW = std::max(1, total / 3);
-    for (int i = 0; i < lineW; ++i) drawStyledRow(top + i);
-    for (int i = 0; i < lineW; ++i) drawStyledRow(top + total - 1 - i);
-  } else {
-    for (int i = 0; i < drawThickness; ++i) {
-      drawStyledRow(top + i);
-    }
-  }
-}
-
-bool PageCssBorderLine::serialize(FsFile& file) {
+bool PageHorizontalRule::serialize(HalFile& file) {
   serialization::writePod(file, xPos);
   serialization::writePod(file, yPos);
   serialization::writePod(file, width);
   serialization::writePod(file, thickness);
-  serialization::writePod(file, style);
   return true;
 }
 
-std::unique_ptr<PageCssBorderLine> PageCssBorderLine::deserialize(FsFile& file) {
-  int16_t x = 0, y = 0, width = 0, thickness = 1;
-  uint8_t style = SOLID;
-  serialization::readPod(file, x);
-  serialization::readPod(file, y);
+std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(HalFile& file) {
+  int16_t xPos = 0;
+  int16_t yPos = 0;
+  uint16_t width = 0;
+  uint8_t thickness = 0;
+  serialization::readPod(file, xPos);
+  serialization::readPod(file, yPos);
   serialization::readPod(file, width);
   serialization::readPod(file, thickness);
-  serialization::readPod(file, style);
-  return std::unique_ptr<PageCssBorderLine>(new PageCssBorderLine(x, y, width, thickness, style));
-}
 
-void PageCssBorderBox::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
-                              ImageRenderMode) {
-  (void)fontId;
-  const int left = xPos + xOffset;
-  const int top = yPos + yOffset;
-  const int boxWidth = std::max<int>(1, width);
-  const int boxHeight = std::max<int>(1, height);
-  const int right = left + boxWidth - 1;
-  const int bottom = top + boxHeight - 1;
-
-  const bool hasBackground = backgroundTone != 0;
-  const uint8_t effectiveBorderTone = hasBackground ? 0 : borderTone;
-  if (hasBackground) {
-    renderer.rectangle.fill(left, top, boxWidth, boxHeight, static_cast<int>(GfxRenderer::FillTone::Ink), radius > 0,
-                            true);
-  }
-  if (radius > 0 && borderTop == borderRight && borderTop == borderBottom && borderTop == borderLeft &&
-      styleTop == PageCssBorderLine::SOLID && styleRight == PageCssBorderLine::SOLID &&
-      styleBottom == PageCssBorderLine::SOLID && styleLeft == PageCssBorderLine::SOLID) {
-    drawRoundedBorder(renderer, left, top, boxWidth, boxHeight, std::max<int>(1, borderTop), effectiveBorderTone);
-    return;
+  if (width == 0 || thickness == 0) {
+    LOG_ERR("PGE", "Deserialization failed: invalid horizontal rule metadata (width=%u thickness=%u)", width,
+            thickness);
+    return nullptr;
   }
 
-  drawHorizontalBorder(renderer, left, right, top, borderTop, styleTop, effectiveBorderTone);
-  drawHorizontalBorder(renderer, left, right, bottom - std::max<int>(1, borderBottom) + 1, borderBottom, styleBottom,
-                       effectiveBorderTone);
-  drawVerticalBorder(renderer, left, top, bottom, borderLeft, styleLeft, effectiveBorderTone);
-  drawVerticalBorder(renderer, right - std::max<int>(1, borderRight) + 1, top, bottom, borderRight, styleRight,
-                     effectiveBorderTone);
+  auto* rule = new (std::nothrow) PageHorizontalRule(width, thickness, xPos, yPos);
+  if (!rule) {
+    LOG_ERR("PGE", "Deserialization failed: could not allocate PageHorizontalRule");
+    return nullptr;
+  }
+  return std::unique_ptr<PageHorizontalRule>(rule);
 }
 
-bool PageCssBorderBox::serialize(FsFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
-  serialization::writePod(file, width);
-  serialization::writePod(file, height);
-  serialization::writePod(file, borderTop);
-  serialization::writePod(file, borderRight);
-  serialization::writePod(file, borderBottom);
-  serialization::writePod(file, borderLeft);
-  serialization::writePod(file, styleTop);
-  serialization::writePod(file, styleRight);
-  serialization::writePod(file, styleBottom);
-  serialization::writePod(file, styleLeft);
-  serialization::writePod(file, radius);
-  serialization::writePod(file, borderTone);
-  serialization::writePod(file, backgroundTone);
-  return true;
+void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
+  renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset, [](const PageElement&) { return true; });
 }
 
-std::unique_ptr<PageCssBorderBox> PageCssBorderBox::deserialize(FsFile& file) {
-  int16_t x = 0, y = 0, width = 0, height = 0;
-  int16_t top = 0, right = 0, bottom = 0, left = 0;
-  uint8_t styleTop = PageCssBorderLine::SOLID;
-  uint8_t styleRight = PageCssBorderLine::SOLID;
-  uint8_t styleBottom = PageCssBorderLine::SOLID;
-  uint8_t styleLeft = PageCssBorderLine::SOLID;
-  int16_t radius = 0;
-  uint8_t borderTone = 1;
-  uint8_t backgroundTone = 0;
-  serialization::readPod(file, x);
-  serialization::readPod(file, y);
-  serialization::readPod(file, width);
-  serialization::readPod(file, height);
-  serialization::readPod(file, top);
-  serialization::readPod(file, right);
-  serialization::readPod(file, bottom);
-  serialization::readPod(file, left);
-  serialization::readPod(file, styleTop);
-  serialization::readPod(file, styleRight);
-  serialization::readPod(file, styleBottom);
-  serialization::readPod(file, styleLeft);
-  serialization::readPod(file, radius);
-  serialization::readPod(file, borderTone);
-  serialization::readPod(file, backgroundTone);
-  return std::unique_ptr<PageCssBorderBox>(new PageCssBorderBox(x, y, width, height, top, right, bottom, left, styleTop,
-                                                                styleRight, styleBottom, styleLeft, radius, borderTone,
-                                                                backgroundTone));
+void Page::renderImages(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
+  renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset,
+                             [](const PageElement& element) { return element.getTag() == TAG_PageImage; });
 }
 
-bool Page::anyImageNeedsGrayscale() const {
-  return std::any_of(elements.begin(), elements.end(), [](const std::unique_ptr<PageElement>& element) {
-    return element->getTag() == TAG_PageImage && needsGrayscalePass(static_cast<const PageImage&>(*element));
-  });
-}
-
-bool Page::anyPngImage() const {
-  return std::any_of(elements.begin(), elements.end(), [](const std::unique_ptr<PageElement>& element) {
-    if (element->getTag() != TAG_PageImage) {
-      return false;
-    }
-    const auto& image = static_cast<const PageImage&>(*element);
-    return StringUtils::checkFileExtension(image.getPath(), ".png");
-  });
-}
-
-/**
- * Renders all elements on the page.
- *
- * @param renderer The graphics renderer
- * @param fontId Font ID for text rendering
- * @param headerFontId Font ID for header rendering
- * @param xOffset Horizontal offset for page margins
- * @param yOffset Vertical offset for page margins
- * @param skipImages If true, images are not rendered
- */
-void Page::fillImageRects(GfxRenderer& renderer, const int xOffset, const int yOffset, const bool value,
-                          const bool onlyGrayscale) const {
-  (void)xOffset;  // images are horizontally centered, not offset by the left margin
-  const int screenW = renderer.getScreenWidth();
+void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, const int xOffset,
+                                       const int yOffset) const {
   for (const auto& element : elements) {
-    if (element->getTag() != TAG_PageImage) {
-      continue;
-    }
-    const auto& img = static_cast<const PageImage&>(*element);  // match PageImage::render geometry
-    if (onlyGrayscale && !needsGrayscalePass(img)) {
-      continue;
-    }
-    const int rx = std::max(0, (screenW - img.getWidth()) / 2);
-    const int ry = std::max(0, img.yPos + yOffset);
-    if (value) {
-      renderer.rectangle.fill(rx, ry, img.getWidth(), img.getHeight(), false);
-      renderer.rectangle.render(rx, ry, img.getWidth(), img.getHeight(), true);
-      if (img.getWidth() > 8 && img.getHeight() > 8) {
-        renderer.rectangle.render(rx + 3, ry + 3, img.getWidth() - 6, img.getHeight() - 6, true);
-      }
+    if (element->getTag() == TAG_PageImage) {
+      static_cast<const PageImage&>(*element).renderPlaceholder(renderer, xOffset, yOffset);
     } else {
-      renderer.rectangle.fill(rx, ry, img.getWidth(), img.getHeight(), false);
+      element->render(renderer, fontId, xOffset, yOffset);
     }
   }
 }
 
-bool Page::getImageBoundingBox(const GfxRenderer& renderer, const int xOffset, const int yOffset, int16_t& outX,
-                               int16_t& outY, int16_t& outW, int16_t& outH) const {
-  (void)xOffset;  // images are horizontally centered, not offset by the left margin
-  const int screenW = renderer.getScreenWidth();
-  bool found = false;
-  int minX = INT_MAX;
-  int minY = INT_MAX;
-  int maxX = INT_MIN;
-  int maxY = INT_MIN;
-  for (const auto& element : elements) {
-    if (element->getTag() != TAG_PageImage) {
-      continue;
-    }
-    // Match PageImage::render: centered horizontally, placed at yPos + yOffset, at the stored size.
-    const auto& img = static_cast<const PageImage&>(*element);
-    const int rx = std::max(0, (screenW - img.getWidth()) / 2);
-    const int ry = std::max(0, img.yPos + yOffset);
-    minX = std::min(minX, rx);
-    minY = std::min(minY, ry);
-    maxX = std::max(maxX, rx + img.getWidth());
-    maxY = std::max(maxY, ry + img.getHeight());
-    found = true;
-  }
-  if (!found || maxX <= minX || maxY <= minY) {
-    return false;
-  }
-  outX = static_cast<int16_t>(minX);
-  outY = static_cast<int16_t>(minY);
-  outW = static_cast<int16_t>(maxX - minX);
-  outH = static_cast<int16_t>(maxY - minY);
-  return true;
-}
-
-void Page::render(GfxRenderer& renderer, const int fontId, const int headerFontId, const int xOffset, const int yOffset,
-                  bool skipImages, const ImageRenderMode imageMode, const bool skipOnlyGrayscaleImages) const {
-  struct InvertedTextRegion {
-    int16_t x;
-    int16_t y;
-    int16_t w;
-    int16_t h;
-  };
-  std::vector<InvertedTextRegion> invertedTextRegions;
-  auto isInvertedText = [&](const int textX, const int textY, const int textFontId) {
-    const int lineHeight = std::max(1, renderer.text.getLineHeight(textFontId));
-    const int textBottom = textY + lineHeight - 1;
-    for (const auto& region : invertedTextRegions) {
-      const int regionRight = region.x + region.w;
-      const int regionBottom = region.y + region.h;
-      if (textX >= region.x && textX < regionRight && textBottom >= region.y && textY < regionBottom) {
-        return true;
-      }
-    }
-    return false;
-  };
-
-  for (auto& element : elements) {
-    if (skipImages && element->getTag() == TAG_PageImage) {
-      const auto* image = static_cast<const PageImage*>(element.get());
-      if (!skipOnlyGrayscaleImages || needsGrayscalePass(*image)) {
-        continue;
-      }
-    }
-
-    uint8_t tag = element->getTag();
-    if (tag == TAG_PageLine) {
-      const auto* line = static_cast<const PageLine*>(element.get());
-      const int textX = line->xPos + xOffset;
-      const int textY = line->yPos + yOffset;
-      line->getTextBlock().render(renderer, fontId, textX, textY, !isInvertedText(textX, textY, fontId));
-    } else if (tag == TAG_PageHeader) {
-      const auto* header = static_cast<const PageHeader*>(element.get());
-      // Use the element's own font id (header font for headings, or a per-block large-font override).
-      const int feId = header->getHeaderFontId() > 0 ? header->getHeaderFontId() : headerFontId;
-      const int textX = header->xPos + xOffset;
-      const int textY = header->yPos + yOffset;
-      header->getTextBlock().render(renderer, feId, textX, textY, !isInvertedText(textX, textY, feId));
-    } else if (tag == TAG_PageSmallCaps) {
-      const auto* smallCaps = static_cast<const PageSmallCaps*>(element.get());
-      const int textX = smallCaps->xPos + xOffset;
-      const int textY = smallCaps->yPos + yOffset;
-      smallCaps->getTextBlock().render(renderer, fontId, textX, textY, !isInvertedText(textX, textY, fontId));
-    } else {
-      element->render(renderer, fontId, xOffset, yOffset, imageMode);
-      if (tag == TAG_PageCssBorderBox) {
-        const auto* box = static_cast<const PageCssBorderBox*>(element.get());
-        if (box->hasBackground()) {
-          invertedTextRegions.push_back(
-              {static_cast<int16_t>(box->xPos + xOffset), static_cast<int16_t>(box->yPos + yOffset), box->getWidth(),
-               box->getHeight()});
-        }
-      }
-    }
-  }
-}
-
-void Page::renderImages(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
-                        const ImageRenderMode imageMode, const bool quality, const bool onlyGrayscale) const {
-  for (auto& element : elements) {
-    if (element->getTag() != TAG_PageImage) {
-      continue;
-    }
-    auto* image = static_cast<PageImage*>(element.get());
-    if (onlyGrayscale && !needsGrayscalePass(*image)) {
-      continue;
-    }
-    image->renderImage(renderer, fontId, xOffset, yOffset, imageMode, quality);
-  }
-}
-
-int Page::warmImageDisplayCache(GfxRenderer& renderer, const int xOffset, const int yOffset,
-                                const ImageRenderMode imageMode, const bool quality) const {
-  int warmed = 0;
-  for (const auto& element : elements) {
-    if (element->getTag() != TAG_PageImage) {
-      continue;
-    }
-    const auto* image = static_cast<const PageImage*>(element.get());
-    if (image->warmDisplayCache(renderer, xOffset, yOffset, imageMode, quality)) {
-      ++warmed;
-    }
-  }
-  return warmed;
-}
-
-bool Page::allGrayscaleImagesCachedTwoBit(GfxRenderer& renderer, const int xOffset, const int yOffset,
-                                          const bool quality) const {
-  bool sawGrayscaleImage = false;
-  for (auto& element : elements) {
-    if (element->getTag() != TAG_PageImage) {
-      continue;
-    }
-    const auto* image = static_cast<const PageImage*>(element.get());
-    if (!needsGrayscalePass(*image)) {
-      continue;
-    }
-    sawGrayscaleImage = true;
-    if (!image->hasCachedTwoBitImage(renderer, xOffset, yOffset, quality)) {
-      return false;
-    }
-  }
-  return sawGrayscaleImage;
-}
-
-std::string Page::extractPlainText(const size_t maxChars) const {
-  std::string out;
-  const auto appendText = [&](const std::string& text) {
-    if (text.empty() || out.size() >= maxChars) {
-      return;
-    }
-    if (!out.empty()) {
-      out += ' ';
-    }
-    const size_t remaining = maxChars - out.size();
-    out.append(text, 0, remaining);
-  };
-
-  for (const auto& element : elements) {
-    if (out.size() >= maxChars) {
-      break;
-    }
-    const TextBlock* block = nullptr;
-    switch (element->getTag()) {
-      case TAG_PageLine:
-        block = &static_cast<const PageLine&>(*element).getTextBlock();
-        break;
-      case TAG_PageHeader:
-        block = &static_cast<const PageHeader&>(*element).getTextBlock();
-        break;
-      case TAG_PageSmallCaps:
-        block = &static_cast<const PageSmallCaps&>(*element).getTextBlock();
-        break;
-      case TAG_PageDropCap:
-        appendText(static_cast<const PageDropCap&>(*element).getDropCapText());
-        break;
-      default:
-        break;
-    }
-    if (block == nullptr) {
-      continue;
-    }
-    block->forEachWord([&](size_t, const std::string& word, int16_t, EpdFontFamily::Style) { appendText(word); });
-  }
-  return out;
-}
-
-/**
- * Serializes a Page to a file.
- *
- * @param file The file to write to
- * @return true if serialization was successful
- */
-bool Page::serialize(FsFile& file) const {
+bool Page::serialize(HalFile& file) const {
   const uint16_t count = elements.size();
   serialization::writePod(file, count);
+
   for (const auto& el : elements) {
+    // Use getTag() method to determine type
     serialization::writePod(file, static_cast<uint8_t>(el->getTag()));
-    if (!el->serialize(file)) return false;
+
+    if (!el->serialize(file)) {
+      return false;
+    }
   }
+
+  // Serialize footnotes (clamp to MAX_FOOTNOTES_PER_PAGE to match addFootnote/deserialize limits)
+  const uint16_t fnCount = std::min<uint16_t>(footnotes.size(), MAX_FOOTNOTES_PER_PAGE);
+  serialization::writePod(file, fnCount);
+  for (uint16_t i = 0; i < fnCount; i++) {
+    const auto& fn = footnotes[i];
+    if (file.write(fn.number, sizeof(fn.number)) != sizeof(fn.number) ||
+        file.write(fn.href, sizeof(fn.href)) != sizeof(fn.href)) {
+      LOG_ERR("PGE", "Failed to write footnote");
+      return false;
+    }
+  }
+
   return true;
 }
 
-/**
- * Deserializes a Page from a file.
- *
- * @param file The file to read from
- * @return Unique pointer to the deserialized Page
- */
-std::unique_ptr<Page> Page::deserialize(FsFile& file) {
+std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   auto page = std::unique_ptr<Page>(new Page());
+
   uint16_t count;
   serialization::readPod(file, count);
+
+  // Reserve up front so a page load costs one allocation for the element vector
+  // instead of a grow-copy-free cycle every doubling. `count` is untrusted (it
+  // comes straight off the SD cache), so clamp it: a real page holds a few dozen
+  // elements, while a corrupt header could ask for 65535 * sizeof(shared_ptr) and
+  // abort() on the failed allocation (vector's operator new is throwing, and this
+  // firmware builds with -fno-exceptions). Under-reserving is harmless -- the
+  // push_back path below still grows normally.
+  static constexpr uint16_t RESERVE_CAP = 256;
+  page->elements.reserve(std::min(count, RESERVE_CAP));
+
   for (uint16_t i = 0; i < count; i++) {
     uint8_t tag;
     serialization::readPod(file, tag);
+
     if (tag == TAG_PageLine) {
-      page->elements.push_back(PageLine::deserialize(file));
-    } else if (tag == TAG_PageSmallCaps) {
-      page->elements.push_back(PageSmallCaps::deserialize(file));
-    } else if (tag == TAG_PageHeader) {
-      page->elements.push_back(PageHeader::deserialize(file));
+      auto pl = PageLine::deserialize(file);
+      if (!pl) {
+        return nullptr;
+      }
+      page->elements.push_back(std::move(pl));
     } else if (tag == TAG_PageImage) {
-      page->elements.push_back(PageImage::deserialize(file));
-    } else if (tag == TAG_PageDropCap) {
-      page->elements.push_back(PageDropCap::deserialize(file));
-    } else if (tag == TAG_PageTable) {
-      page->elements.push_back(PageTable::deserialize(file));
+      auto pi = PageImage::deserialize(file);
+      if (!pi) {
+        return nullptr;
+      }
+      page->elements.push_back(std::move(pi));
     } else if (tag == TAG_PageHorizontalRule) {
-      page->elements.push_back(PageHorizontalRule::deserialize(file));
-    } else if (tag == TAG_PageCssBorderLine) {
-      page->elements.push_back(PageCssBorderLine::deserialize(file));
-    } else if (tag == TAG_PageCssBorderBox) {
-      page->elements.push_back(PageCssBorderBox::deserialize(file));
-    } else if (tag == TAG_PageListMarker) {
-      page->elements.push_back(PageListMarker::deserialize(file));
+      auto rule = PageHorizontalRule::deserialize(file);
+      if (!rule) {
+        return nullptr;
+      }
+      page->elements.push_back(std::move(rule));
+    } else {
+      LOG_ERR("PGE", "Deserialization failed: Unknown tag %u", tag);
+      return nullptr;
     }
   }
+
+  // Deserialize footnotes
+  uint16_t fnCount;
+  serialization::readPod(file, fnCount);
+  if (fnCount > MAX_FOOTNOTES_PER_PAGE) {
+    LOG_ERR("PGE", "Invalid footnote count %u", fnCount);
+    return nullptr;
+  }
+  page->footnotes.resize(fnCount);
+  for (uint16_t i = 0; i < fnCount; i++) {
+    auto& entry = page->footnotes[i];
+    if (file.read(entry.number, sizeof(entry.number)) != sizeof(entry.number) ||
+        file.read(entry.href, sizeof(entry.href)) != sizeof(entry.href)) {
+      LOG_ERR("PGE", "Failed to read footnote %u", i);
+      return nullptr;
+    }
+    entry.number[sizeof(entry.number) - 1] = '\0';
+    entry.href[sizeof(entry.href) - 1] = '\0';
+  }
+
   return page;
 }

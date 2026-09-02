@@ -1,62 +1,75 @@
 #pragma once
 
-/**
- * @file HalGPIO.h
- * @brief Xteink X4 Pro hardware input/power abstraction.
- *
- * The X4 Pro port deliberately contains no hard-coded display, button, battery
- * or wake GPIOs. FreeInk BoardConfig is the single source of truth for hardware
- * wiring so production-batch differences stay inside the validated SDK profile.
- */
-
 #include <Arduino.h>
-#include <BatteryMonitor.h>
 #include <InputManager.h>
-#include <Rtc.h>
+
+// Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
+#define EPD_SCLK 8   // SPI Clock
+#define EPD_MOSI 10  // SPI MOSI (Master Out Slave In)
+#define EPD_CS 21    // Chip Select
+#define EPD_DC 4     // Data/Command
+#define EPD_RST 5    // Reset
+#define EPD_BUSY 6   // Busy
+
+#define SPI_MISO 7  // SPI MISO, shared between SD card and display (Master In Slave Out)
+
+#define BAT_GPIO0 0  // Battery voltage
+
+#define UART0_RXD 20  // Used for USB connection detection
+
+// Xteink X3 Hardware
+#define X3_I2C_SDA 20
+#define X3_I2C_SCL 0
+#define X3_I2C_FREQ 400000
+
+// TI BQ27220 Fuel gauge I2C
+#define I2C_ADDR_BQ27220 0x55  // Fuel gauge I2C address
+#define BQ27220_SOC_REG 0x2C   // StateOfCharge() command code (%)
+#define BQ27220_CUR_REG 0x0C   // Current() command code (signed mA)
+#define BQ27220_VOLT_REG 0x08  // Voltage() command code (mV)
+
+// Analog DS3231 RTC I2C
+#define I2C_ADDR_DS3231 0x68  // RTC I2C address
+#define DS3231_SEC_REG 0x00   // Seconds command code (BCD)
+
+// QST QMI8658 IMU I2C
+#define I2C_ADDR_QMI8658 0x6B        // IMU I2C address
+#define I2C_ADDR_QMI8658_ALT 0x6A    // IMU I2C fallback address
+#define QMI8658_WHO_AM_I_REG 0x00    // WHO_AM_I command code
+#define QMI8658_WHO_AM_I_VALUE 0x05  // WHO_AM_I expected value
 
 class HalGPIO {
 #if CROSSPOINT_EMULATED == 0
   InputManager inputMgr;
-  mutable Rtc rtc;
 #endif
-  bool rtcAvailable = false;
+
+  bool lastUsbConnected = false;
+  bool usbStateChanged = false;
 
  public:
   enum class DeviceType : uint8_t { X4, X3 };
 
-  struct DateTime {
-    uint16_t year = 0;
-    uint8_t month = 0;
-    uint8_t day = 0;
-    uint8_t hour = 0;
-    uint8_t minute = 0;
-    uint8_t second = 0;
-    uint8_t weekday = 0;
-  };
-
  private:
-  mutable int batteryCachedPercent = 0;
-  mutable unsigned long batteryLastPollMs = 0;
-
-  // Screen touch stays a first-class input and is exposed unchanged through the
-  // methods below. Only the dedicated capacitive Home key is bridged into Inx's
-  // legacy Back action so existing activity stacks retain their Home/Back path.
-  uint8_t virtualPressedEvents = 0;
-  uint8_t virtualReleasedEvents = 0;
+  DeviceType _deviceType = DeviceType::X4;
 
  public:
-  static constexpr unsigned long BATTERY_POLL_MS = 1500;
-  enum class MotionGesture : uint8_t { None, Previous, Next };
-
   HalGPIO() = default;
 
-  // The fork is intentionally X4-Pro-only. Keep these compatibility helpers so
-  // the existing Inx application code can remain unchanged during the port.
-  bool deviceIsX3() const { return false; }
-  bool deviceIsX4() const { return true; }
+  // Inline device type helpers for cleaner downstream checks
+  inline bool deviceIsX3() const { return _deviceType == DeviceType::X3; }
+  inline bool deviceIsX4() const { return _deviceType == DeviceType::X4; }
+  bool isXteinkDevice() const;
 
+  // True when the board's page buttons sit on the left/right screen edges
+  // (X3, X4 Pro) rather than an off-screen vertical rocker. Drives side-hint
+  // placement and the flipped large-step direction in selection activities.
+  // Keyed off the active BoardConfig profile, not the X3/X4 runtime detection.
+  bool hasEdgeSideButtons() const;
+
+  // Start button GPIO and setup SPI for screen and SD card
   void begin();
 
+  // Button input methods
   void update();
   bool isPressed(uint8_t buttonIndex) const;
   bool wasPressed(uint8_t buttonIndex) const;
@@ -64,47 +77,57 @@ class HalGPIO {
   bool wasReleased(uint8_t buttonIndex) const;
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
-
-  // Raw FreeInk touch contract. Coordinates are normalized in the panel-native
-  // frame; MappedInputManager converts them to the live GfxRenderer orientation
-  // before any activity performs hit-testing. Do not synthesize directional
-  // button presses from arbitrary screen regions here.
+  unsigned long getPowerButtonHeldTime() const;
   bool hasTouch() const;
+  // Capacitive Home key reported by the touch controller (X4 Pro). The tap
+  // event fires on release and excludes a long hold.
+  bool hasHomeKey() const;
+  bool wasHomeKeyTapped() const;
+  bool wasHomeKeyLongPressed() const;
   bool wasTouchTap(float& nx, float& ny) const;
   bool wasTouchDown(float& nx, float& ny) const;
+  // Raw release edge, reported even when the contact was not a tap (swipe end,
+  // drag-off). Snapshot builders forward it so interaction routing can clear
+  // pressed state.
   bool wasTouchReleased() const;
   bool isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const;
   bool isTouchHeldAt(float& nx, float& ny) const;
+  // One-shot long-press, fired by the SDK classifier while the finger is still
+  // down (stationary contact held past its threshold). Position = touch-down
+  // point. Callers that act on it should suppressTouchContact() so the lift
+  // cannot also tap.
   bool wasTouchLongPress(float& nx, float& ny) const;
+  // Ignore the remainder of the current contact (its continued hold and its
+  // release edge). Self-clears once the contact ends.
   void suppressTouchContact();
   unsigned long lastTouchHeldMs() const;
   bool wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const;
   bool wasTouchActivity() const;
+  void setSharedConfirmPowerShortPressEmitsPower(bool enabled);
 
-  MotionGesture readMotionGesture(uint8_t orientation, uint8_t mode, uint8_t sensitivity);
+  // Verify power button was held long enough after wakeup.
+  // Returns true if verification succeeded, false if device should return to sleep.
+  // Should only be called when wakeup reason is PowerButton.
+  bool verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed);
 
-  void startDeepSleep();
-
-  int getBatteryPercentage() const;
+  // Check if USB is connected
   bool isUsbConnected() const;
 
-  bool hasRtc() const { return rtcAvailable; }
-  // The hardware clock follows CrossPoint and stores UTC. The optional offset
-  // is applied only to the returned display value, including calendar rollover.
-  bool readDateTime(DateTime& outDateTime, int timeZoneOffsetMinutes = 0) const;
-  bool writeDateTime(const DateTime& dateTime) const;
-  bool syncRtcFromSystemTime() const;
+  // Returns true once per edge (plug or unplug) since the last update()
+  bool wasUsbStateChanged() const;
 
   enum class WakeupReason { PowerButton, AfterFlash, AfterUSBPower, Other };
+
   WakeupReason getWakeupReason() const;
 
-  static constexpr uint8_t BTN_BACK = InputManager::BTN_BACK;
-  static constexpr uint8_t BTN_CONFIRM = InputManager::BTN_CONFIRM;
-  static constexpr uint8_t BTN_LEFT = InputManager::BTN_LEFT;
-  static constexpr uint8_t BTN_RIGHT = InputManager::BTN_RIGHT;
-  static constexpr uint8_t BTN_UP = InputManager::BTN_UP;
-  static constexpr uint8_t BTN_DOWN = InputManager::BTN_DOWN;
-  static constexpr uint8_t BTN_POWER = InputManager::BTN_POWER;
+  // Button indices
+  static constexpr uint8_t BTN_BACK = 0;
+  static constexpr uint8_t BTN_CONFIRM = 1;
+  static constexpr uint8_t BTN_LEFT = 2;
+  static constexpr uint8_t BTN_RIGHT = 3;
+  static constexpr uint8_t BTN_UP = 4;
+  static constexpr uint8_t BTN_DOWN = 5;
+  static constexpr uint8_t BTN_POWER = 6;
 };
 
 extern HalGPIO gpio;

@@ -1,235 +1,376 @@
-/**
- * @file HalGPIO.cpp
- * @brief Xteink X4 Pro hardware abstraction backed by FreeInk BoardConfig.
- */
-
-#include <BoardConfig.h>
+#include <DevInputInjector.h>
 #include <HalGPIO.h>
+#include <Logging.h>
 #include <PowerManager.h>
+#include <Preferences.h>
+#include <SPI.h>
+#include <Wire.h>
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
-#include <esp_system.h>
 
-#include <ctime>
+// Dev-build synthetic input (see lib/DevInput/DevInputInjector.h): every input
+// read consults the injector's frame first, so a host-scheduled tap or button
+// is indistinguishable from a real one downstream. Compiled out of release
+// envs, where DEV_INPUT(expr) leaves only the hardware read.
+#if CROSSPOINT_DEV_SERIAL_BRIDGE
+#define DEV_INPUT(expr) \
+  if (expr) return true;
+#else
+#define DEV_INPUT(expr)
+#endif
+
+// Global HalGPIO instance
+HalGPIO gpio;
+
+namespace X3GPIO {
+
+bool readI2CReg16LE(uint8_t addr, uint8_t reg, uint16_t* outValue) {
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) {
+    return false;
+  }
+  if (Wire.requestFrom(addr, static_cast<uint8_t>(2), static_cast<uint8_t>(true)) < 2) {
+    while (Wire.available()) {
+      Wire.read();
+    }
+    return false;
+  }
+  const uint8_t lo = Wire.read();
+  const uint8_t hi = Wire.read();
+  *outValue = (static_cast<uint16_t>(hi) << 8) | lo;
+  return true;
+}
+
+bool readBQ27220CurrentMA(int16_t* outCurrent) {
+  uint16_t raw = 0;
+  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_CUR_REG, &raw)) {
+    return false;
+  }
+  *outCurrent = static_cast<int16_t>(raw);
+  return true;
+}
+
+}  // namespace X3GPIO
 
 namespace {
-void addVirtualClick(uint8_t button, uint8_t& pressed, uint8_t& released) {
-  const uint8_t mask = static_cast<uint8_t>(1u << button);
-  pressed |= mask;
-  released |= mask;
+constexpr char HW_NAMESPACE[] = "cphw";
+constexpr char NVS_KEY_DEV_OVERRIDE[] = "dev_ovr";  // 0=auto, 1=x4, 2=x3
+constexpr char NVS_KEY_DEV_CACHED[] = "dev_det";    // 0=unknown, 1=x4, 2=x3
+
+enum class NvsDeviceValue : uint8_t { Unknown = 0, X4 = 1, X3 = 2 };
+
+NvsDeviceValue readNvsDeviceValue(const char* key, NvsDeviceValue defaultValue) {
+  Preferences prefs;
+  if (!prefs.begin(HW_NAMESPACE, true)) {
+    return defaultValue;
+  }
+  const uint8_t raw = prefs.getUChar(key, static_cast<uint8_t>(defaultValue));
+  prefs.end();
+  if (raw > static_cast<uint8_t>(NvsDeviceValue::X3)) {
+    return defaultValue;
+  }
+  return static_cast<NvsDeviceValue>(raw);
 }
+
+void writeNvsDeviceValue(const char* key, NvsDeviceValue value) {
+  Preferences prefs;
+  if (!prefs.begin(HW_NAMESPACE, false)) {
+    return;
+  }
+  prefs.putUChar(key, static_cast<uint8_t>(value));
+  prefs.end();
+}
+
+HalGPIO::DeviceType nvsToDeviceType(NvsDeviceValue value) {
+  return value == NvsDeviceValue::X3 ? HalGPIO::DeviceType::X3 : HalGPIO::DeviceType::X4;
+}
+
+HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
+  // Explicit override for recovery/support:
+  // 0 = auto, 1 = force X4, 2 = force X3
+  const NvsDeviceValue overrideValue = readNvsDeviceValue(NVS_KEY_DEV_OVERRIDE, NvsDeviceValue::Unknown);
+  if (overrideValue == NvsDeviceValue::X3 || overrideValue == NvsDeviceValue::X4) {
+    LOG_INF("HW", "Device override active: %s", overrideValue == NvsDeviceValue::X3 ? "X3" : "X4");
+    return nvsToDeviceType(overrideValue);
+  }
+
+  const NvsDeviceValue cachedValue = readNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::Unknown);
+  if (cachedValue == NvsDeviceValue::X3 || cachedValue == NvsDeviceValue::X4) {
+    LOG_INF("HW", "Using cached device type: %s", cachedValue == NvsDeviceValue::X3 ? "X3" : "X4");
+    return nvsToDeviceType(cachedValue);
+  }
+
+  // No cache yet: use FreeInk's canonical two-pass X3 fingerprint and persist
+  // only confirmed results. Inconclusive probes deliberately remain uncached.
+  uint8_t score1 = 0;
+  uint8_t score2 = 0;
+  const freeink::XteinkVerdict verdict = freeink::detectXteinkVerdict(&score1, &score2);
+  LOG_INF("HW", "Xteink probe scores: pass1=%u pass2=%u verdict=%u", score1, score2, static_cast<unsigned>(verdict));
+
+  if (verdict == freeink::XteinkVerdict::X3Confirmed) {
+    writeNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::X3);
+    return HalGPIO::DeviceType::X3;
+  }
+
+  if (verdict == freeink::XteinkVerdict::X4Confirmed) {
+    writeNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::X4);
+    return HalGPIO::DeviceType::X4;
+  }
+
+  // Conservative fallback for first boot with inconclusive probes.
+  return HalGPIO::DeviceType::X4;
+}
+
 }  // namespace
 
 void HalGPIO::begin() {
-  // Match FreeInk/CrossPoint's X4 Pro bring-up order. Some X4 Pro peripherals
-  // sit behind switched rails; assert the board-profile-defined boot levels
-  // before touching input, SD or display buses.
-  BoardConfig::holdPowerRails();
+#if FREEINK_MCU_C3
+  _deviceType = detectDeviceTypeWithFingerprint();
+  BoardConfig::selectDevice(deviceIsX3() ? BoardConfig::Board::XteinkX3 : BoardConfig::Board::XteinkX4);
 
-  // X4 Pro production batches can use different 800x480 panel controllers.
-  // Resolve the controller before display.begin(); FreeInk then selects the
-  // matching driver while retaining the same board pinout.
+  // Resolve the per-batch controller before SPI owns the display pins. FreeInk
+  // checks the OEM hw_calib/screenType value first, then falls back to its
+  // two-pass display-bus probe. X3's facade keys panel selection off the sibling
+  // board profile, so preserve a detected UC8279 through setDisplayX3().
   freeink::applyXteinkDisplayController();
+  if (deviceIsX3() && BoardConfig::ACTIVE.displayController == BoardConfig::DisplayController::UC8279) {
+    BoardConfig::selectDevice(BoardConfig::Board::XteinkX3Uc8279);
+  }
 
-  // InputManager resolves the X4 Pro's digital buttons and GT911 controller from
-  // BoardConfig. Do not initialize SPI or probe legacy X3/C3 pins here.
+  SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
+
+  if (deviceIsX4()) {
+    pinMode(BAT_GPIO0, INPUT);
+    pinMode(UART0_RXD, INPUT);
+  }
+#else
+  _deviceType = DeviceType::X4;
+#endif
   inputMgr.begin();
-  rtcAvailable = rtc.begin();
+
+  // InputManager::begin() returns void, and the touch probe inside it can fail
+  // silently: if the GT911 answers on neither candidate I2C address the SDK
+  // sets touchDataEnabled = false and says so only under TOUCH_PROBE_DEBUG,
+  // which no build defines. On the X4 Pro that is the whole input surface --
+  // four of its six logical buttons are unassigned pins -- so the device boots,
+  // draws every screen correctly, and ignores every finger, which is
+  // indistinguishable from nobody touching it.
+  //
+  // The board profile says whether this unit HAS a touch controller; the probe
+  // says whether it answered. Disagreement is hardware that did not come up.
+  if (BoardConfig::hasTouch() && !inputMgr.hasTouch()) {
+    LOG_ERR("GPIO", "touch controller did not answer; taps will do nothing on this boot");
+  }
 }
 
 void HalGPIO::update() {
-  virtualPressedEvents = 0;
-  virtualReleasedEvents = 0;
-
   inputMgr.update();
-
-  // CrossPoint keeps screen touch as raw touch all the way to its mapped-input
-  // layer. Do the same here: arbitrary screen positions must never turn into
-  // directional button presses inside the HAL. The dedicated capacitive Home
-  // key is different hardware and intentionally retains Inx's Back action.
-  if (inputMgr.wasHomeKeyTapped()) {
-    addVirtualClick(BTN_BACK, virtualPressedEvents, virtualReleasedEvents);
-  }
+#if CROSSPOINT_DEV_SERIAL_BRIDGE
+  devinput::update();
+#endif
+  const bool connected = isUsbConnected();
+  usbStateChanged = (connected != lastUsbConnected);
+  lastUsbConnected = connected;
 }
 
-bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
+bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
+
+bool HalGPIO::isPressed(uint8_t buttonIndex) const {
+  DEV_INPUT(devinput::isPressed(buttonIndex))
+  return inputMgr.isPressed(buttonIndex);
+}
 
 bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
-  const uint8_t mask = static_cast<uint8_t>(1u << buttonIndex);
-  return inputMgr.wasPressed(buttonIndex) || (virtualPressedEvents & mask) != 0;
+  DEV_INPUT(devinput::wasPressed(buttonIndex))
+  return inputMgr.wasPressed(buttonIndex);
 }
 
-bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed() || virtualPressedEvents != 0; }
+bool HalGPIO::wasAnyPressed() const {
+  DEV_INPUT(devinput::wasAnyPressed())
+  return inputMgr.wasAnyPressed();
+}
 
 bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
-  const uint8_t mask = static_cast<uint8_t>(1u << buttonIndex);
-  return inputMgr.wasReleased(buttonIndex) || (virtualReleasedEvents & mask) != 0;
+  DEV_INPUT(devinput::wasReleased(buttonIndex))
+  return inputMgr.wasReleased(buttonIndex);
 }
 
-bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased() || virtualReleasedEvents != 0; }
+bool HalGPIO::wasAnyReleased() const {
+  DEV_INPUT(devinput::wasAnyReleased())
+  return inputMgr.wasAnyReleased();
+}
 
 unsigned long HalGPIO::getHeldTime() const {
-  // CrossPoint's X4 Pro power-double-click path evaluates the dedicated power
-  // button hold duration. Inx historically exposes only one generic held-time
-  // accessor, so on the power release frame return FreeInk's latched power hold
-  // value instead of the last arbitrary button/touch duration. This keeps all
-  // existing Inx callers unchanged while matching the X4 Pro input contract.
-  if (inputMgr.wasReleased(BTN_POWER)) {
-    return inputMgr.getPowerButtonHeldTime();
-  }
+#if CROSSPOINT_DEV_SERIAL_BRIDGE
+  if (const unsigned long t = devinput::heldTime()) return t;
+#endif
   return inputMgr.getHeldTime();
+}
+
+unsigned long HalGPIO::getPowerButtonHeldTime() const {
+#if CROSSPOINT_DEV_SERIAL_BRIDGE
+  if (devinput::isPressed(BTN_POWER)) return devinput::powerHeldTime();
+#endif
+  return inputMgr.getPowerButtonHeldTime();
 }
 
 bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
 
-bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return inputMgr.wasTouchTap(nx, ny); }
+bool HalGPIO::hasHomeKey() const { return BoardConfig::hasHomeKey(); }
 
-bool HalGPIO::wasTouchDown(float& nx, float& ny) const { return inputMgr.wasTouchPressedAt(nx, ny); }
+bool HalGPIO::wasHomeKeyTapped() const { return inputMgr.wasHomeKeyTapped(); }
 
-bool HalGPIO::wasTouchReleased() const { return inputMgr.wasTouchReleased(); }
+bool HalGPIO::wasHomeKeyLongPressed() const { return inputMgr.wasHomeKeyLongPressed(); }
+
+bool HalGPIO::wasTouchTap(float& nx, float& ny) const {
+  DEV_INPUT(devinput::wasTouchTap(nx, ny))
+  return inputMgr.wasTouchTap(nx, ny);
+}
+
+bool HalGPIO::wasTouchDown(float& nx, float& ny) const {
+  DEV_INPUT(devinput::wasTouchDown(nx, ny))
+  return inputMgr.wasTouchPressedAt(nx, ny);
+}
+
+bool HalGPIO::wasTouchReleased() const {
+  DEV_INPUT(devinput::wasTouchReleased())
+  return inputMgr.wasTouchReleased();
+}
 
 bool HalGPIO::isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const {
+  DEV_INPUT(devinput::isTouchTapCandidate(nx, ny, heldMs))
   return inputMgr.isTouchTapCandidate(nx, ny, heldMs);
 }
 
-bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const { return inputMgr.isTouchHeldAt(nx, ny); }
+bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const {
+  DEV_INPUT(devinput::isTouchHeldAt(nx, ny))
+  return inputMgr.isTouchHeldAt(nx, ny);
+}
 
-bool HalGPIO::wasTouchLongPress(float& nx, float& ny) const { return inputMgr.wasTouchLongPress(nx, ny); }
+bool HalGPIO::wasTouchLongPress(float& nx, float& ny) const {
+  DEV_INPUT(devinput::wasTouchLongPress(nx, ny))
+  return inputMgr.wasTouchLongPress(nx, ny);
+}
 
-void HalGPIO::suppressTouchContact() { inputMgr.suppressTouchContact(); }
+void HalGPIO::suppressTouchContact() {
+#if CROSSPOINT_DEV_SERIAL_BRIDGE
+  devinput::suppressContact();
+#endif
+  inputMgr.suppressTouchContact();
+}
 
-unsigned long HalGPIO::lastTouchHeldMs() const { return inputMgr.lastTouchHeldMs(); }
+unsigned long HalGPIO::lastTouchHeldMs() const {
+#if CROSSPOINT_DEV_SERIAL_BRIDGE
+  if (const unsigned long t = devinput::lastTouchHeldMs()) return t;
+#endif
+  return inputMgr.lastTouchHeldMs();
+}
 
 bool HalGPIO::wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const {
+  DEV_INPUT(devinput::wasSwipe(nxStart, nyStart, nxEnd, nyEnd))
   return inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
 }
 
-bool HalGPIO::wasTouchActivity() const { return inputMgr.wasTouchActivity(); }
-
-HalGPIO::MotionGesture HalGPIO::readMotionGesture(uint8_t, uint8_t, uint8_t) { return MotionGesture::None; }
-
-void HalGPIO::startDeepSleep() {
-  // Match CrossPoint's X4 Pro sleep sequence: GPIO isolation follows below, so
-  // every master power latch must be driven HIGH and explicitly held first.
-  // Merely calling BoardConfig::holdPowerRails() during boot is insufficient:
-  // it asserts the level but intentionally does not arm a deep-sleep hold.
-  for (const int8_t pin : {BoardConfig::ACTIVE.power.latch0, BoardConfig::ACTIVE.power.latch1}) {
-    if (pin < 0) continue;
-    const auto gpioPin = static_cast<gpio_num_t>(pin);
-    gpio_hold_dis(gpioPin);
-    pinMode(pin, OUTPUT);
-    digitalWrite(pin, HIGH);
-    gpio_hold_en(gpioPin);
-  }
-
-  // The X4 Pro is ESP32-S3. FreeInk selects the correct ext1 wake source and
-  // powers down board rails using the active BoardConfig profile.
-  freeink::PowerManager::powerDownRailsForSleep();
-  freeink::PowerManager::deepSleepUntilPowerButton();
+bool HalGPIO::wasTouchActivity() const {
+  DEV_INPUT(devinput::wasTouchActivity())
+  return inputMgr.wasTouchActivity();
 }
 
-int HalGPIO::getBatteryPercentage() const {
-  const unsigned long now = millis();
-  if (batteryLastPollMs != 0 && (now - batteryLastPollMs) < BATTERY_POLL_MS) {
-    return batteryCachedPercent;
-  }
-
-  static const BatteryMonitor battery;
-  uint16_t percent = 0;
-  if (battery.readPercentageChecked(percent) && percent <= 100) {
-    batteryCachedPercent = static_cast<int>(percent);
-  }
-  batteryLastPollMs = now;
-  return batteryCachedPercent;
+void HalGPIO::setSharedConfirmPowerShortPressEmitsPower(const bool enabled) {
+  InputManager::setSharedConfirmPowerShortPressEmitsPower(enabled);
 }
 
-bool HalGPIO::isUsbConnected() const {
-  // Prefer a real USB/VBUS detect line when the board profile exposes one.
-  if (BoardConfig::ACTIVE.usbDetect >= 0) {
-    return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
-  }
-
-  // Fallback to charging telemetry. This can report false at charge termination,
-  // but it never requires poking an unverified X4/C3 GPIO.
-  static const BatteryMonitor battery;
-  return battery.isCharging();
+bool HalGPIO::hasEdgeSideButtons() const {
+  return BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3 ||
+         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3Uc8279 ||
+         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4Pro;
 }
 
-bool HalGPIO::readDateTime(DateTime& out, const int timeZoneOffsetMinutes) const {
-  if (!rtcAvailable) return false;
-  Rtc::DateTime raw;
-  if (!rtc.now(raw)) return false;
+bool HalGPIO::isXteinkDevice() const {
+  return BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3 ||
+         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3Uc8279 ||
+         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4;
+}
 
-  struct tm utc{};
-  utc.tm_year = raw.year - 1900;
-  utc.tm_mon = raw.month - 1;
-  utc.tm_mday = raw.day;
-  utc.tm_hour = raw.hour;
-  utc.tm_min = raw.minute;
-  utc.tm_sec = raw.second;
-  // FreeInk uses the same mktime/localtime round-trip for calendar-correct
-  // adjustment. The firmware keeps the process timezone at UTC.
-  time_t epoch = mktime(&utc) + static_cast<time_t>(timeZoneOffsetMinutes) * 60;
-  struct tm shown{};
-  if (gmtime_r(&epoch, &shown) == nullptr) return false;
-  out.year = static_cast<uint16_t>(shown.tm_year + 1900);
-  out.month = static_cast<uint8_t>(shown.tm_mon + 1);
-  out.day = static_cast<uint8_t>(shown.tm_mday);
-  out.hour = static_cast<uint8_t>(shown.tm_hour);
-  out.minute = static_cast<uint8_t>(shown.tm_min);
-  out.second = static_cast<uint8_t>(shown.tm_sec);
-  out.weekday = static_cast<uint8_t>(shown.tm_wday);
+bool HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed) {
+  // X4 Pro wakes on any power-button press; other boards retain the configured
+  // hold-duration verification below.
+  if (BoardConfig::isX4Pro() || BoardConfig::ACTIVE.input.power < 0) {
+    return true;
+  }
+#if defined(FREEINK_DEVICE_M5PAPER) && FREEINK_DEVICE_M5PAPER
+  return true;
+#endif
+  if (shortPressAllowed) {
+    // Fast path - no duration check needed
+    return true;
+  }
+  // TODO: Intermittent edge case remains: a single tap followed by another single tap
+  // can still power on the device. Tighten wake debounce/state handling here.
+
+  // Calibrate: subtract boot time already elapsed, assuming button held since boot.
+  const unsigned long calibration = millis();
+  const unsigned long calibratedDuration = (calibration < requiredDurationMs) ? (requiredDurationMs - calibration) : 1;
+
+  const auto start = millis();
+  inputMgr.update();
+  // inputMgr.isPressed() may take up to ~500ms to return correct state
+  while (!inputMgr.isPressed(BTN_POWER) && millis() - start < 1000) {
+    delay(10);
+    inputMgr.update();
+  }
+  if (inputMgr.isPressed(BTN_POWER)) {
+    do {
+      delay(10);
+      inputMgr.update();
+    } while (inputMgr.isPressed(BTN_POWER) && inputMgr.getPowerButtonHeldTime() < calibratedDuration);
+    if (inputMgr.getPowerButtonHeldTime() < calibratedDuration) {
+      return false;
+    }
+  } else {
+    return false;
+  }
   return true;
 }
 
-bool HalGPIO::writeDateTime(const DateTime& value) const {
-  if (!rtcAvailable) return false;
-  const Rtc::DateTime raw{value.year,
-                          value.month,
-                          value.day,
-                          value.hour,
-                          value.minute,
-                          value.second,
-                          static_cast<uint8_t>(value.weekday % 7)};
-  return rtc.set(raw);
-}
-
-bool HalGPIO::syncRtcFromSystemTime() const {
-  const time_t now = time(nullptr);
-  if (!rtcAvailable || now < 1704067200) return false;
-  struct tm utc{};
-  if (gmtime_r(&now, &utc) == nullptr) return false;
-  const Rtc::DateTime value{static_cast<uint16_t>(utc.tm_year + 1900), static_cast<uint8_t>(utc.tm_mon + 1),
-                            static_cast<uint8_t>(utc.tm_mday),         static_cast<uint8_t>(utc.tm_hour),
-                            static_cast<uint8_t>(utc.tm_min),          static_cast<uint8_t>(utc.tm_sec),
-                            static_cast<uint8_t>(utc.tm_wday)};
-  return rtc.set(value);
+bool HalGPIO::isUsbConnected() const {
+  if (deviceIsX3()) {
+    // X3: infer USB/charging via BQ27220 Current() register (0x0C, signed mA).
+    // Positive current means charging.
+    for (uint8_t attempt = 0; attempt < 2; ++attempt) {
+      int16_t currentMa = 0;
+      if (X3GPIO::readBQ27220CurrentMA(&currentMa)) {
+        return currentMa > 0;
+      }
+      delay(2);
+    }
+    return false;
+  }
+  if (BoardConfig::ACTIVE.usbDetect < 0) {
+    return false;
+  }
+  return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
+
   const bool usbConnected = isUsbConnected();
 
   if (resetReason == ESP_RST_DEEPSLEEP &&
       (wakeupCause == ESP_SLEEP_WAKEUP_GPIO || wakeupCause == ESP_SLEEP_WAKEUP_EXT1)) {
     return WakeupReason::PowerButton;
   }
-
-  // Xteink's power topology allows a battery-only cold boot from the held power
-  // button. This classification is used only by Inx's existing boot UX; it does
-  // not write flash or alter boot configuration.
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected) {
     return WakeupReason::PowerButton;
   }
-
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN && usbConnected) {
     return WakeupReason::AfterFlash;
   }
-
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && usbConnected) {
     return WakeupReason::AfterUSBPower;
   }
-
   return WakeupReason::Other;
 }

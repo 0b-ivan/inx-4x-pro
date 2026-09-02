@@ -1,44 +1,37 @@
-/**
- * @file HalFrontlight.cpp
- * @brief X4 Pro frontlight implementation backed by FreeInk FrontlightManager.
- */
+#include "HalFrontlight.h"
 
-#include <HalFrontlight.h>
-#include <Preferences.h>
+#include <Logging.h>
 
-namespace {
-constexpr char kPrefsNamespace[] = "inx-light";
-constexpr uint8_t kPrefsVersion = 1;
-}
-
-HalFrontlight frontlight;
+HalFrontlight HalFrontlight::instance;
 
 void HalFrontlight::begin(const uint8_t brightness, const uint8_t warmth, const bool on) {
-  if (!manager.present()) {
-    Serial.printf("[%lu] [LIGHT] no frontlight in active board profile\n", millis());
-    return;
-  }
+  if (!manager.present()) return;
 
-  manager.begin();
+  // Checked, because this line used to be `manager.begin();` on its own and
+  // the SDK returned void. A board whose channels did not configure was
+  // indistinguishable from one whose owner had not touched the light: the
+  // "Frontlight up" line below printed either way, the panel opened, the sun
+  // icon filled, and settings recorded frontlightOn=1. That is how the X4 Pro
+  // shipped two releases with a light that could not be turned on, and why
+  // reading /api/dev/log on the affected device taught the reader nothing.
+  ready = manager.begin();
   lastBrightness = brightness > 100 ? 100 : brightness;
   manager.setColorTemperature(warmth > 100 ? 100 : warmth);
   lit = on;
   manager.setBrightness(lit ? lastBrightness : 0);
-
-  if (!loadSettings()) {
-    Serial.printf("[%lu] [LIGHT] no saved state; using brightness=%u%% warm=%u%% state=%s\n", millis(),
-                  lastBrightness, manager.colorTemperature(), lit ? "on" : "off");
+  if (!ready) {
+    // Deliberately not a silent degrade to present()==false: the panel stays
+    // reachable so the failure is visible to whoever is holding the device,
+    // rather than a frontlight quietly disappearing from a board that has one.
+    LOG_ERR("LIGHT", "Frontlight did NOT come up; every brightness change from here is accepted and does nothing");
+    return;
   }
-
-  Serial.printf("[%lu] [LIGHT] ready brightness=%u%% warm=%u%% state=%s\n", millis(), lastBrightness,
-                manager.colorTemperature(), lit ? "on" : "off");
+  LOG_INF("LIGHT", "Frontlight up: %u%% warm=%u%% %s", lastBrightness, manager.colorTemperature(), lit ? "on" : "off");
 }
 
 void HalFrontlight::setBrightness(const uint8_t percent) {
   lastBrightness = percent > 100 ? 100 : percent;
-  if (lit) {
-    manager.setBrightness(lastBrightness);
-  }
+  if (lit) manager.setBrightness(lastBrightness);
 }
 
 void HalFrontlight::setWarmth(const uint8_t warmPercent) {
@@ -46,52 +39,7 @@ void HalFrontlight::setWarmth(const uint8_t warmPercent) {
 }
 
 void HalFrontlight::setOn(const bool on) {
-  if (!manager.present() || on == lit) {
-    return;
-  }
+  if (on == lit) return;
   lit = on;
   manager.setBrightness(lit ? lastBrightness : 0);
-  Serial.printf("[%lu] [LIGHT] %s brightness=%u%% warm=%u%%\n", millis(), lit ? "on" : "off", lastBrightness,
-                manager.colorTemperature());
-}
-
-bool HalFrontlight::loadSettings() {
-  if (!manager.present()) return false;
-
-  Preferences prefs;
-  if (!prefs.begin(kPrefsNamespace, true)) return false;
-  const uint8_t version = prefs.getUChar("version", 0);
-  if (version != kPrefsVersion) {
-    prefs.end();
-    return false;
-  }
-
-  const uint8_t savedBrightness = prefs.getUChar("brightness", lastBrightness);
-  const uint8_t savedWarmth = prefs.getUChar("warmth", manager.colorTemperature());
-  const bool savedOn = prefs.getBool("on", lit);
-  prefs.end();
-
-  setBrightness(savedBrightness);
-  setWarmth(savedWarmth);
-  setOn(savedOn);
-  Serial.printf("[%lu] [LIGHT] restored brightness=%u%% warm=%u%% state=%s\n", millis(), lastBrightness,
-                manager.colorTemperature(), lit ? "on" : "off");
-  return true;
-}
-
-bool HalFrontlight::saveSettings() const {
-  if (!manager.present()) return false;
-
-  Preferences prefs;
-  if (!prefs.begin(kPrefsNamespace, false)) return false;
-  bool ok = true;
-  ok = prefs.putUChar("version", kPrefsVersion) == sizeof(uint8_t) && ok;
-  ok = prefs.putUChar("brightness", lastBrightness) == sizeof(uint8_t) && ok;
-  ok = prefs.putUChar("warmth", manager.colorTemperature()) == sizeof(uint8_t) && ok;
-  ok = prefs.putBool("on", lit) == sizeof(uint8_t) && ok;
-  prefs.end();
-
-  Serial.printf("[%lu] [LIGHT] saved brightness=%u%% warm=%u%% state=%s%s\n", millis(), lastBrightness,
-                manager.colorTemperature(), lit ? "on" : "off", ok ? "" : " (write failed)");
-  return ok;
 }

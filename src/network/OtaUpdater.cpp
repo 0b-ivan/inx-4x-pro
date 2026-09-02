@@ -1,607 +1,264 @@
-/**
- * @file OtaUpdater.cpp
- * @brief Definitions for OtaUpdater.
- */
-
 #include "OtaUpdater.h"
 
-#include <Arduino.h>
-#include <ArduinoJson.h>
-#include <SDCardManager.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
+// clang-format off
+// HttpDownloader.h pulls Arduino/SdFat, whose macros collide with lwip's
+// ip4_addr.h unless seen first. Pin this order; clang-format would otherwise sort
+// the local header last and break the build.
+#include "HttpDownloader.h"
+#include <Logging.h>
+#include <ReleaseJsonParser.h>
+#include <esp_ota_ops.h>
+#include <esp_wifi.h>
+// clang-format on
 
 #include <algorithm>
-#include <cctype>
-#include <cstdlib>
-#include <new>
-#ifndef SIMULATOR
-#include <Preferences.h>
-#endif
+#include <cstring>
+#include <string>
 
-#include "esp_heap_caps.h"
-#include "esp_http_client.h"
-#include "esp_https_ota.h"
-#include "esp_ota_ops.h"
-#include "esp_task_wdt.h"
-#include "esp_wifi.h"
+#include "FirmwareBoardTag.h"
+#include "FirmwareFlasher.h"
 
 namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/0b-ivan/inx-4x-pro/releases/latest";
-
-constexpr size_t kMaxReleaseJsonBytes = 12288;
-
-constexpr int kGithubCheckTaskStack = 16384;
-constexpr int kGithubCheckTaskPrio = 3;
-constexpr int kOtaDownloadTaskStack = 16384;
-constexpr int kOtaDownloadTaskPrio = 3;
-
-struct OtaDownloadTaskCtx {
-  OtaUpdater* updater;
-  OtaUpdater::ProgressCallback progress;
-  OtaUpdater::OtaUpdaterError result = OtaUpdater::INTERNAL_UPDATE_ERROR;
-  SemaphoreHandle_t done;
-};
-
-struct ParsedVersion {
-  int major = 0;
-  int minor = 0;
-  int patch = 0;
-  int prerelease = 0;
-  bool isPrerelease = false;
-  bool valid = false;
-};
-
-ParsedVersion parseVersion(std::string value) {
-  ParsedVersion version;
-  std::transform(value.begin(), value.end(), value.begin(),
-                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-  if (!value.empty() && value.front() == 'v') value.erase(0, 1);
-
-  const char* cursor = value.c_str();
-  char* end = nullptr;
-  const auto readPart = [&cursor, &end](int& target, char separator) {
-    const long parsed = std::strtol(cursor, &end, 10);
-    if (end == cursor || parsed < 0 || parsed > 9999) return false;
-    target = static_cast<int>(parsed);
-    if (separator != '\0') {
-      if (*end != separator) return false;
-      cursor = end + 1;
-    } else {
-      cursor = end;
-    }
-    return true;
-  };
-
-  if (!readPart(version.major, '.') || !readPart(version.minor, '.') || !readPart(version.patch, '\0')) return version;
-  if (*cursor == '\0') {
-    version.valid = true;
-    return version;
-  }
-
-  const std::string suffix(cursor);
-  const auto alpha = suffix.find("alpha.");
-  if (alpha == std::string::npos) return version;
-  const char* alphaNumber = suffix.c_str() + alpha + 6;
-  const long parsed = std::strtol(alphaNumber, &end, 10);
-  if (end == alphaNumber || *end != '\0' || parsed < 0 || parsed > 9999) return version;
-  version.prerelease = static_cast<int>(parsed);
-  version.isPrerelease = true;
-  version.valid = true;
-  return version;
-}
-
-bool versionIsNewer(const ParsedVersion& latest, const ParsedVersion& current) {
-  if (!latest.valid || !current.valid) return false;
-  if (latest.major != current.major) return latest.major > current.major;
-  if (latest.minor != current.minor) return latest.minor > current.minor;
-  if (latest.patch != current.patch) return latest.patch > current.patch;
-  if (latest.isPrerelease != current.isPrerelease) return !latest.isPrerelease;
-  return latest.isPrerelease && latest.prerelease > current.prerelease;
-}
-
-char* local_buf = nullptr;
-int output_len = 0;
-size_t local_buf_cap = 0;
-
-extern "C" {
-extern esp_err_t esp_crt_bundle_attach(void* conf);
-}
-
-/** Set the User-Agent header on the OTA HTTPS client during esp_https_ota init. */
-esp_err_t http_client_set_header_cb(esp_http_client_handle_t http_client) {
-  return esp_http_client_set_header(http_client, "User-Agent", "Inx-ESP32-" INX_VERSION);
-}
-
-/** esp_http_client event handler that accumulates the GitHub release JSON response into local_buf. */
-esp_err_t event_handler(esp_http_client_event_t* event) {
-  if (event->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
-  if (event->data == nullptr || event->data_len <= 0) return ESP_OK;
-
-  const int chunk = event->data_len;
-  const size_t need = static_cast<size_t>(output_len) + static_cast<size_t>(chunk) + 1;
-
-  if (local_buf == nullptr) {
-    const int content_len = esp_http_client_get_content_length(event->client);
-    const bool chunked = esp_http_client_is_chunked_response(event->client);
-    if (!chunked && content_len > 0) {
-      if (static_cast<size_t>(content_len) + 1 > kMaxReleaseJsonBytes) {
-        Serial.printf("[%lu] [OTA] HTTP body too large from Content-Length (%d cap %u)\n", millis(), content_len,
-                      static_cast<unsigned>(kMaxReleaseJsonBytes));
-        return ESP_ERR_NO_MEM;
-      }
-      local_buf_cap = static_cast<size_t>(content_len) + 1;
-      local_buf = static_cast<char*>(calloc(local_buf_cap, 1));
-    } else {
-      local_buf_cap = kMaxReleaseJsonBytes;
-      local_buf = static_cast<char*>(calloc(local_buf_cap, 1));
-    }
-    if (local_buf == nullptr) {
-      Serial.printf("[%lu] [OTA] HTTP body buffer alloc failed (cap %u for need %u)\n", millis(),
-                    static_cast<unsigned>(local_buf_cap), static_cast<unsigned>(need));
-      return ESP_ERR_NO_MEM;
-    }
-    output_len = 0;
-  }
-
-  if (need > local_buf_cap) {
-    if (need > kMaxReleaseJsonBytes) {
-      Serial.printf("[%lu] [OTA] HTTP body too large (need %u cap %u free %u largest %u)\n", millis(),
-                    static_cast<unsigned>(need), static_cast<unsigned>(kMaxReleaseJsonBytes),
-                    static_cast<unsigned>(ESP.getFreeHeap()),
-                    static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
-      return ESP_ERR_NO_MEM;
-    }
-
-    size_t ncap = local_buf_cap * 2;
-    if (ncap < need) {
-      ncap = need;
-    }
-    if (ncap > kMaxReleaseJsonBytes) {
-      ncap = kMaxReleaseJsonBytes;
-    }
-    char* nb = static_cast<char*>(realloc(local_buf, ncap));
-    if (nb == nullptr) {
-      Serial.printf("[%lu] [OTA] HTTP body buffer realloc failed (cap %u need %u free %u largest %u)\n", millis(),
-                    static_cast<unsigned>(ncap), static_cast<unsigned>(need), static_cast<unsigned>(ESP.getFreeHeap()),
-                    static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
-      return ESP_ERR_NO_MEM;
-    }
-    local_buf = nb;
-    local_buf_cap = ncap;
-  }
-
-  memcpy(local_buf + output_len, event->data, static_cast<size_t>(chunk));
-  output_len += chunk;
-  local_buf[output_len] = '\0';
-
-  if (output_len % 4096 < chunk) {
-    esp_task_wdt_reset();
-  }
-
-  return ESP_OK;
-}
+// This fork's releases, not upstream's. Left pointing at CrossPoint, "check for
+// update" fetched their newest build and flashed it over the top: every app on
+// the shelf gone, and worse, a cross-chip flash. Upstream's gh_release targets
+// the X4 and X3, which are ESP32-C3; this fork's devices (X4 Pro, Sticky) are
+// S3. Upstream added a guard against exactly that (crosspoint-reader#2880),
+// which says how it ends without one.
+constexpr char latestReleaseUrl[] = "https://api.github.com/repos/ma-r-s/crossplay/releases/latest";
 }  // namespace
 
-struct OtaGithubCheckCtx {
-  OtaUpdater* updater;
-  OtaUpdater::OtaUpdaterError result;
-  SemaphoreHandle_t done;
-};
-
-/** FreeRTOS task entry point that runs the GitHub update check and signals completion via a semaphore. */
-void otaGithubCheckTask(void* param) {
-  auto* ctx = static_cast<OtaGithubCheckCtx*>(param);
-  ctx->result = ctx->updater->checkForUpdateWorker();
-  xSemaphoreGive(ctx->done);
-  vTaskDelete(nullptr);
-}
-
-/** Spawn a background task to check GitHub for updates and block until it completes. */
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
-  SemaphoreHandle_t done = xSemaphoreCreateBinary();
-  if (done == nullptr) {
-    return OOM_ERROR;
-  }
+  LOG_DBG("OTA", "Checking for update (current: %s)", CROSSPOINT_VERSION);
 
-  auto* ctx = new (std::nothrow) OtaGithubCheckCtx{this, INTERNAL_UPDATE_ERROR, done};
-  if (ctx == nullptr) {
-    vSemaphoreDelete(done);
-    return OOM_ERROR;
-  }
-
-  if (xTaskCreate(otaGithubCheckTask, "otaGhChk", kGithubCheckTaskStack, ctx, kGithubCheckTaskPrio, nullptr) !=
-      pdPASS) {
-    delete ctx;
-    vSemaphoreDelete(done);
-    Serial.printf("[%lu] [OTA] Failed to spawn GitHub check task (stack %d)\n", millis(), kGithubCheckTaskStack);
-    return OOM_ERROR;
-  }
-
-  while (xSemaphoreTake(done, pdMS_TO_TICKS(500)) != pdTRUE) {
-    esp_task_wdt_reset();
-  }
-
-  const OtaUpdaterError out = ctx->result;
-  delete ctx;
-  vSemaphoreDelete(done);
-  return out;
-}
-
-/** Fetch and parse the latest GitHub release JSON to find a firmware.bin asset. */
-OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
-  JsonDocument filter;
-  esp_err_t esp_err;
-  JsonDocument doc;
-
-  esp_http_client_config_t client_config = {};
-  client_config.url = latestReleaseUrl;
-  client_config.event_handler = event_handler;
-  client_config.buffer_size = 2048;
-  client_config.buffer_size_tx = 1024;
-  client_config.timeout_ms = 25000;
-  client_config.skip_cert_common_name_check = true;
-  client_config.crt_bundle_attach = esp_crt_bundle_attach;
-  client_config.keep_alive_enable = false;
-
-  if (local_buf != nullptr) {
-    free(local_buf);
-    local_buf = nullptr;
-  }
-  output_len = 0;
-  local_buf_cap = 0;
-
-  struct localBufCleaner {
-    char** bufPtr;
-    ~localBufCleaner() {
-      if (*bufPtr) {
-        free(*bufPtr);
-        *bufPtr = nullptr;
-      }
-      output_len = 0;
-      local_buf_cap = 0;
-    }
-  } localBufCleaner = {&local_buf};
-
-  esp_http_client_handle_t client_handle = esp_http_client_init(&client_config);
-  if (!client_handle) {
-    Serial.printf("[%lu] [OTA] HTTP Client Handle Failed\n", millis());
-    return INTERNAL_UPDATE_ERROR;
-  }
-
-  esp_err = esp_http_client_set_header(client_handle, "User-Agent", "Inx-ESP32-" INX_VERSION);
-  if (esp_err != ESP_OK) {
-    Serial.printf("[%lu] [OTA] esp_http_client_set_header Failed : %s\n", millis(), esp_err_to_name(esp_err));
-    esp_http_client_cleanup(client_handle);
-    return INTERNAL_UPDATE_ERROR;
-  }
-
-  vTaskDelay(pdMS_TO_TICKS(200));
-  esp_task_wdt_reset();
-
-  esp_err = esp_http_client_perform(client_handle);
-
-  esp_task_wdt_reset();
-  if (esp_err != ESP_OK) {
-    Serial.printf("[%lu] [OTA] esp_http_client_perform Failed : %s\n", millis(), esp_err_to_name(esp_err));
-    esp_http_client_cleanup(client_handle);
+  // Stream the ~32KB release JSON straight into the parser as it arrives.
+  // Buffering the whole body in a std::string would add a growing allocation
+  // on top of the TLS session's heap during the fetch; with -fno-exceptions an
+  // OOM there aborts. fetchUrl handles the verified-https GET, redirects, and
+  // User-Agent (see HttpDownloader).
+  ReleaseJsonParser releaseParser;
+  // FORK CHANGE: upstream suffixes the asset per board (firmware-x4pro.bin)
+  // because one release feeds many devices. This fork's x4pro asks for the
+  // literal "firmware.bin": every unit in the field since v1.0.0 asks for
+  // that name, and adopting the suffix would strand them -- their updater
+  // would keep finding firmware.bin (and flash it), while a suffixed build
+  // would stop finding anything the moment a release dropped the plain name.
+  // Boards added after that (sticky, ...) use the per-board suffix from day
+  // one; CROSSPOINT_RELEASE_ASSET in FirmwareBoardTag.h encodes both rules,
+  // and host-tests/release pins the workflow to whatever each device asks
+  // for.
+  releaseParser.setFirmwareAssetName(CROSSPOINT_RELEASE_ASSET);
+  const bool ok = HttpDownloader::fetchUrl(latestReleaseUrl, [&releaseParser](const uint8_t* data, size_t len) {
+    releaseParser.feed(reinterpret_cast<const char*>(data), len);
+    return true;
+  });
+  if (!ok) {
+    LOG_ERR("OTA", "Release check fetch failed");
     return HTTP_ERROR;
   }
 
-  esp_err = esp_http_client_cleanup(client_handle);
-  if (esp_err != ESP_OK) {
-    Serial.printf("[%lu] [OTA] esp_http_client_cleanupp Failed : %s\n", millis(), esp_err_to_name(esp_err));
-    return INTERNAL_UPDATE_ERROR;
-  }
+  LOG_DBG("OTA", "Parser results: tag=%s firmware=%s", releaseParser.foundTag() ? "yes" : "no",
+          releaseParser.foundFirmware() ? "yes" : "no");
 
-  filter["tag_name"] = true;
-  filter["assets"][0]["name"] = true;
-  filter["assets"][0]["browser_download_url"] = true;
-  filter["assets"][0]["size"] = true;
-  if (local_buf == nullptr || output_len <= 0) {
-    Serial.printf("[%lu] [OTA] Empty HTTP body (len=%d)\n", millis(), output_len);
-    return HTTP_ERROR;
-  }
-
-  const DeserializationError error = deserializeJson(doc, local_buf, DeserializationOption::Filter(filter));
-  if (error) {
-    Serial.printf("[%lu] [OTA] JSON parse failed: %s\n", millis(), error.c_str());
+  if (!releaseParser.foundTag()) {
+    LOG_ERR("OTA", "No tag_name in release JSON");
     return JSON_PARSE_ERROR;
   }
 
-  if (!doc["tag_name"].is<std::string>()) {
-    Serial.printf("[%lu] [OTA] No tag_name found\n", millis());
-    return JSON_PARSE_ERROR;
-  }
-
-  if (!doc["assets"].is<JsonArray>()) {
-    Serial.printf("[%lu] [OTA] No assets found\n", millis());
-    return JSON_PARSE_ERROR;
-  }
-
-  latestVersion = doc["tag_name"].as<std::string>();
-
-  for (int i = 0; i < doc["assets"].size(); i++) {
-    if (doc["assets"][i]["name"] == "firmware.bin") {
-      otaUrl = doc["assets"][i]["browser_download_url"].as<std::string>();
-      otaSize = doc["assets"][i]["size"].as<size_t>();
-      totalSize = otaSize;
-      updateAvailable = true;
-      break;
-    }
-  }
-
-  if (!updateAvailable) {
-    Serial.printf("[%lu] [OTA] No firmware.bin asset found\n", millis());
+  if (!releaseParser.foundFirmware()) {
+    LOG_INF("OTA", "No " CROSSPOINT_RELEASE_ASSET " asset in latest release");
     return NO_UPDATE;
   }
 
-  Serial.printf("[%lu] [OTA] Found update: %s\n", millis(), latestVersion.c_str());
+  latestVersion = releaseParser.getTagName();
+  // Tags carry a v prefix ("v1.3.3"); CROSSPOINT_VERSION does not ("1.3.3").
+  // Comparing them raw meant isUpdateNewer()'s sscanf choked on the 'v' and
+  // compared uninitialized ints -- every install since v1.0.0 rode on that
+  // garbage reading as "newer", and a device already on the latest release
+  // was offered itself as an update. Found on hardware, naturally.
+  if (!latestVersion.empty() && (latestVersion[0] == 'v' || latestVersion[0] == 'V')) {
+    latestVersion.erase(0, 1);
+  }
+  otaUrl = releaseParser.getFirmwareUrl();
+  otaSize = releaseParser.getFirmwareSize();
+  totalSize = otaSize;
+  updateAvailable = true;
+
+  LOG_DBG("OTA", "Found update: tag=%s size=%zu", latestVersion.c_str(), otaSize);
+  LOG_DBG("OTA", "Firmware URL: %s", otaUrl.c_str());
   return OK;
 }
 
-/** Check whether the latest known release version is newer than the running firmware. */
 bool OtaUpdater::isUpdateNewer() const {
-  if (!updateAvailable || latestVersion.empty() || latestVersion == INX_VERSION) {
+  if (!updateAvailable || latestVersion.empty() || latestVersion == CROSSPOINT_VERSION) {
     return false;
   }
 
-  return versionIsNewer(parseVersion(latestVersion), parseVersion(INX_VERSION));
+  int currentMajor = 0, currentMinor = 0, currentPatch = 0;
+  int latestMajor = 0, latestMinor = 0, latestPatch = 0;
+
+  const auto currentVersion = CROSSPOINT_VERSION;
+
+  // semantic version check (only match on 3 segments). A tag that does not
+  // parse as three numbers is not an update this device can reason about, so
+  // it is refused rather than compared as garbage.
+  if (sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch) != 3) {
+    return false;
+  }
+  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
+
+  /*
+   * Compare major versions.
+   * If they differ, return true if latest major version greater than current major version
+   * otherwise return false.
+   */
+  if (latestMajor != currentMajor) return latestMajor > currentMajor;
+
+  /*
+   * Compare minor versions.
+   * If they differ, return true if latest minor version greater than current minor version
+   * otherwise return false.
+   */
+  if (latestMinor != currentMinor) return latestMinor > currentMinor;
+
+  /*
+   * Check patch versions.
+   */
+  if (latestPatch != currentPatch) return latestPatch > currentPatch;
+
+  // If we reach here, it means all segments are equal.
+  // One final check, if we're on an RC build (contains "-rc"), we should consider the latest version as newer even if
+  // the segments are equal, since RC builds are pre-release versions.
+  if (strstr(currentVersion, "-rc") != nullptr) {
+    return true;
+  }
+
+  return false;
 }
 
-/** Return the version string of the latest release found. */
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
 
-/** Download and install the latest update over HTTPS. */
-OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
-  const auto result = downloadUpdate();
-  if (result != OK) {
-    return result;
-  }
-  return finalizeDownloadedUpdate();
-}
-
-void otaDownloadTask(void* param) {
-  auto* ctx = static_cast<OtaDownloadTaskCtx*>(param);
-  ctx->result = ctx->updater->downloadUpdateWorker(ctx->progress);
-  xSemaphoreGive(ctx->done);
-  vTaskDelete(nullptr);
-}
-
-/** Download the latest update without activating the new OTA partition. */
-OtaUpdater::OtaUpdaterError OtaUpdater::downloadUpdate(const ProgressCallback& progress) {
-  SemaphoreHandle_t done = xSemaphoreCreateBinary();
-  if (done == nullptr) return OOM_ERROR;
-
-  auto* ctx = new (std::nothrow) OtaDownloadTaskCtx{this, progress, INTERNAL_UPDATE_ERROR, done};
-  if (ctx == nullptr) {
-    vSemaphoreDelete(done);
-    return OOM_ERROR;
-  }
-
-  if (xTaskCreate(otaDownloadTask, "otaDownload", kOtaDownloadTaskStack, ctx, kOtaDownloadTaskPrio, nullptr) !=
-      pdPASS) {
-    delete ctx;
-    vSemaphoreDelete(done);
-    Serial.printf("[%lu] [OTA] Failed to spawn download task (stack %d)\n", millis(), kOtaDownloadTaskStack);
-    return OOM_ERROR;
-  }
-
-  while (xSemaphoreTake(done, pdMS_TO_TICKS(500)) != pdTRUE) {
-    taskYIELD();
-  }
-  const OtaUpdaterError result = ctx->result;
-  delete ctx;
-  vSemaphoreDelete(done);
-  return result;
-}
-
-/** Worker running the HTTPS OTA download on a dedicated, large-stack task. */
-OtaUpdater::OtaUpdaterError OtaUpdater::downloadUpdateWorker(const ProgressCallback& progress) {
+OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgress, void* ctx) {
   if (!isUpdateNewer()) {
     return UPDATE_OLDER_ERROR;
   }
 
-  if (otaHandle != nullptr) {
-    return INTERNAL_UPDATE_ERROR;
-  }
-  esp_err_t esp_err;
-
-  unsigned lastLoggedPercent = 0;
-
-  esp_http_client_config_t client_config = {};
-  client_config.url = otaUrl.c_str();
-  client_config.timeout_ms = 15000;
-  client_config.buffer_size = 8192;
-  client_config.buffer_size_tx = 8192;
-  client_config.skip_cert_common_name_check = true;
-  client_config.crt_bundle_attach = esp_crt_bundle_attach;
-  client_config.keep_alive_enable = true;
-
-  esp_https_ota_config_t ota_config = {};
-  ota_config.http_config = &client_config;
-  ota_config.http_client_init_cb = http_client_set_header_cb;
-
-  esp_wifi_set_ps(WIFI_PS_NONE);
-
-  otaPartition = esp_ota_get_next_update_partition(nullptr);
-
-  esp_err = esp_https_ota_begin(&ota_config, &otaHandle);
-  if (esp_err != ESP_OK) {
-    Serial.printf("[%lu] [OTA] HTTP OTA Begin Failed: %s\n", millis(), esp_err_to_name(esp_err));
-    otaHandle = nullptr;
-    otaPartition = nullptr;
-    return INTERNAL_UPDATE_ERROR;
-  }
-
-  do {
-    esp_err = esp_https_ota_perform(otaHandle);
-    const size_t processed = esp_https_ota_get_image_len_read(otaHandle);
-    processedSize = processed;
-    const size_t total = totalSize.load();
-    const unsigned percent = total > 0 ? static_cast<unsigned>((processed * 100U) / total) : 0;
-    if (percent >= lastLoggedPercent + 25 || (total > 0 && processed >= total)) {
-      lastLoggedPercent = percent;
-      Serial.printf("[%lu] [OTA] Download progress: %u%% (%u / %u bytes)\n", millis(), percent,
-                    static_cast<unsigned>(processed), static_cast<unsigned>(total));
-      if (progress) {
-        progress(processed, total);
-      }
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  } while (esp_err == ESP_ERR_HTTPS_OTA_IN_PROGRESS);
-
-  esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
-
-  if (esp_err != ESP_OK) {
-    Serial.printf("[%lu] [OTA] esp_https_ota_perform Failed: %s\n", millis(), esp_err_to_name(esp_err));
-    esp_https_ota_abort(otaHandle);
-    otaHandle = nullptr;
-    otaPartition = nullptr;
-    return HTTP_ERROR;
-  }
-
-  if (!esp_https_ota_is_complete_data_received(otaHandle)) {
-    Serial.printf("[%lu] [OTA] esp_https_ota_is_complete_data_received Failed: %s\n", millis(),
-                  esp_err_to_name(esp_err));
-    esp_https_ota_abort(otaHandle);
-    otaHandle = nullptr;
-    otaPartition = nullptr;
-    return INTERNAL_UPDATE_ERROR;
-  }
-
-  Serial.printf("[%lu] [OTA] Download completed; waiting for installation confirmation\n", millis());
-  return OK;
-}
-
-/** Activate the downloaded OTA image after explicit user confirmation. */
-OtaUpdater::OtaUpdaterError OtaUpdater::finalizeDownloadedUpdate() {
-  if (otaHandle == nullptr) {
-    return INTERNAL_UPDATE_ERROR;
-  }
-
-  const esp_err_t esp_err = esp_https_ota_finish(otaHandle);
-  otaHandle = nullptr;
-  otaPartition = nullptr;
-  if (esp_err != ESP_OK) {
-    Serial.printf("[%lu] [OTA] esp_https_ota_finish Failed: %s\n", millis(), esp_err_to_name(esp_err));
-    return INTERNAL_UPDATE_ERROR;
-  }
-
-  Serial.printf("[%lu] [OTA] Update completed\n", millis());
-#ifndef SIMULATOR
-  Preferences prefs;
-  if (prefs.begin("inx-ota", false)) {
-    prefs.putString("changelog", latestVersion.c_str());
-    prefs.end();
-  }
-#endif
-  return OK;
-}
-
-/** Abort a downloaded OTA image without changing the active boot slot. */
-void OtaUpdater::abortDownloadedUpdate() {
-  if (otaHandle != nullptr) {
-    esp_https_ota_abort(otaHandle);
-    otaHandle = nullptr;
-    if (otaPartition != nullptr) {
-      const auto* partition = static_cast<const esp_partition_t*>(otaPartition);
-      const esp_err_t eraseErr = esp_partition_erase_range(partition, 0, partition->size);
-      Serial.printf("[%lu] [OTA] Inactive partition cleanup: %s\n", millis(), esp_err_to_name(eraseErr));
-    }
-    otaPartition = nullptr;
-    Serial.printf("[%lu] [OTA] Download aborted\n", millis());
-  }
-}
-
-/** Install a firmware image read from the SD card. */
-OtaUpdater::OtaUpdaterError OtaUpdater::installUpdateFromSd(const char* firmwarePath) {
-  if (firmwarePath == nullptr || firmwarePath[0] == '\0') {
-    return INTERNAL_UPDATE_ERROR;
-  }
-
-  FsFile file;
-  if (!SdMan.openFileForRead("OTA", firmwarePath, file)) {
-    Serial.printf("[%lu] [OTA] SD firmware not found: %s\n", millis(), firmwarePath);
-    return HTTP_ERROR;
-  }
-
-  const size_t firmwareSize = file.size();
-  if (firmwareSize == 0) {
-    Serial.printf("[%lu] [OTA] SD firmware is empty: %s\n", millis(), firmwarePath);
-    file.close();
-    return INTERNAL_UPDATE_ERROR;
-  }
-
+  // esp_https_ota is hardwired to esp-tls/mbedTLS, whose precompiled build on this
+  // package can't negotiate TLS 1.3 (see SecureClient.h). Drive the OTA partition
+  // ourselves and stream the firmware through HttpDownloader, which runs over
+  // wolfSSL when FREEINK_NET_WOLFSSL is set, reusing its redirect handling for the
+  // GitHub -> CDN hop.
   const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);
-  if (updatePartition == nullptr) {
-    Serial.printf("[%lu] [OTA] No OTA update partition available\n", millis());
-    file.close();
+  if (!updatePartition) {
+    LOG_ERR("OTA", "No OTA partition available");
     return INTERNAL_UPDATE_ERROR;
   }
 
-  Serial.printf("[%lu] [OTA] Installing SD firmware %s (%u bytes) to %s\n", millis(), firmwarePath,
-                static_cast<unsigned>(firmwareSize), updatePartition->label);
+  // A device keeps whatever partition table it was installed with: an OTA
+  // writes the app partition and otadata, never the table at 0x8000. Devices
+  // flashed before the spiffs partition was reclaimed still have 6.25MB slots
+  // while the release is built against 7.94MB ones, so an image can legitimately
+  // be too big for the device asking for it. Caught here, from the size the
+  // release already told us, rather than 6MB into a download that esp_ota_write
+  // would end with a generic write failure.
+  if (otaSize > 0 && otaSize > updatePartition->size) {
+    LOG_ERR("OTA", "image %zu > partition %zu on '%s': device needs a USB reflash to repartition", otaSize,
+            static_cast<size_t>(updatePartition->size), updatePartition->label);
+    return TOO_LARGE_ERROR;
+  }
 
   esp_ota_handle_t otaHandle = 0;
-  esp_err_t err = esp_ota_begin(updatePartition, firmwareSize, &otaHandle);
-  if (err != ESP_OK) {
-    Serial.printf("[%lu] [OTA] esp_ota_begin failed: %s\n", millis(), esp_err_to_name(err));
-    file.close();
+  esp_err_t esp_err = esp_ota_begin(updatePartition, OTA_SIZE_UNKNOWN, &otaHandle);
+  if (esp_err != ESP_OK) {
+    LOG_ERR("OTA", "esp_ota_begin failed: %s", esp_err_to_name(esp_err));
     return INTERNAL_UPDATE_ERROR;
   }
 
-  uint8_t buffer[1024];
+  /* For better timing and connectivity, we disable power saving for WiFi */
+  esp_wifi_set_ps(WIFI_PS_NONE);
+
   processedSize = 0;
-  totalSize = firmwareSize;
-  unsigned lastLoggedPercent = 0;
-
-  while (processedSize < firmwareSize) {
-    const size_t toRead = std::min(sizeof(buffer), firmwareSize - processedSize);
-    const int readBytes = file.read(buffer, toRead);
-    if (readBytes <= 0) {
-      Serial.printf("[%lu] [OTA] SD read failed at %u / %u\n", millis(), static_cast<unsigned>(processedSize),
-                    static_cast<unsigned>(firmwareSize));
-      esp_ota_abort(otaHandle);
-      file.close();
-      return HTTP_ERROR;
+  int lastReportedPct = -1;
+  bool flashOk = true;
+  // The image streams in chunks; only the first bytes carry the header. Buffer
+  // the first 14 bytes so we can read chip_id (esp_image_header_t offset 12)
+  // and reject a wrong-MCU image before it overwrites the OTA partition.
+  uint8_t hdr[14];
+  size_t hdrLen = 0;
+  bool wrongChip = false;
+  // All S3 boards share a chip_id, so also scan the stream for the embedded
+  // board tag (FirmwareBoardTag.h). An untagged image passes; a tag naming a
+  // different board aborts the download. The wrong image may partially land in
+  // the inactive OTA slot, but esp_ota_abort() below means it never becomes
+  // the boot target.
+  board_tag::Scanner tagScanner;
+  const bool fetchOk = HttpDownloader::fetchUrl(otaUrl, [&](const uint8_t* data, size_t len) {
+    if (hdrLen < sizeof(hdr)) {
+      const size_t take = std::min(len, sizeof(hdr) - hdrLen);
+      std::memcpy(hdr + hdrLen, data, take);
+      hdrLen += take;
+      if (hdrLen == sizeof(hdr)) {
+        uint16_t imageChip;
+        std::memcpy(&imageChip, hdr + 12, sizeof(imageChip));
+        const uint16_t deviceChip = firmware_flash::runningPartitionChipId();
+        if (deviceChip != 0xFFFF && imageChip != deviceChip) {
+          LOG_ERR("OTA", "wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
+          wrongChip = true;
+          return false;  // abort the transfer
+        }
+      }
     }
-
-    err = esp_ota_write(otaHandle, buffer, static_cast<size_t>(readBytes));
-    if (err != ESP_OK) {
-      Serial.printf("[%lu] [OTA] esp_ota_write failed: %s\n", millis(), esp_err_to_name(err));
-      esp_ota_abort(otaHandle);
-      file.close();
-      return INTERNAL_UPDATE_ERROR;
+    tagScanner.feed(data, len);
+    if (tagScanner.mismatch()) {
+      LOG_ERR("OTA", "wrong board: image=%s device=%.*s", tagScanner.foundName(),
+              static_cast<int>(board_tag::boardNameLen()), board_tag::boardName());
+      return false;  // abort the transfer
     }
-
-    const size_t processed = processedSize.load() + static_cast<size_t>(readBytes);
-    processedSize = processed;
-    const unsigned percent = static_cast<unsigned>((processed * 100U) / firmwareSize);
-    if (percent >= lastLoggedPercent + 10 || processed >= firmwareSize) {
-      lastLoggedPercent = percent;
-      Serial.printf("[%lu] [OTA] SD install progress: %u%% (%u / %u bytes)\n", millis(), percent,
-                    static_cast<unsigned>(processed), static_cast<unsigned>(firmwareSize));
+    if (esp_ota_write(otaHandle, data, len) != ESP_OK) {
+      flashOk = false;
+      return false;  // abort the transfer
     }
-    esp_task_wdt_reset();
-    vTaskDelay(1);
+    processedSize += len;
+    // Fire the callback only on whole-percent change. Per-chunk updates wake the
+    // render task, whose framebuffer work contends with TLS on the internal arena,
+    // and e-ink can't repaint faster than a percent tick anyway.
+    if (onProgress && totalSize > 0) {
+      const int pct = static_cast<int>(static_cast<uint64_t>(processedSize) * 100 / totalSize);
+      if (pct != lastReportedPct) {
+        lastReportedPct = pct;
+        onProgress(ctx);
+      }
+    }
+    return true;
+  });
+
+  /* Return back to default power saving for WiFi in case of failing */
+  esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+
+  if (wrongChip || tagScanner.mismatch()) {
+    LOG_ERR("OTA", "Firmware install aborted: wrong device");
+    esp_ota_abort(otaHandle);
+    return WRONG_DEVICE_ERROR;
   }
 
-  file.close();
+  if (!fetchOk || !flashOk) {
+    LOG_ERR("OTA", "Firmware install failed (%s)", flashOk ? "download" : "flash write");
+    esp_ota_abort(otaHandle);
+    return flashOk ? HTTP_ERROR : INTERNAL_UPDATE_ERROR;
+  }
 
-  err = esp_ota_end(otaHandle);
-  if (err != ESP_OK) {
-    Serial.printf("[%lu] [OTA] esp_ota_end failed: %s\n", millis(), esp_err_to_name(err));
+  esp_err = esp_ota_end(otaHandle);  // verifies the written image
+  if (esp_err != ESP_OK) {
+    LOG_ERR("OTA", "esp_ota_end failed: %s", esp_err_to_name(esp_err));
     return INTERNAL_UPDATE_ERROR;
   }
 
-  err = esp_ota_set_boot_partition(updatePartition);
-  if (err != ESP_OK) {
-    Serial.printf("[%lu] [OTA] esp_ota_set_boot_partition failed: %s\n", millis(), esp_err_to_name(err));
+  esp_err = esp_ota_set_boot_partition(updatePartition);
+  if (esp_err != ESP_OK) {
+    LOG_ERR("OTA", "esp_ota_set_boot_partition failed: %s", esp_err_to_name(esp_err));
     return INTERNAL_UPDATE_ERROR;
   }
 
-  Serial.printf("[%lu] [OTA] SD firmware install completed\n", millis());
+  LOG_INF("OTA", "Update completed");
   return OK;
 }

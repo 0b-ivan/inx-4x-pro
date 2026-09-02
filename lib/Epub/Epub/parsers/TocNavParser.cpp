@@ -1,19 +1,15 @@
-/**
- * @file TocNavParser.cpp
- * @brief Definitions for TocNavParser.
- */
-
 #include "TocNavParser.h"
 
 #include <FsHelpers.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
+#include <XmlParserUtils.h>
 
-#include "../BookMetadataCache.h"
+#include "Epub/BookMetadataCache.h"
 
 bool TocNavParser::setup() {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
-    Serial.printf("[%lu] [NAV] Couldn't allocate memory for parser\n", millis());
+    LOG_DBG("NAV", "Couldn't allocate memory for parser");
     return false;
   }
 
@@ -23,15 +19,7 @@ bool TocNavParser::setup() {
   return true;
 }
 
-TocNavParser::~TocNavParser() {
-  if (parser) {
-    XML_StopParser(parser, XML_FALSE);
-    XML_SetElementHandler(parser, nullptr, nullptr);
-    XML_SetCharacterDataHandler(parser, nullptr);
-    XML_ParserFree(parser);
-    parser = nullptr;
-  }
-}
+TocNavParser::~TocNavParser() { destroyXmlParser(parser); }
 
 size_t TocNavParser::write(const uint8_t data) { return write(&data, 1); }
 
@@ -44,12 +32,8 @@ size_t TocNavParser::write(const uint8_t* buffer, const size_t size) {
   while (remainingInBuffer > 0) {
     void* const buf = XML_GetBuffer(parser, 1024);
     if (!buf) {
-      Serial.printf("[%lu] [NAV] Couldn't allocate memory for buffer\n", millis());
-      XML_StopParser(parser, XML_FALSE);
-      XML_SetElementHandler(parser, nullptr, nullptr);
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
-      parser = nullptr;
+      LOG_DBG("NAV", "Couldn't allocate memory for buffer");
+      destroyXmlParser(parser);
       return 0;
     }
 
@@ -57,13 +41,9 @@ size_t TocNavParser::write(const uint8_t* buffer, const size_t size) {
     memcpy(buf, currentBufferPos, toRead);
 
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), remainingSize == toRead) == XML_STATUS_ERROR) {
-      Serial.printf("[%lu] [NAV] Parse error at line %lu: %s\n", millis(), XML_GetCurrentLineNumber(parser),
-                    XML_ErrorString(XML_GetErrorCode(parser)));
-      XML_StopParser(parser, XML_FALSE);
-      XML_SetElementHandler(parser, nullptr, nullptr);
-      XML_SetCharacterDataHandler(parser, nullptr);
-      XML_ParserFree(parser);
-      parser = nullptr;
+      LOG_DBG("NAV", "Parse error at line %lu: %s", XML_GetCurrentLineNumber(parser),
+              XML_ErrorString(XML_GetErrorCode(parser)));
+      destroyXmlParser(parser);
       return 0;
     }
 
@@ -77,6 +57,7 @@ size_t TocNavParser::write(const uint8_t* buffer, const size_t size) {
 void XMLCALL TocNavParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<TocNavParser*>(userData);
 
+  // Track HTML structure loosely - we mainly care about finding <nav epub:type="toc">
   if (strcmp(name, "html") == 0) {
     self->state = IN_HTML;
     return;
@@ -87,28 +68,19 @@ void XMLCALL TocNavParser::startElement(void* userData, const XML_Char* name, co
     return;
   }
 
+  // Look for <nav epub:type="toc"> anywhere in body (or nested elements)
   if (self->state >= IN_BODY && strcmp(name, "nav") == 0) {
-    bool isTocNav = false;
     for (int i = 0; atts[i]; i += 2) {
-      const char* k = atts[i];
-      const char* v = atts[i + 1];
-      if ((strcmp(k, "epub:type") == 0 || strcmp(k, "type") == 0) && strcmp(v, "toc") == 0) {
-        isTocNav = true;
-        break;
+      if ((strcmp(atts[i], "epub:type") == 0 || strcmp(atts[i], "type") == 0) && strcmp(atts[i + 1], "toc") == 0) {
+        self->state = IN_NAV_TOC;
+        LOG_DBG("NAV", "Found nav toc element");
+        return;
       }
-      if (strcmp(k, "role") == 0 && strcmp(v, "doc-toc") == 0) {
-        isTocNav = true;
-        break;
-      }
-    }
-    if (isTocNav) {
-      self->state = IN_NAV_TOC;
-      Serial.printf("[%lu] [NAV] Found nav toc element\n", millis());
-      return;
     }
     return;
   }
 
+  // Only process ol/li/a if we're inside the toc nav
   if (self->state < IN_NAV_TOC) {
     return;
   }
@@ -128,7 +100,7 @@ void XMLCALL TocNavParser::startElement(void* userData, const XML_Char* name, co
 
   if (self->state == IN_LI && strcmp(name, "a") == 0) {
     self->state = IN_ANCHOR;
-
+    // Get href attribute
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "href") == 0) {
         self->currentHref = atts[i + 1];
@@ -142,6 +114,7 @@ void XMLCALL TocNavParser::startElement(void* userData, const XML_Char* name, co
 void XMLCALL TocNavParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<TocNavParser*>(userData);
 
+  // Only collect text when inside an anchor within the TOC nav
   if (self->state == IN_ANCHOR) {
     self->currentLabel.append(s, len);
   }
@@ -151,17 +124,20 @@ void XMLCALL TocNavParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<TocNavParser*>(userData);
 
   if (strcmp(name, "a") == 0 && self->state == IN_ANCHOR) {
+    // Create TOC entry when closing anchor tag (we have all data now)
     if (!self->currentLabel.empty() && !self->currentHref.empty()) {
-      std::string href = FsHelpers::normalisePath(self->baseContentPath + self->currentHref);
+      const std::string rawTarget = self->baseContentPath + self->currentHref;
+      const size_t pos = rawTarget.find('#');
+      const std::string rawPath = pos == std::string::npos ? rawTarget : rawTarget.substr(0, pos);
+      std::string href = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(rawPath));
       std::string anchor;
 
-      const size_t pos = href.find('#');
       if (pos != std::string::npos) {
-        anchor = href.substr(pos + 1);
-        href = href.substr(0, pos);
+        anchor = FsHelpers::decodeUriEscapes(rawTarget.substr(pos + 1));
       }
 
       if (self->cache) {
+        // olDepth gives us the nesting level (1-based from the outer ol)
         self->cache->createTocEntry(self->currentLabel, href, anchor, self->olDepth);
       }
 
@@ -182,14 +158,14 @@ void XMLCALL TocNavParser::endElement(void* userData, const XML_Char* name) {
     if (self->olDepth == 0) {
       self->state = IN_NAV_TOC;
     } else {
-      self->state = IN_LI;
+      self->state = IN_LI;  // Back to parent li
     }
     return;
   }
 
   if (strcmp(name, "nav") == 0 && self->state >= IN_NAV_TOC) {
     self->state = IN_BODY;
-    Serial.printf("[%lu] [NAV] Finished parsing nav toc\n", millis());
+    LOG_DBG("NAV", "Finished parsing nav toc");
     return;
   }
 }

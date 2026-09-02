@@ -1,33 +1,49 @@
 #pragma once
+#include <HalStorage.h>
 
-/**
- * @file Serialization.h
- * @brief Public interface and types for Serialization.
- */
-
-#include <SdFat.h>
-
-#include <cstdint>
-#include <string>
+#include <iostream>
 
 namespace serialization {
 template <typename T>
-inline void writePod(FsFile& file, const T& value) {
+void writePod(std::ostream& os, const T& value) {
+  os.write(reinterpret_cast<const char*>(&value), sizeof(T));
+}
+
+template <typename T>
+void writePod(HalFile& file, const T& value) {
   file.write(reinterpret_cast<const uint8_t*>(&value), sizeof(T));
 }
 
 template <typename T>
-inline void readPod(FsFile& file, T& value) {
+void readPod(std::istream& is, T& value) {
+  is.read(reinterpret_cast<char*>(&value), sizeof(T));
+}
+
+template <typename T>
+void readPod(HalFile& file, T& value) {
   file.read(reinterpret_cast<uint8_t*>(&value), sizeof(T));
 }
 
-inline void writeString(FsFile& file, const std::string& s) {
+inline void writeString(std::ostream& os, const std::string& s) {
+  const uint32_t len = s.size();
+  writePod(os, len);
+  os.write(s.data(), len);
+}
+
+inline void writeString(HalFile& file, const std::string& s) {
   const uint32_t len = s.size();
   writePod(file, len);
   file.write(reinterpret_cast<const uint8_t*>(s.data()), len);
 }
 
-inline void readString(FsFile& file, std::string& s) {
+inline void readString(std::istream& is, std::string& s) {
+  uint32_t len;
+  readPod(is, len);
+  s.resize(len);
+  is.read(&s[0], len);
+}
+
+inline void readString(HalFile& file, std::string& s) {
   uint32_t len;
   readPod(file, len);
   s.resize(len);
