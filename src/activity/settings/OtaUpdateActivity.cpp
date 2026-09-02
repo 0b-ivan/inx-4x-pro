@@ -248,6 +248,56 @@ void OtaUpdateActivity::onExit() {
   renderingMutex = nullptr;
 }
 
+bool OtaUpdateActivity::handleTouchTap(const int x, const int y) {
+  if (subActivity) return subActivity->handleTouchTap(x, y);
+  const int width = renderer.getScreenWidth();
+  const int height = renderer.getScreenHeight();
+  if (x < 0 || x >= width || y < 0 || y >= height) return false;
+  const int bodyTop = INX_THEME.drawPageHeader(renderer, "Update", 0);
+
+  // The bottom hint row is the touch equivalent of the physical Confirm key.
+  if (y >= height - 70 && x >= width / 4 && x < width * 3 / 4) {
+    touchConfirmRequested = true;
+    return true;
+  }
+
+  if (state == SOURCE_SELECTION) {
+    if (y >= bodyTop + 2 * kSourceItemHeight) {
+      touchConfirmRequested = true;
+      return true;
+    }
+    if (y >= bodyTop && y < bodyTop + 2 * kSourceItemHeight) {
+      sourceSelectedIndex = (y - bodyTop) / kSourceItemHeight;
+      // A direct tap on either source is an explicit selection and activation.
+      touchConfirmRequested = true;
+      updateRequired = true;
+      return true;
+    }
+  } else if (state == WAITING_CONFIRMATION) {
+    if (y >= bodyTop + 2 * kFirmwareItemHeight) {
+      touchConfirmRequested = true;
+      return true;
+    }
+    if (y >= bodyTop + kFirmwareItemHeight && y < bodyTop + 2 * kFirmwareItemHeight) {
+      return true;
+    }
+  } else if (state == WAITING_SD_SELECTION && !sdFirmwareFiles.empty()) {
+    if (y >= bodyTop + static_cast<int>(sdFirmwareFiles.size()) * kFirmwareItemHeight) {
+      touchConfirmRequested = true;
+      return true;
+    }
+    const int index = sdFirmwareScrollOffset + (y - bodyTop) / kFirmwareItemHeight;
+    if (y >= bodyTop && index >= 0 && index < static_cast<int>(sdFirmwareFiles.size())) {
+      sdFirmwareSelectedIndex = index;
+      updateRequired = true;
+      return true;
+    }
+  } else if (state == WAITING_SD_CONFIRMATION) {
+    return true;
+  }
+  return false;
+}
+
 void OtaUpdateActivity::displayTaskLoop() {
   while (true) {
     if (updateRequired || updater.getRender()) {
@@ -431,7 +481,8 @@ void OtaUpdateActivity::loop() {
       updateRequired = true;
       return;
     }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) || touchConfirmRequested) {
+      touchConfirmRequested = false;
       if (sourceSelectedIndex == 0) {
         xSemaphoreTake(renderingMutex, portMAX_DELAY);
         state = WIFI_SELECTION;
@@ -462,7 +513,8 @@ void OtaUpdateActivity::loop() {
   }
 
   if (state == WAITING_CONFIRMATION) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) || touchConfirmRequested) {
+      touchConfirmRequested = false;
       Serial.printf("[%lu] [OTA] New update available, starting download...\n", millis());
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = UPDATE_IN_PROGRESS;
@@ -519,7 +571,8 @@ void OtaUpdateActivity::loop() {
       return;
     }
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) || touchConfirmRequested) {
+      touchConfirmRequested = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = WAITING_SD_CONFIRMATION;
       xSemaphoreGive(renderingMutex);
@@ -540,8 +593,9 @@ void OtaUpdateActivity::loop() {
     }
 
     const std::string& firmwarePath = selectedSdFirmwarePath();
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && !firmwarePath.empty() &&
+    if ((mappedInput.wasPressed(MappedInputManager::Button::Confirm) || touchConfirmRequested) && !firmwarePath.empty() &&
         SdMan.exists(firmwarePath.c_str())) {
+      touchConfirmRequested = false;
       Serial.printf("[%lu] [OTA] Installing firmware from SD: %s\n", millis(), firmwarePath.c_str());
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       state = UPDATE_IN_PROGRESS;

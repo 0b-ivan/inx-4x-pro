@@ -13,6 +13,8 @@
 #include <freertos/task.h>
 
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <new>
 
 #include "esp_heap_caps.h"
@@ -23,12 +25,69 @@
 #include "esp_wifi.h"
 
 namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/obijuankenobiii/inx/releases/latest";
+constexpr char latestReleaseUrl[] = "https://api.github.com/repos/0b-ivan/inx-4x-pro/releases/latest";
 
 constexpr size_t kMaxReleaseJsonBytes = 12288;
 
 constexpr int kGithubCheckTaskStack = 16384;
 constexpr int kGithubCheckTaskPrio = 3;
+
+struct ParsedVersion {
+  int major = 0;
+  int minor = 0;
+  int patch = 0;
+  int prerelease = 0;
+  bool isPrerelease = false;
+  bool valid = false;
+};
+
+ParsedVersion parseVersion(std::string value) {
+  ParsedVersion version;
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  if (!value.empty() && value.front() == 'v') value.erase(0, 1);
+
+  const char* cursor = value.c_str();
+  char* end = nullptr;
+  const auto readPart = [&cursor, &end](int& target, char separator) {
+    const long parsed = std::strtol(cursor, &end, 10);
+    if (end == cursor || parsed < 0 || parsed > 9999) return false;
+    target = static_cast<int>(parsed);
+    if (separator != '\0') {
+      if (*end != separator) return false;
+      cursor = end + 1;
+    } else {
+      cursor = end;
+    }
+    return true;
+  };
+
+  if (!readPart(version.major, '.') || !readPart(version.minor, '.') || !readPart(version.patch, '\0')) return version;
+  if (*cursor == '\0') {
+    version.valid = true;
+    return version;
+  }
+
+  const std::string suffix(cursor);
+  const auto alpha = suffix.find("alpha.");
+  if (alpha == std::string::npos) return version;
+  const char* alphaNumber = suffix.c_str() + alpha + 6;
+  const long parsed = std::strtol(alphaNumber, &end, 10);
+  if (end == alphaNumber || *end != '\0' || parsed < 0 || parsed > 9999) return version;
+  version.prerelease = static_cast<int>(parsed);
+  version.isPrerelease = true;
+  version.valid = true;
+  return version;
+}
+
+bool versionIsNewer(const ParsedVersion& latest, const ParsedVersion& current) {
+  if (!latest.valid || !current.valid) return false;
+  if (latest.major != current.major) return latest.major > current.major;
+  if (latest.minor != current.minor) return latest.minor > current.minor;
+  if (latest.patch != current.patch) return latest.patch > current.patch;
+  if (latest.isPrerelease != current.isPrerelease) return !latest.isPrerelease;
+  return latest.isPrerelease && latest.prerelease > current.prerelease;
+}
 
 char* local_buf = nullptr;
 int output_len = 0;
@@ -276,19 +335,7 @@ bool OtaUpdater::isUpdateNewer() const {
     return false;
   }
 
-  int currentMajor, currentMinor, currentPatch;
-  int latestMajor, latestMinor, latestPatch;
-
-  const auto currentVersion = INX_VERSION;
-
-  sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
-  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
-
-  if (latestMajor != currentMajor) return latestMajor > currentMajor;
-
-  if (latestMinor != currentMinor) return latestMinor > currentMinor;
-
-  return latestPatch > currentPatch;
+  return versionIsNewer(parseVersion(latestVersion), parseVersion(INX_VERSION));
 }
 
 /** Return the version string of the latest release found. */
