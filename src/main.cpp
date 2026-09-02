@@ -92,6 +92,7 @@ void setupDisplayAndFonts();
 void onNetworkModeSelected(NetworkMode mode);
 void openReaderFromCallback(const std::string& path);
 bool handleGlobalPowerRefresh();
+bool handleGlobalHomeButton();
 bool handleScreenTouch();
 #ifndef SIMULATOR
 bool handleX4ProFrontlightDoubleClick();
@@ -271,7 +272,7 @@ bool handleX4ProFrontlightDoubleClick() {
   }
 
   const unsigned long now = millis();
-  if (gpio.getHeldTime() > X4PRO_POWER_CLICK_MAX_HOLD_MS) {
+  if (gpio.getHeldTime() > 300) {
     lastX4ProPowerClickAt = 0;
     return false;
   }
@@ -299,6 +300,17 @@ bool handleGlobalPowerRefresh() {
   }
 
   renderer.displayBuffer(HalDisplay::MANUAL_REFRESH);
+  return true;
+}
+
+bool handleGlobalHomeButton() {
+  if (!input.wasReleased(MappedInputManager::Button::Power)) {
+    return false;
+  }
+  if (gpio.getHeldTime() > 300) {
+    return false;
+  }
+  onGoToRecent();
   return true;
 }
 
@@ -403,7 +415,8 @@ void setup() {
   powerSleepArmed = wakeReason != HalGPIO::WakeupReason::PowerButton;
   switch (wakeReason) {
     case HalGPIO::WakeupReason::PowerButton:
-      verifyPowerButtonDuration();
+      // A short press is a valid wake-and-home action. Keep running after the
+      // wake event instead of interpreting it as an aborted power-on.
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       gpio.startDeepSleep();
@@ -470,6 +483,11 @@ void loop() {
 #endif
 
   if (handleGlobalPowerRefresh()) {
+    delay(10);
+    return;
+  }
+
+  if (handleGlobalHomeButton()) {
     delay(10);
     return;
   }
