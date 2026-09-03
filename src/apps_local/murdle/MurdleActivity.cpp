@@ -464,12 +464,13 @@ void MurdleActivity::routeAction(const int action, const int value) {
 // ---------------------------------------------------------------------------
 
 void MurdleActivity::render(RenderLock&&) {
+  murdletext::setGerman(I18N.getLanguage() == Language::DE);
   renderer.clearScreen();
   // Jersey throughout, like chess and insider. A clue is a sentence or two, not
   // a screenful of prose, so this game does not need the reading cut -- and the
   // first attempt at it put the *header* and the *buttons* in a serif, which is
   // the device's voice wearing the app's.
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions);

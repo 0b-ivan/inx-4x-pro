@@ -228,7 +228,7 @@ void DungeonActivity::loop() {
 
 void DungeonActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer, toybox::toyboxFaces());
+  auto target = toybox::makeTarget(renderer, toybox::toyboxFaces());
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions);

@@ -196,8 +196,8 @@ void WavelengthActivity::saveState() {
 wavelengthui::Spectrum WavelengthActivity::spectrumAt(const int index) const {
   wavelengthui::Spectrum s;
   if (index >= 0 && index < wl::kPairCountEn) {
-    s.top = wl::kPairsEn[index].top;
-    s.bottom = wl::kPairsEn[index].bottom;
+    s.top = std::strcmp(wl::kPairsEn[index].top, "ROUND") == 0 ? "RUND" : wl::kPairsEn[index].top;
+    s.bottom = std::strcmp(wl::kPairsEn[index].bottom, "ROUND") == 0 ? "RUND" : wl::kPairsEn[index].bottom;
   }
   return s;
 }
@@ -551,7 +551,7 @@ void WavelengthActivity::render(RenderLock&&) {
   // against the deck, a quarter of them are wider than the panel at the next
   // size up.
   const toybox::Faces faces{toybox::kButtonFontId, toybox::kDisplayFontId, toybox::kHugeFontId};
-  fui::GfxRendererTarget target_ = toybox::makeTarget(renderer, faces);
+  auto target_ = toybox::makeTarget(renderer, faces);
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target_, target_.deviceContext(), noInput, interactions);

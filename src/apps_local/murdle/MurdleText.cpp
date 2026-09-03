@@ -15,6 +15,45 @@ using murdle::Puzzle;
 
 namespace {
 
+bool german = false;
+
+static constexpr const char* kGermanWeapons[] = {
+    "die Axt",       "den Schlaeger", "den Gehstock", "den Dolch",       "die Gabel",
+    "die Pistole",   "den Hammer",    "das Buegeleisen", "das Glas",     "das Messer",
+    "die Lampe",     "den Becher",    "den Nagel",    "das Ruder",       "die Pfanne",
+    "das Seil",      "den Spaten",    "die Taschenlampe", "die Vase",    "den Draht",
+};
+
+static constexpr const char* kGermanWeaponNames[] = {
+    "AXT", "SCHLAEGER", "GEHSTOCK", "DOLCH", "GABEL", "PISTOLE", "HAMMER", "BUEGELEISEN", "GLAS", "MESSER",
+    "LAMPE", "BECHER", "NAGEL", "RUDER", "PFANNE", "SEIL", "SPATEN", "TASCHENLAMPE", "VASE", "DRAHT",
+};
+
+static constexpr const char* kGermanPlaces[] = {
+    "auf dem Dachboden", "in der Scheune", "in der Hoehle", "am Anleger",
+    "auf dem Bauernhof", "im Garten",       "in der Halle",  "im Gasthaus",
+    "in der Kueche",     "am See",          "in der Muehle",  "im Buero",
+    "im Park",           "auf dem Dach",    "im Arbeitszimmer", "im Turm",
+};
+
+static constexpr const char* kGermanMotives[] = {
+    "Wut", "Schulden", "Neid", "Angst", "Gier", "Hass", "Gerechtigkeit", "Liebe", "Mitleid", "Macht", "Rache", "Scham",
+};
+
+static constexpr const char* kGermanWeaponTraits[] = {
+    "Saegespaene daran", "Band am Griff", "eine silberne Spitze", "Blut daran", "eine verbogene Zinke",
+    "ein abgefeuerter Schuss", "ein lockerer Kopf", "eine Brandspur", "Honig darin", "eine schartige Klinge",
+    "ein ausgefranstes Kabel", "Lippenstift am Rand", "Rost daran", "Sand daran", "Fett daran", "dreizehn Knoten",
+    "getrockneter Schlamm", "eine leere Batterie", "Blattgold daran", "rote Farbe daran",
+};
+
+static constexpr const char* kGermanPlaceTraits[] = {
+    "eine schwingende Luke", "loses Stroh", "ein Echo", "eine knarrende Planke", "ein bellender Hund",
+    "ein summender Bienenstock", "eine stehende Uhr", "eine unbezahlte Rechnung", "eine leere Speisekammer",
+    "aufziehender Nebel", "ein drehendes Rad", "ein verschlossener Tresor", "ein Drachen im Baum",
+    "eine Taubenfeder", "eine offene Schublade", "ein langer Schatten",
+};
+
 int popcount(uint8_t mask) {
   int n = 0;
   while (mask) {
@@ -58,6 +97,20 @@ const murdle::PlaceEntry& placeOf(const Puzzle& p, const int item) {
 }
 const murdle::MotiveEntry& motiveOf(const Puzzle& p, const int item) {
   return murdle::kMotives[p.cast[static_cast<int>(Cat::Motive)][item]];
+}
+
+const char* germanPhraseOf(const Puzzle& p, const int cat, const int item) {
+  switch (static_cast<Cat>(cat)) {
+    case Cat::Suspect:
+      return suspectOf(p, item).name;
+    case Cat::Weapon:
+      return kGermanWeapons[p.cast[static_cast<int>(Cat::Weapon)][item]];
+    case Cat::Location:
+      return kGermanPlaces[p.cast[static_cast<int>(Cat::Location)][item]];
+    case Cat::Motive:
+      return kGermanMotives[p.cast[static_cast<int>(Cat::Motive)][item]];
+  }
+  return "";
 }
 
 // The form a fixture takes inside a sentence, preposition and article already
@@ -326,9 +379,137 @@ void predicatePhrase(const Puzzle& p, const Clue& clue, char* out, const int cap
          phraseOf(p, clue.targetCat, highestBit(mask)));
 }
 
+void germanAttributePhrase(const Puzzle& p, const uint8_t attr, char* out, const int cap) {
+  if (attr == murdle::kAttrTallest) {
+    std::snprintf(out, static_cast<size_t>(cap), "war am groessten");
+  } else if (attr == murdle::kAttrShortest) {
+    std::snprintf(out, static_cast<size_t>(cap), "war am kleinsten");
+  } else if (attr >= murdle::kAttrTallerThan && attr < murdle::kAttrTallerThan + murdle::kMaxItems) {
+    std::snprintf(out, static_cast<size_t>(cap), "war groesser als %s", suspectOf(p, attr - murdle::kAttrTallerThan).name);
+  } else if (attr >= murdle::kAttrShorterThan && attr < murdle::kAttrShorterThan + murdle::kMaxItems) {
+    std::snprintf(out, static_cast<size_t>(cap), "war kleiner als %s", suspectOf(p, attr - murdle::kAttrShorterThan).name);
+  } else {
+    const uint8_t kind = static_cast<uint8_t>(attr / 16u);
+    const uint8_t value = static_cast<uint8_t>(attr % 16u);
+    static constexpr const char* kEyes[] = {"braune", "blaue", "gruene", "haselnussbraune"};
+    static constexpr const char* kHair[] = {"schwarze", "braune", "blonde", "rote", "graue"};
+    if (static_cast<murdle::AttrKind>(kind) == murdle::AttrKind::Handed) {
+      std::snprintf(out, static_cast<size_t>(cap), "war %shaendig", value == 0 ? "links" : "rechts");
+    } else if (static_cast<murdle::AttrKind>(kind) == murdle::AttrKind::Eyes) {
+      std::snprintf(out, static_cast<size_t>(cap), "hatte %s Augen", kEyes[value & 3]);
+    } else {
+      std::snprintf(out, static_cast<size_t>(cap), "hatte %s Haare", kHair[value < 5 ? value : 0]);
+    }
+  }
+}
+
+void germanRelation(const Puzzle& p, const Clue& clue, char* out, const int cap) {
+  if (clue.attr != kNoAttr) {
+    germanAttributePhrase(p, clue.attr, out, cap);
+    return;
+  }
+  const int set = popcount(clue.targetMask);
+  const bool negative = set == p.shape.items - 1;
+  const int first = negative ? missingBit(clue.targetMask, p.shape.items) : lowestBit(clue.targetMask);
+  const int second = highestBit(clue.targetMask);
+  const char* a = germanPhraseOf(p, clue.targetCat, first);
+  const char* b = germanPhraseOf(p, clue.targetCat, second);
+  switch (static_cast<Cat>(clue.targetCat)) {
+    case Cat::Suspect:
+      std::snprintf(out, static_cast<size_t>(cap), negative ? "war nicht %s" : set == 1 ? "war %s" : "war %s oder %s", a, b);
+      break;
+    case Cat::Weapon:
+      std::snprintf(out, static_cast<size_t>(cap), negative ? "trug nicht %s" : set == 1 ? "trug %s" : "trug %s oder %s", a, b);
+      break;
+    case Cat::Location:
+      std::snprintf(out, static_cast<size_t>(cap), negative ? "war nicht %s" : set == 1 ? "war %s" : "war %s oder %s", a, b);
+      break;
+    case Cat::Motive:
+      std::snprintf(out, static_cast<size_t>(cap), negative ? "handelte nicht aus %s" : set == 1 ? "handelte aus %s" : "handelte aus %s oder %s", a, b);
+      break;
+  }
+}
+
+void germanAnchor(const Puzzle& p, const Clue& clue, char* out, const int cap) {
+  if (clue.anchor == Anchor::Murderer) {
+    std::snprintf(out, static_cast<size_t>(cap), "der Taeter");
+    return;
+  }
+  switch (static_cast<Cat>(clue.anchorCat)) {
+    case Cat::Suspect:
+      std::snprintf(out, static_cast<size_t>(cap), "%s", suspectOf(p, clue.anchorItem).name);
+      break;
+    case Cat::Weapon:
+      std::snprintf(out, static_cast<size_t>(cap), "die Person mit der Waffe %s",
+                    kGermanWeaponNames[p.cast[static_cast<int>(Cat::Weapon)][clue.anchorItem]]);
+      break;
+    case Cat::Location:
+      std::snprintf(out, static_cast<size_t>(cap), "die Person %s", germanPhraseOf(p, clue.anchorCat, clue.anchorItem));
+      break;
+    case Cat::Motive:
+      std::snprintf(out, static_cast<size_t>(cap), "die Person mit dem Motiv %s", germanPhraseOf(p, clue.anchorCat, clue.anchorItem));
+      break;
+  }
+}
+
+void germanClueLine(const Puzzle& p, const Clue& clue, char* out, const int cap) {
+  if (clue.anchor == Anchor::Murderer) {
+    const int which = lowestBit(clue.targetMask);
+    if (static_cast<Cat>(clue.targetCat) == Cat::Weapon) {
+      const int index = p.cast[static_cast<int>(Cat::Weapon)][which];
+      std::snprintf(out, static_cast<size_t>(cap), "Die Leiche lag neben der Waffe mit %s.", kGermanWeaponTraits[index]);
+    } else {
+      const int index = p.cast[static_cast<int>(Cat::Location)][which];
+      std::snprintf(out, static_cast<size_t>(cap), "Die Leiche wurde dort gefunden, wo %s war.", kGermanPlaceTraits[index]);
+    }
+    return;
+  }
+
+  if (clue.speaker != kNobodySpeaks) {
+    const int item = lowestBit(clue.targetMask);
+    const bool self = clue.anchorItem == clue.speaker;
+    const bool weapon = static_cast<Cat>(clue.targetCat) == Cat::Weapon;
+    char statement[kLineMax];
+    if (self) {
+      std::snprintf(statement, sizeof(statement), weapon ? "Ich trug %s" : "Ich war %s",
+                    germanPhraseOf(p, clue.targetCat, item));
+    } else {
+      std::snprintf(statement, sizeof(statement), weapon ? "%s trug %s" : "%s war %s",
+                    suspectOf(p, clue.anchorItem).name, germanPhraseOf(p, clue.targetCat, item));
+    }
+    std::snprintf(out, static_cast<size_t>(cap), "%s sagt: \"%s.\"", suspectOf(p, clue.speaker).name, statement);
+    return;
+  }
+
+  char who[kLineMax];
+  char what[kLineMax];
+  germanAnchor(p, clue, who, sizeof(who));
+  germanRelation(p, clue, what, sizeof(what));
+  if (static_cast<Cat>(clue.targetCat) == Cat::Suspect && clue.attr == kNoAttr) {
+    const int set = popcount(clue.targetMask);
+    const bool negative = set == p.shape.items - 1;
+    const int first = negative ? missingBit(clue.targetMask, p.shape.items) : lowestBit(clue.targetMask);
+    const int second = highestBit(clue.targetMask);
+    const char* relation = static_cast<Cat>(clue.anchorCat) == Cat::Weapon ? "trug" :
+                           static_cast<Cat>(clue.anchorCat) == Cat::Location ? "war" : "handelte aus";
+    if (set == 2) {
+      std::snprintf(out, static_cast<size_t>(cap), "%s oder %s %s %s.", suspectOf(p, first).name,
+                    suspectOf(p, second).name, relation, germanPhraseOf(p, clue.anchorCat, clue.anchorItem));
+    } else {
+      std::snprintf(out, static_cast<size_t>(cap), "%s %s%s %s.", suspectOf(p, first).name, relation,
+                    negative ? " nicht" : "", germanPhraseOf(p, clue.anchorCat, clue.anchorItem));
+    }
+    return;
+  }
+  if (who[0] >= 'a' && who[0] <= 'z') who[0] = static_cast<char>(who[0] - 'a' + 'A');
+  std::snprintf(out, static_cast<size_t>(cap), "%s %s.", who, what);
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
+
+void setGerman(const bool enabled) { german = enabled; }
 
 const char* label(const Puzzle& p, const int cat, const int item) {
   switch (static_cast<Cat>(cat)) {
@@ -411,6 +592,10 @@ void clueLine(const Puzzle& p, const int clueIndex, char* out, const int cap) {
   out[0] = '\0';
   if (clueIndex < 0 || clueIndex >= p.clueCount || cap < 8) return;
   const Clue& clue = p.clues[clueIndex];
+  if (german) {
+    germanClueLine(p, clue, out, cap);
+    return;
+  }
   // `clue.voice` used to be overwritten here with a per-case register byte.
   // Nothing reads it any more: anchorPhrase keys its wording to the anchor's
   // category instead, which is systematic where this was a coin flip. The field
@@ -529,13 +714,33 @@ void suspectAttributes(const Puzzle& p, const int item, char* out, const int cap
     std::snprintf(out + at, static_cast<size_t>(cap - at), fmt, args...);
   };
 
-  if (used[0]) add("%s", s.handed == murdle::Handed::Left ? "left-handed" : "right-handed");
-  if (used[1]) add("%s eyes", eyeWord(static_cast<uint8_t>(s.eyes)));
-  if (used[2]) add("%s hair", hairWord(static_cast<uint8_t>(s.hair)));
-  if (used[3]) add("%d'%d\"", s.inches / 12, s.inches % 12);
+  if (german) {
+    static constexpr const char* kEyes[] = {"BRAUNE AUGEN", "BLAUE AUGEN", "GRUENE AUGEN", "HASELNUSSBRAUNE AUGEN"};
+    static constexpr const char* kHair[] = {"SCHWARZE HAARE", "BRAUNE HAARE", "BLONDE HAARE", "ROTE HAARE", "GRAUE HAARE"};
+    if (used[0]) add("%s", s.handed == murdle::Handed::Left ? "LINKSHAENDIG" : "RECHTSHAENDIG");
+    if (used[1]) add("%s", kEyes[static_cast<uint8_t>(s.eyes)]);
+    if (used[2]) add("%s", kHair[static_cast<uint8_t>(s.hair)]);
+    if (used[3]) add("%d CM", static_cast<int>(s.inches) * 254 / 100);
+  } else {
+    if (used[0]) add("%s", s.handed == murdle::Handed::Left ? "left-handed" : "right-handed");
+    if (used[1]) add("%s eyes", eyeWord(static_cast<uint8_t>(s.eyes)));
+    if (used[2]) add("%s hair", hairWord(static_cast<uint8_t>(s.hair)));
+    if (used[3]) add("%d'%d\"", s.inches / 12, s.inches % 12);
+  }
 }
 
 void accusationLine(const Puzzle& p, const uint8_t picks[kMaxCats], char* out, const int cap) {
+  if (german) {
+    char motive[kLineMax] = {};
+    if (p.shape.cats > static_cast<int>(Cat::Motive)) {
+      std::snprintf(motive, sizeof(motive), ", aus %s", germanPhraseOf(p, static_cast<int>(Cat::Motive), picks[static_cast<int>(Cat::Motive)]));
+    }
+    std::snprintf(out, static_cast<size_t>(cap), "Es war %s mit der Waffe %s, %s%s.",
+                  suspectOf(p, picks[static_cast<int>(Cat::Suspect)]).name,
+                  kGermanWeaponNames[p.cast[static_cast<int>(Cat::Weapon)][picks[static_cast<int>(Cat::Weapon)]]],
+                  germanPhraseOf(p, static_cast<int>(Cat::Location), picks[static_cast<int>(Cat::Location)]), motive);
+    return;
+  }
   const int cats = p.shape.cats;
   char tail[kLineMax];
   tail[0] = '\0';
@@ -569,10 +774,10 @@ void blockedLine(const Puzzle& p, const int catA, const int itemA, const int cat
     std::snprintf(into, kPair, "%s/%s", label(p, catA, result.sameCol), label(p, catB, itemB));
   }
   if (second[0] == '\0') {
-    std::snprintf(out, static_cast<size_t>(cap), "ALREADY TICKED: %s. CLEAR IT TO TICK HERE.", first);
+    std::snprintf(out, static_cast<size_t>(cap), german ? "BEREITS MARKIERT: %s. ERST LOESCHEN." : "ALREADY TICKED: %s. CLEAR IT TO TICK HERE.", first);
     return;
   }
-  std::snprintf(out, static_cast<size_t>(cap), "ALREADY TICKED: %s AND %s. CLEAR THEM TO TICK HERE.", first, second);
+  std::snprintf(out, static_cast<size_t>(cap), german ? "BEREITS MARKIERT: %s UND %s. ERST LOESCHEN." : "ALREADY TICKED: %s AND %s. CLEAR THEM TO TICK HERE.", first, second);
 }
 
 }  // namespace murdletext

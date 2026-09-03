@@ -1,6 +1,66 @@
 #include "ForeheadCore.h"
 
+#include "ForeheadWordsDe.h"
+
 namespace forehead {
+
+namespace {
+bool germanWords = false;
+
+const char* entryText(const int entry) {
+  if (germanWords && entry >= 0 && entry < kGermanAnimalCount) return kGermanAnimals[entry];
+  if (germanWords && entry >= kGermanAnimalCount && entry < kGermanAnimalCount + kGermanActCount) {
+    return kGermanAct[entry - kGermanAnimalCount];
+  }
+  constexpr int kSoundFirst = kGermanAnimalCount + kGermanActCount;
+  if (germanWords && entry >= kSoundFirst && entry < kSoundFirst + kGermanSoundCount) {
+    return kGermanSound[entry - kSoundFirst];
+  }
+  constexpr int kFoodFirst = kSoundFirst + kGermanSoundCount;
+  if (germanWords && entry >= kFoodFirst && entry < kFoodFirst + kGermanFoodCount) {
+    return kGermanFood[entry - kFoodFirst];
+  }
+  constexpr int kMovieFirst = kFoodFirst + kGermanFoodCount;
+  if (germanWords && entry >= kMovieFirst && entry < kMovieFirst + kGermanMovieCount) {
+    return kGermanMovies[entry - kMovieFirst];
+  }
+  constexpr int kPeopleFirst = kMovieFirst + kGermanMovieCount;
+  if (germanWords && entry >= kPeopleFirst && entry < kPeopleFirst + kGermanPeopleCount) {
+    return kGermanPeople[entry - kPeopleFirst];
+  }
+  constexpr int kMusicFirst = kPeopleFirst + kGermanPeopleCount;
+  if (germanWords && entry >= kMusicFirst && entry < kMusicFirst + kGermanMusicCount) {
+    return kGermanMusic[entry - kMusicFirst];
+  }
+  constexpr int kJobFirst = kMusicFirst + kGermanMusicCount;
+  if (germanWords && entry >= kJobFirst && entry < kJobFirst + kGermanJobCount) {
+    return kGermanJobs[entry - kJobFirst];
+  }
+  constexpr int kSportFirst = kJobFirst + kGermanJobCount;
+  if (germanWords && entry >= kSportFirst && entry < kSportFirst + kGermanSportCount) {
+    return kGermanSports[entry - kSportFirst];
+  }
+  constexpr int kHouseFirst = kSportFirst + kGermanSportCount;
+  if (germanWords && entry >= kHouseFirst && entry < kHouseFirst + kGermanHouseCount) {
+    return kGermanHouse[entry - kHouseFirst];
+  }
+  constexpr int kPlaceFirst = kHouseFirst + kGermanHouseCount;
+  if (germanWords && entry >= kPlaceFirst && entry < kPlaceFirst + kGermanPlaceCount) {
+    return kGermanPlaces[entry - kPlaceFirst];
+  }
+  constexpr int kNatureFirst = kPlaceFirst + kGermanPlaceCount;
+  if (germanWords && entry >= kNatureFirst && entry < kNatureFirst + kGermanNatureCount) {
+    return kGermanNature[entry - kNatureFirst];
+  }
+  constexpr int kScienceFirst = kNatureFirst + kGermanNatureCount;
+  if (germanWords && entry >= kScienceFirst && entry < kScienceFirst + kGermanScienceCount) {
+    return kGermanScience[entry - kScienceFirst];
+  }
+  return entry < 0 || entry >= kEntryCount ? "" : kEntries[entry];
+}
+}  // namespace
+
+void setGermanWords(const bool enabled) { germanWords = enabled; }
 
 namespace {
 
@@ -173,7 +233,7 @@ void Round::expire() {
 
 const char* Round::cardText() const {
   if (current_ < 0 || current_ >= kEntryCount) return "";
-  return kEntries[current_];
+  return entryText(current_);
 }
 
 int Round::cardEntry() const { return current_; }
@@ -185,7 +245,7 @@ int Round::entryAt(const int index) const {
 
 const char* Round::textAt(const int index) const {
   const int entry = entryAt(index);
-  return entry < 0 || entry >= kEntryCount ? "" : kEntries[entry];
+  return entryText(entry);
 }
 
 Mark Round::markAt(const int index) const {

@@ -244,7 +244,7 @@ void InsiderActivity::render(RenderLock&&) {
   const toybox::Faces faces = view == View::Rules
                                   ? toybox::Faces{toybox::kButtonFontId, toybox::kUiFontId, toybox::kDisplayFontId}
                                   : toybox::toyboxFaces();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer, faces);
+  auto target = toybox::makeTarget(renderer, faces);
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions);

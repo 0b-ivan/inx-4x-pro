@@ -447,7 +447,7 @@ bshipui::BoardModel BattleshipActivity::boardModel() {
 void BattleshipActivity::drawStartMenu() {
   namespace fui = freeink::ui;
   renderer.clearScreen();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions);
@@ -461,7 +461,7 @@ void BattleshipActivity::drawStartMenu() {
 void BattleshipActivity::drawPlaceScreen() {
   namespace fui = freeink::ui;
   renderer.clearScreen();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions);
@@ -477,7 +477,7 @@ void BattleshipActivity::drawPlaceScreen() {
 void BattleshipActivity::drawBoardScreen() {
   namespace fui = freeink::ui;
   renderer.clearScreen();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions);

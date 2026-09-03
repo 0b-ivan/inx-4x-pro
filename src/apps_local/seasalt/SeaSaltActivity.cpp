@@ -127,7 +127,7 @@ void SeaSaltActivity::onLinkEnded() {
 void SeaSaltActivity::drawLinkArt(const Rect& slot) {
   // A fan of the game's own card faces, the menu ornament reused.
   namespace fui = freeink::ui;
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const int16_t size = 48;
   const int kinds[4] = {1, 0, 9, 4};  // boat, crab, mermaid, shark
   const int16_t step = static_cast<int16_t>((slot.width - size) / 3);
@@ -427,7 +427,7 @@ freeink::ui::Rect paint(GfxRenderer& renderer, toybox::Interactions& interaction
                         const char* name) {
   namespace fui = freeink::ui;
   renderer.clearScreen();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions);
@@ -442,7 +442,7 @@ freeink::ui::Rect paint(GfxRenderer& renderer, toybox::Interactions& interaction
 void SeaSaltActivity::drawStartMenu() {
   const fui::Rect slot =
       paint(renderer, interactions, interactionsReady, seasaltui::buildStartMenu, startModel(), "SeaSalt menu");
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
 
   // THE DECK, Mario's pick of three rendered ornaments: the distribution card
   // that ships in the real box -- every face and its count. The menu's dead
@@ -491,7 +491,7 @@ void SeaSaltActivity::drawTutorial() {
   seasaltui::TutorialModel model;
   model.page = tutorialPage;
   renderer.clearScreen();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions);

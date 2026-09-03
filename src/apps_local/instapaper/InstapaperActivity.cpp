@@ -632,7 +632,7 @@ void InstapaperActivity::render(RenderLock&&) {
   renderer.clearScreen();
   // The reading cut in the body slot. This app is a page of text, not a board,
   // and at the 20px UI cut a 480px panel holds about 28 characters a line.
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer, toybox::readingFaces());
+  auto target = toybox::makeTarget(renderer, toybox::readingFaces());
   const fui::DeviceContext device = target.deviceContext();
   const fui::ThemeTokens& tokens = toybox::themeTokens();
   const fui::InputSnapshot noInput{};

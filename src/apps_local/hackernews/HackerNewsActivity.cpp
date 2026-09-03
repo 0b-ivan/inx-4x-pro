@@ -631,7 +631,7 @@ void HackerNewsActivity::render(RenderLock&&) {
   // board, and at the 20px UI cut a 480px panel holds about 28 characters a
   // line: an article became forty page taps and half the headlines on the front
   // page could not finish.
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer, toybox::readingFaces());
+  auto target = toybox::makeTarget(renderer, toybox::readingFaces());
   const fui::DeviceContext device = target.deviceContext();
   const fui::ThemeTokens& tokens = toybox::themeTokens();
   const fui::InputSnapshot noInput{};

@@ -1147,7 +1147,7 @@ void XkcdActivity::runUpdate() {
 
 void XkcdActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer, toybox::readingChromeFaces());
+  auto target = toybox::makeTarget(renderer, toybox::readingChromeFaces());
   const fui::InputSnapshot noInput{};
   interactionsReady_ = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions_);

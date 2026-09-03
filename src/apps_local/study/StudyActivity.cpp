@@ -1500,7 +1500,7 @@ void StudyActivity::render(RenderLock&&) {
 
 #if !defined(FREEINK_NET_WOLFSSL)
   if (previewFlowSet_) {
-    fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+    auto target = toybox::makeTarget(renderer);
     const fui::InputSnapshot noInput{};
     toybox::Frame frame(target, target.deviceContext(), noInput, interactions_);
     toybox::Screen screen(frame);
@@ -1511,7 +1511,7 @@ void StudyActivity::render(RenderLock&&) {
 #endif
 
   if (view_ == View::PairQr) {
-    fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+    auto target = toybox::makeTarget(renderer);
     const fui::InputSnapshot noInput{};
     toybox::Frame frame(target, target.deviceContext(), noInput, interactions_);
     toybox::Screen screen(frame);
@@ -1524,7 +1524,7 @@ void StudyActivity::render(RenderLock&&) {
   }
 
   if (view_ == View::PairConfirm) {
-    fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+    auto target = toybox::makeTarget(renderer);
     const fui::InputSnapshot noInput{};
     toybox::Frame frame(target, target.deviceContext(), noInput, interactions_);
     toybox::Screen screen(frame);
@@ -1545,7 +1545,7 @@ void StudyActivity::render(RenderLock&&) {
   }
 
   if (view_ == View::DeckPicker) {
-    fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+    auto target = toybox::makeTarget(renderer);
     const fui::InputSnapshot noInput{};
     interactionsReady_ = false;
     toybox::Frame frame(target, target.deviceContext(), noInput, interactions_);
@@ -1560,7 +1560,7 @@ void StudyActivity::render(RenderLock&&) {
   }
 
   if (view_ == View::SyncFlow) {
-    fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+    auto target = toybox::makeTarget(renderer);
     const fui::InputSnapshot noInput{};
     toybox::Frame frame(target, target.deviceContext(), noInput, interactions_);
     toybox::Screen screen(frame);
@@ -1580,7 +1580,7 @@ void StudyActivity::render(RenderLock&&) {
     // Chrome is a FreeInkUI component wearing Toybox, never hand-drawn: Screen
     // substitutes every theme token, and both bugs in this fork's first port
     // were tokens it would have supplied. See docs/design-language.md.
-    fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+    auto target = toybox::makeTarget(renderer);
     const fui::InputSnapshot noInput{};
     interactionsReady_ = false;
     toybox::Frame frame(target, target.deviceContext(), noInput, interactions_);

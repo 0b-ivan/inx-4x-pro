@@ -442,7 +442,7 @@ void ToyBattleActivity::gameRender() {
   namespace fui = freeink::ui;
 
   renderer.clearScreen();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const fui::DeviceContext device = target.deviceContext();
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
@@ -630,7 +630,7 @@ void ToyBattleActivity::drawLinkArt(const Rect& area) {
   // applies to anything decorative.
   if (!dealt) return;
   namespace fui = freeink::ui;
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const fui::DeviceContext device = target.deviceContext();
   const fui::InputSnapshot noInput{};
   // A scratch buffer, not the shared one: the link chrome owns the screen and

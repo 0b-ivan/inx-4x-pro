@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "ToyBattleMenus.h"
+#include "../ui/LocalI18n.h"
 
 // Two board treatments, built together so they can be photographed side by side
 // and one chosen. Options described in prose get judged wrong; options rendered
@@ -700,7 +701,7 @@ void buildBrief(toybox::Screen& screen, const BriefModel& model) {
     glyph(screen, at, static_cast<int16_t>(badge - 2), what, true);
 
     char line[96];
-    std::snprintf(line, sizeof(line), "%d x %s", seen[k], specialBlurb(what));
+    std::snprintf(line, sizeof(line), "%d x %s", seen[k], toybox::localize(specialBlurb(what)));
     screen.target().text(fui::makeRect(static_cast<int16_t>(row.x + badge * 2 + toybox::kGutter), row.y,
                                        static_cast<int16_t>(row.width - badge * 2 - toybox::kGutter), row.height),
                          line, body);

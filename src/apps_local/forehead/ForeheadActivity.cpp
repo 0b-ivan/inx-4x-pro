@@ -411,6 +411,7 @@ void ForeheadActivity::loop() {
 }
 
 void ForeheadActivity::render(RenderLock&&) {
+  fh::setGermanWords(I18N.getLanguage() == Language::DE);
   renderer.clearScreen();
 
   // The round and the ready card bind three sizes of Jersey at once, largest in
@@ -422,7 +423,7 @@ void ForeheadActivity::render(RenderLock&&) {
   const toybox::Faces faces = (view == View::Play || view == View::Ready) ? toybox::cardFaces()
                               : view == View::Result                      ? toybox::bigNumberFaces()
                                                                           : toybox::proseMenuFaces();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer, faces);
+  auto target = toybox::makeTarget(renderer, faces);
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions);

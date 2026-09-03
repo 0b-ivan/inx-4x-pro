@@ -500,7 +500,7 @@ void TriviaActivity::render(RenderLock&&) {
   // a sentence runs off the panel and is truncated with an ellipsis Jersey
   // does not carry, so the line simply stops. See ToyboxTheme.h.
   const bool prose = view_ == View::Quizmaster || view_ == View::Solo || view_ == View::Notice;
-  fui::GfxRendererTarget target =
+  auto target =
       toybox::makeTarget(renderer, prose ? toybox::readingChromeFaces() : toybox::proseMenuFaces());
   const fui::InputSnapshot noInput{};
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions_);

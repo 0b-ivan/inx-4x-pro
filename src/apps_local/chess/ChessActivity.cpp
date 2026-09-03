@@ -152,7 +152,7 @@ chessui::StartModel ChessActivity::startModel() const {
 void ChessActivity::drawStartMenu() {
   namespace fui = freeink::ui;
   renderer.clearScreen();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions);
@@ -1076,7 +1076,7 @@ void ChessActivity::drawSettings() {
   namespace fui = freeink::ui;
 
   renderer.clearScreen();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions);
@@ -1140,7 +1140,7 @@ const char* ChessActivity::linkHeadline() const {
     // than only that it is over.
     return position.whiteToMove == humanPlaysWhite ? "YOU LOST" : "YOU WON";
   }
-  return "DRAW";
+  return "A DRAW";
 }
 
 void ChessActivity::sendPosition() {
@@ -1212,7 +1212,7 @@ void ChessActivity::gameRender() {
   renderer.clearScreen();
 
   namespace fui = freeink::ui;
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const fui::InputSnapshot noInput{};
   interactionsReady = false;
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions);

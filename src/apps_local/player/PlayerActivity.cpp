@@ -58,7 +58,7 @@ void PlayerActivity::render(RenderLock&&) {
   namespace fui = freeink::ui;
 
   renderer.clearScreen();
-  fui::GfxRendererTarget target = toybox::makeTarget(renderer);
+  auto target = toybox::makeTarget(renderer);
   const fui::DeviceContext device = target.deviceContext();
   const fui::ThemeTokens& tokens = toybox::themeTokens();
   const fui::InputSnapshot noInput{};

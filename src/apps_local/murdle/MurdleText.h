@@ -23,6 +23,10 @@ namespace murdletext {
 // a trait-worded anchor.
 constexpr int kLineMax = 160;
 
+// The activity updates this before rendering. Keeping the switch here leaves
+// the puzzle and text modules freestanding for their host tests.
+void setGerman(bool enabled);
+
 // The short uppercase label: what the accusation sheet lists and what a grid
 // axis falls back to when there is room for a word.
 const char* label(const murdle::Puzzle& puzzle, int cat, int item);

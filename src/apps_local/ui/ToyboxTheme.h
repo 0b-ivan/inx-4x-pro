@@ -8,6 +8,7 @@
 #include <Logging.h>
 
 #include "ToyboxFonts.h"
+#include "LocalI18n.h"
 #include "ToyboxScreen.h"
 #include "ToyboxTokens.h"
 
@@ -89,8 +90,45 @@ inline Faces proseMenuFaces() { return Faces{kButtonFontId, kUiFontId, kDisplayF
 // the score needs, and the list takes the UI cut in the small slot.
 inline Faces bigNumberFaces() { return Faces{kButtonFontId, kHugeFontId, kDisplayFontId}; }
 
-inline fui::GfxRendererTarget makeTarget(const GfxRenderer& renderer, const Faces& faces = Faces{}) {
-  fui::GfxRendererTarget target(renderer);
+class LocalizedTarget final : public fui::DrawTarget {
+ public:
+  explicit LocalizedTarget(const GfxRenderer& renderer) : target(renderer) {}
+
+  void setFont(const fui::FontId slot, const int gfxFontId) { target.setFont(slot, gfxFontId); }
+  fui::DeviceContext deviceContext() const { return target.deviceContext(); }
+  fui::Size measureText(const fui::FontId font, const char* text, const fui::TextStyle style) const override {
+    return target.measureText(font, localize(text), style);
+  }
+  int16_t lineHeight(const fui::FontId font) const override { return target.lineHeight(font); }
+  void fill(const fui::Rect rect, const fui::Paint paint, const uint8_t radius = 0,
+            const uint8_t corners = fui::CornersAll) override {
+    target.fill(rect, paint, radius, corners);
+  }
+  void stroke(const fui::Rect rect, const fui::Paint paint, const uint8_t width, const uint8_t radius = 0,
+              const uint8_t corners = fui::CornersAll) override {
+    target.stroke(rect, paint, width, radius, corners);
+  }
+  void line(const fui::Point from, const fui::Point to, const uint8_t width, const fui::Paint paint) override {
+    target.line(from, to, width, paint);
+  }
+  void triangle(const fui::Point a, const fui::Point b, const fui::Point c, const fui::Paint paint) override {
+    target.triangle(a, b, c, paint);
+  }
+  void text(const fui::Rect rect, const char* text, const fui::TextStyle style) override {
+    target.text(rect, localize(text), style);
+  }
+  void bitmap(const fui::Rect rect, const fui::BitmapRef bitmap, const fui::BitmapMode mode,
+              const fui::Paint foreground = fui::Paint::solid(fui::Color::Black),
+              const fui::Rotation rotation = fui::Rotation::None) override {
+    target.bitmap(rect, bitmap, mode, foreground, rotation);
+  }
+
+ private:
+  fui::GfxRendererTarget target;
+};
+
+inline LocalizedTarget makeTarget(const GfxRenderer& renderer, const Faces& faces = Faces{}) {
+  LocalizedTarget target(renderer);
   // The small slot carries the dense cut, not a small UI face; see ToyboxTokens.h.
   target.setFont(fui::GfxRendererTarget::FONT_SMALL, faces.small);
   target.setFont(fui::GfxRendererTarget::FONT_BODY, faces.body);

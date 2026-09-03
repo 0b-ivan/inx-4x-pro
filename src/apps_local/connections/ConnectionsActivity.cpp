@@ -676,7 +676,7 @@ void ConnectionsActivity::render(RenderLock&&) {
   // The board needs both tile cuts bound at once so a long word can shrink;
   // the menu needs its rows in the serif instead. Same three slots, spent
   // differently.
-  fui::GfxRendererTarget target =
+  auto target =
       toybox::makeTarget(renderer, view == View::Board ? toybox::serifBoardFaces() : toybox::serifMenuFaces());
   const fui::InputSnapshot noInput{};
   interactionsReady = false;

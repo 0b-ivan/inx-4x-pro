@@ -23,6 +23,8 @@
 
 namespace forehead {
 
+void setGermanWords(bool enabled);
+
 // The round lengths the front door offers. Sixty is the one everybody knows;
 // thirty is for a table that is passing the device round quickly and a hundred
 // and twenty is for a category nobody is any good at.
