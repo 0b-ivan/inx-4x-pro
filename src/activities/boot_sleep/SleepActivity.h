@@ -1,6 +1,10 @@
 #pragma once
 #include <string>
 
+#ifdef SIMULATOR
+#include <esp_random.h>
+#endif
+
 #include "activities/Activity.h"
 
 class Bitmap;
