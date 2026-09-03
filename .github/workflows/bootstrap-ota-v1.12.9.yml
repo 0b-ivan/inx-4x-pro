@@ -22,7 +22,7 @@ jobs:
       - name: Fetch required SDK submodule
         run: git submodule update --init --depth 1 freeink-sdk
 
-      - name: Prepare permanent v1.12.9 source commit
+      - name: Prepare v1.12.9 source commit
         id: prepare
         shell: bash
         run: |
@@ -36,63 +36,16 @@ jobs:
           if old not in text:
               raise SystemExit('expected CrossPlay 1.12.8 version block not found')
           ini.write_text(text.replace(old, new, 1))
-
-          wf = Path('.github/workflows/crossplay-release.yml')
-          text = wf.read_text()
-          old_heading = '            ### What is new in 1.12.8\n'
-          if old_heading not in text:
-              raise SystemExit('expected 1.12.8 release-notes heading not found')
-          new_notes = '''            ### What is new in 1.12.9
-
-            **OTA updates now come from `0b-ivan/inx-4x-pro`.** The X4 Pro
-            checks this repository's latest release and downloads only the
-            application image `firmware.bin` into the inactive OTA slot. The
-            ESP32-S3 chip check and embedded board-identity check still run
-            before the new slot can become bootable.
-
-            **This release establishes the first strict SemVer baseline in this
-            fork.** Earlier repository releases used `-x4pro-alpha.N` tags, so
-            the normal release-notes gate had no previous `vMAJOR.MINOR.PATCH`
-            tag to compare against. Future releases can use the normal release
-            workflow without this bootstrap.
-
-            ### What was new in 1.12.8
-            '''
-          text = text.replace(old_heading, new_notes, 1)
-
-          old_submodules = '          submodules: recursive\n'
-          if old_submodules not in text:
-              raise SystemExit('expected recursive checkout setting not found')
-          text = text.replace(old_submodules, '          submodules: false\n', 1)
-
-          anchor = '          fetch-depth: 0\n\n      # The tag and the version'
-          replacement = (
-              '          fetch-depth: 0\n\n'
-              '      - name: Fetch required SDK submodule\n'
-              '        run: git submodule update --init --depth 1 freeink-sdk\n\n'
-              '      # The tag and the version'
-          )
-          if anchor not in text:
-              raise SystemExit('expected checkout insertion point not found')
-          text = text.replace(anchor, replacement, 1)
-          wf.write_text(text)
           PY
 
-          # This workflow is deliberately one-shot. The release commit must not
-          # leave a branch-push publisher behind.
-          rm .github/workflows/bootstrap-ota-v1.12.9.yml
-
-          # Source-level invariants before committing anything.
           grep -q '^version = 1.12.9$' <(awk '/^\[crossplay\]/{f=1;next} /^\[/{f=0} f' platformio.ini)
           grep -Fq 'https://api.github.com/repos/0b-ivan/inx-4x-pro/releases/latest' src/network/OtaUpdater.cpp
           grep -Fq '#define CROSSPOINT_RELEASE_ASSET "firmware.bin"' src/network/FirmwareBoardTag.h
-          grep -Fq '### What is new in 1.12.9' .github/workflows/crossplay-release.yml
-          grep -Fq 'git submodule update --init --depth 1 freeink-sdk' .github/workflows/crossplay-release.yml
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'release: prepare CrossPlay v1.12.9 OTA'
+          git add platformio.ini
+          git commit -m 'release: bump CrossPlay to v1.12.9'
           git push origin HEAD:feature/crossplay-games
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
@@ -129,7 +82,7 @@ jobs:
               if not data or data[0] != 0xE9:
                   raise SystemExit(f'{filename}: invalid ESP application image magic')
               chip_id = int.from_bytes(data[12:14], 'little')
-              if chip_id != 9:  # ESP32-S3 IMAGE_CHIP_ID
+              if chip_id != 9:
                   raise SystemExit(f'{filename}: wrong image chip id {chip_id}, expected ESP32-S3 (9)')
               if len(data) > SLOT_SIZE:
                   raise SystemExit(f'{filename}: {len(data)} bytes exceeds X4 Pro OTA slot {SLOT_SIZE}')
@@ -159,7 +112,7 @@ jobs:
 
             - X4 Pro OTA asset: `firmware.bin`
             - Sticky OTA asset: `firmware-sticky.bin`
-            - Application images only; no bootloader or partition table is published by this bootstrap
-            - ESP32-S3 image header, board identity tag, repository OTA endpoint, and X4 Pro slot size are validated before publishing
+            - Application images only; no bootloader or partition table
+            - ESP32-S3 image header, board identity tag, repository OTA endpoint, and X4 Pro slot size validated before publishing
 
-            X4 Pro devices on CrossPlay 1.12.8 will now discover 1.12.9 through this repository's `/releases/latest` endpoint.
+            X4 Pro devices on CrossPlay 1.12.8 will discover 1.12.9 through this repository's `/releases/latest` endpoint.
