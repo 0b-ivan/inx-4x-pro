@@ -53,16 +53,20 @@ jobs:
           path: ~/.platformio
           key: pio-packages-${{ runner.os }}-${{ hashFiles('platformio.ini', 'platformio.sim.ini') }}
 
-      - name: Restore compiler cache
-        uses: actions/cache@v4
-        with:
-          path: .cache
-          key: pio-build-${{ runner.os }}-${{ matrix.environment }}-${{ github.sha }}
-          restore-keys: |
-            pio-build-${{ runner.os }}-${{ matrix.environment }}-
-
+      # Stack analysis needs the compiler side outputs (.su/.ci) for every
+      # translation unit. PlatformIO's normal build cache restores .o files but
+      # not those side outputs, which produces a partial call graph and false
+      # "entry not in the graph" failures. Build once against an empty,
+      # throwaway cache so the firmware and its stack graph are complete.
       - name: Build firmware
-        run: PLATFORMIO_BUILD_FLAGS="-fstack-usage -fcallgraph-info=su" pio run -e "${{ matrix.environment }}"
+        run: |
+          set -euo pipefail
+          STACK_CACHE="$RUNNER_TEMP/pio-stack-cache-${{ matrix.environment }}"
+          rm -rf "$STACK_CACHE" ".pio/build/${{ matrix.environment }}"
+          mkdir -p "$STACK_CACHE"
+          PLATFORMIO_BUILD_CACHE_DIR="$STACK_CACHE" \
+          PLATFORMIO_BUILD_FLAGS="-fstack-usage -fcallgraph-info=su" \
+            pio run -e "${{ matrix.environment }}"
 
       - name: Stack fits its task
         run: python3 scripts_local/stack_budget.py --build-dir ".pio/build/${{ matrix.environment }}"
