@@ -58,3 +58,10 @@ qa-artifacts/
 
 # upstream (1.6.0rc): nix flake outputs
 flake.*
+
+# Local PlatformIO state
+/.pio-cache/
+/.platformio-local/
+
+# X4 Pro device backups / preflight dumps
+/x4pro-preflight/
