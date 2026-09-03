@@ -89,13 +89,50 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   }
 #endif
 
+#if FREEINK_DEVICE_X4PRO
+  // X4 Pro wake policy:
+  //   GPIO3  = physical power/standby button, active LOW.
+  //   GPIO10 = GT911 INT. The capacitive Home pad is a GT911 key bit and has
+  //            no separate ESP GPIO, so keeping the controller powered and
+  //            waking from its shared IRQ is the only deep-sleep hardware path.
+  //
+  // The GT911 IRQ is shared by Home and normal panel touches, so a screen touch
+  // can wake the ESP as well. Once awake, InputManager still distinguishes the
+  // Home-key status bit from ordinary coordinates exactly as before.
+  const auto& board = BoardConfig::ACTIVE;
+  const int8_t powerPin = board.input.power;
+  const int8_t touchIrq = board.touch.irq;
+
+  // Keep GPIO2 (active-low GT911 rail) explicitly ON and held through deep
+  // sleep. All other gated rails retain the normal OFF policy.
+  freeink::PowerManager::powerDownRailsForSleep(/*keepTouchPowered=*/true);
+
+  // A short power-button press is enough: only wait for the press that put us
+  // to sleep to be released, then arm an ANY_LOW wake. HalGPIO's X4 Pro wake
+  // verification already accepts the hardware wake pulse without a hold timer.
+  freeink::PowerManager::waitForPowerButtonRelease();
+
+  uint64_t wakeMask = 0;
+  if (powerPin >= 0) {
+    pinMode(powerPin, INPUT_PULLUP);
+    wakeMask |= 1ULL << powerPin;
+  }
+  if (touchIrq >= 0) {
+    // GT911 INT idles high and asserts low for fresh key/touch data.
+    pinMode(touchIrq, INPUT_PULLUP);
+    wakeMask |= 1ULL << touchIrq;
+  }
+
+  if (wakeMask != 0) {
+    freeink::PowerManager::armWakeOnPins(wakeMask, /*wakeLow=*/true);
+  }
+  freeink::PowerManager::deepSleep();
+#else
   // Cut the gated peripheral rails (touch/SD/EPD on boards like the Sticky) and
   // hold the enables off through deep sleep — otherwise the GT911 and SD card
   // stay powered all through "off" and drain the battery. No-op on boards with
-  // no switched rails (X4/X3). Trade-off: no touch-to-wake; wake is the power
-  // button. Must run after display.deepSleep() so the panel controller gets its
-  // deep-sleep command while its rail is still up (enterDeepSleep() in main.cpp
-  // guarantees that ordering).
+  // no switched rails (X4/X3). Must run after display.deepSleep() so the panel
+  // controller gets its deep-sleep command while its rail is still up.
   freeink::PowerManager::powerDownRailsForSleep();
 
 #if FREEINK_DEVICE_PAPERMONO
@@ -110,6 +147,7 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   // Waits for the power button to be physically released (so holding it doesn't
   // immediately wake the device again), then arms the wake source and sleeps.
   freeink::PowerManager::deepSleepUntilPowerButton();
+#endif
 }
 
 uint16_t HalPowerManager::getBatteryPercentage() const {
