@@ -1,5 +1,44 @@
 # GitHub Actions Workflows
 
+**Fork-Status:** CrossPlay (X4 Pro + Sticky) only. Upstream workflows (Game Boy, Bootstrap OTA) are not maintained in this fork.
+
+## ✅ Active Workflows
+
+Only **3 workflows** are active in this fork:
+
+### 1. CrossPlay (`crossplay-ci.yml`)
+```yaml
+Trigger: push:main, pull_request, workflow_dispatch
+Purpose: Firmware builds + tests
+Jobs: firmware (x4pro, sticky), simulator, host-tests
+Status: ✓ ACTIVE
+```
+
+### 2. CrossPlay Release (`crossplay-release.yml`)
+```yaml
+Trigger: tag:v* OR commit:release: v*
+Purpose: Automated release publishing
+Jobs: build, validate, publish
+Status: ✓ ACTIVE
+```
+
+### 3. PR Formatting (`pr-formatting-check.yml`)
+```yaml
+Trigger: pull_request_target
+Purpose: PR title validation (Semantic Versioning)
+Jobs: title-check
+Status: ✓ ACTIVE
+```
+
+## ⚠️ Historical Workflows (Deprecated, Not in This Fork)
+
+These appear in GitHub Actions → All workflows history but **do not run**:
+- ❌ `bootstrap-ota-*` - Old bootstrap releases
+- ❌ `Game Boy X4 Pro Build` - Not for CrossPlay fork
+- ❌ `Publish X4 Pro Bootstrap` - Deprecated
+
+**Why they appear:** GitHub keeps historical workflow runs after files are deleted.
+
 ## Übersicht
 
 Dieses Repository nutzt GitHub Actions für CI/CD mit folgenden Workflows:
