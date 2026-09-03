@@ -16,8 +16,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feature/crossplay-games
-          submodules: recursive
+          submodules: false
           fetch-depth: 0
+
+      - name: Fetch required SDK submodule
+        run: git submodule update --init --depth 1 freeink-sdk
 
       - name: Prepare permanent v1.12.9 source commit
         id: prepare
@@ -55,7 +58,29 @@ jobs:
 
             ### What was new in 1.12.8
             '''
-          wf.write_text(text.replace(old_heading, new_notes, 1))
+          text = text.replace(old_heading, new_notes, 1)
+
+          # The repository contains a legacy gitlink named open-x4-sdk with no
+          # .gitmodules entry. Recursive checkout therefore fails before a
+          # release can start. Only freeink-sdk is an actual configured
+          # submodule and is the one the build needs.
+          old_checkout = '''          submodules: recursive
+          # Tags, for host-tests/release below: without them its notes gate
+          # cannot see what the previous tag published and skips itself.
+          fetch-depth: 0
+'''
+          new_checkout = '''          submodules: false
+          # Tags, for host-tests/release below: without them its notes gate
+          # cannot see what the previous tag published and skips itself.
+          fetch-depth: 0
+
+      - name: Fetch required SDK submodule
+        run: git submodule update --init --depth 1 freeink-sdk
+'''
+          if old_checkout not in text:
+              raise SystemExit('expected recursive checkout block not found')
+          text = text.replace(old_checkout, new_checkout, 1)
+          wf.write_text(text)
           PY
 
           # This workflow is deliberately one-shot. The release commit must not
@@ -67,6 +92,7 @@ jobs:
           grep -Fq 'https://api.github.com/repos/0b-ivan/inx-4x-pro/releases/latest' src/network/OtaUpdater.cpp
           grep -Fq '#define CROSSPOINT_RELEASE_ASSET "firmware.bin"' src/network/FirmwareBoardTag.h
           grep -Fq '### What is new in 1.12.9' .github/workflows/crossplay-release.yml
+          grep -Fq 'git submodule update --init --depth 1 freeink-sdk' .github/workflows/crossplay-release.yml
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
