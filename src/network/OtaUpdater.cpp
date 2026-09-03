@@ -19,13 +19,11 @@
 #include "FirmwareFlasher.h"
 
 namespace {
-// This fork's releases, not upstream's. Left pointing at CrossPoint, "check for
-// update" fetched their newest build and flashed it over the top: every app on
-// the shelf gone, and worse, a cross-chip flash. Upstream's gh_release targets
-// the X4 and X3, which are ESP32-C3; this fork's devices (X4 Pro, Sticky) are
-// S3. Upstream added a guard against exactly that (crosspoint-reader#2880),
-// which says how it ends without one.
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/ma-r-s/crossplay/releases/latest";
+// Use this repository's releases. Pointing at another fork or upstream can
+// offer firmware built for a different product line. The OTA path below also
+// checks ESP chip id and the embedded CROSSPOINT-BOARD-V1 board tag before the
+// inactive partition can become bootable.
+constexpr char latestReleaseUrl[] = "https://api.github.com/repos/0b-ivan/inx-4x-pro/releases/latest";
 }  // namespace
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
