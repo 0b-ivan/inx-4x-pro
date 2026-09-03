@@ -1,13 +1,14 @@
 #include "TarotAssets.h"
 
-#include <SDCardManager.h>
+#include <HalStorage.h>
 
 bool TarotAssets::load() {
   if (loaded_) return true;
-  FsFile file;
-  if (!SdMan.openFileForRead("TAROT", "/tarot/meanings.json", file)) return false;
-  const DeserializationError error = deserializeJson(document_, file);
-  file.close();
+
+  const String json = Storage.readFile("/tarot/meanings.json");
+  if (json.length() == 0) return false;
+
+  const DeserializationError error = deserializeJson(document_, json);
   loaded_ = !error;
   return loaded_;
 }
@@ -30,6 +31,6 @@ bool TarotAssets::installed() {
   // Menu v3 is the final pure-white 1-bit X4 Pro artwork. Requiring the marker
   // makes older installations enter the downloader once so only menu.png is
   // refreshed; the verified 78 card BMPs remain untouched.
-  return SdMan.exists("/tarot/cards/0.bmp") && SdMan.exists("/tarot/meanings.json") &&
-         SdMan.exists("/tarot/menu.png") && SdMan.exists("/tarot/.menu-v3");
+  return Storage.exists("/tarot/cards/0.bmp") && Storage.exists("/tarot/meanings.json") &&
+         Storage.exists("/tarot/menu.png") && Storage.exists("/tarot/.menu-v3");
 }
