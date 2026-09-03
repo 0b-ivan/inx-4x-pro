@@ -54,7 +54,7 @@ jobs:
             workflow without this bootstrap.
 
             ### What was new in 1.12.8
-'''
+            '''
           wf.write_text(text.replace(old_heading, new_notes, 1))
           PY
 
