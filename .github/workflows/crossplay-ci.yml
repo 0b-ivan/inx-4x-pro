@@ -124,7 +124,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Run host tests
+      - name: Host tests
         run: |
           set -euo pipefail
           for suite in host-tests/*/run.sh; do
