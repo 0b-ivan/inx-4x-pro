@@ -35,19 +35,16 @@ class PowerManager {
   static void waitForPowerButtonRelease();
 
   // Drive every assigned peripheral power-rail enable in the active board
-  // profile (display / SD / touch / mic) to its OFF level and latch it with
-  // gpio_hold_en() so the load switches stay off through deep sleep (deepSleep()
-  // enables gpio_deep_sleep_hold_en(), which makes the holds persist). Without
-  // this, boards with gated rails (e.g. Sticky: GT911 on TP_PWR_EN, SD on
-  // SD_PWR_EN, EPD on EP_PWR_EN) leave those peripherals powered all through
-  // deep sleep — milliamps of standby drain. No-op on boards whose rails are
-  // PIN_UNASSIGNED (X4/X3). Call after the display driver's deep-sleep command
-  // and before deepSleep(); wake is a chip reset, so rails re-enable in the
-  // normal init path. Display RESET is held LOW when its rail is cut (avoids
-  // back-powering an unpowered controller) and HIGH when its rail remains on
-  // (keeps deep-sleep state stable). NOTE: cutting the touch rail forfeits
-  // touch-to-wake.
-  static void powerDownRailsForSleep();
+  // profile (display / SD / touch / mic) to its sleep level and latch it with
+  // gpio_hold_en() so the level survives deep sleep (deepSleep() enables
+  // gpio_deep_sleep_hold_en()). By default every peripheral rail is switched
+  // OFF, preserving the existing low-drain behaviour. keepTouchPowered=true is
+  // for boards that deliberately use the touch controller IRQ as a wake source:
+  // its enable is then explicitly held at the ON level instead. Display RESET is
+  // held LOW when its rail is cut (avoids back-powering an unpowered controller)
+  // and HIGH when its rail remains on (keeps deep-sleep state stable). Call after
+  // the display driver's deep-sleep command and before deepSleep().
+  static void powerDownRailsForSleep(bool keepTouchPowered = false);
 
   // Isolate floating GPIOs to cut sleep current, then enter deep sleep. Does not
   // return — the chip resets on wake.
