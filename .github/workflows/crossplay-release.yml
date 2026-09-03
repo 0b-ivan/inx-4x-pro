@@ -1,17 +1,30 @@
-# Build and publish the X4 Pro / Sticky CrossPlay release for a strict vX.Y.Z tag.
-# OTA assets are application-only; USB full images are merged separately.
+# Build and publish the X4 Pro / Sticky CrossPlay release.
+#
+# Two entry points are supported:
+#   1. a strict vX.Y.Z tag (legacy/manual path), or
+#   2. an exact `release: vX.Y.Z` commit on the integration/main branch.
+#
+# The second path lets the release be completed from repository changes alone:
+# bump [crossplay].version, update the notes below, commit with `release: vX.Y.Z`,
+# and this workflow builds, validates and creates the matching GitHub release/tag.
 name: CrossPlay release
 
 on:
   push:
     tags:
       - "v*"
+    branches:
+      - feature/crossplay-games
+      - main
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      startsWith(github.event.head_commit.message, 'release: v')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -24,14 +37,31 @@ jobs:
           # host-tests/release compares these notes with the previous SemVer tag.
           fetch-depth: 0
 
-      - name: The tag must be the version being built
+      - name: Resolve and validate release identity
+        id: release
+        shell: bash
         run: |
+          set -euo pipefail
           VERSION=$(awk '/^\[crossplay\]/{f=1;next} /^\[/{f=0} f && /^version *=/{print $3; exit}' platformio.ini)
-          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
-            echo "tag ${GITHUB_REF_NAME} does not match [crossplay] version ${VERSION}" >&2
-            exit 1
+          TAG="v${VERSION}"
+
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            if [[ "${GITHUB_REF_NAME}" != "${TAG}" ]]; then
+              echo "tag ${GITHUB_REF_NAME} does not match [crossplay] version ${VERSION}" >&2
+              exit 1
+            fi
+          else
+            EXPECTED="release: ${TAG}"
+            ACTUAL="${{ github.event.head_commit.message }}"
+            if [[ "${ACTUAL}" != "${EXPECTED}" ]]; then
+              echo "release commit must be exactly '${EXPECTED}', got '${ACTUAL}'" >&2
+              exit 1
+            fi
           fi
-          echo "tag ${GITHUB_REF_NAME} matches [crossplay] version ${VERSION}"
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "CrossPlay release identity: ${TAG} @ ${GITHUB_SHA}"
 
       - name: The release notes must be this release's
         run: bash host-tests/release/run.sh
@@ -58,41 +88,50 @@ jobs:
         run: pio run -e gh_release_sticky
 
       - name: Name the x4pro artefacts
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           mkdir -p dist
           python -m esptool --chip esp32s3 merge-bin --format raw \
-            -o "dist/crossplay-${GITHUB_REF_NAME}-x4pro-full.bin" \
+            -o "dist/crossplay-${RELEASE_TAG}-x4pro-full.bin" \
             -fm keep -fs keep -ff keep \
             0x0     .pio/build/gh_release_x4pro/bootloader.bin \
             0x8000  .pio/build/gh_release_x4pro/partitions.bin \
             0x10000 .pio/build/gh_release_x4pro/firmware.bin
           cp .pio/build/gh_release_x4pro/firmware.bin dist/firmware.bin
           cp .pio/build/gh_release_x4pro/firmware.elf \
-             "dist/crossplay-${GITHUB_REF_NAME}-x4pro.elf"
+             "dist/crossplay-${RELEASE_TAG}-x4pro.elf"
 
       - name: Name the sticky artefacts
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           python -m esptool --chip esp32s3 merge-bin --format raw \
-            -o "dist/crossplay-${GITHUB_REF_NAME}-sticky-full.bin" \
+            -o "dist/crossplay-${RELEASE_TAG}-sticky-full.bin" \
             -fm keep -fs keep -ff keep \
             0x0     .pio/build/gh_release_sticky/bootloader.bin \
             0x8000  .pio/build/gh_release_sticky/partitions.bin \
             0x10000 .pio/build/gh_release_sticky/firmware.bin
           cp .pio/build/gh_release_sticky/firmware.bin dist/firmware-sticky.bin
           cp .pio/build/gh_release_sticky/firmware.elf \
-             "dist/crossplay-${GITHUB_REF_NAME}-sticky.elf"
+             "dist/crossplay-${RELEASE_TAG}-sticky.elf"
           ls -la dist
 
       - name: Validate OTA application images
         shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
           python - <<'PY'
+          import os
           from pathlib import Path
 
           slot_size = 0x007F0000
           ota_url = b'https://api.github.com/repos/0b-ivan/inx-4x-pro/releases/latest'
-          version = b'1.12.10'
+          version_text = os.environ['RELEASE_VERSION']
+          version = version_text.encode()
+
           for filename, board in (
               ('dist/firmware.bin', 'x4pro'),
               ('dist/firmware-sticky.bin', 'sticky'),
@@ -110,16 +149,18 @@ jobs:
               if ota_url not in data:
                   raise SystemExit(f'{filename}: wrong OTA repository endpoint')
               if version not in data:
-                  raise SystemExit(f'{filename}: wrong CrossPlay version')
-              print(f'{filename}: OK size={len(data)} board={board} version=1.12.10')
+                  raise SystemExit(f'{filename}: wrong CrossPlay version, expected {version_text}')
+              print(f'{filename}: OK size={len(data)} board={board} version={version_text}')
           PY
           sha256sum dist/firmware.bin dist/firmware-sticky.bin
 
       - name: The merged images really are merged
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           fail=0
-          for full in "dist/crossplay-${GITHUB_REF_NAME}-x4pro-full.bin" \
-                      "dist/crossplay-${GITHUB_REF_NAME}-sticky-full.bin"; do
+          for full in "dist/crossplay-${RELEASE_TAG}-x4pro-full.bin" \
+                      "dist/crossplay-${RELEASE_TAG}-sticky-full.bin"; do
             check() {
               got=$(dd if="$full" bs=1 skip=$1 count=2 2>/dev/null | xxd -p)
               if [ "$got" != "$2" ]; then
@@ -138,6 +179,10 @@ jobs:
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: CrossPlay ${{ steps.release.outputs.tag }}
+          make_latest: true
           files: dist/*
           generate_release_notes: false
           body: |
