@@ -2,7 +2,7 @@
 #
 # Two entry points are supported:
 #   1. a strict vX.Y.Z tag (legacy/manual path), or
-#   2. an exact `release: vX.Y.Z` commit on the integration/main branch.
+#   2. an exact `release: vX.Y.Z` commit on main.
 #
 # The second path lets the release be completed from repository changes alone:
 # bump [crossplay].version, update the notes below, commit with `release: vX.Y.Z`,
@@ -14,7 +14,6 @@ on:
     tags:
       - "v*"
     branches:
-      - feature/crossplay-games
       - main
 
 permissions:
