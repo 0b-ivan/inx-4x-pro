@@ -86,6 +86,16 @@ void PowerManager::powerDownRailsForSleep(const bool keepTouchPowered) {
   // active-low ones (e.g. X4 Pro's GPIO5, which powers the card while held LOW).
   holdRailAt(b.sd.powerEnable, b.sd.powerActiveHigh ? LOW : HIGH);
 
+  // Some boards feed the touch rail from a master latch as well as the dedicated
+  // touch enable. X4 Pro is exactly that: GPIO1 must remain HIGH while GPIO2 is
+  // held LOW. holdPowerRails() normally leaves latch pins driven but not held;
+  // esp_sleep_config_gpio_isolate() would therefore be free to float GPIO1. When
+  // touch wake is requested, explicitly latch both master rails HIGH too.
+  if (keepTouchPowered) {
+    holdRailAt(b.power.latch0, HIGH);
+    holdRailAt(b.power.latch1, HIGH);
+  }
+
   // Normally the touch rail is switched off as well. A board that wants a touch
   // IRQ as a wake source must keep the controller alive across deep sleep, and
   // simply skipping this pin is not enough: esp_sleep_config_gpio_isolate() can
