@@ -5,6 +5,8 @@
 #include <freertos/task.h>
 #include <string>
 
+#ifndef SIMULATOR
+
 class TarotDownloadActivity final : public Activity {
  public:
   TarotDownloadActivity(GfxRenderer& r, MappedInputManager& i) : Activity("TarotDownload", r, i) {}
@@ -25,3 +27,18 @@ class TarotDownloadActivity final : public Activity {
   TaskHandle_t task_ = nullptr;
   std::string error_;
 };
+
+#else  // SIMULATOR
+
+// Simulator stub: no-op download activity
+class TarotDownloadActivity final : public Activity {
+ public:
+  TarotDownloadActivity(GfxRenderer& r, MappedInputManager& i) : Activity("TarotDownload", r, i) {}
+  ~TarotDownloadActivity() override = default;
+  void onEnter() override { requestActivityResult(ActivityResult{true, ActivityResultCode::CANCELLED}); }
+  void onExit() override {}
+  void loop() override {}
+  void render(RenderLock&&) override {}
+};
+
+#endif  // SIMULATOR
