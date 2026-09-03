@@ -74,7 +74,7 @@ jobs:
           mkdir -p "$STACK_CACHE"
           PLATFORMIO_BUILD_CACHE_DIR="$STACK_CACHE" \
           PLATFORMIO_BUILD_FLAGS="-fstack-usage -fcallgraph-info=su" \
-            pio run -e "${{ matrix.environment }}"
+            python3 -m platformio run -e "${{ matrix.environment }}"
 
       - name: Stack fits its task
         run: python3 scripts_local/stack_budget.py --build-dir ".pio/build/${{ matrix.environment }}"
@@ -123,7 +123,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libssl-dev
 
       - name: Build simulator
-        run: pio run -e simulator_x4_pro
+        run: python3 -m platformio run -e simulator_x4_pro
 
   host-tests:
     name: host tests

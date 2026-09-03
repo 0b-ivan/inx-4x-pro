@@ -86,10 +86,10 @@ jobs:
           uv pip install --system -U esptool
 
       - name: Build x4pro
-        run: pio run -e gh_release_x4pro
+        run: python3 -m platformio run -e gh_release_x4pro
 
       - name: Build sticky
-        run: pio run -e gh_release_sticky
+        run: python3 -m platformio run -e gh_release_sticky
 
       - name: Name the x4pro artefacts
         env:
