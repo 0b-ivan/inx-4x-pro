@@ -34,7 +34,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
           # Tags, for host-tests/release below: without them its notes gate
           # cannot see what the previous tag published and skips itself.
           fetch-depth: 0
