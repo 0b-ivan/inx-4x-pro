@@ -60,26 +60,21 @@ jobs:
             '''
           text = text.replace(old_heading, new_notes, 1)
 
-          # The repository contains a legacy gitlink named open-x4-sdk with no
-          # .gitmodules entry. Recursive checkout therefore fails before a
-          # release can start. Only freeink-sdk is an actual configured
-          # submodule and is the one the build needs.
-          old_checkout = '''          submodules: recursive
-          # Tags, for host-tests/release below: without them its notes gate
-          # cannot see what the previous tag published and skips itself.
-          fetch-depth: 0
-'''
-          new_checkout = '''          submodules: false
-          # Tags, for host-tests/release below: without them its notes gate
-          # cannot see what the previous tag published and skips itself.
-          fetch-depth: 0
+          old_submodules = '          submodules: recursive\n'
+          if old_submodules not in text:
+              raise SystemExit('expected recursive checkout setting not found')
+          text = text.replace(old_submodules, '          submodules: false\n', 1)
 
-      - name: Fetch required SDK submodule
-        run: git submodule update --init --depth 1 freeink-sdk
-'''
-          if old_checkout not in text:
-              raise SystemExit('expected recursive checkout block not found')
-          text = text.replace(old_checkout, new_checkout, 1)
+          anchor = '          fetch-depth: 0\n\n      # The tag and the version'
+          replacement = (
+              '          fetch-depth: 0\n\n'
+              '      - name: Fetch required SDK submodule\n'
+              '        run: git submodule update --init --depth 1 freeink-sdk\n\n'
+              '      # The tag and the version'
+          )
+          if anchor not in text:
+              raise SystemExit('expected checkout insertion point not found')
+          text = text.replace(anchor, replacement, 1)
           wf.write_text(text)
           PY
 
