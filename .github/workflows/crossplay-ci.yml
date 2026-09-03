@@ -1,7 +1,8 @@
-# CrossPlay's own CI.
+# CrossPlay's fast development CI.
 #
-# main is the canonical development and release branch for this fork.
-# Keep the device builds, release builds, simulator and host suites green there.
+# Release binaries are built and validated only by crossplay-release.yml.
+# Development CI keeps the device builds, simulator and host suites green while
+# running the expensive paths in parallel.
 name: CrossPlay
 
 on:
@@ -13,18 +14,27 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: crossplay-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIO_CORE_URL: https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
 jobs:
-  build:
+  firmware:
+    name: firmware (${{ matrix.environment }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [x4pro, sticky]
+
     steps:
       - uses: actions/checkout@v6
         with:
-          # freeink-sdk is vendored as a normal tree in this fork. Do not recurse
-          # into stale/orphan gitlinks during checkout.
           submodules: false
-          # Tags are required by host-tests/release to compare release notes.
-          fetch-depth: 0
-          fetch-tags: true
+          fetch-depth: 1
 
       - uses: actions/setup-python@v6
         with:
@@ -35,40 +45,84 @@ jobs:
           version: "latest"
 
       - name: Install PlatformIO Core
-        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+        run: uv pip install --system -U "$PIO_CORE_URL"
 
       - name: Cache PlatformIO packages
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          key: pio-packages-${{ runner.os }}-${{ hashFiles('platformio.ini', 'platformio.sim.ini') }}
 
-      - name: Install the simulator's host libraries
+      - name: Restore compiler cache
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: pio-build-${{ runner.os }}-${{ matrix.environment }}-${{ github.sha }}
+          restore-keys: |
+            pio-build-${{ runner.os }}-${{ matrix.environment }}-
+
+      - name: Build firmware
+        run: PLATFORMIO_BUILD_FLAGS="-fstack-usage -fcallgraph-info=su" pio run -e "${{ matrix.environment }}"
+
+      - name: Stack fits its task
+        run: python3 scripts_local/stack_budget.py --build-dir ".pio/build/${{ matrix.environment }}"
+
+  simulator:
+    name: simulator (x4 pro)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Install PlatformIO Core
+        run: uv pip install --system -U "$PIO_CORE_URL"
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-packages-${{ runner.os }}-${{ hashFiles('platformio.ini', 'platformio.sim.ini') }}
+
+      - name: Restore compiler cache
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: pio-build-${{ runner.os }}-simulator_x4_pro-${{ github.sha }}
+          restore-keys: |
+            pio-build-${{ runner.os }}-simulator_x4_pro-
+
+      - name: Install simulator host libraries
         run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libssl-dev
 
-      - name: Build the x4pro firmware
-        run: PLATFORMIO_BUILD_FLAGS="-fstack-usage -fcallgraph-info=su" pio run -e x4pro
-
-      - name: Stack fits its task (x4pro)
-        run: python3 scripts_local/stack_budget.py --build-dir .pio/build/x4pro
-
-      - name: Build the sticky firmware
-        run: PLATFORMIO_BUILD_FLAGS="-fstack-usage -fcallgraph-info=su" pio run -e sticky
-
-      - name: Stack fits its task (sticky)
-        run: python3 scripts_local/stack_budget.py --build-dir .pio/build/sticky
-
-      - name: Build the simulator
+      - name: Build simulator
         run: pio run -e simulator_x4_pro
 
-      - name: Build the release firmware (x4pro)
-        run: pio run -e gh_release_x4pro
+  host-tests:
+    name: host tests
+    runs-on: ubuntu-latest
 
-      - name: Build the release firmware (sticky)
-        run: pio run -e gh_release_sticky
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+          # host-tests/release compares against the previous SemVer tag.
+          fetch-depth: 0
+          fetch-tags: true
 
-      - name: Host tests
+      - name: Run host tests
         run: |
+          set -euo pipefail
           for suite in host-tests/*/run.sh; do
             bash "$suite"
           done
