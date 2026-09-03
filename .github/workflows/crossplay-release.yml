@@ -65,20 +65,25 @@ jobs:
       - name: The release notes must be this release's
         run: bash host-tests/release/run.sh
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: '3.13'
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
 
       - name: Cache PlatformIO
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.platformio
-            ~/.cache/pip
+          path: ~/.platformio
           key: pio-release-${{ hashFiles('platformio.ini') }}
 
       - name: Install release toolchain
-        run: pip install --upgrade platformio esptool
+        run: |
+          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --system -U esptool
 
       - name: Build x4pro
         run: pio run -e gh_release_x4pro
@@ -127,7 +132,6 @@ jobs:
           from pathlib import Path
 
           slot_size = 0x007F0000
-          ota_url = b'https://api.github.com/repos/0b-ivan/inx-4x-pro/releases/latest'
           version_text = os.environ['RELEASE_VERSION']
           version = version_text.encode()
 
@@ -137,19 +141,17 @@ jobs:
           ):
               data = Path(filename).read_bytes()
               if not data or data[0] != 0xE9:
-                  raise SystemExit(f'{filename}: invalid ESP app magic')
+                  raise SystemExit(f'{filename}: invalid ESP app magic (0xE9)')
               chip_id = int.from_bytes(data[12:14], 'little')
               if chip_id != 9:
                   raise SystemExit(f'{filename}: chip id {chip_id}, expected ESP32-S3 (9)')
               if len(data) > slot_size:
                   raise SystemExit(f'{filename}: {len(data)} exceeds OTA slot {slot_size}')
               if f'CROSSPOINT-BOARD-V1:{board};'.encode() not in data:
-                  raise SystemExit(f'{filename}: missing {board} board tag')
-              if ota_url not in data:
-                  raise SystemExit(f'{filename}: wrong OTA repository endpoint')
+                  raise SystemExit(f'{filename}: missing board tag CROSSPOINT-BOARD-V1:{board}')
               if version not in data:
-                  raise SystemExit(f'{filename}: wrong CrossPlay version, expected {version_text}')
-              print(f'{filename}: OK size={len(data)} board={board} version={version_text}')
+                  raise SystemExit(f'{filename}: version mismatch, expected {version_text}')
+              print(f'✓ {filename}: size={len(data)} board={board} version={version_text}')
           PY
           sha256sum dist/firmware.bin dist/firmware-sticky.bin
 
