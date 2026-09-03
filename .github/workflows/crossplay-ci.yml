@@ -119,12 +119,6 @@ jobs:
           restore-keys: |
             pio-build-${{ runner.os }}-simulator_x4_pro-
 
-      - name: Cache PlatformIO packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: pio-packages-${{ runner.os }}-${{ hashFiles('platformio.ini', 'platformio.sim.ini') }}
-
       - name: Install simulator host libraries
         run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libssl-dev
 
@@ -146,6 +140,14 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Install PlatformIO Core
+        run: |
+          uv pip install --system -U "$PIO_CORE_URL"
 
       - name: Host tests
         run: |
