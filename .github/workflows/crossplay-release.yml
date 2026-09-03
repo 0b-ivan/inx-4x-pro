@@ -177,7 +177,13 @@ jobs:
             devices next to each other find one another with nothing to type --
             and they do not have to be the same device.
 
-            ### What is new in 1.12.11
+            ### What is new in 1.12.13
+
+            **Firmware release tooling improvements.** Build and release
+            automation has been refined to ensure consistent deployment on
+            GitHub Actions. No functional changes to the firmware itself.
+
+            ### What WAS new in 1.12.11
 
             **SUDOKU no longer throws away your saved puzzle.** Opening the
             difficulty menu, looking through the levels and coming back to your
