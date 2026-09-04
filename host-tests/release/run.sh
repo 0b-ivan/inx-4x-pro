@@ -53,7 +53,7 @@ done
 # reformatting the workflow does not turn a passing check into a failing one,
 # and reordering the arguments does not turn a failing one into a pass. One
 # merge-bin per board; each must place all three parts.
-for board in x4pro sticky; do
+for board in x4pro; do
   merge="$(tr '\n' ' ' < "$WF" | grep -o "merge-bin[^;]*gh_release_$board/firmware\.bin" || true)"
   if [ -z "$merge" ]; then
     bad "the release workflow never calls esptool merge-bin for $board"
@@ -90,14 +90,6 @@ elif grep -qE "dist/$legacy( |\"|$)" "$WF"; then
   ok
 else
   bad "the release does not publish '$legacy', so every fielded X4 Pro's Check for updates finds nothing"
-fi
-sticky_name="$(grep -A1 'FREEINK_DEVICE_STICKY$' "$TAGH" | grep -oE 'CROSSPOINT_BOARD_NAME "[^"]+"' | sed 's/.*"\(.*\)"/\1/')"
-if [ -z "$sticky_name" ]; then
-  bad "cannot find the sticky board name in FirmwareBoardTag.h"
-elif grep -qE "dist/firmware-$sticky_name\.bin( |\"|$)" "$WF"; then
-  ok
-else
-  bad "the release does not publish 'firmware-$sticky_name.bin', so a Sticky's Check for updates finds nothing"
 fi
 
 # -- 3. every documented flash command names a file the release actually makes -

@@ -1,4 +1,4 @@
-// GET /api/firmware?device=x4pro|sticky&tag=v1.8.0
+// GET /api/firmware?device=x4pro&tag=v1.8.0
 //
 // Streams one release image back to the browser, same-origin. The Install
 // button cannot fetch it from GitHub itself: release assets are served from
@@ -33,14 +33,11 @@ const { pipeline } = require("node:stream/promises");
 
 const REPO = "ma-r-s/crossplay";
 
-// Must match the artefact names in .github/workflows/crossplay-release.yml
-// ("Name the x4pro artefacts" / "Name the sticky artefacts"). Renaming them
-// there without changing this line breaks the Install button and nothing else
-// -- no build fails, no test goes red on its own -- so host-tests/release
-// asserts the two spellings against each other.
+// Must match the artefact names in .github/workflows/crossplay-release.yml.
+// Renaming there without changing this line breaks the Install button and
+// nothing else, so host-tests/release asserts both spellings match.
 const DEVICES = {
   x4pro: "crossplay-{tag}-x4pro-full.bin",
-  sticky: "crossplay-{tag}-sticky-full.bin",
 };
 
 // v1.8.0 and nothing else. Anchored, bounded, digits only.
@@ -57,7 +54,7 @@ module.exports = async function handler(req, res) {
   if (!template) {
     res.statusCode = 400;
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ error: "Unknown device. Use x4pro or sticky." }));
+    res.end(JSON.stringify({ error: "Unknown device. Use x4pro." }));
     return;
   }
   if (!TAG.test(tag)) {
