@@ -31,11 +31,10 @@
 
   var REPO = "ma-r-s/crossplay";
 
-  // Both boards are ESP32-S3. The check is not X4-Pro-vs-Sticky (nothing on
-  // the wire tells those apart); it is "this is not one of the ESP32-C3
-  // Xteinks", which is a real mistake someone will make, and one that used to
-  // cost them a bricked device. CrossPoint upstream is the right answer there
-  // and the error says so.
+  // The check is "this is not one of the ESP32-C3 Xteinks", which is a real
+  // mistake someone will make, and one that used to cost them a bricked
+  // device. CrossPoint upstream is the right answer there and the error says
+  // so.
   var EXPECTED_CHIP = "ESP32-S3";
 
   var DEVICES = {
@@ -45,10 +44,6 @@
       restart:
         "Unplug the USB cable and plug it back in, then hold the power button " +
         "until the screen changes.",
-    },
-    sticky: {
-      name: "Seeed reTerminal Sticky",
-      restart: "Unplug the USB cable and plug it back in.",
     },
   };
 

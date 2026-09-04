@@ -51,6 +51,7 @@ restyled to match the design language the apps use.
 | **Knucklebones** | Cult of the Lamb's dice game. Matching dice multiply; yours destroy theirs.  |
 | **Minesweeper**  | Tap to dig, hold to flag. The first dig is always safe.                      |
 | **Sudoku**       | Generated on the device and graded by the technique it needs, not the clues. |
+| **Tarot**        | Draw from a full deck and keep a history of your spread on-device.           |
 | **Sea Salt**     | Sea Salt & Paper: collect duos, bet on STOP or LAST CHANCE.                  |
 | **Toy Battle**   | Nine boards of bases and paths. Hold regions, take medals, solo or nearby.   |
 | **Forehead**     | Screen against your forehead, the room shouts clues, sixty seconds.          |

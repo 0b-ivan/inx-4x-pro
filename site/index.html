@@ -166,7 +166,7 @@
     <p class="hed">Reading was never the whole of it.</p>
     <p>
       E-ink holds a page at no power for as long as you need it. So does a chess
-      position, a flashcard, a logic grid, an article you saved to finish. The
+      position, a flashcard, a Tarot draw, a logic grid, an article you saved to finish. The
       screen puts up a situation, you think, you decide. A panel that cannot
       animate is the right one for that, and so far it has been spent on books.
     </p>
@@ -476,7 +476,6 @@
         <fieldset class="installer-devices">
           <legend>Which device</legend>
           <label><input type="radio" name="install-device" value="x4pro" checked> Xteink X4 Pro</label>
-          <label><input type="radio" name="install-device" value="sticky"> Seeed reTerminal Sticky</label>
         </fieldset>
         <button class="btn primary" type="button" id="installButton">Install on Xteink X4 Pro</button>
         <div class="installer-bar" id="installBar" hidden><span id="installBarFill"></span></div>
@@ -499,11 +498,11 @@
       <details class="by-hand">
         <summary>Or install it by hand</summary>
         <ol class="steps">
-          <li><strong>Download your device's full image</strong> from the <a href="https://github.com/ma-r-s/crossplay/releases">releases page</a>: <code>crossplay-&lt;version&gt;-x4pro-full.bin</code> or <code>crossplay-&lt;version&gt;-sticky-full.bin</code>. Each is the whole firmware, bootloader and partition table included, so you do not need to have installed CrossPoint first. The firmware refuses an image built for the other board, so the worst a mixed-up download costs is a retry.</li>
-          <li><strong>Flash it over USB.</strong> You need <a href="https://github.com/espressif/esptool">esptool</a>, which is one <code>pip install esptool</code> on Windows, macOS or Linux alike. With the device plugged in (shown for the X4 Pro; swap in the sticky filename on a Sticky):
+          <li><strong>Download the full image</strong> from the <a href="https://github.com/ma-r-s/crossplay/releases">releases page</a>: <code>crossplay-&lt;version&gt;-x4pro-full.bin</code>. It is the whole firmware, bootloader and partition table included, so you do not need to have installed CrossPoint first.</li>
+          <li><strong>Flash it over USB.</strong> You need <a href="https://github.com/espressif/esptool">esptool</a>, which is one <code>pip install esptool</code> on Windows, macOS or Linux alike. With the device plugged in:
             <br><code>esptool.py --chip esp32s3 --baud 921600 write_flash 0x0 crossplay-&lt;version&gt;-x4pro-full.bin</code>
           </li>
-          <li><strong>Updating an install you already have</strong> uses the app-only file instead -- <code>firmware.bin</code> for the X4 Pro, <code>firmware-sticky.bin</code> for the Sticky -- over Wi-Fi or from the SD card. The <code>-full.bin</code> is for USB only: handing it to the updater writes a bootloader into a slot meant for the application.</li>
+          <li><strong>Updating an install you already have</strong> uses the app-only file instead -- <code>firmware.bin</code> -- over Wi-Fi or from the SD card. The <code>-full.bin</code> is for USB only: handing it to the updater writes a bootloader into a slot meant for the application.</li>
         </ol>
       </details>
 
