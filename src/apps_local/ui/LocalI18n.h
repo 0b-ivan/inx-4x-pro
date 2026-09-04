@@ -1,6 +1,15 @@
 #pragma once
 
+#if defined(__has_include)
+#if __has_include(<I18n.h>)
 #include <I18n.h>
+#define TOYBOX_LOCAL_I18N_HAS_CORE 1
+#else
+#define TOYBOX_LOCAL_I18N_HAS_CORE 0
+#endif
+#else
+#define TOYBOX_LOCAL_I18N_HAS_CORE 0
+#endif
 
 #include <cstdio>
 #include <cstring>
@@ -15,8 +24,21 @@ struct LocalTranslation {
   const char* german;
 };
 
+inline bool isGermanLanguage() {
+#if TOYBOX_LOCAL_I18N_HAS_CORE
+  return I18N.getLanguage() == Language::DE;
+#else
+  return false;
+#endif
+}
+
 inline const char* localize(const char* text) {
-  if (text == nullptr || I18N.getLanguage() != Language::DE) return text;
+  if (text == nullptr) return text;
+#if TOYBOX_LOCAL_I18N_HAS_CORE
+  if (!isGermanLanguage()) return text;
+#else
+  return text;
+#endif
 
   static constexpr LocalTranslation kGerman[] = {
       {"Games", "Spiele"},

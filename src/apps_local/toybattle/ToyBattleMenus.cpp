@@ -264,8 +264,8 @@ void buildMenu(toybox::Screen& screen, const MenuModel& model) {
   // would be resuming. Made of the app's own material and showing the app's own
   // data, so a screenshot of it is not the same on everyone's device.
   char caption[64];
-  std::snprintf(caption, sizeof(caption), I18N.getLanguage() == Language::DE ? "%s   %d ZUM SIEG, %d AUF DEM BRETT"
-                                                                            : "%s   %d TO WIN, %d ON THE BOARD",
+  std::snprintf(caption, sizeof(caption),
+                toybox::isGermanLanguage() ? "%s   %d ZUM SIEG, %d AUF DEM BRETT" : "%s   %d TO WIN, %d ON THE BOARD",
                 toybox::localize(terrain.name), terrain.medalsObjective, medalsOn(terrain));
   const fui::Rect capBox = fui::makeRect(ornament.x, static_cast<int16_t>(ornament.bottom() - 24), ornament.width, 24);
   miniBoard(screen, fui::makeRect(ornament.x, ornament.y, ornament.width, static_cast<int16_t>(ornament.height - 30)),
@@ -359,8 +359,8 @@ void buildSetup(toybox::Screen& screen, const SetupModel& model) {
   const int16_t below = static_cast<int16_t>(startBox.y - body.y - toybox::kMargin);
   if (below > 60) {
     char note[64];
-    std::snprintf(note, sizeof(note), I18N.getLanguage() == Language::DE ? "%d MEDAILLEN ZUM SIEG, %d AUF DEM BRETT"
-                                                                         : "%d MEDALS TO WIN, %d ON THE BOARD",
+    std::snprintf(note, sizeof(note),
+                  toybox::isGermanLanguage() ? "%d MEDAILLEN ZUM SIEG, %d AUF DEM BRETT" : "%d MEDALS TO WIN, %d ON THE BOARD",
                   terrain.medalsObjective, medalsOn(terrain));
     miniBoard(screen, fui::makeRect(body.x, body.y, body.width, static_cast<int16_t>(below - 28)), terrain, nullptr, 0);
     screen.target().text(fui::makeRect(body.x, static_cast<int16_t>(body.y + below - 26), body.width, 24), note,
@@ -419,7 +419,7 @@ void buildMapPick(toybox::Screen& screen, const MapPickModel& model) {
   if (page >= pages) page = pages - 1;
 
   char counter[16];
-    std::snprintf(counter, sizeof(counter), pages > 1 ? "%d/%d" : I18N.getLanguage() == Language::DE ? "%d KARTEN" : "%d MAPS",
+  std::snprintf(counter, sizeof(counter), pages > 1 ? "%d/%d" : toybox::isGermanLanguage() ? "%d KARTEN" : "%d MAPS",
                 pages > 1 ? page + 1 : tb::kPlayableTerrainCount, pages);
   chrome(screen, "MAPS", counter);
 
@@ -452,8 +452,8 @@ void buildMapPick(toybox::Screen& screen, const MapPickModel& model) {
                                        static_cast<int16_t>(card.y + 22), static_cast<int16_t>(card.width - 132), 28),
                          terrain.name, styled(toybox::kUiFont, fui::TextAlign::Left));
     char sub[56];
-    std::snprintf(sub, sizeof(sub), I18N.getLanguage() == Language::DE ? "%d BASEN   SIEG BEI %d VON %d"
-                                                                       : "%d BASES   WIN AT %d OF %d",
+    std::snprintf(sub, sizeof(sub),
+            toybox::isGermanLanguage() ? "%d BASEN   SIEG BEI %d VON %d" : "%d BASES   WIN AT %d OF %d",
                   terrain.baseCount, terrain.medalsObjective, medalsOn(terrain));
     screen.target().text(fui::makeRect(static_cast<int16_t>(card.x + toybox::kGutter),
                                        static_cast<int16_t>(card.y + 58), static_cast<int16_t>(card.width - 132), 24),
