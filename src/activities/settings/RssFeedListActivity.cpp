@@ -41,6 +41,36 @@ void RssFeedListActivity::loop() {
   }
 
   const int itemCount = getItemCount();
+  if (itemCount > 0 && mappedInput.hasTouch()) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const int pageHeight = renderer.getScreenHeight();
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+    const int rowHeight = GUI.getMenuRowHeight(renderer);
+    const int rowStep = rowHeight + metrics.menuSpacing;
+    const int pageItems = std::max(1, contentHeight / std::max(1, rowStep));
+    const int pageStart = (selectedIndex / pageItems) * pageItems;
+
+    int touchedRow = -1;
+    const auto rowTouch = mappedInput.rowTouch(touchedRow, contentTop, rowStep, std::min(pageItems, itemCount - pageStart),
+                                               0, renderer.getScreenWidth(), rowHeight);
+    if (rowTouch != MappedInputManager::RowTouch::None && touchedRow >= 0) {
+      const int touchedIndex = pageStart + touchedRow;
+      if (touchedIndex < itemCount) {
+        if (rowTouch == MappedInputManager::RowTouch::Down) {
+          if (selectedIndex != touchedIndex) {
+            selectedIndex = touchedIndex;
+            requestUpdate();
+          }
+        } else {
+          selectedIndex = touchedIndex;
+          handleSelection();
+        }
+      }
+      return;
+    }
+  }
+
   if (itemCount > 0) {
     buttonNavigator.onNext([this, itemCount] {
       selectedIndex = ButtonNavigator::nextIndex(selectedIndex, itemCount);

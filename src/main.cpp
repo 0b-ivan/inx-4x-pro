@@ -481,6 +481,11 @@ void setup() {
       LOG_DBG("MAIN", "Dev bridge build: skipping power button verification");
       break;
 #else
+      if (BoardConfig::isX4Pro()) {
+        LOG_DBG("MAIN", "X4 Pro wake: skipping hold-duration verification");
+        wakePowerReleasePending = true;
+        break;
+      }
       LOG_DBG("MAIN", "Verifying power button press duration");
       if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
                                         SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP)) {

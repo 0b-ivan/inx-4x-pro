@@ -48,6 +48,31 @@ void RssSettingsActivity::loop() {
   }
 
   const int menuItems = getMenuItemCount();
+  if (menuItems > 0 && mappedInput.hasTouch()) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const int pageHeight = renderer.getScreenHeight();
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + metrics.tabBarHeight;
+    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+    const int rowHeight = GUI.getMenuRowHeight(renderer);
+    const int rowStep = rowHeight + metrics.menuSpacing;
+
+    int touchedRow = -1;
+    const auto rowTouch = mappedInput.rowTouch(touchedRow, contentTop, rowStep, menuItems, 0, renderer.getScreenWidth(),
+                                               rowHeight);
+    if (rowTouch != MappedInputManager::RowTouch::None && touchedRow >= 0 && touchedRow < menuItems) {
+      if (rowTouch == MappedInputManager::RowTouch::Down) {
+        if (selectedIndex != touchedRow) {
+          selectedIndex = touchedRow;
+          requestUpdate();
+        }
+      } else {
+        selectedIndex = touchedRow;
+        handleSelection();
+      }
+      return;
+    }
+  }
+
   buttonNavigator.onNext([this, menuItems] {
     selectedIndex = ButtonNavigator::nextIndex(selectedIndex, menuItems);
     requestUpdate();

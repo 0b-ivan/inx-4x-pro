@@ -578,7 +578,7 @@ void SleepActivity::renderTarotSleepScreen() const {
   }
 
   renderer.clearScreen();
-  renderer.drawBitmap(bitmap, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), 0, 0, false, true);
+  renderer.drawBitmap(bitmap, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), 0, 0, true, true);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 

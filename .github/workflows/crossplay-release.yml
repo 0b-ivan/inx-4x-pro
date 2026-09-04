@@ -155,18 +155,13 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.16
+            ### What is new in 1.12.17
 
-            - Added RSS Reader with per-feed settings in System Settings and
-              in the APPS shelf.
-            - Added RSS feed management: add/edit/remove feeds with optional
-              HTTP basic auth.
-            - Added feed browsing and article reader view with pagination and
-              reader orientation support.
-            - Added article full-text extraction from fetched HTML with
-              AMP/Wikipedia fallbacks.
-            - Added German UI translations for RSS management and article
-              screens.
+            - X4 Pro wake behavior fixed: standby wake no longer requires a
+              long power-button hold.
+            - RSS feed management touch input fixed: tapping list rows now
+              correctly opens Add Feed and feed field editors.
+            - No protocol or installer contract changes in this hotfix.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
