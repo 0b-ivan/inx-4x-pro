@@ -155,7 +155,7 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.13
+            ### What is new in 1.12.14
 
             - Release pipeline simplified to one target: `gh_release_x4pro`.
             - Sticky release artefacts removed from build and publish steps.
