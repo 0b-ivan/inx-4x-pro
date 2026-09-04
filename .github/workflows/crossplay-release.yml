@@ -155,15 +155,18 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.15
+            ### What is new in 1.12.16
 
-            - X4 Pro sleep wake tightened: wake now only from the physical
-              power button.
-            - Capacitive Home key and screen touch no longer wake the device
-              from deep sleep.
-            - Tarot card rendering fixed: cards are no longer vertically
-              mirrored.
-            - No other gameplay or updater contract changes in this release.
+            - Added RSS Reader with per-feed settings in System Settings and
+              in the APPS shelf.
+            - Added RSS feed management: add/edit/remove feeds with optional
+              HTTP basic auth.
+            - Added feed browsing and article reader view with pagination and
+              reader orientation support.
+            - Added article full-text extraction from fetched HTML with
+              AMP/Wikipedia fallbacks.
+            - Added German UI translations for RSS management and article
+              screens.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
