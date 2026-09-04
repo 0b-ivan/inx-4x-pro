@@ -80,7 +80,7 @@ void TarotActivity::drawTextCard() {
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
         // The asset aspect ratio matches the panel. Explicit upscaling is local
         // to Tarot so book covers retain drawBitmap's no-upscale default.
-        renderer.drawBitmap(bitmap, 0, 0, w, h, 0, 0, false, true);
+        renderer.drawBitmap(bitmap, 0, 0, w, h, 0, 0, true, true);
         const TarotMeaning meaning = assets_.meaning(card_);
         if (showMeaning_)
           renderer.drawCenteredText(toybox::kUiFontId, h - 116,

@@ -155,12 +155,15 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.14
+            ### What is new in 1.12.15
 
-            - Release pipeline simplified to one target: `gh_release_x4pro`.
-            - Sticky release artefacts removed from build and publish steps.
-            - Release CI setup streamlined (`uv` + pinned PlatformIO Core).
-            - No firmware feature or gameplay changes in this release.
+            - X4 Pro sleep wake tightened: wake now only from the physical
+              power button.
+            - Capacitive Home key and screen touch no longer wake the device
+              from deep sleep.
+            - Tarot card rendering fixed: cards are no longer vertically
+              mirrored.
+            - No other gameplay or updater contract changes in this release.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.

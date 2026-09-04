@@ -92,20 +92,13 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
 #if FREEINK_DEVICE_X4PRO
   // X4 Pro wake policy:
   //   GPIO3  = physical power/standby button, active LOW.
-  //   GPIO10 = GT911 INT. The capacitive Home pad is a GT911 key bit and has
-  //            no separate ESP GPIO, so keeping the controller powered and
-  //            waking from its shared IRQ is the only deep-sleep hardware path.
-  //
-  // The GT911 IRQ is shared by Home and normal panel touches, so a screen touch
-  // can wake the ESP as well. Once awake, InputManager still distinguishes the
-  // Home-key status bit from ordinary coordinates exactly as before.
+  // Deep sleep intentionally wakes only from POWER. GT911 INT is shared by the
+  // Home pad and panel touches; arming it would also wake on any screen tap.
   const auto& board = BoardConfig::ACTIVE;
   const int8_t powerPin = board.input.power;
-  const int8_t touchIrq = board.touch.irq;
 
-  // Keep GPIO2 (active-low GT911 rail) explicitly ON and held through deep
-  // sleep. All other gated rails retain the normal OFF policy.
-  freeink::PowerManager::powerDownRailsForSleep(/*keepTouchPowered=*/true);
+  // Keep default sleep policy: rails off while sleeping, including touch.
+  freeink::PowerManager::powerDownRailsForSleep();
 
   // A short power-button press is enough: only wait for the press that put us
   // to sleep to be released, then arm an ANY_LOW wake. HalGPIO's X4 Pro wake
@@ -116,11 +109,6 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   if (powerPin >= 0) {
     pinMode(powerPin, INPUT_PULLUP);
     wakeMask |= 1ULL << powerPin;
-  }
-  if (touchIrq >= 0) {
-    // GT911 INT idles high and asserts low for fresh key/touch data.
-    pinMode(touchIrq, INPUT_PULLUP);
-    wakeMask |= 1ULL << touchIrq;
   }
 
   if (wakeMask != 0) {
