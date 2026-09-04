@@ -35,7 +35,12 @@ class TarotDownloadActivity final : public Activity {
  public:
   TarotDownloadActivity(GfxRenderer& r, MappedInputManager& i) : Activity("TarotDownload", r, i) {}
   ~TarotDownloadActivity() override = default;
-  void onEnter() override { requestActivityResult(ActivityResult{true, ActivityResultCode::CANCELLED}); }
+  void onEnter() override {
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
+  }
   void onExit() override {}
   void loop() override {}
   void render(RenderLock&&) override {}
