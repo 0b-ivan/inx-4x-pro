@@ -155,16 +155,18 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.18
+            ### What is new in 1.12.19
 
-            - Tarot card rendering now uses the same orientation as the standby
-              Tarot screen on the X4 Pro.
-            - Fixes the unreleased Tarot orientation hotfix from commit
-              c6f57d13facbcd9163e12b375fee28e52a9c1a90.
+            - Adds the **Authenticator** app for managing multiple offline TOTP
+              accounts directly on the X4 Pro.
+            - Generates RFC 6238 codes from Base32 secrets and refuses to show
+              codes while the device clock is invalid.
+            - Protects the authenticator vault with a 6-12 digit PIN. Secrets
+              are encrypted at rest with AES-256-GCM and a PBKDF2-HMAC-SHA256
+              derived key, with random salt and IV.
+            - Sticky remains development-only; tagged releases publish X4 Pro
+              images only.
             - No OTA, partition-table or installer contract changes.
-
-            PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
-            Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
 
             ### Install
 
