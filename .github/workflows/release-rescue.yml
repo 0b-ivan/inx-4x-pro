@@ -2,10 +2,10 @@ name: Release rescue
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
-      - ".github/workflows/release-rescue.yml"
-  workflow_dispatch:
+      - .github/workflows/release-rescue.yml
 
 permissions:
   contents: write
@@ -19,65 +19,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare v1.12.18
-        shell: bash
+      - name: Prepare release files
+        run: python3 scripts_local/release_rescue.py
+
+      - name: Commit and tag v1.12.18
         run: |
           set -euo pipefail
-
-          # Fail closed if this rescue is ever re-run against an unexpected state.
-          grep -q '^version = 1\.12\.17$' <(awk '/^\[crossplay\]/{f=1;next} /^\[/{f=0} f{print}' platformio.ini)
-          git merge-base --is-ancestor c6f57d13facbcd9163e12b375fee28e52a9c1a90 HEAD
-
-          python3 - <<'PY'
-          from pathlib import Path
-
-          ini = Path('platformio.ini')
-          text = ini.read_text()
-          old = '[crossplay]\nversion = 1.12.17'
-          new = '[crossplay]\nversion = 1.12.18'
-          if text.count(old) != 1:
-              raise SystemExit('expected exactly one crossplay 1.12.17 version')
-          ini.write_text(text.replace(old, new, 1))
-
-          wf = Path('.github/workflows/crossplay-release.yml')
-          text = wf.read_text()
-          old = '''            ### What is new in 1.12.17
-
-            - X4 Pro wake behavior fixed: standby wake no longer requires a
-              long power-button hold.
-            - RSS feed management touch input fixed: tapping list rows now
-              correctly opens Add Feed and feed field editors.
-            - No protocol or installer contract changes in this hotfix.
-'''
-          new = '''            ### What is new in 1.12.18
-
-            - Tarot card rendering now uses the same orientation as the standby
-              Tarot screen on the X4 Pro.
-            - Fixes the unreleased Tarot orientation hotfix from commit
-              c6f57d13facbcd9163e12b375fee28e52a9c1a90.
-            - No OTA, partition-table or installer contract changes.
-'''
-          if text.count(old) != 1:
-              raise SystemExit('expected exactly one 1.12.17 release-note block')
-          wf.write_text(text.replace(old, new, 1))
-          PY
-
-          # This workflow is intentionally one-shot. The real release workflow
-          # remains the single owner of building and publishing firmware.
-          rm .github/workflows/release-rescue.yml
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add platformio.ini .github/workflows/crossplay-release.yml .github/workflows/release-rescue.yml
+          git add -A
           git commit -m "release: prepare v1.12.18 tarot orientation hotfix"
           git push origin HEAD:main
-
           git tag -a v1.12.18 -m "v1.12.18"
           git push origin v1.12.18
 
-      - name: Dispatch release build on the tag
+      - name: Dispatch release build
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run crossplay-release.yml --ref v1.12.18
-
-# one-shot trigger
