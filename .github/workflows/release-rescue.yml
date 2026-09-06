@@ -37,3 +37,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run crossplay-release.yml --ref v1.12.18
+
+# retrigger after release notes were prepared with the GitHub app
