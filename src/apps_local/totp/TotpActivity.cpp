@@ -11,6 +11,10 @@
 #include <HalStorage.h>
 #else
 #include <Preferences.h>
+#include <esp_random.h>
+#include <mbedtls/gcm.h>
+#include <mbedtls/md.h>
+#include <mbedtls/pkcs5.h>
 #endif
 
 #include "../../activities/util/KeyboardEntryActivity.h"
@@ -30,6 +34,8 @@ constexpr fui::ActionId kActionDelete = 522;
 constexpr fui::ActionId kActionKeep = 523;
 constexpr fui::ActionId kActionDeleteConfirm = 524;
 constexpr fui::ActionId kActionNoticeBack = 525;
+constexpr fui::ActionId kActionUnlock = 526;
+constexpr fui::ActionId kActionSetPin = 527;
 
 #if defined(SIMULATOR)
 constexpr char kSimStorePath[] = "/.crosspoint/totp.bin";
@@ -58,35 +64,18 @@ fui::TextStyle centered(const fui::TextStyle& base, const uint8_t maxLines = 1) 
   return style;
 }
 
+void wipeBytes(void* data, const size_t len) {
+  volatile uint8_t* p = static_cast<volatile uint8_t*>(data);
+  for (size_t i = 0; i < len; ++i) p[i] = 0;
+}
+
 }  // namespace
 
 std::unique_ptr<Activity> TotpActivity::create(GfxRenderer& renderer, MappedInputManager& mappedInput) {
   return makeUniqueNoThrow<TotpActivity>(renderer, mappedInput);
 }
 
-bool TotpActivity::loadAccounts() {
-  store_ = StoreBlob{};
-#if defined(SIMULATOR)
-  if (!Storage.exists(kSimStorePath)) return true;
-  HalFile file = Storage.open(kSimStorePath, O_RDONLY);
-  if (!file || file.size() != sizeof(StoreBlob)) return false;
-  if (file.read(&store_, sizeof(store_)) != static_cast<int>(sizeof(store_))) return false;
-#else
-  Preferences prefs;
-  if (!prefs.begin("crossplay-totp", true)) return false;
-  const size_t bytes = prefs.getBytesLength("accounts");
-  if (bytes == 0) {
-    prefs.end();
-    return true;
-  }
-  if (bytes != sizeof(StoreBlob) || prefs.getBytes("accounts", &store_, sizeof(store_)) != sizeof(store_)) {
-    prefs.end();
-    store_ = StoreBlob{};
-    return false;
-  }
-  prefs.end();
-#endif
-
+bool TotpActivity::validateStore() {
   if (store_.magic != kStoreMagic || store_.version != kStoreVersion || store_.count > kMaxAccounts) {
     store_ = StoreBlob{};
     return false;
@@ -110,6 +99,205 @@ bool TotpActivity::loadAccounts() {
   return true;
 }
 
+bool TotpActivity::loadAccounts() {
+#if defined(SIMULATOR)
+  store_ = StoreBlob{};
+  if (!Storage.exists(kSimStorePath)) return true;
+  HalFile file = Storage.open(kSimStorePath, O_RDONLY);
+  if (!file || file.size() != sizeof(StoreBlob)) return false;
+  if (file.read(&store_, sizeof(store_)) != static_cast<int>(sizeof(store_))) return false;
+  return validateStore();
+#else
+  return false;
+#endif
+}
+
+#if !defined(SIMULATOR)
+bool TotpActivity::validPin(const char* pin) {
+  if (pin == nullptr) return false;
+  const size_t len = std::strlen(pin);
+  if (len < 6 || len > 12) return false;
+  for (size_t i = 0; i < len; ++i) {
+    if (pin[i] < '0' || pin[i] > '9') return false;
+  }
+  return true;
+}
+
+bool TotpActivity::deriveVaultKey(const char* pin, const std::array<uint8_t, kVaultSaltBytes>& salt,
+                                  std::array<uint8_t, kVaultKeyBytes>& key) const {
+  if (!validPin(pin)) return false;
+  return mbedtls_pkcs5_pbkdf2_hmac_ext(MBEDTLS_MD_SHA256, reinterpret_cast<const unsigned char*>(pin),
+                                       std::strlen(pin), salt.data(), salt.size(), kPbkdf2Iterations,
+                                       static_cast<uint32_t>(key.size()), key.data()) == 0;
+}
+
+bool TotpActivity::vaultExists() const {
+  Preferences prefs;
+  if (!prefs.begin("crossplay-totp", true)) return false;
+  const size_t bytes = prefs.getBytesLength("vault");
+  prefs.end();
+  return bytes > 0;
+}
+
+bool TotpActivity::readVault(VaultBlob& vault) const {
+  Preferences prefs;
+  if (!prefs.begin("crossplay-totp", true)) return false;
+  const size_t bytes = prefs.getBytesLength("vault");
+  const bool ok = bytes == sizeof(VaultBlob) && prefs.getBytes("vault", &vault, sizeof(vault)) == sizeof(vault);
+  prefs.end();
+  return ok && vault.magic == kVaultMagic && vault.version == kVaultVersion;
+}
+
+bool TotpActivity::writeEncryptedVault() const {
+  if (!unlocked_) return false;
+
+  VaultBlob vault{};
+  vault.salt = vaultSalt_;
+  esp_fill_random(vault.iv.data(), vault.iv.size());
+
+  mbedtls_gcm_context gcm;
+  mbedtls_gcm_init(&gcm);
+  int rc = mbedtls_gcm_setkey(&gcm, MBEDTLS_CIPHER_ID_AES, vaultKey_.data(), 256);
+  if (rc == 0) {
+    rc = mbedtls_gcm_crypt_and_tag(&gcm, MBEDTLS_GCM_ENCRYPT, sizeof(StoreBlob), vault.iv.data(), vault.iv.size(),
+                                   nullptr, 0, reinterpret_cast<const unsigned char*>(&store_),
+                                   vault.ciphertext.data(), vault.tag.size(), vault.tag.data());
+  }
+  mbedtls_gcm_free(&gcm);
+  if (rc != 0) return false;
+
+  Preferences prefs;
+  if (!prefs.begin("crossplay-totp", false)) return false;
+  const size_t written = prefs.putBytes("vault", &vault, sizeof(vault));
+  prefs.end();
+  return written == sizeof(vault);
+}
+
+bool TotpActivity::unlockWithPin(const char* pin) {
+  VaultBlob vault{};
+  if (!readVault(vault)) return false;
+
+  std::array<uint8_t, kVaultKeyBytes> candidateKey{};
+  if (!deriveVaultKey(pin, vault.salt, candidateKey)) return false;
+
+  StoreBlob candidate{};
+  mbedtls_gcm_context gcm;
+  mbedtls_gcm_init(&gcm);
+  int rc = mbedtls_gcm_setkey(&gcm, MBEDTLS_CIPHER_ID_AES, candidateKey.data(), 256);
+  if (rc == 0) {
+    rc = mbedtls_gcm_auth_decrypt(&gcm, sizeof(StoreBlob), vault.iv.data(), vault.iv.size(), nullptr, 0,
+                                  vault.tag.data(), vault.tag.size(), vault.ciphertext.data(),
+                                  reinterpret_cast<unsigned char*>(&candidate));
+  }
+  mbedtls_gcm_free(&gcm);
+  if (rc != 0) {
+    wipeBytes(candidateKey.data(), candidateKey.size());
+    wipeBytes(&candidate, sizeof(candidate));
+    return false;
+  }
+
+  store_ = candidate;
+  wipeBytes(&candidate, sizeof(candidate));
+  if (!validateStore()) {
+    wipeBytes(candidateKey.data(), candidateKey.size());
+    return false;
+  }
+
+  vaultKey_ = candidateKey;
+  vaultSalt_ = vault.salt;
+  wipeBytes(candidateKey.data(), candidateKey.size());
+  unlocked_ = true;
+  return true;
+}
+
+bool TotpActivity::initialiseVault(const char* pin) {
+  if (!validPin(pin)) return false;
+  store_ = StoreBlob{};
+  esp_fill_random(vaultSalt_.data(), vaultSalt_.size());
+  if (!deriveVaultKey(pin, vaultSalt_, vaultKey_)) return false;
+  unlocked_ = true;
+  if (!writeEncryptedVault()) {
+    unlocked_ = false;
+    wipeBytes(vaultKey_.data(), vaultKey_.size());
+    wipeBytes(vaultSalt_.data(), vaultSalt_.size());
+    return false;
+  }
+
+  Preferences prefs;
+  if (prefs.begin("crossplay-totp", false)) {
+    prefs.remove("accounts");
+    prefs.end();
+  }
+  return true;
+}
+
+void TotpActivity::beginUnlock() {
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "VAULT PIN", "", 12, InputType::Password);
+  if (!keyboard) {
+    showNotice("LOW MEMORY", "The PIN keyboard could not be opened. Try again.", Phase::Locked);
+    return;
+  }
+  startActivityForResult(
+      std::move(keyboard),
+      [this](const ActivityResult& result) {
+        if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
+        const std::string& pin = std::get<KeyboardResult>(result.data).text;
+        if (!validPin(pin.c_str())) {
+          showNotice("INVALID PIN", "Use 6 to 12 digits.", Phase::Locked);
+          return;
+        }
+        if (!unlockWithPin(pin.c_str())) {
+          showNotice("UNLOCK FAILED", "The PIN is wrong or the vault is damaged.", Phase::Locked);
+          return;
+        }
+        phase_ = Phase::List;
+        requestUpdate();
+      });
+}
+
+void TotpActivity::beginSetPin() {
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "NEW VAULT PIN", "", 12,
+                                                            InputType::Password);
+  if (!keyboard) {
+    showNotice("LOW MEMORY", "The PIN keyboard could not be opened. Try again.", Phase::SetupPin);
+    return;
+  }
+  startActivityForResult(
+      std::move(keyboard),
+      [this](const ActivityResult& result) {
+        if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
+        const std::string pin = std::get<KeyboardResult>(result.data).text;
+        if (!validPin(pin.c_str())) {
+          showNotice("INVALID PIN", "Use 6 to 12 digits.", Phase::SetupPin);
+          return;
+        }
+
+        auto confirm = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "CONFIRM VAULT PIN", "", 12,
+                                                                 InputType::Password);
+        if (!confirm) {
+          showNotice("LOW MEMORY", "The PIN keyboard could not be opened. Try again.", Phase::SetupPin);
+          return;
+        }
+        startActivityForResult(
+            std::move(confirm),
+            [this, pin](const ActivityResult& confirmResult) {
+              if (confirmResult.isCancelled || !std::holds_alternative<KeyboardResult>(confirmResult.data)) return;
+              const std::string& confirmation = std::get<KeyboardResult>(confirmResult.data).text;
+              if (confirmation != pin) {
+                showNotice("PIN MISMATCH", "The two PIN entries did not match.", Phase::SetupPin);
+                return;
+              }
+              if (!initialiseVault(pin.c_str())) {
+                showNotice("NOT SAVED", "The encrypted vault could not be created.", Phase::SetupPin);
+                return;
+              }
+              phase_ = Phase::List;
+              requestUpdate();
+            });
+      });
+}
+#endif
+
 bool TotpActivity::saveAccounts() const {
 #if defined(SIMULATOR)
   if (!Storage.ensureDirectoryExists("/.crosspoint")) return false;
@@ -119,29 +307,35 @@ bool TotpActivity::saveAccounts() const {
   file.flush();
   return written == sizeof(store_);
 #else
-  Preferences prefs;
-  if (!prefs.begin("crossplay-totp", false)) return false;
-  const size_t written = prefs.putBytes("accounts", &store_, sizeof(store_));
-  prefs.end();
-  return written == sizeof(store_);
+  return writeEncryptedVault();
 #endif
 }
 
 void TotpActivity::onEnter() {
   Activity::onEnter();
   toybox::ensureFonts(renderer);
+#if defined(SIMULATOR)
   if (!loadAccounts()) {
     showNotice("STORE RESET", "The authenticator store was unreadable and was reset.");
   } else {
     phase_ = Phase::List;
   }
+#else
+  store_ = StoreBlob{};
+  unlocked_ = false;
+  phase_ = vaultExists() ? Phase::Locked : Phase::SetupPin;
+#endif
   requestUpdate();
 }
 
 void TotpActivity::onExit() {
   Activity::onExit();
-  volatile uint8_t* wipe = reinterpret_cast<volatile uint8_t*>(&store_);
-  for (size_t i = 0; i < sizeof(store_); ++i) wipe[i] = 0;
+  wipeBytes(&store_, sizeof(store_));
+#if !defined(SIMULATOR)
+  wipeBytes(vaultKey_.data(), vaultKey_.size());
+  wipeBytes(vaultSalt_.data(), vaultSalt_.size());
+  unlocked_ = false;
+#endif
 }
 
 bool TotpActivity::clockValid() const { return static_cast<int64_t>(std::time(nullptr)) > kClockFloor; }
@@ -153,9 +347,10 @@ uint64_t TotpActivity::currentCounter() const {
   return static_cast<uint64_t>(std::time(nullptr)) / account.period;
 }
 
-void TotpActivity::showNotice(const char* headline, const char* message) {
+void TotpActivity::showNotice(const char* headline, const char* message, const Phase returnTo) {
   std::snprintf(noticeHeadline_, sizeof(noticeHeadline_), "%s", headline == nullptr ? "" : headline);
   std::snprintf(noticeMessage_, sizeof(noticeMessage_), "%s", message == nullptr ? "" : message);
+  noticeReturn_ = returnTo;
   phase_ = Phase::Notice;
   requestUpdate();
 }
@@ -277,6 +472,8 @@ void TotpActivity::pageList(const int delta) {
 void TotpActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     switch (phase_) {
+      case Phase::Locked:
+      case Phase::SetupPin:
       case Phase::List:
         shelf::leave(renderer, mappedInput);
         break;
@@ -285,8 +482,11 @@ void TotpActivity::loop() {
         requestUpdate();
         break;
       case Phase::Code:
-      case Phase::Notice:
         phase_ = Phase::List;
+        requestUpdate();
+        break;
+      case Phase::Notice:
+        phase_ = noticeReturn_;
         requestUpdate();
         break;
     }
@@ -344,9 +544,17 @@ void TotpActivity::loop() {
       deleteSelected();
       break;
     case kActionNoticeBack:
-      phase_ = Phase::List;
+      phase_ = noticeReturn_;
       requestUpdate();
       break;
+#if !defined(SIMULATOR)
+    case kActionUnlock:
+      beginUnlock();
+      break;
+    case kActionSetPin:
+      beginSetPin();
+      break;
+#endif
     default:
       break;
   }
@@ -368,6 +576,33 @@ void TotpActivity::render(RenderLock&&) {
   const int16_t footerY = static_cast<int16_t>(device.height - toybox::kMargin - toybox::kPillHeight);
 
   switch (phase_) {
+    case Phase::Locked: {
+      chrome(screen, "AUTHENTICATOR");
+      const fui::Rect body = screen.body();
+      target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 90), width, 180),
+                  "VAULT LOCKED\nEnter your PIN to decrypt the stored TOTP accounts.", centered(screen.theme().bodyText, 4));
+      fui::ButtonProps unlock;
+      unlock.label = "UNLOCK";
+      unlock.action = kActionUnlock;
+      unlock.styles = toybox::rowStyles();
+      screen.button(unlock, fui::makeRect(toybox::kMargin, footerY, width, toybox::kPillHeight));
+      break;
+    }
+
+    case Phase::SetupPin: {
+      chrome(screen, "AUTHENTICATOR");
+      const fui::Rect body = screen.body();
+      target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 70), width, 230),
+                  "SET UP ENCRYPTED VAULT\nCreate a 6 to 12 digit PIN. Secrets are encrypted before they are written to internal storage.",
+                  centered(screen.theme().bodyText, 5));
+      fui::ButtonProps setup;
+      setup.label = "SET PIN";
+      setup.action = kActionSetPin;
+      setup.styles = toybox::rowStyles();
+      screen.button(setup, fui::makeRect(toybox::kMargin, footerY, width, toybox::kPillHeight));
+      break;
+    }
+
     case Phase::List: {
       char countLabel[16];
       std::snprintf(countLabel, sizeof(countLabel), "%u / %d", static_cast<unsigned>(store_.count), kMaxAccounts);
@@ -503,7 +738,7 @@ void TotpActivity::render(RenderLock&&) {
       target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 80), width, 220), noticeMessage_,
                   centered(screen.theme().bodyText, 5));
       fui::ButtonProps back;
-      back.label = "BACK TO ACCOUNTS";
+      back.label = noticeReturn_ == Phase::List ? "BACK TO ACCOUNTS" : "TRY AGAIN";
       back.action = kActionNoticeBack;
       back.styles = toybox::rowStyles();
       screen.button(back, fui::makeRect(toybox::kMargin, footerY, width, toybox::kPillHeight));
