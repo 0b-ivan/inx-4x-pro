@@ -1,8 +1,8 @@
 # CrossPlay's fast development CI.
 #
 # Release binaries are built and validated only by crossplay-release.yml.
-# Development CI keeps the device builds, simulator and host suites green while
-# running the expensive paths in parallel.
+# The release train is X4 Pro-only. Sticky remains a local development target
+# in platformio.ini, but does not gate main or tagged X4 Pro releases.
 name: CrossPlay
 
 on:
@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [x4pro, sticky]
+        environment: [x4pro]
 
     steps:
       - uses: actions/checkout@v6
