@@ -1,0 +1,35 @@
+name: Authenticator integration
+
+on:
+  push:
+    branches: [feature/totp-authenticator]
+    paths:
+      - scripts_local/apply_totp_integration.py
+      - .github/workflows/totp-integrate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/totp-authenticator
+          fetch-depth: 0
+      - name: Apply integration edits
+        run: python3 scripts_local/apply_totp_integration.py
+      - name: Commit integration
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No integration changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/apps_local/Shelf.cpp README.md platformio.ini
+          git commit -m "feat: integrate TOTP authenticator"
+          git push origin HEAD:feature/totp-authenticator
