@@ -22,7 +22,7 @@
 ![CrossPlay on the Xteink X4 Pro](site/assets/shots/og.png)
 
 CrossPlay is a fork of [CrossPoint](https://crosspointreader.com/) for the
-**Xteink X4 Pro** and the **Seeed reTerminal Sticky**. CrossPoint turns the
+**Xteink X4 Pro**. CrossPoint turns the
 device into an excellent e-reader. CrossPlay keeps all of that and adds the
 other things a screen that holds still is good at: games you think about rather
 than react to, spaced-repetition flashcards, comics, and two devices that play
@@ -59,6 +59,8 @@ restyled to match the design language the apps use.
 | **Wavelength**   | A hidden point on a spectrum, one clue, and the whole table arguing.         |
 | **Study**        | Anki decks with the FSRS scheduler, offline.                                 |
 | **Hacker News**  | The front page in a reading serif, articles kept on the card.                |
+| **RSS Reader**   | Follow RSS feeds directly on the device.                                    |
+| **Authenticator**| Store multiple TOTP accounts and generate codes offline.                    |
 | **xkcd**         | The archive, packed for the card and drawn one to one.                       |
 | **Get Books**    | Browse any OPDS catalog and download straight to the card, no computer.      |
 | **Instapaper**   | Your read-later queue, synced both ways: reading position and archiving.     |
@@ -85,10 +87,10 @@ How the two physical buttons are used, and why there are only two:
 
 ## Install it
 
-CrossPlay targets two devices: the **Xteink X4 Pro** and the **Seeed
-reTerminal Sticky**, both ESP32-S3 with the same 800x480 panel and capacitive
-touch. For every other device CrossPoint supports, CrossPoint upstream is the
-right answer and is excellent.
+CrossPlay releases target the **Xteink X4 Pro**. The Seeed reTerminal Sticky
+environment remains available for development builds, but no Sticky release
+artifact is published. For every other device CrossPoint supports, CrossPoint
+upstream is the right answer and is excellent.
 
 > **This runs on real hardware.** One tester flashed v1.2.1 and played most
 > of the shelf; the three problems they hit were fixed in v1.2.2. As of
@@ -112,8 +114,7 @@ failing when pressed.
 
 1. Download your device's full image from the
    [releases page](https://github.com/ma-r-s/crossplay/releases):
-   `crossplay-<version>-x4pro-full.bin` for the X4 Pro,
-   `crossplay-<version>-sticky-full.bin` for the Sticky. Each is the whole
+   `crossplay-<version>-x4pro-full.bin` for the X4 Pro. It is the whole
    firmware: second-stage bootloader at `0x0`, partition table at `0x8000`,
    application at `0x10000`, in one file.
 2. Plug the device into a computer over USB.
@@ -125,9 +126,6 @@ failing when pressed.
    esptool.py --chip esp32s3 --baud 921600 write_flash 0x0 crossplay-<version>-x4pro-full.bin
    ```
 
-   ```bash
-   esptool.py --chip esp32s3 --baud 921600 write_flash 0x0 crossplay-<version>-sticky-full.bin
-   ```
 
 ### Updating an install you already have
 
