@@ -73,7 +73,7 @@ constexpr shelf::Item kApps[] = {
     {"STUDY", &icon_study_32, &StudyActivity::create},
     {"HACKER NEWS", &icon_hackernews_32, &HackerNewsActivity::create},
     {"XKCD", &icon_xkcd_32, &XkcdActivity::create},
-  {"RSS READER", &icon_hackernews_32, &RssFeedListActivity::create},
+    {"RSS READER", &icon_hackernews_32, &RssFeedListActivity::create},
     {"AUTHENTICATOR", &icon_study_32, &TotpActivity::create},
     {"GET BOOKS", &icon_getbooks_32, &OpdsBookBrowserActivity::create},
     {"INSTAPAPER", &icon_instapaper_32, &InstapaperActivity::create},

@@ -364,7 +364,7 @@ void TotpActivity::render(RenderLock&&) {
 
       fui::ButtonProps add;
       add.label = store_.count < kMaxAccounts ? "ADD ACCOUNT" : "FULL";
-      add.action = store_.count < kMaxAccounts ? kActionAdd : fui::ActionNone;
+      add.action = kActionAdd;
       add.styles = toybox::rowStyles();
       screen.button(add, fui::makeRect(toybox::kMargin, footerY, width, toybox::kPillHeight));
 
