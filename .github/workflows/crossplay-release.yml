@@ -168,6 +168,9 @@ jobs:
               images only.
             - No OTA, partition-table or installer contract changes.
 
+            PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
+            Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
+
             ### Install
 
             - USB full image: `crossplay-<version>-x4pro-full.bin`
