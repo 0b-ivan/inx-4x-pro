@@ -1,0 +1,53 @@
+name: TOTP hardening fixup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/totp-hardening-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - name: Apply TOTP hardening fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/apps_local/totp/TotpActivity.cpp')
+          s = p.read_text()
+
+          old = '''    if (!totp::normalizeSecret(account.secret, normalized, sizeof(normalized))) {\n      store_ = StoreBlob{};\n      return false;\n    }\n'''
+          new = '''    if (!totp::normalizeSecret(account.secret, normalized, sizeof(normalized))) {\n      store_ = StoreBlob{};\n      return false;\n    }\n    std::snprintf(account.secret, sizeof(account.secret), "%s", normalized);\n'''
+          if old not in s:
+              raise SystemExit('stored-secret normalization anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '''  startActivityForResult(\n      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "ACCOUNT NAME", "", 39, InputType::Text),\n      [this](const ActivityResult& result) {\n'''
+          new = '''  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "ACCOUNT NAME", "", 39, InputType::Text);\n  if (!keyboard) {\n    showNotice("LOW MEMORY", "The account editor could not be opened. Try again after leaving other apps.");\n    return;\n  }\n  startActivityForResult(\n      std::move(keyboard),\n      [this](const ActivityResult& result) {\n'''
+          if old not in s:
+              raise SystemExit('account keyboard anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '''  startActivityForResult(\n      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "BASE32 SECRET", "", totp::kMaxSecretChars,\n                                              InputType::Password),\n      [this, savedName](const ActivityResult& result) {\n'''
+          new = '''  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "BASE32 SECRET", "",\n                                                        totp::kMaxSecretChars, InputType::Password);\n  if (!keyboard) {\n    showNotice("LOW MEMORY", "The secret editor could not be opened. Try again after leaving other apps.");\n    return;\n  }\n  startActivityForResult(\n      std::move(keyboard),\n      [this, savedName](const ActivityResult& result) {\n'''
+          if old not in s:
+              raise SystemExit('secret keyboard anchor not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/apps_local/totp/TotpActivity.cpp
+          git commit -m "fix: harden authenticator secret handling"
+          git push origin HEAD:main
