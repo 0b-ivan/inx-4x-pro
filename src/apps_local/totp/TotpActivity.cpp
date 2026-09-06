@@ -105,6 +105,7 @@ bool TotpActivity::loadAccounts() {
       store_ = StoreBlob{};
       return false;
     }
+    std::snprintf(account.secret, sizeof(account.secret), "%s", normalized);
   }
   return true;
 }
@@ -165,8 +166,13 @@ void TotpActivity::beginAdd() {
     return;
   }
 
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "ACCOUNT NAME", "", 39, InputType::Text);
+  if (!keyboard) {
+    showNotice("LOW MEMORY", "The account editor could not be opened. Try again after leaving other apps.");
+    return;
+  }
   startActivityForResult(
-      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "ACCOUNT NAME", "", 39, InputType::Text),
+      std::move(keyboard),
       [this](const ActivityResult& result) {
         if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
         const std::string& name = std::get<KeyboardResult>(result.data).text;
@@ -180,9 +186,14 @@ void TotpActivity::beginAdd() {
 
 void TotpActivity::addSecretForName(const char* name) {
   const std::string savedName(name == nullptr ? "" : name);
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "BASE32 SECRET", "",
+                                                        totp::kMaxSecretChars, InputType::Password);
+  if (!keyboard) {
+    showNotice("LOW MEMORY", "The secret editor could not be opened. Try again after leaving other apps.");
+    return;
+  }
   startActivityForResult(
-      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "BASE32 SECRET", "", totp::kMaxSecretChars,
-                                              InputType::Password),
+      std::move(keyboard),
       [this, savedName](const ActivityResult& result) {
         if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
         addAccount(savedName.c_str(), std::get<KeyboardResult>(result.data).text.c_str());
