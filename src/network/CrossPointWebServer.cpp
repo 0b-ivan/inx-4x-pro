@@ -19,6 +19,7 @@
 #include <mbedtls/md.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstring>
 
