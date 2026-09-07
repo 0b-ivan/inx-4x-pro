@@ -42,11 +42,6 @@ jobs:
           # cannot see what the previous tag published and skips itself.
           fetch-depth: 0
 
-      # The tag and the version are two hand-edited facts that nothing forced to
-      # agree. A v1.6.4 tag pushed with platformio.ini still at 1.6.3 builds an
-      # image reporting the old version, publishes it under the new one, and
-      # every notes gate stays green because it reads the file, not the tag.
-      # First step, so it costs seconds rather than a full build.
       - name: The tag must be the version being built
         run: |
           VERSION=$(awk '/^\[crossplay\]/{f=1;next} /^\[/{f=0} f && /^version *=/{print $3; exit}' platformio.ini)
@@ -56,11 +51,6 @@ jobs:
           fi
           echo "tag ${GITHUB_REF_NAME} matches [crossplay] version ${VERSION}"
 
-      # The notes gate runs HERE, not only in CI. CI is a different workflow on
-      # a different trigger with no `needs:` binding it to this one, so pushing
-      # the branch and the tag together published the release first and went red
-      # afterwards -- which changes nothing already public. This is the last
-      # moment stale notes can still be stopped.
       - name: The release notes must be this release's
         run: bash host-tests/release/run.sh
 
@@ -84,27 +74,6 @@ jobs:
       - name: Build release firmware
         run: python3 -m platformio run -e gh_release_x4pro
 
-      # Two .bin files for X4 Pro, because the two ways of installing need
-      # different images and shipping only one of them is what went wrong
-      # before.
-      #
-      #   -full.bin  bootloader + partition table + app, flashed at 0x0 over
-      #              USB. This is the one a first install needs. v1.0.0 and
-      #              v1.0.1 shipped the app on its own and told people to write
-      #              it to 0x0 -- which on an S3 is where the bootloader lives,
-      #              so it landed on top of it.
-      #   firmware.bin  the app alone for OTA updates.
-      #              The over-the-air updater matches this filename exactly
-      #              (CROSSPOINT_RELEASE_ASSET).
-      #
-      # The per-board steps are spelled out rather than looped so
-      # host-tests/release can assert offsets and filenames against literal
-      # text.
-      #
-      # -fm/-fs/-ff keep: the flash mode, size and frequency already in the
-      # bootloader header are the ones this build was configured with. Passing
-      # them again by hand is a second copy of a fact that can drift; verified
-      # byte-identical to spelling them out.
       - name: Name the x4pro artefacts
         run: |
           mkdir -p dist
@@ -121,14 +90,11 @@ jobs:
       - name: List artefacts
         run: ls -la dist
 
-      # A merged image that is not actually merged is indistinguishable from
-      # the app image it replaces until someone bricks a device with it, so
-      # check the three magic numbers rather than trust the exit code.
       - name: The merged images really are merged
         run: |
           fail=0
           for full in "dist/crossplay-${GITHUB_REF_NAME}-x4pro-full.bin"; do
-            check() {  # offset, expected-magic, what
+            check() {
               got=$(dd if="$full" bs=1 skip=$1 count=2 2>/dev/null | xxd -p)
               if [ "$got" != "$2" ]; then
                 echo "::error::$full at $(printf '0x%x' $1): expected $2 ($3), got $got"
@@ -147,22 +113,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
-          # Off on purpose. This fork carries upstream's whole history, and with
-          # no previous tag of its own the generator has no floor: v1.0.0 would
-          # have listed 1,319 commits, most of them CrossPoint's, as "what is
-          # new in CrossPlay". A release note is a thing you write.
           generate_release_notes: false
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.22
+            ### What is new in 1.12.23
 
-            - Adds **Authenticator management to the X4 Pro web interface**.
-            - TOTP accounts can be listed, added and deleted from the browser;
-              secrets remain stored in the encrypted device vault.
-            - Keeps ESP32 NVS/crypto code device-only so the X4 Pro simulator
-              continues to build and test the shared web server.
-            - Includes the Authenticator render diagnostics from 1.12.21.
+            - Fixes the remaining **Authenticator crash after PIN unlock** on
+              the X4 Pro by moving the account-list backing array off the
+              render-task stack.
+            - Keeps the encrypted AES-256-GCM/PBKDF2 TOTP vault and the
+              browser-based Authenticator management introduced in 1.12.22.
+            - Keeps the render diagnostics enabled so any remaining device-side
+              failure can still be located precisely.
             - Sticky remains development-only; tagged releases publish X4 Pro
               images only.
             - No OTA, partition-table or installer contract changes.
@@ -175,9 +138,6 @@ jobs:
             - USB full image: `crossplay-<version>-x4pro-full.bin`
             - OTA app image: `firmware.bin`
 
-      # One event per published release, so the Numbers page can line up
-      # downloads and heartbeats against release times. The address and the
-      # public key are repository variables; missing ones skip the step.
       - name: Tell the board a release went out
         if: vars.SUPABASE_URL != '' && vars.SUPABASE_ANON_KEY != ''
         env:
