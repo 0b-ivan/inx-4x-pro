@@ -146,6 +146,9 @@ jobs:
             normal NVS; hardware-backed eFuse/HMAC provisioning is not enabled automatically. Treat the
             passkey image as a test build, not as a production hardware security key.
 
+            PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
+            Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
+
             ### Install
 
             - Normal USB full image: `crossplay-<version>-x4pro-full.bin`
