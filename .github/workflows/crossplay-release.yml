@@ -77,18 +77,18 @@ jobs:
           python -m esptool --chip esp32s3 merge-bin --format raw \
             -o "dist/crossplay-${GITHUB_REF_NAME}-x4pro-full.bin" \
             -fm keep -fs keep -ff keep \
-            0x0     "$NORMAL/bootloader.bin" \
-            0x8000  "$NORMAL/partitions.bin" \
-            0x10000 "$NORMAL/firmware.bin"
+            0x0     .pio/build/gh_release_x4pro/bootloader.bin \
+            0x8000  .pio/build/gh_release_x4pro/partitions.bin \
+            0x10000 .pio/build/gh_release_x4pro/firmware.bin
           cp "$NORMAL/firmware.bin" dist/firmware.bin
           cp "$NORMAL/firmware.elf" "dist/crossplay-${GITHUB_REF_NAME}-x4pro.elf"
 
           python -m esptool --chip esp32s3 merge-bin --format raw \
             -o "dist/crossplay-${GITHUB_REF_NAME}-x4pro-passkey-full.bin" \
             -fm keep -fs keep -ff keep \
-            0x0     "$PASSKEY/bootloader.bin" \
-            0x8000  "$PASSKEY/partitions.bin" \
-            0x10000 "$PASSKEY/firmware.bin"
+            0x0     .pio/build/x4pro_passkey/bootloader.bin \
+            0x8000  .pio/build/x4pro_passkey/partitions.bin \
+            0x10000 .pio/build/x4pro_passkey/firmware.bin
           cp "$PASSKEY/firmware.bin" dist/firmware-passkey.bin
           cp "$PASSKEY/firmware.elf" "dist/crossplay-${GITHUB_REF_NAME}-x4pro-passkey.elf"
 
@@ -130,6 +130,14 @@ jobs:
           generate_release_notes: false
           body: |
             CrossPlay release for **Xteink X4 Pro**.
+
+            ### What is new in 1.12.24
+
+            - Adds the experimental USB Passkey firmware variant for X4 Pro.
+            - Adds FIDO2/CTAP2 HID transport with ES256/P-256 credentials.
+            - Adds explicit one-shot physical confirmation for registration and login.
+            - Adds CTAPHID keepalive while the device waits for user presence.
+            - Keeps normal firmware and Passkey firmware on separate OTA asset names.
 
             ### Install
 
