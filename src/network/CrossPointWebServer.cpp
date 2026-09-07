@@ -23,7 +23,9 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
+#include <ctime>
 
 #include "CrossPointSettings.h"
 #include "DevInputCommands.h"
@@ -2603,11 +2605,42 @@ void CrossPointWebServer::handleTotpList() {
     server->send(403, "text/plain", "Wrong PIN or damaged vault"); return;
   }
 
-  JsonDocument out; out["created"] = created; JsonArray arr = out["accounts"].to<JsonArray>();
-  for (uint16_t i=0;i<store.count;++i) {
-    JsonObject a=arr.add<JsonObject>(); a["index"]=i; a["name"]=store.accounts[i].name; a["digits"]=store.accounts[i].digits; a["period"]=store.accounts[i].period;
+  JsonDocument out;
+  out["created"] = created;
+  const uint64_t now = static_cast<uint64_t>(std::time(nullptr));
+  const bool clockValid = now > 1700000000ULL;
+  out["serverTime"] = now;
+  out["clockValid"] = clockValid;
+  JsonArray arr = out["accounts"].to<JsonArray>();
+  for (uint16_t i = 0; i < store.count; ++i) {
+    const WebTotpAccount& account = store.accounts[i];
+    JsonObject a = arr.add<JsonObject>();
+    a["index"] = i;
+    a["name"] = account.name;
+    a["digits"] = account.digits;
+    a["period"] = account.period;
+
+    char shown[16]{};
+    uint32_t remaining = 0;
+    if (clockValid && account.period > 0) {
+      bool ok = false;
+      const uint32_t code = totp::generate(account.secret, now, account.digits, account.period, &ok);
+      if (ok) {
+        char raw[12]{};
+        std::snprintf(raw, sizeof(raw), "%0*u", static_cast<int>(account.digits), static_cast<unsigned>(code));
+        const int split = static_cast<int>(account.digits / 2);
+        std::snprintf(shown, sizeof(shown), "%.*s %s", split, raw, raw + split);
+        remaining = static_cast<uint32_t>(account.period - (now % account.period));
+      }
+    }
+    a["code"] = shown;
+    a["remaining"] = remaining;
+    a["expiresAt"] = remaining > 0 ? now + remaining : 0;
   }
-  String body; serializeJson(out, body); server->send(200, "application/json", body);
+  String body;
+  serializeJson(out, body);
+  std::memset(&store, 0, sizeof(store));
+  server->send(200, "application/json", body);
 
 #endif
 }
