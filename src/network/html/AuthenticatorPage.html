@@ -5,42 +5,39 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>CrossPlay Authenticator</title>
 <style>
-:root{--font:#333;--bg:#f5f5f5;--title:#2c3e50;--card:#fff;--border:#ddd;--accent:rgb(110,154,130);--danger:#b33}
-@media(prefers-color-scheme:dark){:root{--font:#f5f5f5;--bg:#333;--title:#ecf0f1;--card:#444;--border:#666;color-scheme:dark}}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:800px;margin:auto;padding:20px;background:var(--bg);color:var(--font)}
-h1,h2{color:var(--title)} h1{border-bottom:2px solid var(--accent);padding-bottom:10px}
-.nav{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}.nav a{padding:10px 16px;text-decoration:none;color:var(--font);border-radius:4px}.nav a.active{background:var(--accent);color:white}
-.card{background:var(--card);padding:20px;border-radius:8px;margin:15px 0;box-shadow:0 2px 4px #0002}
-label{display:block;font-weight:600;margin-top:10px}input{width:100%;box-sizing:border-box;padding:10px;margin-top:5px;border:1px solid var(--border);border-radius:4px}
-button{margin-top:12px;padding:10px 16px;border:0;border-radius:4px;background:var(--accent);color:white;cursor:pointer}.danger{background:var(--danger)}
-.row{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);padding:10px 0;gap:10px}.muted{opacity:.72;font-size:.9em}.error{color:#d44}.ok{color:#2a5}
+:root{--font:#26323d;--muted:#6d7882;--bg:#f4f5f7;--title:#2c3e50;--card:#fff;--border:#dfe3e8;--accent:rgb(110,154,130);--danger:#b33;--track:#e5e9ed}
+@media(prefers-color-scheme:dark){:root{--font:#f5f5f5;--muted:#b8c0c7;--bg:#303030;--title:#ecf0f1;--card:#444;--border:#62676c;--track:#565b60;color-scheme:dark}}
+*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:800px;margin:auto;padding:20px;background:var(--bg);color:var(--font)}
+h1,h2{color:var(--title)}h1{border-bottom:2px solid var(--accent);padding-bottom:10px}.nav{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}.nav a{padding:10px 16px;text-decoration:none;color:var(--font);border-radius:4px}.nav a.active{background:var(--accent);color:white}
+.panel{background:var(--card);padding:20px;border-radius:12px;margin:15px 0;box-shadow:0 2px 8px #0002}label{display:block;font-weight:600;margin-top:10px}input{width:100%;padding:10px;margin-top:5px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--font)}button{margin-top:12px;padding:10px 16px;border:0;border-radius:6px;background:var(--accent);color:white;cursor:pointer}.danger{background:transparent;color:var(--danger);border:1px solid var(--border);margin:0}.muted{color:var(--muted);font-size:.9em}.error{color:#d44}.ok{color:#2a8b57}
+.accounts{display:grid;gap:14px}.otp-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:17px 20px;box-shadow:0 2px 9px #0001}.otp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.otp-name{font-size:1.05rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.otp-code{font-size:2rem;letter-spacing:.09em;font-variant-numeric:tabular-nums;margin-top:4px}.otp-meta{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:12px}.otp-time{min-width:38px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}.progress{height:4px;background:var(--track);border-radius:999px;overflow:hidden;flex:1}.progress-fill{height:100%;width:100%;background:var(--accent);transition:width .2s linear}.empty{padding:12px 0;color:var(--muted)}
+@media(max-width:560px){body{padding:12px}.otp-code{font-size:1.65rem}.panel{padding:16px}}
 </style>
 </head>
 <body>
 <h1>CrossPlay</h1>
-<div class="nav">
-<a href="/">Home</a><a href="/files">File Manager</a><a href="/settings">Settings</a><a href="/fonts">Fonts</a><a class="active" href="/authenticator">Authenticator</a>
-</div>
-<div class="card">
+<div class="nav"><a href="/">Home</a><a href="/files">File Manager</a><a href="/settings">Settings</a><a href="/fonts">Fonts</a><a class="active" href="/authenticator">Authenticator</a></div>
+<div class="panel">
 <h2>TOTP Vault</h2>
-<p class="muted">This page is served by the temporary reader web interface. PIN and TOTP secrets travel over your local HTTP connection, so only use it on a trusted network.</p>
+<p class="muted">The reader generates the codes. Base32 secrets are never returned to this page. PIN and new secrets still travel over your local HTTP connection, so only use this on a trusted network.</p>
 <label>Vault PIN</label><input id="pin" type="password" inputmode="numeric" minlength="6" maxlength="12" placeholder="6-12 digits" />
-<button onclick="loadAccounts()">Unlock / Refresh</button>
-<div id="status" class="muted"></div>
+<button onclick="loadAccounts(false)">Unlock / Refresh</button><div id="status" class="muted"></div>
 </div>
-<div class="card">
-<h2>Add account</h2>
-<label>Name</label><input id="name" maxlength="39" placeholder="e.g. GitHub" />
-<label>Base32 secret</label><input id="secret" type="password" maxlength="96" autocomplete="off" placeholder="JBSWY3DPEHPK3PXP" />
-<button onclick="addAccount()">Add account</button>
+<div class="panel"><h2>Accounts</h2><div id="accounts" class="accounts"><div class="empty">Unlock the vault to load current TOTP codes.</div></div></div>
+<div class="panel">
+<h2>Add account</h2><label>Name</label><input id="name" maxlength="39" placeholder="e.g. GitHub" /><label>Base32 secret</label><input id="secret" type="password" maxlength="96" autocomplete="off" placeholder="JBSWY3DPEHPK3PXP" /><button onclick="addAccount()">Add account</button>
 </div>
-<div class="card"><h2>Accounts</h2><div id="accounts" class="muted">Unlock the vault to load accounts.</div></div>
 <script>
+let serverEpoch=0,receivedAt=0,refreshing=false,unlocked=false;
 function pin(){return document.getElementById('pin').value.trim()}
 function setStatus(msg,ok){const e=document.getElementById('status');e.textContent=msg;e.className=ok?'ok':'error'}
 async function post(url,data){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const t=await r.text();if(!r.ok)throw new Error(t||('HTTP '+r.status));return t?JSON.parse(t):{}}
-async function loadAccounts(){try{const d=await post('/api/totp/list',{pin:pin()});const box=document.getElementById('accounts');box.innerHTML='';if(!d.accounts.length){box.textContent='No accounts yet.'}else d.accounts.forEach(a=>{const row=document.createElement('div');row.className='row';const s=document.createElement('span');s.textContent=a.name+' · '+a.digits+' digits · '+a.period+'s';const b=document.createElement('button');b.className='danger';b.textContent='Delete';b.onclick=()=>del(a.index);row.append(s,b);box.append(row)});setStatus(d.created?'New encrypted vault created.':'Vault unlocked.',true)}catch(e){setStatus(e.message,false)}}
-async function addAccount(){try{await post('/api/totp',{pin:pin(),name:document.getElementById('name').value.trim(),secret:document.getElementById('secret').value.trim()});document.getElementById('secret').value='';await loadAccounts()}catch(e){setStatus(e.message,false)}}
-async function del(index){if(!confirm('Delete this TOTP account?'))return;try{await post('/api/totp/delete',{pin:pin(),index:index});await loadAccounts()}catch(e){setStatus(e.message,false)}}
+function estimatedNow(){return serverEpoch+(Date.now()-receivedAt)/1000}
+function renderAccounts(d){const box=document.getElementById('accounts');box.innerHTML='';if(!d.accounts.length){box.innerHTML='<div class="empty">No accounts yet.</div>';return}d.accounts.forEach(a=>{const card=document.createElement('div');card.className='otp-card';card.dataset.expires=String(a.expiresAt||0);card.dataset.period=String(a.period||30);card.innerHTML='<div class="otp-head"><div style="min-width:0"><div class="otp-name"></div><div class="otp-code"></div></div></div><div class="otp-meta"><div class="progress"><div class="progress-fill"></div></div><span class="otp-time"></span><button class="danger" type="button">Delete</button></div>';card.querySelector('.otp-name').textContent=a.name;card.querySelector('.otp-code').textContent=a.code||'CLOCK NOT SET';card.querySelector('.danger').onclick=()=>del(a.index);box.appendChild(card)});tick()}
+async function loadAccounts(silent){if(refreshing)return;refreshing=true;try{const d=await post('/api/totp/list',{pin:pin()});serverEpoch=Number(d.serverTime||0);receivedAt=Date.now();unlocked=true;renderAccounts(d);if(!silent)setStatus(d.created?'New encrypted vault created.':'Vault unlocked.',true)}catch(e){unlocked=false;if(!silent)setStatus(e.message,false)}finally{refreshing=false}}
+function tick(){if(!unlocked)return;const now=estimatedNow();let expired=false;document.querySelectorAll('.otp-card').forEach(card=>{const expires=Number(card.dataset.expires||0),period=Math.max(1,Number(card.dataset.period||30));const remaining=expires?Math.max(0,Math.ceil(expires-now)):0;card.querySelector('.otp-time').textContent=expires?remaining+'s':'';card.querySelector('.progress-fill').style.width=expires?Math.max(0,Math.min(100,remaining/period*100))+'%':'0%';if(expires&&remaining<=0)expired=true});if(expired&&!refreshing)loadAccounts(true)}
+async function addAccount(){try{await post('/api/totp',{pin:pin(),name:document.getElementById('name').value.trim(),secret:document.getElementById('secret').value.trim()});document.getElementById('secret').value='';await loadAccounts(true);setStatus('Account added.',true)}catch(e){setStatus(e.message,false)}}
+async function del(index){if(!confirm('Delete this TOTP account?'))return;try{await post('/api/totp/delete',{pin:pin(),index:index});await loadAccounts(true);setStatus('Account deleted.',true)}catch(e){setStatus(e.message,false)}}
+setInterval(tick,500);
 </script>
 </body></html>
