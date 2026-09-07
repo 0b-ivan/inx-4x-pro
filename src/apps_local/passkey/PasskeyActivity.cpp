@@ -7,6 +7,7 @@
 #include "../Shelf.h"
 #include "../ui/Toybox.h"
 #include "../ui/ToyboxFonts.h"
+#include "PasskeyStore.h"
 #include "PasskeyUsb.h"
 
 namespace {
@@ -41,6 +42,10 @@ void PasskeyActivity::onEnter() {
   usbStarted_ = passkey::usbPasskey().begin();
   shownReady_ = passkey::usbPasskey().ready();
   shownPackets_ = passkey::usbPasskey().packetsSeen();
+
+  auto& store = passkey::credentialStore();
+  shownStoreReady_ = store.ready() || store.begin();
+  shownCredentials_ = shownStoreReady_ ? static_cast<unsigned>(store.credentialCount()) : 0U;
   requestUpdate();
 }
 
@@ -78,13 +83,20 @@ void PasskeyActivity::render(RenderLock&&) {
   target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 35), width, 55), state,
               centered(screen.theme().titleText, 2));
 
-  target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 115), width, 170),
-              "CTAP-HID is active over native USB. INIT, PING and authenticatorGetInfo are implemented. Credential creation and signing stay disabled until the secure store + confirmation path are ready.",
+  target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 105), width, 155),
+              "CTAP-HID + getInfo are active. P-256/ES256 and the AES-256-GCM credential vault are ready for the next CTAP2 step. makeCredential/getAssertion remain disabled until CBOR parsing and explicit user-presence confirmation are connected.",
               centered(screen.theme().bodyText, 6));
+
+  char storeStats[96];
+  std::snprintf(storeStats, sizeof(storeStats), "Credential vault: %s  %u/%u\nRoot key: software NVS (development only)",
+                shownStoreReady_ ? "READY" : "FAILED", shownCredentials_,
+                static_cast<unsigned>(passkey::kMaxStoredCredentials));
+  target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 275), width, 72), storeStats,
+              centered(screen.theme().smallText, 3));
 
   char stats[48];
   std::snprintf(stats, sizeof(stats), "USB packets: %lu", shownPackets_);
-  target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 315), width, 42), stats,
+  target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 355), width, 42), stats,
               centered(screen.theme().smallText, 1));
 #else
   target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 70), width, 180),
