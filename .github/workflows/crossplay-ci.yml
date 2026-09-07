@@ -59,7 +59,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-packages-${{ runner.os }}-${{ hashFiles('platformio.ini', 'platformio.sim.ini') }}
+          key: pio-packages-${{ runner.os }}-${{ hashFiles('platformio.ini', 'platformio.sim.ini', 'platformio.passkey.ini') }}
 
       # Stack analysis needs the compiler side outputs (.su/.ci) for every
       # translation unit. PlatformIO's normal build cache restores .o files but
@@ -78,6 +78,18 @@ jobs:
 
       - name: Stack fits its task
         run: python3 scripts_local/stack_budget.py --build-dir ".pio/build/${{ matrix.environment }}"
+
+      # The passkey firmware intentionally lives behind its own PlatformIO
+      # project config so normal release/USB behavior stays untouched. Compile
+      # it here anyway: otherwise a green PR only proves the normal x4pro env.
+      - name: Build USB passkey variant
+        run: |
+          set -euo pipefail
+          PASSKEY_CACHE="$RUNNER_TEMP/pio-passkey-cache"
+          rm -rf "$PASSKEY_CACHE" ".pio/build/x4pro_passkey"
+          mkdir -p "$PASSKEY_CACHE"
+          PLATFORMIO_BUILD_CACHE_DIR="$PASSKEY_CACHE" \
+            python3 -m platformio run --project-conf platformio.passkey.ini -e x4pro_passkey
 
   simulator:
     name: simulator (x4 pro)
@@ -154,4 +166,3 @@ jobs:
           set -euo pipefail
           for suite in host-tests/*/run.sh; do
             bash "$suite"
-          done
