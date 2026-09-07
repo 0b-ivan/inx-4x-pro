@@ -155,15 +155,15 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.20
+            ### What is new in 1.12.21
 
-            - Fixes the **Authenticator** crash seen when opening the app on
-              the X4 Pro by moving large TOTP vault scratch buffers off the
-              render-task stack.
-            - Adds targeted TOTP startup diagnostics around Activity entry,
-              font setup and encrypted-vault/NVS detection.
-            - Keeps the encrypted AES-256-GCM/PBKDF2 TOTP vault introduced in
-              1.12.19; no vault format or OTA/partition contract changes.
+            - Adds step-by-step **Authenticator render diagnostics** for the
+              X4 Pro setup screen to pinpoint the remaining crash after vault
+              startup succeeds.
+            - Logs the exact render stage around target/frame/screen creation,
+              setup text/button construction and the final e-ink buffer update.
+            - Keeps the encrypted TOTP vault and the stack-pressure reduction
+              from 1.12.20 unchanged while isolating the remaining UI fault.
             - Sticky remains development-only; tagged releases publish X4 Pro
               images only.
             - No OTA, partition-table or installer contract changes.
