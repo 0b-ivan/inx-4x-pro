@@ -4,11 +4,11 @@
 #include <limits>
 
 #if defined(CROSSPOINT_USB_PASSKEY) && !defined(SIMULATOR)
+#include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/aes.h>
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolfssl/wolfcrypt/random.h>
-#include <wolfssl/wolfcrypt/settings.h>
 
 namespace passkey {
 namespace {
