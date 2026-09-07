@@ -126,8 +126,11 @@ jobs:
             - Removes the oversized TOTP detail layout from the normal flow and
               keeps the add/delete controls inside the X4 Pro safe area.
             - Refreshes the e-ink token list only when a TOTP window changes.
-            - Keeps the encrypted AES-256-GCM/PBKDF2 vault and browser-based
-              Authenticator management unchanged.
+            - The web interface now shows current TOTP codes in Authy-style cards
+              with a local countdown/progress indicator after vault unlock.
+            - The web API returns generated codes and expiry metadata, never the
+              stored Base32 TOTP secrets.
+            - Keeps the encrypted AES-256-GCM/PBKDF2 vault and X4 Pro-only release line.
             - Sticky remains development-only; tagged releases publish X4 Pro
               images only.
             - No OTA, partition-table or installer contract changes.
