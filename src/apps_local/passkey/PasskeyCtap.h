@@ -34,19 +34,22 @@ class CtapHidAssembler {
 
 class CtapProcessor {
  public:
+  using KeepAliveSender = void (*)(uint32_t cid);
+
   bool process(const HidMessage& request, HidMessage& response);
+  void setKeepAliveSender(KeepAliveSender sender) { keepAliveSender_ = sender; }
 
  private:
   uint32_t nextCid_ = 0x01020304U;
+  KeepAliveSender keepAliveSender_ = nullptr;
+
   uint32_t allocateCid();
   bool processInit(const HidMessage& request, HidMessage& response);
   bool processPing(const HidMessage& request, HidMessage& response) const;
-  bool processCbor(const HidMessage& request, HidMessage& response) const;
+  bool processCbor(const HidMessage& request, HidMessage& response);
   static void buildHidError(uint32_t cid, uint8_t code, HidMessage& response);
 };
 
-// Encodes one logical CTAP-HID message into one or more 64-byte reports.
-// Returns the number of reports written, or 0 if the output buffer is too small.
 std::size_t encodeReports(const HidMessage& message, uint8_t* out, std::size_t outBytes);
 
 }  // namespace passkey
