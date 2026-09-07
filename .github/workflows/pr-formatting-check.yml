@@ -6,6 +6,7 @@ on:
       - opened
       - reopened
       - edited
+      - ready_for_review
 
 permissions:
   pull-requests: read
@@ -13,6 +14,7 @@ permissions:
 jobs:
   title-check:
     name: Title Check
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
