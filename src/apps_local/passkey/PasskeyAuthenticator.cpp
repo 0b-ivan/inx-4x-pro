@@ -2,15 +2,14 @@
 
 #include <cstring>
 
+#include "PasskeyPresence.h"
+
 namespace passkey {
 namespace {
 
 constexpr uint8_t kAuthenticatorFlagUp = 0x01;
 constexpr std::size_t kSignedAssertionBytes = kAuthenticatorDataBytes + kSha256Bytes;
 
-// The USB passkey worker serializes authenticator operations. Keep sensitive
-// scratch storage here instead of combining a ~230-byte credential with crypto
-// buffers on the FreeRTOS task stack.
 PasskeyCredential g_credentialScratch{};
 std::array<uint8_t, kSignedAssertionBytes> g_signedAssertionScratch{};
 std::array<uint8_t, kSha256Bytes> g_digestScratch{};
@@ -37,6 +36,10 @@ bool PasskeyAuthenticator::createCredential(const uint8_t rpIdHash[kRpIdHashByte
   created = PublicCredential{};
   clearScratch();
 
+  // The approval is consumed before touching key material. It was created only
+  // by a physical input event while the matching CTAP request was pending.
+  if (!presence().consumeApproval()) return false;
+
   if (rpIdHash == nullptr || (userHandle == nullptr && userHandleLength != 0) || userHandleLength > kMaxUserHandleBytes ||
       !begin()) {
     return false;
@@ -50,9 +53,7 @@ bool PasskeyAuthenticator::createCredential(const uint8_t rpIdHash[kRpIdHashByte
 
   std::memcpy(g_credentialScratch.rpIdHash.data(), rpIdHash, g_credentialScratch.rpIdHash.size());
   g_credentialScratch.userHandleLength = static_cast<uint8_t>(userHandleLength);
-  if (userHandleLength > 0) {
-    std::memcpy(g_credentialScratch.userHandle.data(), userHandle, userHandleLength);
-  }
+  if (userHandleLength > 0) std::memcpy(g_credentialScratch.userHandle.data(), userHandle, userHandleLength);
   g_credentialScratch.signCount = 0;
 
   if (!credentialStore().save(g_credentialScratch)) {
@@ -72,6 +73,8 @@ bool PasskeyAuthenticator::getAssertion(const uint8_t* credentialId, const std::
                                          const uint8_t clientDataHash[kSha256Bytes], AssertionResult& assertion) {
   assertion = AssertionResult{};
   clearScratch();
+
+  if (!presence().consumeApproval()) return false;
 
   if (credentialId == nullptr || credentialIdLength != kCredentialIdBytes || rpIdHash == nullptr ||
       clientDataHash == nullptr || !begin()) {
