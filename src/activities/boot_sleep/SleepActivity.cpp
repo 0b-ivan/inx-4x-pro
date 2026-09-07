@@ -30,6 +30,7 @@
 #include "apps_local/tarot/TarotAssets.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "images/Logo120.h"
 #include "images/MoonIcon.h"
 
 namespace {
@@ -549,6 +550,8 @@ void SleepActivity::onEnter() {
       }
     case (CrossPointSettings::SLEEP_SCREEN_MODE::TAROT):
       return renderTarotSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::TARO):
+      return renderTaroSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
@@ -622,6 +625,20 @@ void SleepActivity::renderCustomSleepScreen() const {
   renderDefaultSleepScreen();
 }
 
+void SleepActivity::renderTaroSleepScreen() const {
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  char version[48];
+  std::snprintf(version, sizeof(version), "v%s", CROSSPOINT_VERSION);
+
+  renderer.clearScreen();
+  crossplay::branding::drawTaroCrossPointMark(renderer, pageWidth / 2, pageHeight / 2 - 45);
+  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 35, tr(STR_TARO), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 63, version);
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 88, tr(STR_SLEEPING));
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
 // Sleep screens paint with a single HALF refresh (stock parity): the OEM X4
 // firmware's only clean refresh in normal operation is the single-pass 0xD7
 // sequence, used once for the sleep image. It never runs the multi-flash GC
@@ -629,16 +646,11 @@ void SleepActivity::renderCustomSleepScreen() const {
 void SleepActivity::renderDefaultSleepScreen() const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  const int centerX = pageWidth / 2;
-  const int centerY = pageHeight / 2 - 45;
-  char version[48];
-  std::snprintf(version, sizeof(version), "v%s", CROSSPOINT_VERSION);
 
   renderer.clearScreen();
-  crossplay::branding::drawTaroCrossPointMark(renderer, centerX, centerY);
-  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 35, "TARO // CROSSPOINT", true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 63, version);
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 88, tr(STR_SLEEPING));
+  renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
+  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, tr(STR_CROSSPLAY), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_SLEEPING));
 
   // Make sleep screen dark unless light is selected in settings
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
