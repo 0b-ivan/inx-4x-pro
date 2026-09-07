@@ -77,7 +77,8 @@ void wipeBytes(void* data, const size_t len) {
   for (size_t i = 0; i < len; ++i) p[i] = 0;
 }
 
-uint64_t listCounterSignature(const TotpActivity::Account* accounts, const uint16_t count, const uint64_t now) {
+template <typename AccountT>
+uint64_t listCounterSignature(const AccountT* accounts, const uint16_t count, const uint64_t now) {
   uint64_t signature = 1469598103934665603ULL;
   for (uint16_t i = 0; i < count; ++i) {
     const auto& account = accounts[i];
@@ -569,10 +570,14 @@ void TotpActivity::loop() {
       return;
     }
 
-    const bool valid = clockValid();
-    const uint64_t now = valid ? static_cast<uint64_t>(std::time(nullptr)) : 0;
-    const uint64_t signature = valid ? listCounterSignature(store_.accounts.data(), store_.count, now) : 0;
-    if (valid != shownClockValid_ || (valid && signature != shownCounter_)) requestUpdate();
+    // Empty vaults are static; avoid repainting an e-ink screen just because a
+    // valid clock became available while there is no token to update.
+    if (store_.count > 0) {
+      const bool valid = clockValid();
+      const uint64_t now = valid ? static_cast<uint64_t>(std::time(nullptr)) : 0;
+      const uint64_t signature = valid ? listCounterSignature(store_.accounts.data(), store_.count, now) : 0;
+      if (valid != shownClockValid_ || (valid && signature != shownCounter_)) requestUpdate();
+    }
   }
 
   if (phase_ == Phase::Code && selected_ >= 0 && selected_ < static_cast<int>(store_.count)) {
@@ -691,6 +696,8 @@ void TotpActivity::render(RenderLock&&) {
                     "NO ACCOUNTS\nAdd a TOTP account on the device or in the web interface.",
                     centered(screen.theme().bodyText, 3));
         topIndex_ = 0;
+        shownClockValid_ = false;
+        shownCounter_ = 0;
       } else {
         if (visibleRows_ > 0) {
           const int maxTop = ((static_cast<int>(store_.count) - 1) / visibleRows_) * visibleRows_;
