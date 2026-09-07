@@ -7,6 +7,7 @@
 #include "../Shelf.h"
 #include "../ui/Toybox.h"
 #include "../ui/ToyboxFonts.h"
+#include "PasskeyPresence.h"
 #include "PasskeyStore.h"
 #include "PasskeyUsb.h"
 
@@ -46,21 +47,58 @@ void PasskeyActivity::onEnter() {
   auto& store = passkey::credentialStore();
   shownStoreReady_ = store.ready() || store.begin();
   shownCredentials_ = shownStoreReady_ ? static_cast<unsigned>(store.credentialCount()) : 0U;
+  shownPresenceState_ = static_cast<uint8_t>(passkey::presence().decision());
   requestUpdate();
 }
 
 void PasskeyActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  passkey::usbPasskey().poll();
+
+  const auto pending = passkey::presence().snapshot();
+  if (pending.decision == passkey::PresenceDecision::Waiting) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      passkey::presence().approve();
+      requestUpdate();
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      passkey::presence().deny();
+      requestUpdate();
+      return;
+    }
+
+    // Touch users get the same two explicit actions in the bottom band. A tap
+    // that happened before the CTAP request cannot reach this branch.
+    int col = -1;
+    const int width = renderer.getScreenWidth();
+    const int height = renderer.getScreenHeight();
+    const int margin = 24;
+    const int available = width - margin * 2;
+    const int step = available / 2;
+    if (mappedInput.colTouch(col, margin, step, 2, height - 120, height - 24, step - 8) ==
+        MappedInputManager::RowTouch::Tap) {
+      if (col == 0) {
+        passkey::presence().deny();
+      } else if (col == 1) {
+        passkey::presence().approve();
+      }
+      requestUpdate();
+      return;
+    }
+  } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     shelf::leave(renderer, mappedInput);
     return;
   }
 
-  passkey::usbPasskey().poll();
   const bool ready = passkey::usbPasskey().ready();
   const unsigned long packets = passkey::usbPasskey().packetsSeen();
-  if (ready != shownReady_ || packets != shownPackets_) {
+  const uint8_t presenceState = static_cast<uint8_t>(passkey::presence().decision());
+  if (ready != shownReady_ || packets != shownPackets_ || presenceState != shownPresenceState_) {
     shownReady_ = ready;
     shownPackets_ = packets;
+    shownPresenceState_ = presenceState;
+    const auto& store = passkey::credentialStore();
+    shownCredentials_ = store.ready() ? static_cast<unsigned>(store.credentialCount()) : 0U;
     requestUpdate();
   }
 }
@@ -79,24 +117,42 @@ void PasskeyActivity::render(RenderLock&&) {
   const int16_t width = static_cast<int16_t>(device.width - 2 * toybox::kMargin);
 
 #if defined(CROSSPOINT_USB_PASSKEY) && !defined(SIMULATOR)
-  const char* state = !usbStarted_ ? "USB START FAILED" : (shownReady_ ? "FIDO HID CONNECTED" : "WAITING FOR USB HOST");
+  const auto pending = passkey::presence().snapshot();
+  if (pending.decision == passkey::PresenceDecision::Waiting) {
+    const char* title = pending.action == passkey::PresenceAction::CreateCredential ? "PASSKEY ERSTELLEN?"
+                                                                                   : "ANMELDUNG BESTAETIGEN?";
+    target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 30), width, 55), title,
+                centered(screen.theme().titleText, 2));
+    target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 105), width, 90), pending.rpId.data(),
+                centered(screen.theme().bodyText, 3));
+    target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 215), width, 70),
+                "Nur bestaetigen, wenn du diese Anfrage gerade selbst gestartet hast.",
+                centered(screen.theme().smallText, 3));
+
+    const auto labels = mappedInput.mapLabels("Abbrechen", "Bestaetigen", "", "");
+    toybox::drawButtonHints(target, screen.theme(), labels);
+    renderer.displayBuffer();
+    return;
+  }
+
+  const char* state = !usbStarted_ ? "USB START FAILED" : (shownReady_ ? "FIDO2 READY" : "WAITING FOR USB HOST");
   target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 35), width, 55), state,
               centered(screen.theme().titleText, 2));
 
-  target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 105), width, 155),
-              "CTAP-HID + getInfo are active. P-256/ES256 and the AES-256-GCM credential vault are ready for the next CTAP2 step. makeCredential/getAssertion remain disabled until CBOR parsing and explicit user-presence confirmation are connected.",
-              centered(screen.theme().bodyText, 6));
+  target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 105), width, 120),
+              "FIDO2 / ES256. Oeffne diese App fuer Registrierungen und Logins; jede Operation braucht eine neue physische Bestaetigung.",
+              centered(screen.theme().bodyText, 5));
 
   char storeStats[96];
   std::snprintf(storeStats, sizeof(storeStats), "Credential vault: %s  %u/%u\nRoot key: software NVS (development only)",
                 shownStoreReady_ ? "READY" : "FAILED", shownCredentials_,
                 static_cast<unsigned>(passkey::kMaxStoredCredentials));
-  target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 275), width, 72), storeStats,
+  target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 260), width, 72), storeStats,
               centered(screen.theme().smallText, 3));
 
   char stats[48];
   std::snprintf(stats, sizeof(stats), "USB packets: %lu", shownPackets_);
-  target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 355), width, 42), stats,
+  target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 345), width, 42), stats,
               centered(screen.theme().smallText, 1));
 #else
   target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 70), width, 180),
