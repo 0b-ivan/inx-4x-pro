@@ -589,16 +589,22 @@ void TotpActivity::loop() {
 }
 
 void TotpActivity::render(RenderLock&&) {
+  LOG_INF("TOTP", "render: begin phase=%u", static_cast<unsigned>(phase_));
   renderer.clearScreen();
+  LOG_INF("TOTP", "render: cleared");
 
   const toybox::Faces faces = phase_ == Phase::Code ? toybox::bigNumberFaces() : toybox::toyboxFaces();
+  LOG_INF("TOTP", "render: faces ready");
   auto target = toybox::makeTarget(renderer, faces);
+  LOG_INF("TOTP", "render: target ready");
   const fui::DeviceContext device = target.deviceContext();
   const fui::InputSnapshot noInput{};
   interactionsReady_ = false;
   interactions_.clear();
   toybox::Frame frame(target, device, noInput, interactions_);
+  LOG_INF("TOTP", "render: frame ready");
   toybox::Screen screen(frame);
+  LOG_INF("TOTP", "render: screen ready");
 
   const int16_t width = static_cast<int16_t>(device.width - 2 * toybox::kMargin);
   const int16_t footerY = static_cast<int16_t>(device.height - toybox::kMargin - toybox::kPillHeight);
@@ -618,16 +624,22 @@ void TotpActivity::render(RenderLock&&) {
     }
 
     case Phase::SetupPin: {
+      LOG_INF("TOTP", "render setup: chrome");
       chrome(screen, "AUTHENTICATOR");
+      LOG_INF("TOTP", "render setup: chrome done");
       const fui::Rect body = screen.body();
+      LOG_INF("TOTP", "render setup: text");
       target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 70), width, 230),
                   "SET UP ENCRYPTED VAULT\nCreate a 6 to 12 digit PIN. Secrets are encrypted before they are written to internal storage.",
                   centered(screen.theme().bodyText, 5));
+      LOG_INF("TOTP", "render setup: text done");
       fui::ButtonProps setup;
       setup.label = "SET PIN";
       setup.action = kActionSetPin;
       setup.styles = toybox::rowStyles();
+      LOG_INF("TOTP", "render setup: button");
       screen.button(setup, fui::makeRect(toybox::kMargin, footerY, width, toybox::kPillHeight));
+      LOG_INF("TOTP", "render setup: button done");
       break;
     }
 
@@ -775,8 +787,13 @@ void TotpActivity::render(RenderLock&&) {
   }
 
   interactionsReady_ = true;
+  LOG_INF("TOTP", "render: interactions ready");
   toybox::reportOverflow(interactions_, "Authenticator");
+  LOG_INF("TOTP", "render: overflow checked");
   const auto labels = mappedInput.mapLabels("Back", "", "Up", "Down");
+  LOG_INF("TOTP", "render: hints");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  LOG_INF("TOTP", "render: display");
   renderer.displayBuffer();
+  LOG_INF("TOTP", "render: done");
 }
