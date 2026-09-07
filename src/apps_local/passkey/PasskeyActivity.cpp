@@ -9,6 +9,7 @@
 #if !defined(SIMULATOR)
 #include "../ui/Toybox.h"
 #include "../ui/ToyboxFonts.h"
+#include "../ui/ToyboxTheme.h"
 #endif
 #include "PasskeyPresence.h"
 #include "PasskeyStore.h"
