@@ -1,6 +1,7 @@
 #include "PasskeyUsb.h"
 
 #include "PasskeyCtap.h"
+#include "PasskeyStore.h"
 
 #if defined(CROSSPOINT_USB_PASSKEY) && !defined(SIMULATOR)
 #include <Arduino.h>
@@ -90,6 +91,11 @@ bool UsbPasskeyTransport::begin() {
   if (started_) return true;
   if (g_rxQueue == nullptr) g_rxQueue = xQueueCreate(8, kHidReportBytes);
   if (g_rxQueue == nullptr) return false;
+
+  // Vault initialization is deliberately non-fatal for USB transport. A
+  // broken/empty store must not hide CTAPHID diagnostics or getInfo from the
+  // host; credential commands remain gated until the store reports ready.
+  (void)credentialStore().begin();
 
   g_hid.begin();
   USB.manufacturerName("CrossPlay");
