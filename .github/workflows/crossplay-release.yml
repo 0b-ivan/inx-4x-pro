@@ -1,4 +1,7 @@
-# Turn a v* tag into a release the devices' own updaters can install.
+# Turn a v* tag into the one stable release both X4 Pro firmware variants use.
+# Normal devices request firmware.bin; USB-passkey devices request
+# firmware-passkey.bin. Keeping both assets on the same GitHub release means
+# /releases/latest can never let one variant shadow the other.
 name: CrossPlay release
 
 on:
@@ -19,8 +22,8 @@ env:
 
 jobs:
   release:
-    # Dedicated USB-passkey tags are owned by crossplay-passkey-release.yml.
-    # Never publish a normal firmware.bin from a *-passkey tag.
+    # Old experimental *-passkey tags are deliberately not release channels.
+    # Passkey and normal firmware now ship under the same stable SemVer tag.
     if: ${{ !endsWith(github.ref_name, '-passkey') }}
     runs-on: ubuntu-latest
     steps:
@@ -52,34 +55,52 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-release-${{ hashFiles('platformio.ini') }}
+          key: pio-release-${{ hashFiles('platformio.ini', 'platformio.passkey.ini') }}
 
       - name: Install PlatformIO Core and tooling
         run: uv pip install --system -U "$PIO_CORE_URL" esptool
 
-      - name: Build release firmware
+      - name: Build normal release firmware
         run: python3 -m platformio run -e gh_release_x4pro
+
+      - name: Build USB passkey release firmware
+        run: python3 -m platformio run --project-conf platformio.passkey.ini -e x4pro_passkey
 
       - name: Name the x4pro artefacts
         run: |
+          set -euo pipefail
           mkdir -p dist
+
+          NORMAL=.pio/build/gh_release_x4pro
+          PASSKEY=.pio/build/x4pro_passkey
+
           python -m esptool --chip esp32s3 merge-bin --format raw \
             -o "dist/crossplay-${GITHUB_REF_NAME}-x4pro-full.bin" \
             -fm keep -fs keep -ff keep \
-            0x0     .pio/build/gh_release_x4pro/bootloader.bin \
-            0x8000  .pio/build/gh_release_x4pro/partitions.bin \
-            0x10000 .pio/build/gh_release_x4pro/firmware.bin
-          cp .pio/build/gh_release_x4pro/firmware.bin dist/firmware.bin
-          cp .pio/build/gh_release_x4pro/firmware.elf \
-             "dist/crossplay-${GITHUB_REF_NAME}-x4pro.elf"
+            0x0     "$NORMAL/bootloader.bin" \
+            0x8000  "$NORMAL/partitions.bin" \
+            0x10000 "$NORMAL/firmware.bin"
+          cp "$NORMAL/firmware.bin" dist/firmware.bin
+          cp "$NORMAL/firmware.elf" "dist/crossplay-${GITHUB_REF_NAME}-x4pro.elf"
 
-      - name: List artefacts
-        run: ls -la dist
+          python -m esptool --chip esp32s3 merge-bin --format raw \
+            -o "dist/crossplay-${GITHUB_REF_NAME}-x4pro-passkey-full.bin" \
+            -fm keep -fs keep -ff keep \
+            0x0     "$PASSKEY/bootloader.bin" \
+            0x8000  "$PASSKEY/partitions.bin" \
+            0x10000 "$PASSKEY/firmware.bin"
+          cp "$PASSKEY/firmware.bin" dist/firmware-passkey.bin
+          cp "$PASSKEY/firmware.elf" "dist/crossplay-${GITHUB_REF_NAME}-x4pro-passkey.elf"
 
-      - name: The merged images really are merged
+      - name: Validate artefacts
         run: |
+          set -euo pipefail
+          test -s dist/firmware.bin
+          test -s dist/firmware-passkey.bin
           fail=0
-          for full in "dist/crossplay-${GITHUB_REF_NAME}-x4pro-full.bin"; do
+          for full in \
+            "dist/crossplay-${GITHUB_REF_NAME}-x4pro-full.bin" \
+            "dist/crossplay-${GITHUB_REF_NAME}-x4pro-passkey-full.bin"; do
             check() {
               got=$(dd if="$full" bs=1 skip=$1 count=2 2>/dev/null | xxd -p)
               if [ "$got" != "$2" ]; then
@@ -93,7 +114,14 @@ jobs:
             check 32768 aa50 "partition table"
             check 65536 e907 "app"
           done
+          python -m esptool image-info dist/firmware.bin | tee /tmp/normal-image-info.txt
+          python -m esptool image-info dist/firmware-passkey.bin | tee /tmp/passkey-image-info.txt
+          grep -qi "ESP32-S3\|ESP32S3" /tmp/normal-image-info.txt
+          grep -qi "ESP32-S3\|ESP32S3" /tmp/passkey-image-info.txt
           exit $fail
+
+      - name: List artefacts
+        run: ls -la dist
 
       - name: Publish
         uses: softprops/action-gh-release@v2
@@ -105,8 +133,22 @@ jobs:
 
             ### Install
 
+            Normal CrossPlay:
             - USB full image: `crossplay-<version>-x4pro-full.bin`
             - OTA app image: `firmware.bin`
+
+            USB Passkey variant:
+            - USB full image: `crossplay-<version>-x4pro-passkey-full.bin`
+            - OTA app image: `firmware-passkey.bin`
+
+            The two OTA asset names are intentionally distinct. Normal X4 Pro
+            devices cannot switch to the passkey USB personality through OTA.
+
+            ### Passkey security status
+
+            The credential vault uses AES-256-GCM, but its root key is still
+            stored in ordinary NVS. The passkey variant is therefore not
+            hardware-backed and does not burn or modify eFuses.
 
       - name: Tell the board a release went out
         if: vars.SUPABASE_URL != '' && vars.SUPABASE_ANON_KEY != ''
