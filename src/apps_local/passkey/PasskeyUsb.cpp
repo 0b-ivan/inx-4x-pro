@@ -15,27 +15,16 @@ namespace {
 
 USBHID g_hid;
 QueueHandle_t g_rxQueue = nullptr;
+SemaphoreHandle_t g_pollMutex = nullptr;
 CtapHidAssembler g_assembler;
 CtapProcessor g_processor;
 TaskHandle_t g_passkeyTask = nullptr;
 
 static const uint8_t kFidoReportDescriptor[] = {
-    0x06, 0xd0, 0xf1,        // Usage Page (FIDO Alliance)
-    0x09, 0x01,              // Usage (U2F Authenticator Device)
-    0xa1, 0x01,              // Collection (Application)
-    0x09, 0x20,              // Usage (Input Report Data)
-    0x15, 0x00,              // Logical Minimum (0)
-    0x26, 0xff, 0x00,        // Logical Maximum (255)
-    0x75, 0x08,              // Report Size (8)
-    0x95, 0x40,              // Report Count (64)
-    0x81, 0x02,              // Input (Data,Var,Abs)
-    0x09, 0x21,              // Usage (Output Report Data)
-    0x15, 0x00,              // Logical Minimum (0)
-    0x26, 0xff, 0x00,        // Logical Maximum (255)
-    0x75, 0x08,              // Report Size (8)
-    0x95, 0x40,              // Report Count (64)
-    0x91, 0x02,              // Output (Data,Var,Abs)
-    0xc0                     // End Collection
+    0x06, 0xd0, 0xf1, 0x09, 0x01, 0xa1, 0x01,
+    0x09, 0x20, 0x15, 0x00, 0x26, 0xff, 0x00, 0x75, 0x08, 0x95, 0x40, 0x81, 0x02,
+    0x09, 0x21, 0x15, 0x00, 0x26, 0xff, 0x00, 0x75, 0x08, 0x95, 0x40, 0x91, 0x02,
+    0xc0
 };
 
 class FidoHidDevice final : public USBHIDDevice {
@@ -78,6 +67,15 @@ bool sendMessage(const HidMessage& message) {
   return true;
 }
 
+void sendPresenceKeepAlive(const uint32_t cid) {
+  HidMessage message;
+  message.cid = cid;
+  message.command = 0x3b;  // CTAPHID_KEEPALIVE
+  message.length = 1;
+  message.payload[0] = 0x02;  // STATUS_UPNEEDED
+  (void)sendMessage(message);
+}
+
 void passkeyTask(void*) {
   for (;;) {
     usbPasskey().poll();
@@ -90,12 +88,11 @@ void passkeyTask(void*) {
 bool UsbPasskeyTransport::begin() {
   if (started_) return true;
   if (g_rxQueue == nullptr) g_rxQueue = xQueueCreate(8, kHidReportBytes);
-  if (g_rxQueue == nullptr) return false;
+  if (g_pollMutex == nullptr) g_pollMutex = xSemaphoreCreateMutex();
+  if (g_rxQueue == nullptr || g_pollMutex == nullptr) return false;
 
-  // Vault initialization is deliberately non-fatal for USB transport. A
-  // broken/empty store must not hide CTAPHID diagnostics or getInfo from the
-  // host; credential commands remain gated until the store reports ready.
   (void)credentialStore().begin();
+  g_processor.setKeepAliveSender(sendPresenceKeepAlive);
 
   g_hid.begin();
   USB.manufacturerName("CrossPlay");
@@ -115,7 +112,8 @@ bool UsbPasskeyTransport::begin() {
 }
 
 void UsbPasskeyTransport::poll() {
-  if (!started_ || g_rxQueue == nullptr) return;
+  if (!started_ || g_rxQueue == nullptr || g_pollMutex == nullptr) return;
+  if (xSemaphoreTake(g_pollMutex, 0) != pdTRUE) return;
 
   uint8_t frame[kHidReportBytes];
   while (xQueueReceive(g_rxQueue, frame, 0) == pdTRUE) {
@@ -138,6 +136,8 @@ void UsbPasskeyTransport::poll() {
     HidMessage response;
     if (g_processor.process(request, response)) sendMessage(response);
   }
+
+  xSemaphoreGive(g_pollMutex);
 }
 
 bool UsbPasskeyTransport::ready() const { return started_ && g_hid.ready(); }
@@ -149,10 +149,6 @@ UsbPasskeyTransport& usbPasskey() {
 
 }  // namespace passkey
 
-// Arduino calls initVariant() from its setup task after the scheduler is alive
-// but before the application setup() function. Keeping the passkey transport
-// here makes the USB authenticator available even when the Passkey screen is
-// not open. This symbol only exists in the dedicated passkey build.
 extern "C" void initVariant() { passkey::usbPasskey().begin(); }
 
 #else
