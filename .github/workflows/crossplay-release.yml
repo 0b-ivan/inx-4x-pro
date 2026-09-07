@@ -139,6 +139,8 @@ jobs:
             - Adds CTAPHID keepalive while the device waits for user presence.
             - Keeps normal firmware and Passkey firmware on separate OTA asset names.
 
+            PLAY NEARBY continues to support Chess, Connect Four, Battleship, Jaipur, Checkers, Yahtzee, Knucklebones, Sea Salt, and Toy Battle.
+
             ### Install
 
             Normal CrossPlay:
