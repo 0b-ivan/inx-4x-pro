@@ -12,10 +12,20 @@
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
 #include <esp_ota_ops.h>
+#if !defined(SIMULATOR)
+#include <Preferences.h>
+#include <esp_random.h>
+#include <mbedtls/gcm.h>
+#include <mbedtls/pkcs5.h>
+#include <mbedtls/md.h>
+#endif
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
+#include <ctime>
 
 #include "CrossPointSettings.h"
 #include "DevInputCommands.h"
@@ -32,6 +42,8 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/AuthenticatorPageHtml.generated.h"
+#include "apps_local/totp/TotpCore.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "util/BookCacheUtils.h"
@@ -46,6 +58,99 @@ constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
 // Where Developer Mode uploads land. Fixed on purpose; see handleDevUploadData.
 constexpr const char* kDevUploadPath = "/.crosspoint/devmode-firmware.bin";
+
+#if !defined(SIMULATOR)
+constexpr uint32_t kTotpStoreMagic = 0x54505431U;
+constexpr uint16_t kTotpStoreVersion = 1;
+constexpr uint32_t kTotpVaultMagic = 0x32565054U;
+constexpr uint16_t kTotpVaultVersion = 2;
+constexpr size_t kTotpSaltBytes = 16;
+constexpr size_t kTotpIvBytes = 12;
+constexpr size_t kTotpTagBytes = 16;
+constexpr size_t kTotpKeyBytes = 32;
+constexpr unsigned int kTotpPbkdf2Iterations = 120000;
+constexpr int kTotpMaxAccounts = 16;
+
+struct WebTotpAccount {
+  char name[40]{};
+  char secret[totp::kMaxSecretChars + 1]{};
+  uint8_t digits = 6;
+  uint8_t reserved = 0;
+  uint16_t period = 30;
+};
+struct WebTotpStore {
+  uint32_t magic = kTotpStoreMagic;
+  uint16_t version = kTotpStoreVersion;
+  uint16_t count = 0;
+  std::array<WebTotpAccount, kTotpMaxAccounts> accounts{};
+};
+struct WebTotpVault {
+  uint32_t magic = kTotpVaultMagic;
+  uint16_t version = kTotpVaultVersion;
+  uint16_t reserved = 0;
+  std::array<uint8_t, kTotpSaltBytes> salt{};
+  std::array<uint8_t, kTotpIvBytes> iv{};
+  std::array<uint8_t, kTotpTagBytes> tag{};
+  std::array<uint8_t, sizeof(WebTotpStore)> ciphertext{};
+};
+
+bool webTotpValidPin(const char* pin) {
+  if (!pin) return false;
+  const size_t n = std::strlen(pin);
+  if (n < 6 || n > 12) return false;
+  for (size_t i = 0; i < n; ++i) if (pin[i] < '0' || pin[i] > '9') return false;
+  return true;
+}
+bool webTotpDerive(const char* pin, const std::array<uint8_t,kTotpSaltBytes>& salt,
+                   std::array<uint8_t,kTotpKeyBytes>& key) {
+  if (!webTotpValidPin(pin)) return false;
+  return mbedtls_pkcs5_pbkdf2_hmac_ext(MBEDTLS_MD_SHA256,
+      reinterpret_cast<const unsigned char*>(pin), std::strlen(pin),
+      salt.data(), salt.size(), kTotpPbkdf2Iterations,
+      static_cast<uint32_t>(key.size()), key.data()) == 0;
+}
+bool webTotpReadVault(WebTotpVault& vault) {
+  Preferences prefs;
+  if (!prefs.begin("crossplay-totp", true)) return false;
+  const size_t bytes = prefs.getBytesLength("vault");
+  const bool ok = bytes == sizeof(vault) && prefs.getBytes("vault", &vault, sizeof(vault)) == sizeof(vault);
+  prefs.end();
+  return ok && vault.magic == kTotpVaultMagic && vault.version == kTotpVaultVersion;
+}
+bool webTotpDecrypt(const char* pin, WebTotpStore& store, WebTotpVault& vault) {
+  if (!webTotpReadVault(vault)) return false;
+  std::array<uint8_t,kTotpKeyBytes> key{};
+  if (!webTotpDerive(pin, vault.salt, key)) return false;
+  mbedtls_gcm_context gcm; mbedtls_gcm_init(&gcm);
+  int rc = mbedtls_gcm_setkey(&gcm, MBEDTLS_CIPHER_ID_AES, key.data(), 256);
+  if (rc == 0) rc = mbedtls_gcm_auth_decrypt(&gcm, sizeof(store), vault.iv.data(), vault.iv.size(),
+      nullptr, 0, vault.tag.data(), vault.tag.size(), vault.ciphertext.data(),
+      reinterpret_cast<unsigned char*>(&store));
+  mbedtls_gcm_free(&gcm);
+  return rc == 0 && store.magic == kTotpStoreMagic && store.version == kTotpStoreVersion && store.count <= kTotpMaxAccounts;
+}
+bool webTotpWrite(const char* pin, const WebTotpStore& store, std::array<uint8_t,kTotpSaltBytes>* existingSalt = nullptr) {
+  if (!webTotpValidPin(pin)) return false;
+  WebTotpVault vault{};
+  if (existingSalt) vault.salt = *existingSalt; else esp_fill_random(vault.salt.data(), vault.salt.size());
+  esp_fill_random(vault.iv.data(), vault.iv.size());
+  std::array<uint8_t,kTotpKeyBytes> key{};
+  if (!webTotpDerive(pin, vault.salt, key)) return false;
+  mbedtls_gcm_context gcm; mbedtls_gcm_init(&gcm);
+  int rc = mbedtls_gcm_setkey(&gcm, MBEDTLS_CIPHER_ID_AES, key.data(), 256);
+  if (rc == 0) rc = mbedtls_gcm_crypt_and_tag(&gcm, MBEDTLS_GCM_ENCRYPT, sizeof(store),
+      vault.iv.data(), vault.iv.size(), nullptr, 0,
+      reinterpret_cast<const unsigned char*>(&store), vault.ciphertext.data(),
+      vault.tag.size(), vault.tag.data());
+  mbedtls_gcm_free(&gcm);
+  if (rc != 0) return false;
+  Preferences prefs;
+  if (!prefs.begin("crossplay-totp", false)) return false;
+  const bool ok = prefs.putBytes("vault", &vault, sizeof(vault)) == sizeof(vault);
+  prefs.end();
+  return ok;
+}
+#endif
 
 // Static pointer for WebSocket callback (WebSocketsServer requires C-style callback)
 CrossPointWebServer* wsInstance = nullptr;
@@ -162,6 +267,7 @@ void CrossPointWebServer::begin() {
   if (!devOnly) {
     server->on("/", HTTP_GET, [this] { handleRoot(); });
     server->on("/files", HTTP_GET, [this] { handleFileList(); });
+    server->on("/authenticator", HTTP_GET, [this] { handleAuthenticatorPage(); });
     server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
 
     server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
@@ -182,6 +288,11 @@ void CrossPointWebServer::begin() {
 
     // Delete file/folder endpoint
     server->on("/delete", HTTP_POST, [this] { handleDelete(); });
+
+    // Authenticator endpoints
+    server->on("/api/totp/list", HTTP_POST, [this] { handleTotpList(); });
+    server->on("/api/totp", HTTP_POST, [this] { handleTotpAdd(); });
+    server->on("/api/totp/delete", HTTP_POST, [this] { handleTotpDelete(); });
 
     // Settings endpoints
     server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
@@ -2472,4 +2583,113 @@ void CrossPointWebServer::handleDevFlash() {
 #endif
   delay(250);
   ESP.restart();
+}
+
+
+void CrossPointWebServer::handleAuthenticatorPage() const {
+  server->sendHeader("Content-Encoding", "gzip");
+  server->send_P(200, "text/html", AuthenticatorPageHtml, AuthenticatorPageHtmlCompressedSize);
+}
+
+void CrossPointWebServer::handleTotpList() {
+#if defined(SIMULATOR)
+  server->send(501, "text/plain", "TOTP web vault is device-only");
+#else
+  if (!server->hasArg("plain")) { server->send(400, "text/plain", "Missing JSON body"); return; }
+  JsonDocument doc; if (deserializeJson(doc, server->arg("plain"))) { server->send(400, "text/plain", "Invalid JSON"); return; }
+  const std::string pin = doc["pin"] | std::string("");
+  if (!webTotpValidPin(pin.c_str())) { server->send(400, "text/plain", "PIN must contain 6-12 digits"); return; }
+
+  WebTotpStore store{}; WebTotpVault vault{};
+  bool created = false;
+  if (!webTotpReadVault(vault)) {
+    if (!webTotpWrite(pin.c_str(), store, nullptr)) { server->send(500, "text/plain", "Could not create encrypted vault"); return; }
+    created = true;
+  } else if (!webTotpDecrypt(pin.c_str(), store, vault)) {
+    server->send(403, "text/plain", "Wrong PIN or damaged vault"); return;
+  }
+
+  JsonDocument out;
+  out["created"] = created;
+  const uint64_t now = static_cast<uint64_t>(std::time(nullptr));
+  const bool clockValid = now > 1700000000ULL;
+  out["serverTime"] = now;
+  out["clockValid"] = clockValid;
+  JsonArray arr = out["accounts"].to<JsonArray>();
+  for (uint16_t i = 0; i < store.count; ++i) {
+    const WebTotpAccount& account = store.accounts[i];
+    JsonObject a = arr.add<JsonObject>();
+    a["index"] = i;
+    a["name"] = account.name;
+    a["digits"] = account.digits;
+    a["period"] = account.period;
+
+    char shown[16]{};
+    uint32_t remaining = 0;
+    if (clockValid && account.period > 0) {
+      bool ok = false;
+      const uint32_t code = totp::generate(account.secret, now, account.digits, account.period, &ok);
+      if (ok) {
+        char raw[12]{};
+        std::snprintf(raw, sizeof(raw), "%0*u", static_cast<int>(account.digits), static_cast<unsigned>(code));
+        const int split = static_cast<int>(account.digits / 2);
+        std::snprintf(shown, sizeof(shown), "%.*s %s", split, raw, raw + split);
+        remaining = static_cast<uint32_t>(account.period - (now % account.period));
+      }
+    }
+    a["code"] = shown;
+    a["remaining"] = remaining;
+    a["expiresAt"] = remaining > 0 ? now + remaining : 0;
+  }
+  String body;
+  serializeJson(out, body);
+  std::memset(&store, 0, sizeof(store));
+  server->send(200, "application/json", body);
+
+#endif
+}
+
+void CrossPointWebServer::handleTotpAdd() {
+#if defined(SIMULATOR)
+  server->send(501, "text/plain", "TOTP web vault is device-only");
+#else
+  if (!server->hasArg("plain")) { server->send(400, "text/plain", "Missing JSON body"); return; }
+  JsonDocument doc; if (deserializeJson(doc, server->arg("plain"))) { server->send(400, "text/plain", "Invalid JSON"); return; }
+  const std::string pin = doc["pin"] | std::string("");
+  const std::string name = doc["name"] | std::string("");
+  const std::string secret = doc["secret"] | std::string("");
+  if (!webTotpValidPin(pin.c_str())) { server->send(400, "text/plain", "PIN must contain 6-12 digits"); return; }
+  if (name.empty()) { server->send(400, "text/plain", "Name is required"); return; }
+  char normalized[totp::kMaxSecretChars+1]{};
+  if (!totp::normalizeSecret(secret.c_str(), normalized, sizeof(normalized))) { server->send(400, "text/plain", "Invalid Base32 secret"); return; }
+
+  WebTotpStore store{}; WebTotpVault vault{}; std::array<uint8_t,kTotpSaltBytes>* salt=nullptr;
+  if (webTotpReadVault(vault)) {
+    if (!webTotpDecrypt(pin.c_str(), store, vault)) { server->send(403, "text/plain", "Wrong PIN or damaged vault"); return; }
+    salt=&vault.salt;
+  }
+  if (store.count >= kTotpMaxAccounts) { server->send(400, "text/plain", "Vault is full"); return; }
+  auto &a=store.accounts[store.count++]; std::snprintf(a.name,sizeof(a.name),"%s",name.c_str()); std::snprintf(a.secret,sizeof(a.secret),"%s",normalized); a.digits=6; a.period=30;
+  if (!webTotpWrite(pin.c_str(), store, salt)) { server->send(500, "text/plain", "Could not save encrypted vault"); return; }
+  server->send(200, "application/json", "{}");
+
+#endif
+}
+
+void CrossPointWebServer::handleTotpDelete() {
+#if defined(SIMULATOR)
+  server->send(501, "text/plain", "TOTP web vault is device-only");
+#else
+  if (!server->hasArg("plain")) { server->send(400, "text/plain", "Missing JSON body"); return; }
+  JsonDocument doc; if (deserializeJson(doc, server->arg("plain"))) { server->send(400, "text/plain", "Invalid JSON"); return; }
+  const std::string pin = doc["pin"] | std::string(""); const int index=doc["index"] | -1;
+  WebTotpStore store{}; WebTotpVault vault{};
+  if (!webTotpDecrypt(pin.c_str(), store, vault)) { server->send(403, "text/plain", "Wrong PIN or damaged vault"); return; }
+  if (index<0 || index>=static_cast<int>(store.count)) { server->send(400, "text/plain", "Invalid account index"); return; }
+  for (int i=index;i+1<static_cast<int>(store.count);++i) store.accounts[i]=store.accounts[i+1];
+  --store.count; store.accounts[store.count]=WebTotpAccount{};
+  if (!webTotpWrite(pin.c_str(), store, &vault.salt)) { server->send(500, "text/plain", "Could not save encrypted vault"); return; }
+  server->send(200, "application/json", "{}");
+
+#endif
 }

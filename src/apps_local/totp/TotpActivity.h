@@ -95,6 +95,9 @@ class TotpActivity final : public Activity {
   int selected_ = -1;
   int topIndex_ = 0;
   int visibleRows_ = 0;
+  // Keep list backing storage off the render-task stack. PIN completion can
+  // request a render while the keyboard result callback is still unwinding.
+  std::array<freeink::ui::ListItem, kMaxAccounts> listRows_{};
   uint64_t shownCounter_ = 0;
   bool shownClockValid_ = false;
 
