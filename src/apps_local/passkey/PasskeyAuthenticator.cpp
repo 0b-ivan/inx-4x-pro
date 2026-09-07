@@ -31,13 +31,22 @@ void clearScratch() {
 
 bool PasskeyAuthenticator::begin() { return credentialStore().begin(); }
 
+bool PasskeyAuthenticator::hasCredential(const uint8_t* credentialId, const std::size_t credentialIdLength,
+                                          const uint8_t rpIdHash[kRpIdHashBytes]) {
+  clearScratch();
+  if (credentialId == nullptr || credentialIdLength != kCredentialIdBytes || rpIdHash == nullptr || !begin()) {
+    return false;
+  }
+  const bool found = credentialStore().findByCredentialId(credentialId, credentialIdLength, g_credentialScratch) &&
+                     std::memcmp(g_credentialScratch.rpIdHash.data(), rpIdHash, kRpIdHashBytes) == 0;
+  clearScratch();
+  return found;
+}
+
 bool PasskeyAuthenticator::createCredential(const uint8_t rpIdHash[kRpIdHashBytes], const uint8_t* userHandle,
                                              const std::size_t userHandleLength, PublicCredential& created) {
   created = PublicCredential{};
   clearScratch();
-
-  // The approval is consumed before touching key material. It was created only
-  // by a physical input event while the matching CTAP request was pending.
   if (!presence().consumeApproval()) return false;
 
   if (rpIdHash == nullptr || (userHandle == nullptr && userHandleLength != 0) || userHandleLength > kMaxUserHandleBytes ||
@@ -73,7 +82,6 @@ bool PasskeyAuthenticator::getAssertion(const uint8_t* credentialId, const std::
                                          const uint8_t clientDataHash[kSha256Bytes], AssertionResult& assertion) {
   assertion = AssertionResult{};
   clearScratch();
-
   if (!presence().consumeApproval()) return false;
 
   if (credentialId == nullptr || credentialIdLength != kCredentialIdBytes || rpIdHash == nullptr ||
