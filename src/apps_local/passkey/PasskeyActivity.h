@@ -18,5 +18,7 @@ class PasskeyActivity final : public Activity {
  private:
   bool usbStarted_ = false;
   bool shownReady_ = false;
+  bool shownStoreReady_ = false;
+  unsigned shownCredentials_ = 0;
   unsigned long shownPackets_ = 0;
 };
