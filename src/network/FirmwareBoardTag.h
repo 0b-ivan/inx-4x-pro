@@ -15,10 +15,6 @@
 // releases) are allowed: the guard only rejects a tag naming a DIFFERENT
 // board.
 
-// The board name derives from the FREEINK_DEVICE_* build flags so every env
-// (and any fork built from this source) is tagged automatically. The combined
-// X3/X4 ESP32-C3 binary is one compatibility class, tagged "x4". Names match
-// the release asset suffixes (firmware-<name>.bin; see below for x4pro).
 #if FREEINK_DEVICE_X4PRO
 #define CROSSPOINT_BOARD_NAME "x4pro"
 #elif FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
@@ -41,12 +37,13 @@
 #error "FirmwareBoardTag: no FREEINK_DEVICE_* flag set; cannot derive board name"
 #endif
 
-// Release asset this board's OTA updater requests. The x4pro keeps the plain
-// name: every unit in the field since v1.0.0 asks for the literal
-// "firmware.bin", so renaming its asset would strand them all (see
-// OtaUpdater.cpp). Every board added after that ships with the per-board
-// suffix from day one, so one release can carry one asset per device.
-#if FREEINK_DEVICE_X4PRO
+// The passkey firmware is intentionally a separate OTA channel. Normal X4 Pro
+// units keep requesting firmware.bin; passkey units request firmware-passkey.bin.
+// A release may therefore carry both without allowing a normal device to switch
+// USB personality accidentally.
+#if defined(CROSSPOINT_USB_PASSKEY) && CROSSPOINT_USB_PASSKEY
+#define CROSSPOINT_RELEASE_ASSET "firmware-passkey.bin"
+#elif FREEINK_DEVICE_X4PRO
 #define CROSSPOINT_RELEASE_ASSET "firmware.bin"
 #else
 #define CROSSPOINT_RELEASE_ASSET "firmware-" CROSSPOINT_BOARD_NAME ".bin"
@@ -54,24 +51,14 @@
 
 namespace board_tag {
 
-// Full tag: magic prefix + board name + ';'.
 extern const char TAG[];
-
-// Board name of the running firmware (pointer into TAG; not null-terminated at
-// the name boundary — always pair with boardNameLen()).
 const char* boardName();
 size_t boardNameLen();
 
-// Incremental scanner: feed every byte of a candidate image in stream order,
-// then check mismatch(). State persists across feed() calls, so chunk
-// boundaries splitting the tag are handled.
 class Scanner {
  public:
   void feed(const uint8_t* data, size_t len);
-  // True once a tag naming a different board has been seen. Valid mid-stream:
-  // callers may abort a download as soon as this turns true.
   bool mismatch() const { return mismatchFound; }
-  // Board name from the offending tag, for logging (empty until mismatch()).
   const char* foundName() const { return mismatchFound ? captured : ""; }
 
  private:
