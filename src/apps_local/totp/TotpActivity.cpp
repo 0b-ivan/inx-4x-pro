@@ -29,7 +29,6 @@ namespace {
 namespace fui = freeink::ui;
 
 constexpr int64_t kClockFloor = 1700000000LL;
-constexpr fui::ActionId kActionOpen = 520;
 constexpr fui::ActionId kActionAdd = 521;
 constexpr fui::ActionId kActionDelete = 522;
 constexpr fui::ActionId kActionKeep = 523;
@@ -37,6 +36,14 @@ constexpr fui::ActionId kActionDeleteConfirm = 524;
 constexpr fui::ActionId kActionNoticeBack = 525;
 constexpr fui::ActionId kActionUnlock = 526;
 constexpr fui::ActionId kActionSetPin = 527;
+
+// Authentik-inspired token cards: compact enough to keep several current codes
+// visible together, with enough height for a readable account name + code.
+constexpr int16_t kTokenRowHeight = 98;
+constexpr int16_t kTokenRowGap = 8;
+constexpr int16_t kTokenRowStep = kTokenRowHeight + kTokenRowGap;
+// chrome() consumes the fixed 76px header and then applies a 36px top inset.
+constexpr int16_t kTokenListTop = toybox::kHeaderHeight + toybox::kGutter * 3;
 
 #if defined(SIMULATOR)
 constexpr char kSimStorePath[] = "/.crosspoint/totp.bin";
@@ -68,6 +75,17 @@ fui::TextStyle centered(const fui::TextStyle& base, const uint8_t maxLines = 1) 
 void wipeBytes(void* data, const size_t len) {
   volatile uint8_t* p = static_cast<volatile uint8_t*>(data);
   for (size_t i = 0; i < len; ++i) p[i] = 0;
+}
+
+uint64_t listCounterSignature(const TotpActivity::Account* accounts, const uint16_t count, const uint64_t now) {
+  uint64_t signature = 1469598103934665603ULL;
+  for (uint16_t i = 0; i < count; ++i) {
+    const auto& account = accounts[i];
+    const uint64_t counter = account.period == 0 ? 0 : now / account.period;
+    signature ^= counter + (static_cast<uint64_t>(i) << 32);
+    signature *= 1099511628211ULL;
+  }
+  return signature;
 }
 
 }  // namespace
@@ -272,6 +290,8 @@ void TotpActivity::beginUnlock() {
           return;
         }
         phase_ = Phase::List;
+        shownCounter_ = UINT64_MAX;
+        shownClockValid_ = false;
         requestUpdate();
       });
 }
@@ -313,6 +333,8 @@ void TotpActivity::beginSetPin() {
                 return;
               }
               phase_ = Phase::List;
+              shownCounter_ = UINT64_MAX;
+              shownClockValid_ = false;
               requestUpdate();
             });
       });
@@ -335,9 +357,7 @@ bool TotpActivity::saveAccounts() const {
 void TotpActivity::onEnter() {
   LOG_INF("TOTP", "onEnter: begin");
   Activity::onEnter();
-  LOG_DBG("TOTP", "onEnter: Activity entered");
   toybox::ensureFonts(renderer);
-  LOG_DBG("TOTP", "onEnter: fonts ready");
 #if defined(SIMULATOR)
   if (!loadAccounts()) {
     showNotice("STORE RESET", "The authenticator store was unreadable and was reset.");
@@ -347,12 +367,12 @@ void TotpActivity::onEnter() {
 #else
   store_ = StoreBlob{};
   unlocked_ = false;
-  LOG_DBG("TOTP", "onEnter: checking vault");
   const bool hasVault = vaultExists();
   LOG_INF("TOTP", "onEnter: vault=%d", hasVault ? 1 : 0);
   phase_ = hasVault ? Phase::Locked : Phase::SetupPin;
 #endif
-  LOG_DBG("TOTP", "onEnter: request render");
+  shownCounter_ = UINT64_MAX;
+  shownClockValid_ = false;
   requestUpdate();
 }
 
@@ -410,7 +430,7 @@ void TotpActivity::beginAdd() {
 void TotpActivity::addSecretForName(const char* name) {
   const std::string savedName(name == nullptr ? "" : name);
   auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "BASE32 SECRET", "",
-                                                        totp::kMaxSecretChars, InputType::Password);
+                                                            totp::kMaxSecretChars, InputType::Password);
   if (!keyboard) {
     showNotice("LOW MEMORY", "The secret editor could not be opened. Try again after leaving other apps.");
     return;
@@ -447,8 +467,8 @@ void TotpActivity::addAccount(const char* name, const char* secretInput) {
     return;
   }
 
-  selected_ = static_cast<int>(store_.count) - 1;
-  phase_ = Phase::Code;
+  selected_ = -1;
+  phase_ = Phase::List;
   shownCounter_ = UINT64_MAX;
   shownClockValid_ = false;
   requestUpdate();
@@ -472,14 +492,14 @@ void TotpActivity::deleteSelected() {
   --store_.count;
   store_.accounts[store_.count] = Account{};
   if (!saveAccounts()) {
-    // The in-memory list is still usable for this session, but do not pretend
-    // the deletion is durable when NVS/SD refused the write.
     showNotice("NOT SAVED", "The account was removed in memory, but storage did not accept the change.");
     return;
   }
   selected_ = -1;
   if (topIndex_ >= static_cast<int>(store_.count)) topIndex_ = 0;
   phase_ = Phase::List;
+  shownCounter_ = UINT64_MAX;
+  shownClockValid_ = false;
   requestUpdate();
 }
 
@@ -506,9 +526,6 @@ void TotpActivity::loop() {
         shelf::leave(renderer, mappedInput);
         break;
       case Phase::ConfirmDelete:
-        phase_ = Phase::Code;
-        requestUpdate();
-        break;
       case Phase::Code:
         phase_ = Phase::List;
         requestUpdate();
@@ -522,6 +539,24 @@ void TotpActivity::loop() {
   }
 
   if (phase_ == Phase::List) {
+    int holdX = 0;
+    int holdY = 0;
+    if (mappedInput.wasScreenLongPress(holdX, holdY)) {
+      const int offset = holdY - kTokenListTop;
+      if (offset >= 0) {
+        const int row = offset / kTokenRowStep;
+        const int withinRow = offset % kTokenRowStep;
+        const int index = topIndex_ + row;
+        if (row >= 0 && row < visibleRows_ && withinRow < kTokenRowHeight && index >= 0 &&
+            index < static_cast<int>(store_.count)) {
+          selected_ = index;
+          phase_ = Phase::ConfirmDelete;
+          requestUpdate();
+        }
+      }
+      return;
+    }
+
     const bool next = mappedInput.wasReleased(MappedInputManager::Button::Down);
     const bool prev = mappedInput.wasReleased(MappedInputManager::Button::Up);
     const MappedInputManager::SwipeDir swipe = mappedInput.wasSwipe();
@@ -533,14 +568,17 @@ void TotpActivity::loop() {
       pageList(-1);
       return;
     }
+
+    const bool valid = clockValid();
+    const uint64_t now = valid ? static_cast<uint64_t>(std::time(nullptr)) : 0;
+    const uint64_t signature = valid ? listCounterSignature(store_.accounts.data(), store_.count, now) : 0;
+    if (valid != shownClockValid_ || (valid && signature != shownCounter_)) requestUpdate();
   }
 
   if (phase_ == Phase::Code && selected_ >= 0 && selected_ < static_cast<int>(store_.count)) {
     const bool valid = clockValid();
     const uint64_t counter = valid ? currentCounter() : 0;
-    if (valid != shownClockValid_ || (valid && counter != shownCounter_)) {
-      requestUpdate();
-    }
+    if (valid != shownClockValid_ || (valid && counter != shownCounter_)) requestUpdate();
   }
 
   int tapX = 0;
@@ -554,9 +592,6 @@ void TotpActivity::loop() {
   const fui::ActionEvent event = interactions_.route(input);
 
   switch (event.action) {
-    case kActionOpen:
-      openAccount(event.value);
-      break;
     case kActionAdd:
       beginAdd();
       break;
@@ -565,7 +600,7 @@ void TotpActivity::loop() {
       requestUpdate();
       break;
     case kActionKeep:
-      phase_ = Phase::Code;
+      phase_ = Phase::List;
       requestUpdate();
       break;
     case kActionDeleteConfirm:
@@ -589,25 +624,22 @@ void TotpActivity::loop() {
 }
 
 void TotpActivity::render(RenderLock&&) {
-  LOG_INF("TOTP", "render: begin phase=%u", static_cast<unsigned>(phase_));
   renderer.clearScreen();
-  LOG_INF("TOTP", "render: cleared");
 
-  const toybox::Faces faces = phase_ == Phase::Code ? toybox::bigNumberFaces() : toybox::toyboxFaces();
-  LOG_INF("TOTP", "render: faces ready");
-  auto target = toybox::makeTarget(renderer, faces);
-  LOG_INF("TOTP", "render: target ready");
+  // Keep every Authenticator view in the normal UI/display cuts. The previous
+  // detail screen bound the huge score face into BODY, which also enlarged the
+  // account label and status text and produced the clipped layout seen on-device.
+  auto target = toybox::makeTarget(renderer, toybox::toyboxFaces());
   const fui::DeviceContext device = target.deviceContext();
   const fui::InputSnapshot noInput{};
   interactionsReady_ = false;
   interactions_.clear();
   toybox::Frame frame(target, device, noInput, interactions_);
-  LOG_INF("TOTP", "render: frame ready");
   toybox::Screen screen(frame);
-  LOG_INF("TOTP", "render: screen ready");
 
   const int16_t width = static_cast<int16_t>(device.width - 2 * toybox::kMargin);
-  const int16_t footerY = static_cast<int16_t>(device.height - toybox::kMargin - toybox::kPillHeight);
+  const fui::Rect safe = frame.safeRect();
+  const int16_t footerY = static_cast<int16_t>(safe.y + safe.height - toybox::kMargin - toybox::kPillHeight);
 
   switch (phase_) {
     case Phase::Locked: {
@@ -624,22 +656,16 @@ void TotpActivity::render(RenderLock&&) {
     }
 
     case Phase::SetupPin: {
-      LOG_INF("TOTP", "render setup: chrome");
       chrome(screen, "AUTHENTICATOR");
-      LOG_INF("TOTP", "render setup: chrome done");
       const fui::Rect body = screen.body();
-      LOG_INF("TOTP", "render setup: text");
       target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 70), width, 230),
                   "SET UP ENCRYPTED VAULT\nCreate a 6 to 12 digit PIN. Secrets are encrypted before they are written to internal storage.",
                   centered(screen.theme().bodyText, 5));
-      LOG_INF("TOTP", "render setup: text done");
       fui::ButtonProps setup;
       setup.label = "SET PIN";
       setup.action = kActionSetPin;
       setup.styles = toybox::rowStyles();
-      LOG_INF("TOTP", "render setup: button");
       screen.button(setup, fui::makeRect(toybox::kMargin, footerY, width, toybox::kPillHeight));
-      LOG_INF("TOTP", "render setup: button done");
       break;
     }
 
@@ -655,45 +681,74 @@ void TotpActivity::render(RenderLock&&) {
       screen.button(add, fui::makeRect(toybox::kMargin, footerY, width, toybox::kPillHeight));
 
       const fui::Rect body = screen.body();
-      const int16_t listHeight = static_cast<int16_t>(footerY - toybox::kGutter - body.y);
+      const int16_t listBottom = static_cast<int16_t>(footerY - toybox::kGutter);
+      const int16_t listHeight = static_cast<int16_t>(listBottom - body.y);
+      visibleRows_ = listHeight > 0 ? listHeight / kTokenRowStep : 0;
+      if (visibleRows_ < 1 && listHeight >= kTokenRowHeight) visibleRows_ = 1;
+
       if (store_.count == 0) {
-        const int16_t line = target.lineHeight(screen.theme().bodyText.font);
-        target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + toybox::kMargin * 2), width,
-                                  static_cast<int16_t>(line * 3)),
-                    "NO ACCOUNTS\nTap ADD ACCOUNT to store a TOTP secret.", centered(screen.theme().bodyText, 3));
-        visibleRows_ = 0;
+        target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 70), width, 120),
+                    "NO ACCOUNTS\nAdd a TOTP account on the device or in the web interface.",
+                    centered(screen.theme().bodyText, 3));
         topIndex_ = 0;
       } else {
-        for (uint16_t i = 0; i < store_.count; ++i) {
-          listRows_[i] = fui::ListItem{};
-          listRows_[i].label = store_.accounts[i].name;
-          listRows_[i].value = store_.accounts[i].digits == 8 ? "8 DIGIT" : "6 DIGIT";
-          listRows_[i].actionValue = static_cast<int16_t>(i);
-        }
-
-        fui::ListProps list;
-        list.items = listRows_.data();
-        list.count = store_.count;
-        list.topIndex = static_cast<uint16_t>(topIndex_);
-        list.selectedIndex = -1;
-        list.action = kActionOpen;
-        list.rowHeight = screen.theme().rowHeight;
-        list.labelText = screen.theme().bodyText;
-        list.valueText = screen.theme().smallText;
-        list.balanceWrappedLabelWithValue = false;
-
-        visibleRows_ = fui::listVisibleRows(fui::makeRect(body.x, body.y, body.width, listHeight), list.rowHeight,
-                                            screen.theme().listRowGap);
         if (visibleRows_ > 0) {
           const int maxTop = ((static_cast<int>(store_.count) - 1) / visibleRows_) * visibleRows_;
           if (topIndex_ > maxTop) topIndex_ = maxTop;
         }
-        screen.list(list, listHeight, fui::LayoutAnchor::Top);
+
+        const bool validClock = clockValid();
+        const uint64_t now = validClock ? static_cast<uint64_t>(std::time(nullptr)) : 0;
+        fui::TextStyle nameStyle = screen.theme().bodyText;
+        nameStyle.maxLines = 1;
+        fui::TextStyle codeStyle = screen.theme().titleText;
+        codeStyle.color = fui::Color::Black;
+        codeStyle.align = fui::TextAlign::Left;
+        codeStyle.maxLines = 1;
+
+        for (int row = 0; row < visibleRows_; ++row) {
+          const int index = topIndex_ + row;
+          if (index >= static_cast<int>(store_.count)) break;
+          const Account& account = store_.accounts[static_cast<size_t>(index)];
+          const int16_t y = static_cast<int16_t>(body.y + row * kTokenRowStep);
+          const fui::Rect card = fui::makeRect(body.x, y, body.width, kTokenRowHeight);
+          target.stroke(card, fui::Paint::solid(fui::Color::Black), toybox::kHairline, 8);
+
+          target.text(fui::makeRect(static_cast<int16_t>(card.x + toybox::kGutter),
+                                    static_cast<int16_t>(card.y + 5),
+                                    static_cast<int16_t>(card.width - 2 * toybox::kGutter), 34),
+                      account.name, nameStyle);
+
+          char shown[20]{};
+          if (validClock) {
+            bool ok = false;
+            const uint32_t code = totp::generate(account.secret, now, account.digits, account.period, &ok);
+            if (ok) {
+              char raw[12]{};
+              std::snprintf(raw, sizeof(raw), "%0*u", static_cast<int>(account.digits), static_cast<unsigned>(code));
+              const int split = account.digits / 2;
+              std::snprintf(shown, sizeof(shown), "%.*s %s", split, raw, raw + split);
+            } else {
+              std::snprintf(shown, sizeof(shown), "INVALID SECRET");
+            }
+          } else {
+            std::snprintf(shown, sizeof(shown), "CLOCK NOT SET");
+          }
+          target.text(fui::makeRect(static_cast<int16_t>(card.x + toybox::kGutter),
+                                    static_cast<int16_t>(card.y + 34),
+                                    static_cast<int16_t>(card.width - 2 * toybox::kGutter), 63),
+                      shown, codeStyle);
+        }
+
+        shownClockValid_ = validClock;
+        shownCounter_ = validClock ? listCounterSignature(store_.accounts.data(), store_.count, now) : 0;
       }
       break;
     }
 
     case Phase::Code: {
+      // Kept only for backwards-compatible state transitions. New navigation
+      // stays on the all-token list; a normal row tap no longer opens a detail.
       if (selected_ < 0 || selected_ >= static_cast<int>(store_.count)) {
         phase_ = Phase::List;
         break;
@@ -701,7 +756,6 @@ void TotpActivity::render(RenderLock&&) {
       const Account& account = store_.accounts[static_cast<size_t>(selected_)];
       chrome(screen, "AUTHENTICATOR");
       const fui::Rect body = screen.body();
-
       target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + toybox::kGutter), width, 48), account.name,
                   centered(screen.theme().smallText));
 
@@ -711,35 +765,23 @@ void TotpActivity::render(RenderLock&&) {
         const uint64_t now = static_cast<uint64_t>(std::time(nullptr));
         const uint32_t code = totp::generate(account.secret, now, account.digits, account.period, &ok);
         if (ok) {
-          char raw[12];
-          std::snprintf(raw, sizeof(raw), "%0*u", static_cast<int>(account.digits), static_cast<unsigned>(code));
+          char raw[12]{};
           char shown[16]{};
+          std::snprintf(raw, sizeof(raw), "%0*u", static_cast<int>(account.digits), static_cast<unsigned>(code));
           const int split = account.digits / 2;
           std::snprintf(shown, sizeof(shown), "%.*s %s", split, raw, raw + split);
-          fui::TextStyle codeStyle = centered(screen.theme().bodyText);
-          target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 90), width, 150), shown, codeStyle);
-
-          char periodLine[48];
-          std::snprintf(periodLine, sizeof(periodLine), "CHANGES EVERY %u SECONDS", static_cast<unsigned>(account.period));
-          target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 250), width, 50), periodLine,
-                      centered(screen.theme().smallText));
+          fui::TextStyle codeStyle = centered(screen.theme().titleText);
+          codeStyle.color = fui::Color::Black;
+          target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 100), width, 90), shown, codeStyle);
           shownCounter_ = now / account.period;
           shownClockValid_ = true;
         }
       } else {
-        target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 100), width, 90), "CLOCK NOT SET",
-                    centered(screen.theme().smallText, 2));
-        target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 200), width, 120),
-                    "Set or sync the device clock before using TOTP.", centered(screen.theme().smallText, 3));
+        target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 120), width, 90), "CLOCK NOT SET",
+                    centered(screen.theme().bodyText, 2));
         shownClockValid_ = false;
         shownCounter_ = 0;
       }
-
-      fui::ButtonProps remove;
-      remove.label = "DELETE ACCOUNT";
-      remove.action = kActionDelete;
-      remove.styles = toybox::rowStyles();
-      screen.button(remove, fui::makeRect(toybox::kMargin, footerY, width, toybox::kPillHeight));
       break;
     }
 
@@ -752,7 +794,8 @@ void TotpActivity::render(RenderLock&&) {
       target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 80), width, 100), name,
                   centered(screen.theme().bodyText, 2));
       target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 190), width, 100),
-                  "The secret will be removed from this device.", centered(screen.theme().smallText, 3));
+                  "Long press selected this token. Delete its secret from this device?",
+                  centered(screen.theme().smallText, 3));
 
       const int16_t half = static_cast<int16_t>((width - toybox::kGutter) / 2);
       fui::ButtonProps keep;
@@ -785,13 +828,8 @@ void TotpActivity::render(RenderLock&&) {
   }
 
   interactionsReady_ = true;
-  LOG_INF("TOTP", "render: interactions ready");
   toybox::reportOverflow(interactions_, "Authenticator");
-  LOG_INF("TOTP", "render: overflow checked");
   const auto labels = mappedInput.mapLabels("Back", "", "Up", "Down");
-  LOG_INF("TOTP", "render: hints");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  LOG_INF("TOTP", "render: display");
   renderer.displayBuffer();
-  LOG_INF("TOTP", "render: done");
 }
