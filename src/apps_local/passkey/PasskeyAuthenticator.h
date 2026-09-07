@@ -30,14 +30,16 @@ class PasskeyAuthenticator {
  public:
   bool begin();
 
-  // Creates and persists a credential while only exposing its public half to
-  // the CTAP layer. The private scalar never leaves this module/store boundary.
+  // Checks the RP binding without exposing the encrypted private key to CTAP.
+  bool hasCredential(const uint8_t* credentialId, std::size_t credentialIdLength,
+                     const uint8_t rpIdHash[kRpIdHashBytes]);
+
+  // Requires and consumes a fresh physical user-presence approval.
   bool createCredential(const uint8_t rpIdHash[kRpIdHashBytes], const uint8_t* userHandle,
                         std::size_t userHandleLength, PublicCredential& created);
 
-  // Builds authenticatorData with UP=true, advances the persistent signature
-  // counter, hashes authenticatorData || clientDataHash, and returns an ES256
-  // signature. UV remains false until a separate verification path exists.
+  // Requires and consumes a fresh physical user-presence approval. The private
+  // scalar never leaves this module/store boundary.
   bool getAssertion(const uint8_t* credentialId, std::size_t credentialIdLength,
                     const uint8_t rpIdHash[kRpIdHashBytes], const uint8_t clientDataHash[kSha256Bytes],
                     AssertionResult& assertion);
