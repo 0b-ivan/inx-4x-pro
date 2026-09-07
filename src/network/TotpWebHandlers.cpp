@@ -70,7 +70,7 @@ void handleList(WebServer& server) {
   if (rateLimited(server)) return;
   JsonDocument request;
   if (!parseBody(server, request)) return;
-  std::array<totpweb::AccountMeta, totpweb::kMaxAccounts> accounts{};
+  static std::array<totpweb::AccountMeta, totpweb::kMaxAccounts> accounts{};
   size_t count = 0;
   const auto result = totpweb::list(pinFrom(request), accounts.data(), accounts.size(), count);
   if (result != totpweb::Result::Ok) return sendResult(server, result);
