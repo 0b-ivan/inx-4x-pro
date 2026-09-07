@@ -1,25 +1,10 @@
 # Turn a v* tag into a release the devices' own updaters can install.
-#
-# Upstream's release.yml is still in this tree and still fires on every tag, but
-# it builds gh_release, which is -DFREEINK_DEVICE_X4/X3 and therefore ESP32-C3.
-# This fork's devices (X4 Pro, Sticky) are S3. Two workflows on one tag would
-# publish two binaries and let the updater pick the wrong chip, so upstream's is
-# filtered to tags this fork never creates (see the `if` below) and this one
-# owns v*.
-#
-# This release publishes only the X4 Pro images. The x4pro fleet's updater asks
-# for the literal "firmware.bin" (every unit in the field since v1.0.0), and
-# host-tests/release asserts this file keeps publishing that asset. Cross-
-# flashing is guarded twice: the esp_image chip_id check, and the
-# CROSSPOINT-BOARD-V1 tag embedded in every image.
 name: CrossPlay release
 
 on:
   push:
     tags:
       - "v*"
-  # Dispatched by crossplay-autorelease.yml on the tag it just pushed, because
-  # a tag pushed with the workflow token starts nothing on its own.
   workflow_dispatch:
 
 permissions:
@@ -34,12 +19,13 @@ env:
 
 jobs:
   release:
+    # Dedicated USB-passkey tags are owned by crossplay-passkey-release.yml.
+    # Never publish a normal firmware.bin from a *-passkey tag.
+    if: ${{ !endsWith(github.ref_name, '-passkey') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          # Tags, for host-tests/release below: without them its notes gate
-          # cannot see what the previous tag published and skips itself.
           fetch-depth: 0
 
       - name: The tag must be the version being built
@@ -116,27 +102,6 @@ jobs:
           generate_release_notes: false
           body: |
             CrossPlay release for **Xteink X4 Pro**.
-
-            ### What is new in 1.12.24
-
-            - Redesigns **Authenticator** around an Authentik-inspired token list:
-              account names and current TOTP codes are visible together.
-            - Long-press an account card to open the delete confirmation; normal
-              taps keep the user on the all-token overview.
-            - Removes the oversized TOTP detail layout from the normal flow and
-              keeps the add/delete controls inside the X4 Pro safe area.
-            - Refreshes the e-ink token list only when a TOTP window changes.
-            - The web interface now shows current TOTP codes in Authy-style cards
-              with a local countdown/progress indicator after vault unlock.
-            - The web API returns generated codes and expiry metadata, never the
-              stored Base32 TOTP secrets.
-            - Keeps the encrypted AES-256-GCM/PBKDF2 vault and X4 Pro-only release line.
-            - Sticky remains development-only; tagged releases publish X4 Pro
-              images only.
-            - No OTA, partition-table or installer contract changes.
-
-            PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
-            Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
 
             ### Install
 
