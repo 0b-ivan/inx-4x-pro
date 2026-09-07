@@ -117,15 +117,17 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.23
+            ### What is new in 1.12.24
 
-            - Fixes the remaining **Authenticator crash after PIN unlock** on
-              the X4 Pro by moving the account-list backing array off the
-              render-task stack.
-            - Keeps the encrypted AES-256-GCM/PBKDF2 TOTP vault and the
-              browser-based Authenticator management introduced in 1.12.22.
-            - Keeps the render diagnostics enabled so any remaining device-side
-              failure can still be located precisely.
+            - Redesigns **Authenticator** around an Authentik-inspired token list:
+              account names and current TOTP codes are visible together.
+            - Long-press an account card to open the delete confirmation; normal
+              taps keep the user on the all-token overview.
+            - Removes the oversized TOTP detail layout from the normal flow and
+              keeps the add/delete controls inside the X4 Pro safe area.
+            - Refreshes the e-ink token list only when a TOTP window changes.
+            - Keeps the encrypted AES-256-GCM/PBKDF2 vault and browser-based
+              Authenticator management unchanged.
             - Sticky remains development-only; tagged releases publish X4 Pro
               images only.
             - No OTA, partition-table or installer contract changes.
