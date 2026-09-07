@@ -23,6 +23,7 @@ class SleepActivity final : public Activity {
   // paint to white resets the baseline so the image paint lands clean (#2588).
   void flushPanelWhite() const;
   void renderDefaultSleepScreen() const;
+  void renderTaroSleepScreen() const;
   void renderTarotSleepScreen() const;
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;
