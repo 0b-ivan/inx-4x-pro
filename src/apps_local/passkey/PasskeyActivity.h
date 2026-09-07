@@ -21,4 +21,5 @@ class PasskeyActivity final : public Activity {
   bool shownStoreReady_ = false;
   unsigned shownCredentials_ = 0;
   unsigned long shownPackets_ = 0;
+  uint8_t shownPresenceState_ = 0;
 };
