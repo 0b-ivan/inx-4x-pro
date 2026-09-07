@@ -133,7 +133,7 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.25
+            ### What is new in 1.12.26
 
             - Adds an **experimental USB passkey / FIDO2 build** for X4 Pro.
             - Adds CTAP-HID transport, FIDO HID framing, `INIT`, `PING` and CTAP2 handling.
@@ -141,6 +141,20 @@ jobs:
             - Adds physical user-presence confirmation on the device.
             - Keeps the normal X4 Pro firmware and OTA asset completely separate from the passkey build.
             - Normal devices continue to use `firmware.bin`; the passkey variant uses `firmware-passkey.bin`.
+            - Adds **Authenticator** as a full web-management page while the
+              reader is in File Transfer mode.
+            - Unlocks the same encrypted TOTP vault used on-device and shows
+              current codes with local countdown/progress indicators.
+            - Imports standard `otpauth://totp/...` URIs or adds SHA-1 TOTP
+              accounts manually with 6/8 digits and configurable periods.
+            - Supports deleting accounts from the browser without exposing
+              stored Base32 secrets through the API.
+            - Five failed PIN attempts trigger a 30-second request block.
+            - The File Transfer server remains plain HTTP: use Authenticator
+              web management only on a trusted private network or hotspot.
+            - Keeps the encrypted AES-256-GCM/PBKDF2 vault and X4 Pro-only
+              release line unchanged.
+            - No OTA, partition-table or installer contract changes.
 
             **Security note:** the passkey variant is experimental. Its vault root key is still stored in
             normal NVS; hardware-backed eFuse/HMAC provisioning is not enabled automatically. Treat the

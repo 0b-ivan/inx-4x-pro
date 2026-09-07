@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -25,6 +26,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "activities/reader/ReaderUtils.h"
+#include "apps_local/branding/TaroCrossPointStandby.h"
 #include "apps_local/tarot/TarotAssets.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -548,6 +550,8 @@ void SleepActivity::onEnter() {
       }
     case (CrossPointSettings::SLEEP_SCREEN_MODE::TAROT):
       return renderTarotSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::TARO):
+      return renderTaroSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
@@ -619,6 +623,20 @@ void SleepActivity::renderCustomSleepScreen() const {
   }
 
   renderDefaultSleepScreen();
+}
+
+void SleepActivity::renderTaroSleepScreen() const {
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  char version[48];
+  std::snprintf(version, sizeof(version), "v%s", CROSSPOINT_VERSION);
+
+  renderer.clearScreen();
+  crossplay::branding::drawTaroCrossPointMark(renderer, pageWidth / 2, pageHeight / 2 - 45);
+  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 35, tr(STR_TARO), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 63, version);
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 88, tr(STR_SLEEPING));
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 // Sleep screens paint with a single HALF refresh (stock parity): the OEM X4
