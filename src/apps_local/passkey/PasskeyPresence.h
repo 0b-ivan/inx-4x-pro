@@ -30,8 +30,9 @@ struct PresenceSnapshot {
 
 // Cross-task, one-shot user-presence gate. A CTAP request publishes a fresh
 // challenge here; only an input event that happens while that request is
-// Waiting can approve it. Decisions are consumed once, so a stale button press
-// can never authorize a future credential operation.
+// Waiting can approve it. consumeApproval() is the only successful path into
+// credential creation/signing, so stale button presses cannot authorize a
+// future operation.
 class PasskeyPresence {
  public:
   bool request(PresenceAction action, const char* rpId, std::size_t rpIdLength);
@@ -39,6 +40,7 @@ class PasskeyPresence {
   bool approve();
   bool deny();
   PresenceDecision decision() const;
+  bool consumeApproval();
   void clear();
 
  private:
