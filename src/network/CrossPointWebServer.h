@@ -114,6 +114,12 @@ class CrossPointWebServer {
   void handleMove() const;
   void handleDelete() const;
 
+  // Authenticator/TOTP web management
+  void handleAuthenticatorPage() const;
+  void handleTotpList();
+  void handleTotpAdd();
+  void handleTotpDelete();
+
   // Settings handlers
   void handleSettingsPage() const;
   void handleGetSettings() const;
