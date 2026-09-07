@@ -18,17 +18,28 @@ jobs:
           fetch-depth: 0
 
       - name: Apply staged Authenticator migration
-        run: python3 scripts_local/apply_authenticator_authy_ui.py
-
-      - name: Remove staging helpers
         run: |
-          rm -f scripts_local/apply_authenticator_authy_ui.py
-          rm -f .github/workflows/authenticator-authy-temp.yml
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts_local/apply_authenticator_authy_ui.py')
+          s = p.read_text()
+          start = s.index('regex_once(\n    ".github/workflows/crossplay-release.yml"')
+          end_marker = '\n)\n\nprint("Authenticator Authy-style UI patch applied")'
+          end = s.index(end_marker, start)
+          s = s[:start] + '\nprint("Authenticator Authy-style UI patch applied")\n' + s[end + len(end_marker):]
+          p.write_text(s)
+          PY
+          python3 scripts_local/apply_authenticator_authy_ui.py
+          git checkout -- scripts_local/apply_authenticator_authy_ui.py
 
       - name: Commit staged result
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
+          git add src/apps_local/totp/TotpActivity.cpp \
+                  src/apps_local/totp/TotpActivity.h \
+                  src/network/CrossPointWebServer.cpp \
+                  src/network/html/AuthenticatorPage.html \
+                  platformio.ini
           git commit -m 'feat: authy-style authenticator UI and web codes'
           git push origin HEAD:authenticator-authy-ui
