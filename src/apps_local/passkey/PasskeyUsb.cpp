@@ -68,7 +68,8 @@ bool sendMessage(const HidMessage& message) {
 }
 
 void sendPresenceKeepAlive(const uint32_t cid) {
-  HidMessage message;
+  static HidMessage message;
+  message = HidMessage{};
   message.cid = cid;
   message.command = 0x3b;  // CTAPHID_KEEPALIVE
   message.length = 1;
