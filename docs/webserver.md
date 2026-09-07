@@ -12,6 +12,7 @@ The web server is available while the device is in **File Transfer** or
 - Create folders
 - Edit many device settings from a browser
 - Manage saved Wi-Fi networks and OPDS servers
+- Manage the encrypted Authenticator TOTP vault
 - Upload and delete `.cpfont` SD-card font families
 - Accept WebDAV clients and Calibre wireless uploads
 
@@ -77,7 +78,7 @@ OPDS server.
 
 ## Web Interface
 
-The browser UI has four primary pages.
+The browser UI has five primary pages.
 
 ### Home
 
@@ -120,6 +121,12 @@ upload.
 
 Installed fonts appear in **Settings > Reader > Font Family** after the font
 registry refreshes.
+
+### Authenticator
+
+The Authenticator page manages the same encrypted TOTP vault used by the on-device Authenticator app. Create the vault and its 6-12 digit PIN on the reader first. The page can list account metadata, import standard `otpauth://totp/...` URIs, add Base32 secrets manually, and delete accounts. Stored secrets are never returned by the API.
+
+The File Transfer server is plain HTTP. The vault remains encrypted at rest, but the PIN and newly submitted secrets are visible to the local network while a request is in transit. Use Authenticator web management only on a trusted private network or a hotspot you control, and exit File Transfer when finished.
 
 ## Command Line Use
 

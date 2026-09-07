@@ -7,3 +7,6 @@ SRC=../../src/apps_local
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC \
   test_totp.cpp $SRC/totp/TotpCore.cpp -o "$BUILD_DIR/test_totp"
 "$BUILD_DIR/test_totp"
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC \
+  test_uri.cpp $SRC/totp/TotpCore.cpp $SRC/totp/TotpUri.cpp -o "$BUILD_DIR/test_uri"
+"$BUILD_DIR/test_uri"
