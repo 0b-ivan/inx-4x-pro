@@ -16,6 +16,7 @@ USBHID g_hid;
 QueueHandle_t g_rxQueue = nullptr;
 CtapHidAssembler g_assembler;
 CtapProcessor g_processor;
+TaskHandle_t g_passkeyTask = nullptr;
 
 static const uint8_t kFidoReportDescriptor[] = {
     0x06, 0xd0, 0xf1,        // Usage Page (FIDO Alliance)
@@ -76,6 +77,13 @@ bool sendMessage(const HidMessage& message) {
   return true;
 }
 
+void passkeyTask(void*) {
+  for (;;) {
+    usbPasskey().poll();
+    vTaskDelay(pdMS_TO_TICKS(2));
+  }
+}
+
 }  // namespace
 
 bool UsbPasskeyTransport::begin() {
@@ -90,6 +98,13 @@ bool UsbPasskeyTransport::begin() {
   if (!USB.begin()) return false;
 
   started_ = true;
+  if (g_passkeyTask == nullptr) {
+    if (xTaskCreate(passkeyTask, "passkey-usb", 4096, nullptr, 2, &g_passkeyTask) != pdPASS) {
+      started_ = false;
+      g_passkeyTask = nullptr;
+      return false;
+    }
+  }
   return true;
 }
 
@@ -127,6 +142,12 @@ UsbPasskeyTransport& usbPasskey() {
 }
 
 }  // namespace passkey
+
+// Arduino calls initVariant() from its setup task after the scheduler is alive
+// but before the application setup() function. Keeping the passkey transport
+// here makes the USB authenticator available even when the Passkey screen is
+// not open. This symbol only exists in the dedicated passkey build.
+extern "C" void initVariant() { passkey::usbPasskey().begin(); }
 
 #else
 
