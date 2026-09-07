@@ -12,9 +12,8 @@ SRC="$ROOT/src/apps_local"
   -o "$BUILD_DIR/test_passkey_core"
 "$BUILD_DIR/test_passkey_core"
 
-# Both USB personalities must live on the same stable GitHub release. If a
-# separate passkey release becomes /releases/latest it can hide firmware.bin
-# from every normal X4 Pro, so pin the release contract here.
+# Passkey remains a draft-only variant for now. Stable tagged releases must
+# publish only normal x4pro artefacts and must not expose passkey artefacts.
 WF="$ROOT/.github/workflows/crossplay-release.yml"
 TAGH="$ROOT/src/network/FirmwareBoardTag.h"
 PASSKEY_INI="$ROOT/platformio.passkey.ini"
@@ -22,8 +21,8 @@ PASSKEY_INI="$ROOT/platformio.passkey.ini"
 test -f "$WF"
 test ! -e "$ROOT/.github/workflows/crossplay-passkey-release.yml"
 grep -q 'dist/firmware.bin' "$WF"
-grep -q 'dist/firmware-passkey.bin' "$WF"
-grep -q 'platformio.passkey.ini -e x4pro_passkey' "$WF"
+! grep -q 'dist/firmware-passkey.bin' "$WF"
+! grep -q 'platformio.passkey.ini -e x4pro_passkey' "$WF"
 grep -q '#define CROSSPOINT_RELEASE_ASSET "firmware-passkey.bin"' "$TAGH"
 grep -q '#define CROSSPOINT_RELEASE_ASSET "firmware.bin"' "$TAGH"
 grep -q 'CROSSPOINT_VERSION=\\"${crossplay.version}\\"' "$PASSKEY_INI"
