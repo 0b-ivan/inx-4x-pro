@@ -1,6 +1,7 @@
 #include "TotpActivity.h"
 
 #include <Memory.h>
+#include <Logging.h>
 
 #include <cstdio>
 #include <cstring>
@@ -140,9 +141,14 @@ bool TotpActivity::vaultExists() const {
 }
 
 bool TotpActivity::readVault(VaultBlob& vault) const {
+  LOG_DBG("TOTP", "readVault: open NVS");
   Preferences prefs;
-  if (!prefs.begin("crossplay-totp", true)) return false;
+  if (!prefs.begin("crossplay-totp", true)) {
+    LOG_ERR("TOTP", "readVault: prefs.begin failed");
+    return false;
+  }
   const size_t bytes = prefs.getBytesLength("vault");
+  LOG_DBG("TOTP", "readVault: bytes=%u", static_cast<unsigned>(bytes));
   const bool ok = bytes == sizeof(VaultBlob) && prefs.getBytes("vault", &vault, sizeof(vault)) == sizeof(vault);
   prefs.end();
   return ok && vault.magic == kVaultMagic && vault.version == kVaultVersion;
@@ -151,60 +157,75 @@ bool TotpActivity::readVault(VaultBlob& vault) const {
 bool TotpActivity::writeEncryptedVault() const {
   if (!unlocked_) return false;
 
-  VaultBlob vault{};
-  vault.salt = vaultSalt_;
-  esp_fill_random(vault.iv.data(), vault.iv.size());
+  auto vault = makeUniqueNoThrow<VaultBlob>();
+  if (!vault) {
+    LOG_ERR("TOTP", "writeVault: no heap for VaultBlob");
+    return false;
+  }
+  vault->salt = vaultSalt_;
+  esp_fill_random(vault->iv.data(), vault->iv.size());
 
   mbedtls_gcm_context gcm;
   mbedtls_gcm_init(&gcm);
   int rc = mbedtls_gcm_setkey(&gcm, MBEDTLS_CIPHER_ID_AES, vaultKey_.data(), 256);
   if (rc == 0) {
-    rc = mbedtls_gcm_crypt_and_tag(&gcm, MBEDTLS_GCM_ENCRYPT, sizeof(StoreBlob), vault.iv.data(), vault.iv.size(),
+    rc = mbedtls_gcm_crypt_and_tag(&gcm, MBEDTLS_GCM_ENCRYPT, sizeof(StoreBlob), vault->iv.data(), vault->iv.size(),
                                    nullptr, 0, reinterpret_cast<const unsigned char*>(&store_),
-                                   vault.ciphertext.data(), vault.tag.size(), vault.tag.data());
+                                   vault->ciphertext.data(), vault->tag.size(), vault->tag.data());
   }
   mbedtls_gcm_free(&gcm);
-  if (rc != 0) return false;
+  if (rc != 0) {
+    LOG_ERR("TOTP", "writeVault: AES-GCM failed rc=%d", rc);
+    return false;
+  }
 
   Preferences prefs;
-  if (!prefs.begin("crossplay-totp", false)) return false;
-  const size_t written = prefs.putBytes("vault", &vault, sizeof(vault));
+  if (!prefs.begin("crossplay-totp", false)) {
+    LOG_ERR("TOTP", "writeVault: prefs.begin failed");
+    return false;
+  }
+  const size_t written = prefs.putBytes("vault", vault.get(), sizeof(VaultBlob));
   prefs.end();
-  return written == sizeof(vault);
+  LOG_DBG("TOTP", "writeVault: wrote=%u", static_cast<unsigned>(written));
+  return written == sizeof(VaultBlob);
 }
 
 bool TotpActivity::unlockWithPin(const char* pin) {
-  VaultBlob vault{};
-  if (!readVault(vault)) return false;
+  auto vault = makeUniqueNoThrow<VaultBlob>();
+  auto candidate = makeUniqueNoThrow<StoreBlob>();
+  if (!vault || !candidate) {
+    LOG_ERR("TOTP", "unlock: no heap for crypto scratch");
+    return false;
+  }
+  if (!readVault(*vault)) return false;
 
   std::array<uint8_t, kVaultKeyBytes> candidateKey{};
-  if (!deriveVaultKey(pin, vault.salt, candidateKey)) return false;
+  if (!deriveVaultKey(pin, vault->salt, candidateKey)) return false;
 
-  StoreBlob candidate{};
   mbedtls_gcm_context gcm;
   mbedtls_gcm_init(&gcm);
   int rc = mbedtls_gcm_setkey(&gcm, MBEDTLS_CIPHER_ID_AES, candidateKey.data(), 256);
   if (rc == 0) {
-    rc = mbedtls_gcm_auth_decrypt(&gcm, sizeof(StoreBlob), vault.iv.data(), vault.iv.size(), nullptr, 0,
-                                  vault.tag.data(), vault.tag.size(), vault.ciphertext.data(),
-                                  reinterpret_cast<unsigned char*>(&candidate));
+    rc = mbedtls_gcm_auth_decrypt(&gcm, sizeof(StoreBlob), vault->iv.data(), vault->iv.size(), nullptr, 0,
+                                  vault->tag.data(), vault->tag.size(), vault->ciphertext.data(),
+                                  reinterpret_cast<unsigned char*>(candidate.get()));
   }
   mbedtls_gcm_free(&gcm);
   if (rc != 0) {
     wipeBytes(candidateKey.data(), candidateKey.size());
-    wipeBytes(&candidate, sizeof(candidate));
+    wipeBytes(candidate.get(), sizeof(StoreBlob));
     return false;
   }
 
-  store_ = candidate;
-  wipeBytes(&candidate, sizeof(candidate));
+  store_ = *candidate;
+  wipeBytes(candidate.get(), sizeof(StoreBlob));
   if (!validateStore()) {
     wipeBytes(candidateKey.data(), candidateKey.size());
     return false;
   }
 
   vaultKey_ = candidateKey;
-  vaultSalt_ = vault.salt;
+  vaultSalt_ = vault->salt;
   wipeBytes(candidateKey.data(), candidateKey.size());
   unlocked_ = true;
   return true;
@@ -312,8 +333,11 @@ bool TotpActivity::saveAccounts() const {
 }
 
 void TotpActivity::onEnter() {
+  LOG_INF("TOTP", "onEnter: begin");
   Activity::onEnter();
+  LOG_DBG("TOTP", "onEnter: Activity entered");
   toybox::ensureFonts(renderer);
+  LOG_DBG("TOTP", "onEnter: fonts ready");
 #if defined(SIMULATOR)
   if (!loadAccounts()) {
     showNotice("STORE RESET", "The authenticator store was unreadable and was reset.");
@@ -323,8 +347,12 @@ void TotpActivity::onEnter() {
 #else
   store_ = StoreBlob{};
   unlocked_ = false;
-  phase_ = vaultExists() ? Phase::Locked : Phase::SetupPin;
+  LOG_DBG("TOTP", "onEnter: checking vault");
+  const bool hasVault = vaultExists();
+  LOG_INF("TOTP", "onEnter: vault=%d", hasVault ? 1 : 0);
+  phase_ = hasVault ? Phase::Locked : Phase::SetupPin;
 #endif
+  LOG_DBG("TOTP", "onEnter: request render");
   requestUpdate();
 }
 
