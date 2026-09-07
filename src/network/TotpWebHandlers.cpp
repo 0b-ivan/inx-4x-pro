@@ -1,5 +1,6 @@
 #include "TotpWebHandlers.h"
 
+#include <Arduino.h>
 #include <ArduinoJson.h>
 #include <WebServer.h>
 
@@ -49,7 +50,12 @@ bool rateLimited(WebServer& server) {
 }
 
 bool parseBody(WebServer& server, JsonDocument& doc) {
-  if (!server.hasArg("plain") || deserializeJson(doc, server.arg("plain"))) {
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid JSON body\"}");
+    return false;
+  }
+  String body = server.arg("plain");
+  if (deserializeJson(doc, body)) {
     server.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid JSON body\"}");
     return false;
   }
