@@ -1,16 +1,21 @@
 #include "PasskeyActivity.h"
 
+#include <GfxRenderer.h>
 #include <Memory.h>
 
 #include <cstdio>
 
 #include "../Shelf.h"
+#if !defined(SIMULATOR)
 #include "../ui/Toybox.h"
 #include "../ui/ToyboxFonts.h"
+#endif
 #include "PasskeyPresence.h"
 #include "PasskeyStore.h"
 #include "PasskeyUsb.h"
+#include "fontIds.h"
 
+#if !defined(SIMULATOR)
 namespace {
 namespace fui = freeink::ui;
 
@@ -32,6 +37,7 @@ void chrome(toybox::Screen& screen) {
 }
 
 }  // namespace
+#endif
 
 std::unique_ptr<Activity> PasskeyActivity::create(GfxRenderer& renderer, MappedInputManager& mappedInput) {
   return makeUniqueNoThrow<PasskeyActivity>(renderer, mappedInput);
@@ -39,7 +45,9 @@ std::unique_ptr<Activity> PasskeyActivity::create(GfxRenderer& renderer, MappedI
 
 void PasskeyActivity::onEnter() {
   Activity::onEnter();
+#if !defined(SIMULATOR)
   toybox::ensureFonts(renderer);
+#endif
   usbStarted_ = passkey::usbPasskey().begin();
   shownReady_ = passkey::usbPasskey().ready();
   shownPackets_ = passkey::usbPasskey().packetsSeen();
@@ -97,7 +105,7 @@ void PasskeyActivity::loop() {
     shownReady_ = ready;
     shownPackets_ = packets;
     shownPresenceState_ = presenceState;
-    const auto& store = passkey::credentialStore();
+    auto& store = passkey::credentialStore();
     shownCredentials_ = store.ready() ? static_cast<unsigned>(store.credentialCount()) : 0U;
     requestUpdate();
   }
@@ -105,6 +113,14 @@ void PasskeyActivity::loop() {
 
 void PasskeyActivity::render(RenderLock&&) {
   renderer.clearScreen();
+
+#if defined(SIMULATOR)
+  const int top = renderer.getScreenHeight() / 2;
+  renderer.drawCenteredText(UI_10_FONT_ID, top,
+                            "USB passkey mode is hardware-only. Build x4pro_passkey for the X4 Pro.");
+  renderer.displayBuffer();
+  return;
+#else
   auto target = toybox::makeTarget(renderer, toybox::toyboxFaces());
   const fui::DeviceContext device = target.deviceContext();
   const fui::InputSnapshot noInput{};
@@ -116,7 +132,7 @@ void PasskeyActivity::render(RenderLock&&) {
   const fui::Rect body = screen.body();
   const int16_t width = static_cast<int16_t>(device.width - 2 * toybox::kMargin);
 
-#if defined(CROSSPOINT_USB_PASSKEY) && !defined(SIMULATOR)
+#if defined(CROSSPOINT_USB_PASSKEY)
   const auto pending = passkey::presence().snapshot();
   if (pending.decision == passkey::PresenceDecision::Waiting) {
     const char* title = pending.action == passkey::PresenceAction::CreateCredential ? "PASSKEY ERSTELLEN?"
@@ -163,4 +179,5 @@ void PasskeyActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
   toybox::drawButtonHints(target, screen.theme(), labels);
   renderer.displayBuffer();
+#endif
 }
