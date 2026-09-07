@@ -21,6 +21,7 @@ not resolve on your network, use the IP address shown on the device screen.
 | `GET` | `/files` | File manager page |
 | `GET` | `/settings` | Web settings page |
 | `GET` | `/fonts` | SD-card font manager page |
+| `GET` | `/authenticator` | Encrypted TOTP Authenticator manager |
 | `GET` | `/js/jszip.min.js` | JavaScript asset used by the file manager |
 
 ## Device Status
@@ -317,6 +318,44 @@ Successful response:
 
 ```json
 {"ok":true}
+```
+
+## Authenticator API
+
+These endpoints operate on the encrypted Authenticator vault in internal storage. Create the vault and PIN on the reader before using them. The server never returns stored Base32 secrets. Because File Transfer uses HTTP, the PIN and secrets submitted to these endpoints are not encrypted in transit; use them only on a trusted network or controlled hotspot. Five failed PIN attempts trigger a 30-second request block.
+
+### `POST /api/totp/list`
+
+Lists account metadata after unlocking the vault for this request.
+
+```json
+{"pin":"123456"}
+```
+
+The response contains `index`, `name`, `digits`, and `period` only.
+
+### `POST /api/totp/import`
+
+Import a standard TOTP URI:
+
+```json
+{"pin":"123456","uri":"otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example"}
+```
+
+Or add an account manually:
+
+```json
+{"pin":"123456","name":"Example: alice","secret":"JBSWY3DPEHPK3PXP","digits":6,"period":30}
+```
+
+Only SHA-1 TOTP with 6 or 8 digits is accepted.
+
+### `POST /api/totp/delete`
+
+Delete an account by the index returned from `/api/totp/list`:
+
+```json
+{"pin":"123456","index":0}
 ```
 
 ## OPDS Server API

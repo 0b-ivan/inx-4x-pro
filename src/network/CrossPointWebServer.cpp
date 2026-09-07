@@ -26,6 +26,7 @@
 #include "OpdsServerStore.h"
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
+#include "TotpWebHandlers.h"
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
 #include "html/FilesPageHtml.generated.h"
@@ -202,6 +203,9 @@ void CrossPointWebServer::begin() {
     server->on("/api/wifi", HTTP_GET, [this] { handleGetWifiNetworks(); });
     server->on("/api/wifi", HTTP_POST, [this] { handlePostWifiNetwork(); });
     server->on("/api/wifi/delete", HTTP_POST, [this] { handleDeleteWifiNetwork(); });
+
+    // Authenticator management is deliberately limited to this temporary File Transfer surface.
+    registerTotpWebRoutes(*server);
   }  // !devOnly
 
   // Always present, in both surfaces. /api/status carries no secrets and is how
