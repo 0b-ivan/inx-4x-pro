@@ -1,0 +1,34 @@
+name: Authenticator Authy UI staging
+
+on:
+  push:
+    branches: [authenticator-authy-ui]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: authenticator-authy-ui
+          fetch-depth: 0
+
+      - name: Apply staged Authenticator migration
+        run: python3 scripts_local/apply_authenticator_authy_ui.py
+
+      - name: Remove staging helpers
+        run: |
+          rm -f scripts_local/apply_authenticator_authy_ui.py
+          rm -f .github/workflows/authenticator-authy-temp.yml
+
+      - name: Commit staged result
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: authy-style authenticator UI and web codes'
+          git push origin HEAD:authenticator-authy-ui
