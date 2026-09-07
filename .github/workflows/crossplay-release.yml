@@ -7,11 +7,9 @@
 # filtered to tags this fork never creates (see the `if` below) and this one
 # owns v*.
 #
-# This release publishes only the X4 Pro images. The x4pro fleet's updater asks
-# for the literal "firmware.bin" (every unit in the field since v1.0.0), and
-# host-tests/release asserts this file keeps publishing that asset. Cross-
-# flashing is guarded twice: the esp_image chip_id check, and the
-# CROSSPOINT-BOARD-V1 tag embedded in every image.
+# The stable X4 Pro updater continues to receive the literal firmware.bin.
+# The experimental USB passkey variant is published as a separate asset and
+# therefore cannot replace normal firmware by accident.
 name: CrossPlay release
 
 on:
@@ -66,26 +64,42 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-release-${{ hashFiles('platformio.ini') }}
+          key: pio-release-${{ hashFiles('platformio.ini', 'platformio.passkey.ini', 'tools_local/build_passkey.sh') }}
 
       - name: Install PlatformIO Core and tooling
         run: uv pip install --system -U "$PIO_CORE_URL" esptool
 
-      - name: Build release firmware
+      - name: Build normal X4 Pro release firmware
         run: python3 -m platformio run -e gh_release_x4pro
 
-      - name: Name the x4pro artefacts
+      - name: Build experimental USB passkey firmware
+        run: bash tools_local/build_passkey.sh
+
+      - name: Name X4 Pro artefacts
         run: |
+          set -euo pipefail
           mkdir -p dist
+
           python -m esptool --chip esp32s3 merge-bin --format raw \
             -o "dist/crossplay-${GITHUB_REF_NAME}-x4pro-full.bin" \
             -fm keep -fs keep -ff keep \
             0x0     .pio/build/gh_release_x4pro/bootloader.bin \
             0x8000  .pio/build/gh_release_x4pro/partitions.bin \
             0x10000 .pio/build/gh_release_x4pro/firmware.bin
+
+          python -m esptool --chip esp32s3 merge-bin --format raw \
+            -o "dist/crossplay-${GITHUB_REF_NAME}-x4pro-passkey-full.bin" \
+            -fm keep -fs keep -ff keep \
+            0x0     .pio/build/x4pro_passkey/bootloader.bin \
+            0x8000  .pio/build/x4pro_passkey/partitions.bin \
+            0x10000 .pio/build/x4pro_passkey/firmware.bin
+
           cp .pio/build/gh_release_x4pro/firmware.bin dist/firmware.bin
+          cp .pio/build/x4pro_passkey/firmware.bin dist/firmware-passkey.bin
           cp .pio/build/gh_release_x4pro/firmware.elf \
              "dist/crossplay-${GITHUB_REF_NAME}-x4pro.elf"
+          cp .pio/build/x4pro_passkey/firmware.elf \
+             "dist/crossplay-${GITHUB_REF_NAME}-x4pro-passkey.elf"
 
       - name: List artefacts
         run: ls -la dist
@@ -93,7 +107,9 @@ jobs:
       - name: The merged images really are merged
         run: |
           fail=0
-          for full in "dist/crossplay-${GITHUB_REF_NAME}-x4pro-full.bin"; do
+          for full in \
+            "dist/crossplay-${GITHUB_REF_NAME}-x4pro-full.bin" \
+            "dist/crossplay-${GITHUB_REF_NAME}-x4pro-passkey-full.bin"; do
             check() {
               got=$(dd if="$full" bs=1 skip=$1 count=2 2>/dev/null | xxd -p)
               if [ "$got" != "$2" ]; then
@@ -117,31 +133,25 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.24
+            ### What is new in 1.12.25
 
-            - Redesigns **Authenticator** around an Authentik-inspired token list:
-              account names and current TOTP codes are visible together.
-            - Long-press an account card to open the delete confirmation; normal
-              taps keep the user on the all-token overview.
-            - Removes the oversized TOTP detail layout from the normal flow and
-              keeps the add/delete controls inside the X4 Pro safe area.
-            - Refreshes the e-ink token list only when a TOTP window changes.
-            - The web interface now shows current TOTP codes in Authy-style cards
-              with a local countdown/progress indicator after vault unlock.
-            - The web API returns generated codes and expiry metadata, never the
-              stored Base32 TOTP secrets.
-            - Keeps the encrypted AES-256-GCM/PBKDF2 vault and X4 Pro-only release line.
-            - Sticky remains development-only; tagged releases publish X4 Pro
-              images only.
-            - No OTA, partition-table or installer contract changes.
+            - Adds an **experimental USB passkey / FIDO2 build** for X4 Pro.
+            - Adds CTAP-HID transport, FIDO HID framing, `INIT`, `PING` and CTAP2 handling.
+            - Adds P-256 / ES256 crypto primitives and an AES-256-GCM encrypted credential vault.
+            - Adds physical user-presence confirmation on the device.
+            - Keeps the normal X4 Pro firmware and OTA asset completely separate from the passkey build.
+            - Normal devices continue to use `firmware.bin`; the passkey variant uses `firmware-passkey.bin`.
 
-            PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
-            Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
+            **Security note:** the passkey variant is experimental. Its vault root key is still stored in
+            normal NVS; hardware-backed eFuse/HMAC provisioning is not enabled automatically. Treat the
+            passkey image as a test build, not as a production hardware security key.
 
             ### Install
 
-            - USB full image: `crossplay-<version>-x4pro-full.bin`
-            - OTA app image: `firmware.bin`
+            - Normal USB full image: `crossplay-<version>-x4pro-full.bin`
+            - Normal OTA app image: `firmware.bin`
+            - Experimental passkey full image: `crossplay-<version>-x4pro-passkey-full.bin`
+            - Experimental passkey OTA image: `firmware-passkey.bin`
 
       - name: Tell the board a release went out
         if: vars.SUPABASE_URL != '' && vars.SUPABASE_ANON_KEY != ''
