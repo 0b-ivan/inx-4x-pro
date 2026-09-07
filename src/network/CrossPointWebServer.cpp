@@ -12,11 +12,13 @@
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
 #include <esp_ota_ops.h>
+#if !defined(SIMULATOR)
 #include <Preferences.h>
 #include <esp_random.h>
 #include <mbedtls/gcm.h>
 #include <mbedtls/pkcs5.h>
 #include <mbedtls/md.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -54,6 +56,7 @@ constexpr uint16_t LOCAL_UDP_PORT = 8134;
 // Where Developer Mode uploads land. Fixed on purpose; see handleDevUploadData.
 constexpr const char* kDevUploadPath = "/.crosspoint/devmode-firmware.bin";
 
+#if !defined(SIMULATOR)
 constexpr uint32_t kTotpStoreMagic = 0x54505431U;
 constexpr uint16_t kTotpStoreVersion = 1;
 constexpr uint32_t kTotpVaultMagic = 0x32565054U;
@@ -144,6 +147,7 @@ bool webTotpWrite(const char* pin, const WebTotpStore& store, std::array<uint8_t
   prefs.end();
   return ok;
 }
+#endif
 
 // Static pointer for WebSocket callback (WebSocketsServer requires C-style callback)
 CrossPointWebServer* wsInstance = nullptr;
@@ -2582,6 +2586,9 @@ void CrossPointWebServer::handleAuthenticatorPage() const {
 }
 
 void CrossPointWebServer::handleTotpList() {
+#if defined(SIMULATOR)
+  server->send(501, "text/plain", "TOTP web vault is device-only");
+#else
   if (!server->hasArg("plain")) { server->send(400, "text/plain", "Missing JSON body"); return; }
   JsonDocument doc; if (deserializeJson(doc, server->arg("plain"))) { server->send(400, "text/plain", "Invalid JSON"); return; }
   const std::string pin = doc["pin"] | std::string("");
@@ -2601,9 +2608,14 @@ void CrossPointWebServer::handleTotpList() {
     JsonObject a=arr.add<JsonObject>(); a["index"]=i; a["name"]=store.accounts[i].name; a["digits"]=store.accounts[i].digits; a["period"]=store.accounts[i].period;
   }
   String body; serializeJson(out, body); server->send(200, "application/json", body);
+
+#endif
 }
 
 void CrossPointWebServer::handleTotpAdd() {
+#if defined(SIMULATOR)
+  server->send(501, "text/plain", "TOTP web vault is device-only");
+#else
   if (!server->hasArg("plain")) { server->send(400, "text/plain", "Missing JSON body"); return; }
   JsonDocument doc; if (deserializeJson(doc, server->arg("plain"))) { server->send(400, "text/plain", "Invalid JSON"); return; }
   const std::string pin = doc["pin"] | std::string("");
@@ -2623,9 +2635,14 @@ void CrossPointWebServer::handleTotpAdd() {
   auto &a=store.accounts[store.count++]; std::snprintf(a.name,sizeof(a.name),"%s",name.c_str()); std::snprintf(a.secret,sizeof(a.secret),"%s",normalized); a.digits=6; a.period=30;
   if (!webTotpWrite(pin.c_str(), store, salt)) { server->send(500, "text/plain", "Could not save encrypted vault"); return; }
   server->send(200, "application/json", "{}");
+
+#endif
 }
 
 void CrossPointWebServer::handleTotpDelete() {
+#if defined(SIMULATOR)
+  server->send(501, "text/plain", "TOTP web vault is device-only");
+#else
   if (!server->hasArg("plain")) { server->send(400, "text/plain", "Missing JSON body"); return; }
   JsonDocument doc; if (deserializeJson(doc, server->arg("plain"))) { server->send(400, "text/plain", "Invalid JSON"); return; }
   const std::string pin = doc["pin"] | std::string(""); const int index=doc["index"] | -1;
@@ -2636,4 +2653,6 @@ void CrossPointWebServer::handleTotpDelete() {
   --store.count; store.accounts[store.count]=WebTotpAccount{};
   if (!webTotpWrite(pin.c_str(), store, &vault.salt)) { server->send(500, "text/plain", "Could not save encrypted vault"); return; }
   server->send(200, "application/json", "{}");
+
+#endif
 }
