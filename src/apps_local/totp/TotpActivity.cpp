@@ -664,17 +664,15 @@ void TotpActivity::render(RenderLock&&) {
         visibleRows_ = 0;
         topIndex_ = 0;
       } else {
-        std::array<fui::ListItem, kMaxAccounts> rows{};
-        std::array<char, 16> values{};
-        (void)values;
         for (uint16_t i = 0; i < store_.count; ++i) {
-          rows[i].label = store_.accounts[i].name;
-          rows[i].value = store_.accounts[i].digits == 8 ? "8 DIGIT" : "6 DIGIT";
-          rows[i].actionValue = static_cast<int16_t>(i);
+          listRows_[i] = fui::ListItem{};
+          listRows_[i].label = store_.accounts[i].name;
+          listRows_[i].value = store_.accounts[i].digits == 8 ? "8 DIGIT" : "6 DIGIT";
+          listRows_[i].actionValue = static_cast<int16_t>(i);
         }
 
         fui::ListProps list;
-        list.items = rows.data();
+        list.items = listRows_.data();
         list.count = store_.count;
         list.topIndex = static_cast<uint16_t>(topIndex_);
         list.selectedIndex = -1;
