@@ -79,9 +79,9 @@ jobs:
       - name: Stack fits its task
         run: python3 scripts_local/stack_budget.py --build-dir ".pio/build/${{ matrix.environment }}"
 
-      # The passkey firmware intentionally lives behind its own PlatformIO
-      # project config so normal release/USB behavior stays untouched. Compile
-      # it here anyway: otherwise a green PR only proves the normal x4pro env.
+      # custom_sdkconfig performs a nested PlatformIO invocation after the IDF
+      # libraries are rebuilt. Use the wrapper so x4pro_passkey stays visible
+      # to that nested invocation as well.
       - name: Build USB passkey variant
         run: |
           set -euo pipefail
@@ -89,7 +89,7 @@ jobs:
           rm -rf "$PASSKEY_CACHE" ".pio/build/x4pro_passkey"
           mkdir -p "$PASSKEY_CACHE"
           PLATFORMIO_BUILD_CACHE_DIR="$PASSKEY_CACHE" \
-            python3 -m platformio run --project-conf platformio.passkey.ini -e x4pro_passkey
+            bash tools_local/build_passkey.sh
 
   simulator:
     name: simulator (x4 pro)
