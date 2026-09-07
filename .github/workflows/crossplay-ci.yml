@@ -59,7 +59,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-packages-${{ runner.os }}-${{ hashFiles('platformio.ini', 'platformio.sim.ini') }}
+          key: pio-packages-${{ runner.os }}-${{ hashFiles('platformio.ini', 'platformio.sim.ini', 'platformio.passkey.ini') }}
 
       # Stack analysis needs the compiler side outputs (.su/.ci) for every
       # translation unit. PlatformIO's normal build cache restores .o files but
@@ -78,6 +78,18 @@ jobs:
 
       - name: Stack fits its task
         run: python3 scripts_local/stack_budget.py --build-dir ".pio/build/${{ matrix.environment }}"
+
+      # custom_sdkconfig performs a nested PlatformIO invocation after the IDF
+      # libraries are rebuilt. Use the wrapper so x4pro_passkey stays visible
+      # to that nested invocation as well.
+      - name: Build USB passkey variant
+        run: |
+          set -euo pipefail
+          PASSKEY_CACHE="$RUNNER_TEMP/pio-passkey-cache"
+          rm -rf "$PASSKEY_CACHE" ".pio/build/x4pro_passkey"
+          mkdir -p "$PASSKEY_CACHE"
+          PLATFORMIO_BUILD_CACHE_DIR="$PASSKEY_CACHE" \
+            bash tools_local/build_passkey.sh
 
   simulator:
     name: simulator (x4 pro)
