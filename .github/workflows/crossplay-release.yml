@@ -155,15 +155,14 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.21
+            ### What is new in 1.12.22
 
-            - Adds step-by-step **Authenticator render diagnostics** for the
-              X4 Pro setup screen to pinpoint the remaining crash after vault
-              startup succeeds.
-            - Logs the exact render stage around target/frame/screen creation,
-              setup text/button construction and the final e-ink buffer update.
-            - Keeps the encrypted TOTP vault and the stack-pressure reduction
-              from 1.12.20 unchanged while isolating the remaining UI fault.
+            - Adds **Authenticator management to the X4 Pro web interface**.
+            - TOTP accounts can be listed, added and deleted from the browser;
+              secrets remain stored in the encrypted device vault.
+            - Keeps ESP32 NVS/crypto code device-only so the X4 Pro simulator
+              continues to build and test the shared web server.
+            - Includes the Authenticator render diagnostics from 1.12.21.
             - Sticky remains development-only; tagged releases publish X4 Pro
               images only.
             - No OTA, partition-table or installer contract changes.
