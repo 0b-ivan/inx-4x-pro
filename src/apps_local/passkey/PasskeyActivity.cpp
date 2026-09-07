@@ -146,7 +146,7 @@ void PasskeyActivity::render(RenderLock&&) {
                 centered(screen.theme().smallText, 3));
 
     const auto labels = mappedInput.mapLabels("Abbrechen", "Bestaetigen", "", "");
-    toybox::drawButtonHints(target, screen.theme(), labels);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -177,7 +177,7 @@ void PasskeyActivity::render(RenderLock&&) {
 #endif
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
-  toybox::drawButtonHints(target, screen.theme(), labels);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 #endif
 }
