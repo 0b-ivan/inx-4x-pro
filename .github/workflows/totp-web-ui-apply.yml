@@ -1,0 +1,84 @@
+name: TOTP web UI apply
+
+on:
+  push:
+    branches: [feature/totp-web-ui]
+    paths:
+      - .github/workflows/totp-web-ui-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/totp-web-ui
+      - name: Wire web routes, navigation and docs
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('src/network/CrossPointWebServer.cpp')
+          s = p.read_text()
+          if '#include "TotpWebHandlers.h"' not in s:
+              needle = '#include "SettingsList.h"\n'
+              assert needle in s
+              s = s.replace(needle, needle + '#include "TotpWebHandlers.h"\n', 1)
+          if 'registerTotpWebRoutes(*server);' not in s:
+              needle = '    server->on("/api/wifi/delete", HTTP_POST, [this] { handleDeleteWifiNetwork(); });\n'
+              assert needle in s
+              s = s.replace(needle, needle + '\n    // Authenticator management is deliberately limited to this temporary File Transfer surface.\n    registerTotpWebRoutes(*server);\n', 1)
+          p.write_text(s)
+
+          for name in ('HomePage.html', 'FilesPage.html', 'SettingsPage.html', 'FontsPage.html'):
+              p = Path('src/network/html') / name
+              s = p.read_text()
+              if 'href="/authenticator"' in s:
+                  continue
+              pattern = r'(<a\s+href="/fonts"[^>]*>Fonts</a>)'
+              s2, count = re.subn(pattern, r'\1\n      <a href="/authenticator">Authenticator</a>', s, count=1)
+              assert count == 1, f'fonts nav link not found in {name}'
+              p.write_text(s2)
+
+          p = Path('docs/webserver.md')
+          s = p.read_text()
+          if '- Manage the encrypted Authenticator TOTP vault' not in s:
+              needle = '- Manage saved Wi-Fi networks and OPDS servers\n'
+              assert needle in s
+              s = s.replace(needle, needle + '- Manage the encrypted Authenticator TOTP vault\n', 1)
+          s = s.replace('The browser UI has four primary pages.', 'The browser UI has five primary pages.')
+          if '### Authenticator' not in s:
+              needle = '## Command Line Use\n'
+              assert needle in s
+              section = '''### Authenticator\n\nThe Authenticator page manages the same encrypted TOTP vault used by the on-device Authenticator app. Create the vault and its 6-12 digit PIN on the reader first. The page can list account metadata, import standard `otpauth://totp/...` URIs, add Base32 secrets manually, and delete accounts. Stored secrets are never returned by the API.\n\nThe File Transfer server is plain HTTP. The vault remains encrypted at rest, but the PIN and newly submitted secrets are visible to the local network while a request is in transit. Use Authenticator web management only on a trusted private network or a hotspot you control, and exit File Transfer when finished.\n\n'''
+              s = s.replace(needle, section + needle, 1)
+          p.write_text(s)
+
+          p = Path('docs/webserver-endpoints.md')
+          s = p.read_text()
+          if '| `GET` | `/authenticator` |' not in s:
+              needle = '| `GET` | `/fonts` | SD-card font manager page |\n'
+              assert needle in s
+              s = s.replace(needle, needle + '| `GET` | `/authenticator` | Encrypted TOTP Authenticator manager |\n', 1)
+          if '## Authenticator API' not in s:
+              needle = '## OPDS Server API\n'
+              assert needle in s
+              section = '''## Authenticator API\n\nThese endpoints operate on the encrypted Authenticator vault in internal storage. Create the vault and PIN on the reader before using them. The server never returns stored Base32 secrets. Because File Transfer uses HTTP, the PIN and secrets submitted to these endpoints are not encrypted in transit; use them only on a trusted network or controlled hotspot. Five failed PIN attempts trigger a 30-second request block.\n\n### `POST /api/totp/list`\n\nLists account metadata after unlocking the vault for this request.\n\n```json\n{"pin":"123456"}\n```\n\nThe response contains `index`, `name`, `digits`, and `period` only.\n\n### `POST /api/totp/import`\n\nImport a standard TOTP URI:\n\n```json\n{"pin":"123456","uri":"otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example"}\n```\n\nOr add an account manually:\n\n```json\n{"pin":"123456","name":"Example: alice","secret":"JBSWY3DPEHPK3PXP","digits":6,"period":30}\n```\n\nOnly SHA-1 TOTP with 6 or 8 digits is accepted.\n\n### `POST /api/totp/delete`\n\nDelete an account by the index returned from `/api/totp/list`:\n\n```json\n{"pin":"123456","index":0}\n```\n\n'''
+              s = s.replace(needle, section + needle, 1)
+          p.write_text(s)
+          PY
+      - name: Commit integration
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/network/CrossPointWebServer.cpp src/network/html docs
+          if git diff --cached --quiet; then
+            echo 'No changes needed'
+          else
+            git commit -m 'feat: wire authenticator into file transfer web UI'
+            git push origin HEAD:feature/totp-web-ui
+          fi
