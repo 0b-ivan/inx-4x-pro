@@ -140,6 +140,9 @@ jobs:
             cancellation/retry, and timer wake. The existing 80-entry cache limit
             remains; too many pending entries produce an incomplete sync.
 
+            PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
+            Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
+
             ### Install
 
             - USB full image: `crossplay-<version>-x4pro-full.bin`
