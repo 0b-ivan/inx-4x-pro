@@ -17,6 +17,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/reader/RssArticleActivity.h"
 #include "apps_local/ShelfScreen.h"
+#include "apps_local/rss/RssCache.h"
 #include "apps_local/ui/Toybox.h"
 #include "apps_local/ui/ToyboxFonts.h"
 #include "apps_local/ui/ToyboxTheme.h"
@@ -134,7 +135,7 @@ std::string wikipediaRenderUrl(const std::string& url) {
 }
 
 bool fetchArticleHtml(const std::string& url, const std::string& username, const std::string& password,
-                     std::string& outHtml) {
+                      std::string& outHtml) {
   outHtml.clear();
   outHtml.reserve(4096);
   size_t total = 0;
@@ -162,6 +163,26 @@ bool fetchArticleHtml(const std::string& url, const std::string& username, const
   if (truncated) LOG_DBG("RSS", "Article HTML truncated at %u bytes: %s", static_cast<unsigned>(total), url.c_str());
   return fetched || !outHtml.empty();
 }
+
+std::string compactPublishedDate(const std::string& value) {
+  if (value.size() >= 10 && value[4] == '-' && value[7] == '-') return value.substr(0, 10);
+
+  size_t start = value.find(',');
+  start = start == std::string::npos ? 0 : start + 1;
+  while (start < value.size() && isspace(static_cast<unsigned char>(value[start]))) ++start;
+  if (start >= value.size()) return {};
+
+  size_t pos = start;
+  int tokens = 0;
+  while (pos < value.size()) {
+    while (pos < value.size() && isspace(static_cast<unsigned char>(value[pos]))) ++pos;
+    if (pos >= value.size()) break;
+    while (pos < value.size() && !isspace(static_cast<unsigned char>(value[pos]))) ++pos;
+    ++tokens;
+    if (tokens == 3) return value.substr(start, pos - start);
+  }
+  return value;
+}
 }  // namespace
 
 void RssFeedBrowserActivity::onEnter() {
@@ -170,6 +191,7 @@ void RssFeedBrowserActivity::onEnter() {
 
   state = BrowserState::CHECK_WIFI;
   items.clear();
+  listValues.clear();
   listItems.clear();
   feedTitle.clear();
   errorMessage.clear();
@@ -177,14 +199,28 @@ void RssFeedBrowserActivity::onEnter() {
   topIndex = 0;
   visibleRows = 0;
   interactionsReady = false;
-  requestUpdate();
 
+  RssCacheInfo cacheInfo;
+  if (rsscache::loadFeed(feed, feedTitle, items, &cacheInfo)) {
+    LOG_DBG("RSS", "Loaded %u cached entries for %s", static_cast<unsigned>(items.size()), feed.url.c_str());
+    rebuildListItems();
+    state = BrowserState::BROWSING;
+    requestUpdateAndWait();
+
+    // Cache-first: never force Wi-Fi just to browse. If another activity already
+    // has Wi-Fi up, refresh an older-than-one-day cache in place.
+    if (wifiConnected() && rsscache::isStale(cacheInfo)) fetchFeed();
+    return;
+  }
+
+  requestUpdate();
   checkAndConnectWifi();
 }
 
 void RssFeedBrowserActivity::onExit() {
   Activity::onExit();
   items.clear();
+  listValues.clear();
   listItems.clear();
   interactionsReady = false;
 }
@@ -196,7 +232,7 @@ void RssFeedBrowserActivity::loop() {
 
   if (state == BrowserState::ERROR) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
+      if (wifiConnected()) {
         state = BrowserState::LOADING;
         statusMessage = tr(STR_LOADING);
         requestUpdate();
@@ -361,63 +397,103 @@ void RssFeedBrowserActivity::pageList(const int delta) {
 
 void RssFeedBrowserActivity::fetchFeed() {
   if (feed.url.empty()) {
+    if (!items.empty()) {
+      state = BrowserState::BROWSING;
+      requestUpdate();
+      return;
+    }
     state = BrowserState::ERROR;
     errorMessage = tr(STR_NO_FEED_URL);
     requestUpdate();
     return;
   }
 
+  const bool hasFallback = !items.empty();
   LOG_DBG("RSS", "Fetching: %s", feed.url.c_str());
   RssParser parser;
   if (!HttpDownloader::fetchUrl(
           feed.url, [&parser](const uint8_t* data, const size_t len) { return parser.write(data, len) == len; },
           feed.username, feed.password)) {
+    LOG_ERR("RSS", "Feed request failed (HTTP %d)", HttpDownloader::lastStatus());
+    if (hasFallback) {
+      state = BrowserState::BROWSING;
+      requestUpdate();
+      return;
+    }
     state = BrowserState::ERROR;
     errorMessage = HttpDownloader::lastStatus() == 401 ? tr(STR_AUTH_FAILED) : tr(STR_FETCH_FEED_FAILED);
-    LOG_ERR("RSS", "Feed request failed (HTTP %d)", HttpDownloader::lastStatus());
     requestUpdate();
     return;
   }
   parser.flush();
 
   if (!parser) {
+    if (hasFallback) {
+      state = BrowserState::BROWSING;
+      requestUpdate();
+      return;
+    }
     state = BrowserState::ERROR;
     errorMessage = tr(STR_PARSE_FEED_FAILED);
     requestUpdate();
     return;
   }
 
-  feedTitle = parser.getFeedTitle();
-  items = std::move(parser).getItems();
+  const std::string freshTitle = parser.getFeedTitle();
+  const std::vector<RssItem> freshItems = std::move(parser).getItems();
+  std::vector<RssItem> mergedItems;
+  RssCacheInfo cacheInfo;
+  const bool cacheSaved = rsscache::mergeAndSaveFeed(feed, freshTitle, freshItems, mergedItems, &cacheInfo);
+  if (!cacheSaved) LOG_ERR("RSS", "Feed loaded, but cache write failed");
+
+  feedTitle = freshTitle.empty() ? feedTitle : freshTitle;
+  items = mergedItems.empty() && !freshItems.empty() ? freshItems : std::move(mergedItems);
   topIndex = 0;
   visibleRows = 0;
-
-  listItems.clear();
-  listItems.reserve(items.size());
-
-  for (size_t i = 0; i < items.size(); ++i) {
-    freeink::ui::ListItem row;
-    row.label = !items[i].title.empty()
-                    ? items[i].title.c_str()
-                    : (!items[i].link.empty() ? items[i].link.c_str() : tr(STR_RSS_READER));
-    row.value = !items[i].published.empty() ? items[i].published.c_str() : items[i].author.c_str();
-    row.actionValue = static_cast<int16_t>(i);
-    listItems.push_back(row);
-  }
+  rebuildListItems();
 
   state = BrowserState::BROWSING;
   requestUpdate();
 }
 
-void RssFeedBrowserActivity::openItem(const RssItem& item) {
-  state = BrowserState::ARTICLE_LOADING;
-  statusMessage = item.title.empty() ? tr(STR_LOADING) : item.title;
-  requestUpdateAndWait();
+void RssFeedBrowserActivity::rebuildListItems() {
+  listValues.clear();
+  listValues.reserve(items.size());
+  for (const auto& item : items) listValues.push_back(compactPublishedDate(item.published));
 
+  listItems.clear();
+  listItems.reserve(items.size());
+  for (size_t i = 0; i < items.size(); ++i) {
+    freeink::ui::ListItem row;
+    row.label = !items[i].title.empty()
+                    ? items[i].title.c_str()
+                    : (!items[i].link.empty() ? items[i].link.c_str() : tr(STR_RSS_READER));
+    row.value = !listValues[i].empty()
+                    ? listValues[i].c_str()
+                    : (!items[i].author.empty() ? items[i].author.c_str() : "");
+    row.actionValue = static_cast<int16_t>(i);
+    listItems.push_back(row);
+  }
+}
+
+void RssFeedBrowserActivity::openItem(const RssItem& item) {
   RssItem article = item;
-  std::string extracted = fetchArticleText(item);
-  if (!extracted.empty() && extracted.size() > article.content.size()) {
-    article.content = std::move(extracted);
+  std::string cachedArticle;
+  const bool hasCachedArticle = rsscache::loadArticle(feed, item, cachedArticle);
+  if (hasCachedArticle && cachedArticle.size() > article.content.size()) article.content = cachedArticle;
+
+  const bool canFetchArticle = !hasCachedArticle && wifiConnected() &&
+                               (item.link.starts_with("http://") || item.link.starts_with("https://"));
+  if (canFetchArticle) {
+    state = BrowserState::ARTICLE_LOADING;
+    statusMessage = item.title.empty() ? tr(STR_LOADING) : item.title;
+    requestUpdateAndWait();
+
+    std::string extracted = fetchArticleText(item);
+    if (!extracted.empty() && extracted.size() > article.content.size()) {
+      article.content = extracted;
+      if (!rsscache::saveArticle(feed, item, extracted)) LOG_ERR("RSS", "Could not cache article text");
+    }
   }
 
   state = BrowserState::BROWSING;
@@ -456,8 +532,12 @@ std::string RssFeedBrowserActivity::fetchArticleText(const RssItem& item) {
   return {};
 }
 
+bool RssFeedBrowserActivity::wifiConnected() const {
+  return WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0);
+}
+
 void RssFeedBrowserActivity::checkAndConnectWifi() {
-  if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
+  if (wifiConnected()) {
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
     requestUpdate();
