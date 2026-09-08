@@ -117,20 +117,19 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.28
+            ### What is new in 1.13.0
 
-            - RSS feed browsing now uses a Hacker News style flow with a clearer
-              list layout, tap-to-open rows, and page-wise navigation via side
-              buttons or vertical swipes.
-            - RSS connection tests in File Transfer -> Settings -> RSS feeds now
-              show inline per-feed results, including clearer authentication and
-              connectivity errors.
-            - Wi-Fi connect UX is improved: pressing Back during manual
-              connection now cancels immediately and returns to the network list.
-            - RSS article reading is smoother: reaching the final page no longer
-              auto-closes the article.
-            - Updated local German wording in parts of the Toybox UI for better
-              consistency.
+            - RSS and Atom feeds are now cached persistently on the SD card, so
+              previously synchronized feeds remain available without Wi-Fi.
+            - Feed refreshes merge new entries with older cached entries instead
+              of replacing the list, retaining up to 80 unique entries per feed.
+            - Full readable article text is cached after the first successful
+              online open and reused for later offline reading.
+            - Cached feeds open immediately without forcing a Wi-Fi connection;
+              stale caches refresh automatically when Wi-Fi is already active.
+            - RSS cache metadata and an explicit cache-sync endpoint are now
+              available to the File Transfer web interface.
+            - RSS lists now show a compact publication date when available.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
