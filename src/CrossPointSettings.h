@@ -223,6 +223,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
+  // Long power-button hold enters the board's deepest supported shutdown sleep.
+  // Enabled by default; wake remains Power-button only.
+  uint8_t longPwrBtnShutdown = 1;
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
