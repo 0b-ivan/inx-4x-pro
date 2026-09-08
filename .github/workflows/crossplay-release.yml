@@ -117,9 +117,10 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.13.0
+            ### What is new in 1.13.1
 
-            - RSS and Atom feeds are now cached persistently on the SD card, so
+            - Maintenance release of the current stable `main` branch.
+            - RSS and Atom feeds are cached persistently on the SD card, so
               previously synchronized feeds remain available without Wi-Fi.
             - Feed refreshes merge new entries with older cached entries instead
               of replacing the list, retaining up to 80 unique entries per feed.
@@ -127,9 +128,9 @@ jobs:
               online open and reused for later offline reading.
             - Cached feeds open immediately without forcing a Wi-Fi connection;
               stale caches refresh automatically when Wi-Fi is already active.
-            - RSS cache metadata and an explicit cache-sync endpoint are now
+            - RSS cache metadata and an explicit cache-sync endpoint are
               available to the File Transfer web interface.
-            - RSS lists now show a compact publication date when available.
+            - RSS lists show a compact publication date when available.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
