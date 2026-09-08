@@ -830,6 +830,7 @@
   // /api/rss REST endpoints. Password fields are never pre-filled for security;
   // the "(unchanged)" placeholder indicates an existing password is preserved on save.
   let rssFeeds = [];
+  let rssSyncTimer = null;
 
   function rssCacheStatus(srv) {
     const count = Number(srv.cachedItems || 0);
@@ -886,7 +887,9 @@
     html += '<p><label><input type="checkbox" id="rss-schedule-enabled"> Daily sync</label> ' +
       '<input type="time" id="rss-schedule-time" value="06:30" aria-label="Daily RSS sync time"> ' +
       '<button class="btn-small" onclick="saveRssSchedule(this)">Save schedule</button> ' +
-      '<button class="btn-small" onclick="syncRssFeed(null, this)">Sync all feeds</button></p>';
+      '<button class="btn-small" onclick="syncRssFeed(null, this)">Sync all feeds</button> ' +
+      '<button class="btn-small" id="rss-sync-cancel" onclick="cancelRssSync()" hidden>Cancel sync</button></p>' +
+      '<p id="rss-sync-progress" role="status" aria-live="polite"></p>';
     if (rssFeeds.length === 0) {
       html += '<p style="color:var(--label-color);text-align:center;">No RSS feeds configured</p>';
     } else {
@@ -912,6 +915,7 @@
       const schedule = await scheduleResp.json();
       document.getElementById('rss-schedule-enabled').checked = schedule.enabled;
       document.getElementById('rss-schedule-time').value = schedule.time;
+      await pollRssSync();
     } catch (e) {
       showMessage('RSS feeds could not be loaded', true);
     }
@@ -988,33 +992,68 @@
     finally { button.disabled = false; }
   }
 
-  async function syncRssFeed(idx, button = null) {
-    const id = idx;
-    const oldLabel = button ? button.textContent : '';
+  function showRssSyncProgress(status) {
+    const result = document.getElementById('rss-sync-progress');
+    const cancel = document.getElementById('rss-sync-cancel');
+    if (cancel) cancel.hidden = !status.active;
+    if (!result) return;
+    if (status.state === 'idle') { result.textContent = ''; return; }
+    const counts = status.articlesSaved + '/' + status.articlesTotal + ' planned articles saved; ' +
+      status.articlesFailed + ' article errors; ' + status.feedsDone + '/' + status.feedsTotal +
+      ' feeds processed; ' + status.feedsFailed + ' feed errors.';
+    let label = 'Syncing. ';
+    if (status.state === 'connecting') label = 'Connecting to Wi-Fi. ';
+    if (status.state === 'complete') label = 'Sync complete. ';
+    if (status.state === 'incomplete') label = 'Sync incomplete. Check Wi-Fi, feed access and SD card. ';
+    if (status.state === 'cancelled') label = 'Sync cancelled. ';
+    result.textContent = label + counts + (status.active ?
+      ' The article total grows as feeds are read. Cancel stops before the next article.' :
+      status.state === 'complete' ? '' : ' Unsaved articles remain pending for retry.');
+    result.style.color = ['incomplete', 'cancelled'].includes(status.state) ? 'var(--error-color, #c0392b)' : '';
+  }
+
+  async function pollRssSync() {
+    clearTimeout(rssSyncTimer);
     try {
-      if (button) {
-        button.disabled = true;
-        button.textContent = 'Syncing...';
-      }
-      showRssInlineResult(id, 'Synchronizing cache...', false);
+      const resp = await fetch('/api/rss/sync', {cache: 'no-store'});
+      if (!resp.ok) throw new Error(await resp.text());
+      const status = await resp.json();
+      showRssSyncProgress(status);
+      if (status.active) rssSyncTimer = setTimeout(pollRssSync, 500);
+    } catch (e) {
+      const result = document.getElementById('rss-sync-progress');
+      if (result) result.textContent = 'Sync status unavailable. Reconnecting; the device may still be working.';
+      rssSyncTimer = setTimeout(pollRssSync, 2000);
+    }
+  }
+
+  async function cancelRssSync() {
+    try {
+      const resp = await fetch('/api/rss/sync/cancel', {method: 'POST'});
+      if (!resp.ok) throw new Error(await resp.text());
+      clearTimeout(rssSyncTimer);
+      showRssSyncProgress(await resp.json());
+    } catch (e) {
+      showMessage('Cancellation could not be confirmed. Check sync status.', true);
+      await pollRssSync();
+    }
+  }
+
+  async function syncRssFeed(idx, button = null) {
+    try {
+      if (button) button.disabled = true;
       const resp = await fetch('/api/rss/sync', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({index: idx})
       });
-      const text = await resp.text();
-      if (!resp.ok) throw new Error(text || 'Cache sync failed');
-      showRssInlineResult(id, text || 'Cache synchronized.', false);
-      showMessage(text || 'RSS cache synchronized.', false);
-      await loadRssFeeds();
+      if (!resp.ok) throw new Error(await resp.text() || 'Cache sync could not start');
+      showRssSyncProgress(await resp.json());
+      await pollRssSync();
     } catch (e) {
-      showRssInlineResult(id, e.message || 'Cache sync failed.', true);
       showMessage('Error: ' + e.message, true);
     } finally {
-      if (button) {
-        button.disabled = false;
-        button.textContent = oldLabel;
-      }
+      if (button) button.disabled = false;
     }
   }
 

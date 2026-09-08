@@ -9,3 +9,6 @@ ${CXX:-c++} -std=c++20 -Wall -Wextra -Werror -Ihost-tests/rss/stubs -Isrc/apps_l
 "$BUILD/rss-wifi"
 ${CXX:-c++} -std=c++20 -Wall -Wextra -Wno-unused-variable -DSIMULATOR -Ihost-tests/rss/stubs -Isrc/apps_local/rss -Ilib/RssParser -Ilib/XmlParserUtils -Itest/opds_feed/stubs host-tests/rss/test_sync.cpp src/apps_local/rss/RssSync.cpp src/apps_local/rss/RssWifi.cpp src/apps_local/rss/RssTime.cpp lib/RssParser/RssParser.cpp -lexpat -o "$BUILD/rss-sync"
 "$BUILD/rss-sync"
+
+${CXX:-c++} -std=c++20 -Wall -Wextra -Werror -Ihost-tests/rss/stubs -Isrc/apps_local/rss -Ilib/RssParser -Itest/opds_feed/stubs host-tests/rss/test_cache.cpp src/apps_local/rss/RssCache.cpp -o "$BUILD/rss-cache"
+"$BUILD/rss-cache"

@@ -216,6 +216,10 @@ bool mergeAndSaveFeed(const RssFeed& feed, const std::string& freshTitle, const 
     if (duplicate == mergedItems.end()) mergedItems.push_back(boundedItem(candidate));
   };
 
+  // Keep retry metadata ahead of ordinary cached entries when the index is full.
+  for (const auto& old : oldItems) {
+    if (articlePending(feed, old)) appendUnique(old);
+  }
   for (const auto& fresh : freshItems) {
     RssItem candidate = fresh;
     const auto previous = std::find_if(oldItems.begin(), oldItems.end(),
@@ -230,6 +234,17 @@ bool mergeAndSaveFeed(const RssFeed& feed, const std::string& freshTitle, const 
   for (const auto& old : oldItems) {
     appendUnique(old);
     if (mergedItems.size() >= MAX_CACHED_ITEMS) break;
+  }
+
+  // Never replace an index if doing so would strand a pending download.
+  const auto retained = [&](const RssItem& item) {
+    return !articlePending(feed, item) || std::any_of(mergedItems.begin(), mergedItems.end(),
+                                                      [&](const RssItem& merged) { return sameItem(merged, item); });
+  };
+  if (!std::all_of(oldItems.begin(), oldItems.end(), retained) ||
+      !std::all_of(freshItems.begin(), freshItems.end(), retained)) {
+    LOG_ERR("RSS", "Pending articles exceed RSS cache capacity");
+    return false;
   }
 
   const std::string title = !freshTitle.empty() ? freshTitle : oldTitle;

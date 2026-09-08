@@ -1,4 +1,5 @@
 #pragma once
+inline int testSavesUntilFailure = -1;
 template <class T>
 class PersistableStore {
  public:
@@ -6,6 +7,10 @@ class PersistableStore {
     static T value;
     return value;
   }
-  bool saveToFile() { return true; }
+  bool saveToFile() {
+    if (testSavesUntilFailure == 0) return false;
+    if (testSavesUntilFailure > 0) --testSavesUntilFailure;
+    return true;
+  }
   void loadFromFile() {}
 };

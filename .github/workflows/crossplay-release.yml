@@ -114,25 +114,31 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'legacy' }}
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.13.0
+            ### What is new in 1.14.0-alpha.1
 
-            - RSS and Atom feeds are now cached persistently on the SD card, so
-              previously synchronized feeds remain available without Wi-Fi.
-            - Feed refreshes merge new entries with older cached entries instead
-              of replacing the list, retaining up to 80 unique entries per feed.
-            - Full readable article text is cached after the first successful
-              online open and reused for later offline reading.
-            - Cached feeds open immediately without forcing a Wi-Fi connection;
-              stale caches refresh automatically when Wi-Fi is already active.
-            - RSS cache metadata and an explicit cache-sync endpoint are now
-              available to the File Transfer web interface.
-            - RSS lists now show a compact publication date when available.
+            **Alpha preview from feature/rss-offline-sync.** This is a prerelease
+            for testing on Xteink X4 Pro; it is not the stable update channel.
 
-            PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
-            Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
+            - RSS synchronization now advances one article at a time, reusing
+              the existing download, extraction and SD-cache implementation.
+            - The web settings show article/feed progress and partial errors.
+              Reloading the page reconnects to the running job.
+            - Cancel stops before the next article. An in-flight download or
+              connection attempt finishes or reaches its existing timeout first.
+            - Pending downloads survive cancellation and remain retryable;
+              one failed feed does not prevent the remaining feeds from syncing.
+            - Success is recorded only after all planned articles are saved.
+              Scheduled sync and timer wake use the same execution steps.
+
+            **Device validation still required:** settings persistence after a
+            restart, Wi-Fi initially off/on, connection failure, missing SD card,
+            cancellation/retry, and timer wake. The existing 80-entry cache limit
+            remains; too many pending entries produce an incomplete sync.
 
             ### Install
 
@@ -140,7 +146,7 @@ jobs:
             - OTA app image: `firmware.bin`
 
       - name: Tell the board a release went out
-        if: vars.SUPABASE_URL != '' && vars.SUPABASE_ANON_KEY != ''
+        if: ${{ !contains(github.ref_name, '-') && vars.SUPABASE_URL != '' && vars.SUPABASE_ANON_KEY != '' }}
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
