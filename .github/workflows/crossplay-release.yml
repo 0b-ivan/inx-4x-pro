@@ -117,7 +117,7 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What’s New in 1.12.28
+            ### What is new in 1.12.28
 
             - Added
             - RSS feed browsing now uses a Hacker News–style flow with a cleaner list layout, tap-to-open rows, and page-wise navigation via side buttons or vertical swipes.
