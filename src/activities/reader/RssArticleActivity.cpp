@@ -10,6 +10,7 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
+#include "apps_local/rss/RssTime.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -84,7 +85,7 @@ std::string RssArticleActivity::articleText() const {
   if (!item.author.empty() || !item.published.empty()) {
     if (!item.author.empty()) text += item.author;
     if (!item.author.empty() && !item.published.empty()) text += " - ";
-    if (!item.published.empty()) text += item.published;
+    if (!item.published.empty()) text += rsstime::formatPublished(item.published, SETTINGS.clockUtcOffsetQ);
     text += "\n\n";
   }
   if (!item.content.empty()) {

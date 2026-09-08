@@ -881,8 +881,12 @@
 
   function renderRssSection() {
     const container = document.getElementById('rss-container');
-    let html = '<div class="card"><h2>RSS feeds</h2><p>Enter a direct RSS/Atom feed URL. Feeds are cached on the SD card for offline reading; use Sync cache for an immediate refresh. When Wi-Fi is already active, a cache older than 24 hours refreshes automatically. For Nextcloud, use your login username and an app password (Personal settings → Security). The News web page and JSON API are not RSS feeds.</p>';
+    let html = '<div class="card"><h2>RSS feeds</h2><p>Enter a direct RSS/Atom feed URL. Feeds are cached on the SD card for offline reading; use Sync cache for an immediate refresh. The daily sync downloads new and today’s article texts using the device clock offset. Keep the device clock set correctly. For Nextcloud, use your login username and an app password (Personal settings → Security). The News web page and JSON API are not RSS feeds.</p>';
 
+    html += '<p><label><input type="checkbox" id="rss-schedule-enabled"> Daily sync</label> ' +
+      '<input type="time" id="rss-schedule-time" value="06:30" aria-label="Daily RSS sync time"> ' +
+      '<button class="btn-small" onclick="saveRssSchedule(this)">Save schedule</button> ' +
+      '<button class="btn-small" onclick="syncRssFeed(null, this)">Sync all feeds</button></p>';
     if (rssFeeds.length === 0) {
       html += '<p style="color:var(--label-color);text-align:center;">No RSS feeds configured</p>';
     } else {
@@ -903,6 +907,11 @@
       if (!resp.ok) throw new Error('Failed to load');
       rssFeeds = await resp.json();
       renderRssSection();
+      const scheduleResp = await fetch('/api/rss/schedule');
+      if (!scheduleResp.ok) throw new Error('Failed to load schedule');
+      const schedule = await scheduleResp.json();
+      document.getElementById('rss-schedule-enabled').checked = schedule.enabled;
+      document.getElementById('rss-schedule-time').value = schedule.time;
     } catch (e) {
       showMessage('RSS feeds could not be loaded', true);
     }
@@ -963,6 +972,20 @@
     } finally {
       if (button) button.disabled = false;
     }
+  }
+
+  async function saveRssSchedule(button) {
+    button.disabled = true;
+    try {
+      const resp = await fetch('/api/rss/schedule', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled: document.getElementById('rss-schedule-enabled').checked,
+          time: document.getElementById('rss-schedule-time').value})
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      showMessage('RSS schedule saved', false);
+    } catch (e) { showMessage(e.message, true); }
+    finally { button.disabled = false; }
   }
 
   async function syncRssFeed(idx, button = null) {

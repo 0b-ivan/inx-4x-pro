@@ -176,13 +176,15 @@ void XMLCALL RssParser::startElement(void* userData, const XML_Char* name, const
       elementMatches(name, "title") || elementMatches(name, "link") || elementMatches(name, "description") ||
       elementMatches(name, "encoded") || elementMatches(name, "creator") || elementMatches(name, "author") ||
       elementMatches(name, "pubDate") || elementMatches(name, "updated") || elementMatches(name, "published") ||
-      elementMatches(name, "guid") || elementMatches(name, "content") || elementMatches(name, "summary");
+      elementMatches(name, "guid") || elementMatches(name, "id") || elementMatches(name, "content") ||
+      elementMatches(name, "summary");
 
   if (!textElement) return;
 
   if (self->inItem && elementMatches(name, "link") && self->currentItem.link.empty()) {
     const char* href = findAttribute(atts, "href");
-    if (href) self->currentItem.link = href;
+    const char* rel = findAttribute(atts, "rel");
+    if (href && (!rel || strcmp(rel, "alternate") == 0)) self->currentItem.link = href;
   }
 
   if (self->inItem || (self->inChannel && elementMatches(name, "title") && self->feedTitle.empty())) {
@@ -234,7 +236,7 @@ void XMLCALL RssParser::endElement(void* userData, const XML_Char* name) {
     } else if (elementMatches(name, "pubDate") || elementMatches(name, "updated") ||
                elementMatches(name, "published")) {
       self->currentItem.published = text;
-    } else if (elementMatches(name, "guid")) {
+    } else if (elementMatches(name, "guid") || elementMatches(name, "id")) {
       self->currentItem.guid = text;
     }
   }

@@ -37,6 +37,7 @@
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "apps_local/Shelf.h"
+#include "apps_local/rss/RssSync.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
@@ -293,6 +294,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
 
+  rsssync::armSleep();
   powerManager.startDeepSleep(gpio);
 }
 
@@ -453,6 +455,12 @@ void setup() {
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();
+  rsssync::begin();
+  if (rsssync::isTimerWake()) {
+    rsssync::tick(true);
+    rsssync::armSleep();
+    powerManager.startDeepSleep(gpio);
+  }
   // First boot (or first boot after upgrading into this feature) gets the
   // public catalogs, so Get Books works without any setup.
   OPDS_STORE.seedDefaultCatalogs();
@@ -489,6 +497,7 @@ void setup() {
       LOG_DBG("MAIN", "Verifying power button press duration");
       if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
                                         SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP)) {
+        rsssync::armSleep();
         powerManager.startDeepSleep(gpio);
       }
       wakePowerReleasePending = true;
@@ -502,6 +511,7 @@ void setup() {
       // Sleeping here would strand the device in a USB-replug boot loop.
       break;
 #else
+      rsssync::armSleep();
       powerManager.startDeepSleep(gpio);
       break;
 #endif
@@ -692,6 +702,7 @@ void loop() {
   }
 
   devmode::update();
+  rsssync::tick();
 
 #if CROSSPOINT_DEV_SERIAL_BRIDGE
   // Dev builds route all serial commands (screenshot included) through the

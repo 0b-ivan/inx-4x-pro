@@ -85,12 +85,6 @@ bool readString(HalFile& file, std::string& value, const size_t maxBytes) {
   return true;
 }
 
-bool sameItem(const RssItem& lhs, const RssItem& rhs) {
-  if (!lhs.guid.empty() && !rhs.guid.empty()) return lhs.guid == rhs.guid;
-  if (!lhs.link.empty() && !rhs.link.empty()) return lhs.link == rhs.link;
-  return !lhs.title.empty() && lhs.title == rhs.title && lhs.published == rhs.published;
-}
-
 RssItem boundedItem(const RssItem& source) {
   RssItem result = source;
   if (result.title.size() > MAX_TITLE_BYTES) result.title.resize(MAX_TITLE_BYTES);
@@ -158,6 +152,12 @@ bool writeFeedFile(const RssFeed& feed, const std::string& feedTitle, const std:
 }  // namespace
 
 namespace rsscache {
+
+bool sameItem(const RssItem& lhs, const RssItem& rhs) {
+  if (!lhs.guid.empty() && !rhs.guid.empty()) return lhs.guid == rhs.guid;
+  if (!lhs.link.empty() && !rhs.link.empty()) return lhs.link == rhs.link;
+  return !lhs.title.empty() && lhs.title == rhs.title && lhs.published == rhs.published;
+}
 
 bool loadFeed(const RssFeed& feed, std::string& feedTitle, std::vector<RssItem>& items, RssCacheInfo* info) {
   feedTitle.clear();
@@ -287,8 +287,19 @@ bool loadArticle(const RssFeed& feed, const RssItem& item, std::string& text) {
   return !text.empty();
 }
 
+bool articlePending(const RssFeed& feed, const RssItem& item) {
+  return Storage.exists(articlePath(feed, item, ".pending").c_str());
+}
+
+bool markArticlePending(const RssFeed& feed, const RssItem& item) {
+  if (articlePending(feed, item)) return true;
+  if (!Storage.ensureDirectoryExists(CACHE_DIR)) return false;
+  HalFile file;
+  return Storage.openFileForWrite("RSS", articlePath(feed, item, ".pending"), file);
+}
+
 bool saveArticle(const RssFeed& feed, const RssItem& item, const std::string& text) {
-  if (text.empty() || !Storage.ensureDirectoryExists(CACHE_DIR)) return false;
+  if (text.empty() || text.size() > MAX_ARTICLE_BYTES || !Storage.ensureDirectoryExists(CACHE_DIR)) return false;
 
   const std::string finalPath = articlePath(feed, item, ".article");
   const std::string tempPath = articlePath(feed, item, ".article.tmp");
@@ -310,6 +321,8 @@ bool saveArticle(const RssFeed& feed, const RssItem& item, const std::string& te
     Storage.remove(tempPath.c_str());
     return false;
   }
+  const std::string pending = articlePath(feed, item, ".pending");
+  if (Storage.exists(pending.c_str())) Storage.remove(pending.c_str());
   return true;
 }
 
