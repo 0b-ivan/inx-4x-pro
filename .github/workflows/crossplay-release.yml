@@ -117,20 +117,13 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.13.1
+            ### What is new in 1.13.2
 
-            - Maintenance release of the current stable `main` branch.
-            - RSS and Atom feeds are cached persistently on the SD card, so
-              previously synchronized feeds remain available without Wi-Fi.
-            - Feed refreshes merge new entries with older cached entries instead
-              of replacing the list, retaining up to 80 unique entries per feed.
-            - Full readable article text is cached after the first successful
-              online open and reused for later offline reading.
-            - Cached feeds open immediately without forcing a Wi-Fi connection;
-              stale caches refresh automatically when Wi-Fi is already active.
-            - RSS cache metadata and an explicit cache-sync endpoint are
-              available to the File Transfer web interface.
-            - RSS lists show a compact publication date when available.
+            - Long-pressing the Power button now uses the X4 Pro's existing
+              deep-sleep shutdown path with peripheral power rails disabled.
+            - A new Controls setting lets long-press Power shutdown be enabled
+              or disabled. It is enabled by default.
+            - Short Power-button behavior is unchanged.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
