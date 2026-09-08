@@ -9,8 +9,12 @@
 
 namespace {
 bool readRequest(WebServer& server, JsonDocument& doc) {
-  if (!server.hasArg("plain") || server.arg("plain").length() > 4096 || deserializeJson(doc, server.arg("plain")) ||
-      !doc.is<JsonObject>()) {
+  if (!server.hasArg("plain")) {
+    server.send(400, "text/plain", "Expected a JSON object (maximum 4096 bytes)");
+    return false;
+  }
+  String requestBody = server.arg("plain");
+  if (requestBody.length() > 4096 || deserializeJson(doc, requestBody) || !doc.is<JsonObject>()) {
     server.send(400, "text/plain", "Expected a JSON object (maximum 4096 bytes)");
     return false;
   }
@@ -104,9 +108,10 @@ void testFeed(WebServer& server, const RssFeed& feed) {
     server.send(422, "text/plain",
                 "HTTP 403: access denied. Check feed permissions and any reverse proxy/SSO protection.");
   } else if (status != 200) {
-    server.send(422, "text/plain",
-                String("Feed request failed (HTTP ") + status +
-                    "). Check the URL, Wi-Fi, DNS/TLS and proxy. HTTP 0 means no HTTP response.");
+    String error = "Feed request failed (HTTP ";
+    error += String(status);
+    error += "). Check the URL, Wi-Fi, DNS/TLS and proxy. HTTP 0 means no HTTP response.";
+    server.send(422, "text/plain", error);
   } else if (tooLarge) {
     server.send(422, "text/plain", "Feed exceeds the 256 KB connection-test limit. Use a smaller feed.");
   } else if (!parser || (parser.getItems().empty() && parser.getFeedTitle().empty())) {
@@ -116,8 +121,10 @@ void testFeed(WebServer& server, const RssFeed& feed) {
   } else if (!fetched) {
     server.send(422, "text/plain", "HTTP 200, but the transfer was incomplete. Try again.");
   } else {
-    server.send(200, "text/plain",
-                String("Connection OK: RSS/Atom feed received, ") + parser.getItems().size() + " entries.");
+    String success = "Connection OK: RSS/Atom feed received, ";
+    success += String(static_cast<unsigned long>(parser.getItems().size()));
+    success += " entries.";
+    server.send(200, "text/plain", success);
   }
 }
 
