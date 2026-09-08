@@ -119,13 +119,19 @@ jobs:
 
             ### What is new in 1.12.28
 
-            - Added
-            - RSS feed browsing now uses a Hacker News–style flow with a cleaner list layout, tap-to-open rows, and page-wise navigation via side buttons or vertical swipes.
-            - RSS connection tests under File Transfer → Settings → RSS Feeds now show inline results for each feed. 
-            - Clearer RSS authentication and connectivity error messages.
-            - Improved Wi-Fi connection UX: pressing Back during a manual connection attempt now cancels immediately and returns to the network list.
-            - RSS article reading is smoother: reaching the final page no longer automatically closes the article.
-            - Updated German wording in parts of the Toybox UI for better consistency.
+            - RSS feed browsing now uses a Hacker News style flow with a clearer
+              list layout, tap-to-open rows, and page-wise navigation via side
+              buttons or vertical swipes.
+            - RSS connection tests in File Transfer -> Settings -> RSS feeds now
+              show inline per-feed results, including clearer authentication and
+              connectivity errors.
+            - Wi-Fi connect UX is improved: pressing Back during manual
+              connection now cancels immediately and returns to the network list.
+            - RSS article reading is smoother: reaching the final page no longer
+              auto-closes the article.
+            - Updated local German wording in parts of the Toybox UI for better
+              consistency.
+
 
             ### Install
 
