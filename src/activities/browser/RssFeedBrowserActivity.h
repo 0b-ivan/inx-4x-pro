@@ -30,6 +30,7 @@ class RssFeedBrowserActivity final : public Activity {
   std::string statusMessage;
   int topIndex = 0;
   int visibleRows = 0;
+  std::vector<std::string> listValues;
   std::vector<freeink::ui::ListItem> listItems;
 
   toybox::Interactions interactions;
@@ -39,8 +40,10 @@ class RssFeedBrowserActivity final : public Activity {
   void launchWifiSelection();
   void onWifiSelectionComplete(bool connected);
   void fetchFeed();
+  void rebuildListItems();
   void openItem(const RssItem& item);
   std::string fetchArticleText(const RssItem& item);
   void pageList(int delta);
+  bool wifiConnected() const;
   bool preventAutoSleep() override { return true; }
 };
