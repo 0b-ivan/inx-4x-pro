@@ -37,13 +37,9 @@ void RssArticleActivity::loop() {
   if (prevTriggered && currentPage > 0) {
     currentPage--;
     requestUpdate();
-  } else if (nextTriggered) {
-    if (currentPage < totalPages - 1) {
-      currentPage++;
-      requestUpdate();
-    } else {
-      finish();
-    }
+  } else if (nextTriggered && currentPage < totalPages - 1) {
+    currentPage++;
+    requestUpdate();
   }
 }
 

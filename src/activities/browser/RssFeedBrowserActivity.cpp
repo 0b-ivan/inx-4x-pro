@@ -1,6 +1,7 @@
 #include "RssFeedBrowserActivity.h"
 
 #include <FontCacheManager.h>
+#include <FreeInkUI.h>
 #include <GfxRenderer.h>
 #include <HtmlArticleExtractor.h>
 #include <I18n.h>
@@ -9,19 +10,29 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 
 #include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/reader/RssArticleActivity.h"
+#include "apps_local/ShelfScreen.h"
+#include "apps_local/ui/Toybox.h"
+#include "apps_local/ui/ToyboxFonts.h"
+#include "apps_local/ui/ToyboxTheme.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 
 namespace {
 constexpr size_t MAX_ARTICLE_HTML_BYTES = 40 * 1024;
+constexpr freeink::ui::ActionId ACTION_OPEN_ITEM = 1;
 
-bool startsWithAtCaseInsensitive(const std::string& text, size_t pos, const char* prefix) {
+int16_t listRowHeight(const freeink::ui::DrawTarget& target, const freeink::ui::ThemeTokens& tokens) {
+  return static_cast<int16_t>(2 * target.lineHeight(tokens.bodyText.font) + toybox::kGutter);
+}
+
+bool startsWithAtCaseInsensitive(const std::string& text, const size_t pos, const char* prefix) {
   const size_t len = strlen(prefix);
   if (pos + len > text.size()) return false;
   for (size_t i = 0; i < len; i++) {
@@ -32,7 +43,7 @@ bool startsWithAtCaseInsensitive(const std::string& text, size_t pos, const char
   return true;
 }
 
-size_t findCaseInsensitive(const std::string& text, const char* needle, size_t start = 0) {
+size_t findCaseInsensitive(const std::string& text, const char* needle, const size_t start = 0) {
   const size_t needleLen = strlen(needle);
   if (needleLen == 0) return start <= text.size() ? start : std::string::npos;
   if (needleLen > text.size() || start > text.size() - needleLen) return std::string::npos;
@@ -130,7 +141,7 @@ bool fetchArticleHtml(const std::string& url, const std::string& username, const
   bool truncated = false;
   const bool fetched = HttpDownloader::fetchUrl(
       url,
-      [&](const uint8_t* data, size_t len) {
+      [&](const uint8_t* data, const size_t len) {
         if (total >= MAX_ARTICLE_HTML_BYTES) {
           truncated = true;
           return false;
@@ -155,13 +166,17 @@ bool fetchArticleHtml(const std::string& url, const std::string& username, const
 
 void RssFeedBrowserActivity::onEnter() {
   Activity::onEnter();
+  toybox::ensureFonts(renderer);
 
   state = BrowserState::CHECK_WIFI;
   items.clear();
+  listItems.clear();
   feedTitle.clear();
-  selectorIndex = 0;
   errorMessage.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
+  topIndex = 0;
+  visibleRows = 0;
+  interactionsReady = false;
   requestUpdate();
 
   checkAndConnectWifi();
@@ -170,9 +185,13 @@ void RssFeedBrowserActivity::onEnter() {
 void RssFeedBrowserActivity::onExit() {
   Activity::onExit();
   items.clear();
+  listItems.clear();
+  interactionsReady = false;
 }
 
 void RssFeedBrowserActivity::loop() {
+  namespace fui = freeink::ui;
+
   if (state == BrowserState::WIFI_SELECTION) return;
 
   if (state == BrowserState::ERROR) {
@@ -196,44 +215,114 @@ void RssFeedBrowserActivity::loop() {
     return;
   }
 
-  if (state == BrowserState::BROWSING) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (!items.empty()) openItem(items[selectorIndex]);
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      finish();
-    }
+  if (state != BrowserState::BROWSING) return;
 
-    if (!items.empty()) {
-      buttonNavigator.onNextRelease([this] {
-        selectorIndex = ButtonNavigator::nextIndex(selectorIndex, items.size());
-        requestUpdate();
-      });
-      buttonNavigator.onPreviousRelease([this] {
-        selectorIndex = ButtonNavigator::previousIndex(selectorIndex, items.size());
-        requestUpdate();
-      });
-      buttonNavigator.onNextContinuous([this] {
-        selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, items.size(), PAGE_ITEMS);
-        requestUpdate();
-      });
-      buttonNavigator.onPreviousContinuous([this] {
-        selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, items.size(), PAGE_ITEMS);
-        requestUpdate();
-      });
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    finish();
+    return;
+  }
+
+  const MappedInputManager::SwipeDir swipe = mappedInput.wasSwipe();
+  const bool next =
+      mappedInput.wasReleased(MappedInputManager::Button::Down) || swipe == MappedInputManager::SwipeDir::Up;
+  const bool prev = mappedInput.wasReleased(MappedInputManager::Button::Up) || swipe == MappedInputManager::SwipeDir::Down;
+  if (next || prev) {
+    pageList(next ? 1 : -1);
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !listItems.empty()) {
+    const int index = std::max(0, std::min(topIndex, static_cast<int>(items.size()) - 1));
+    openItem(items[static_cast<size_t>(index)]);
+    return;
+  }
+
+  int tapX = 0;
+  int tapY = 0;
+  if (!mappedInput.wasScreenTapped(tapX, tapY) || !interactionsReady) return;
+
+  fui::InputSnapshot input;
+  input.touchReleased = true;
+  input.touchX = static_cast<int16_t>(tapX);
+  input.touchY = static_cast<int16_t>(tapY);
+  const fui::ActionEvent event = interactions.route(input);
+
+  if (event.action == ACTION_OPEN_ITEM) {
+    const int index = event.value;
+    if (index >= 0 && index < static_cast<int>(items.size())) {
+      openItem(items[static_cast<size_t>(index)]);
     }
   }
 }
 
 void RssFeedBrowserActivity::render(RenderLock&&) {
-  renderer.clearScreen();
+  namespace fui = freeink::ui;
+
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-
   const char* headerTitle =
       !feed.name.empty() ? feed.name.c_str() : (!feedTitle.empty() ? feedTitle.c_str() : tr(STR_RSS_READER));
+
+  if (state == BrowserState::BROWSING) {
+    renderer.clearScreen();
+
+    auto target = toybox::makeTarget(renderer, toybox::readingFaces());
+    const fui::DeviceContext device = target.deviceContext();
+    const fui::ThemeTokens& tokens = toybox::themeTokens();
+    const fui::InputSnapshot noInput{};
+    interactionsReady = false;
+    toybox::Frame frame(target, device, noInput, interactions);
+    toybox::Screen screen(frame);
+
+    fui::HeaderProps header;
+    header.title = headerTitle;
+    header.borderEdges = fui::EdgesNone;
+    toybox::absoluteChrome(screen);
+    toybox::headerBand(screen, header);
+    toybox::headerRule(screen);
+    screen.insetContent(fui::Insets{toybox::kGutter * 3, toybox::kMargin, toybox::kMargin, toybox::kMargin});
+
+    if (listItems.empty()) {
+      screen.centeredText(tr(STR_NO_ENTRIES), screen.theme().bodyText);
+    } else {
+      const int16_t rowHeight = listRowHeight(target, tokens);
+      visibleRows = fui::listVisibleRows(screen.body(), rowHeight, tokens.listRowGap);
+      if (visibleRows > 0) {
+        const int pages = shelfui::pageCountFor(static_cast<int>(listItems.size()), visibleRows);
+        const int maxTop = pages > 0 ? (pages - 1) * visibleRows : 0;
+        if (topIndex > maxTop) topIndex = maxTop;
+        if (topIndex < 0) topIndex = 0;
+      }
+
+      fui::ListProps list;
+      list.items = listItems.data();
+      list.count = static_cast<uint16_t>(listItems.size());
+      list.topIndex = static_cast<uint16_t>(topIndex);
+      list.selectedIndex = -1;
+      list.action = ACTION_OPEN_ITEM;
+      list.rowHeight = rowHeight;
+      list.labelText = tokens.bodyText;
+      list.labelText.maxLines = 2;
+      list.valueText = tokens.smallText;
+      list.valueText.align = fui::TextAlign::Right;
+      list.balanceWrappedLabelWithValue = false;
+      screen.list(list);
+    }
+
+    interactionsReady = true;
+    toybox::reportOverflow(interactions, "RSS feed list");
+
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+    return;
+  }
+
+  renderer.clearScreen();
   renderer.drawCenteredText(UI_12_FONT_ID, 15, headerTitle, true, EpdFontFamily::BOLD);
 
-  if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING || state == BrowserState::ARTICLE_LOADING) {
+  if (state == BrowserState::CHECK_WIFI || state == BrowserState::WIFI_SELECTION || state == BrowserState::LOADING ||
+      state == BrowserState::ARTICLE_LOADING) {
     if (state == BrowserState::ARTICLE_LOADING) {
       renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, tr(STR_LOADING));
       auto row = renderer.truncatedText(UI_10_FONT_ID, statusMessage.c_str(), pageWidth - 40);
@@ -256,25 +345,18 @@ void RssFeedBrowserActivity::render(RenderLock&&) {
     return;
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  if (items.empty()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_NO_ENTRIES));
-  } else {
-    const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
-    renderer.fillRect(0, LIST_TOP + (selectorIndex % PAGE_ITEMS) * ROW_HEIGHT - 3, pageWidth - 1, ROW_HEIGHT);
-
-    for (size_t i = pageStartIndex; i < items.size() && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
-      const auto& item = items[i];
-      std::string displayText = item.title;
-      if (!item.published.empty()) displayText += " - " + item.published;
-      auto row = renderer.truncatedText(UI_10_FONT_ID, displayText.c_str(), pageWidth - 40);
-      renderer.drawText(UI_10_FONT_ID, 20, LIST_TOP + (i % PAGE_ITEMS) * ROW_HEIGHT, row.c_str(),
-                        i != static_cast<size_t>(selectorIndex));
-    }
-  }
   renderer.displayBuffer();
+}
+
+void RssFeedBrowserActivity::pageList(const int delta) {
+  const int count = static_cast<int>(listItems.size());
+  if (count <= 0 || visibleRows <= 0) return;
+
+  const int pages = shelfui::pageCountFor(count, visibleRows);
+  if (pages <= 1) return;
+
+  topIndex = shelfui::pageStep(shelfui::pageFor(topIndex, visibleRows), pages, delta) * visibleRows;
+  requestUpdate();
 }
 
 void RssFeedBrowserActivity::fetchFeed() {
@@ -288,7 +370,7 @@ void RssFeedBrowserActivity::fetchFeed() {
   LOG_DBG("RSS", "Fetching: %s", feed.url.c_str());
   RssParser parser;
   if (!HttpDownloader::fetchUrl(
-          feed.url, [&parser](const uint8_t* data, size_t len) { return parser.write(data, len) == len; },
+          feed.url, [&parser](const uint8_t* data, const size_t len) { return parser.write(data, len) == len; },
           feed.username, feed.password)) {
     state = BrowserState::ERROR;
     errorMessage = HttpDownloader::lastStatus() == 401 ? tr(STR_AUTH_FAILED) : tr(STR_FETCH_FEED_FAILED);
@@ -307,15 +389,29 @@ void RssFeedBrowserActivity::fetchFeed() {
 
   feedTitle = parser.getFeedTitle();
   items = std::move(parser).getItems();
-  selectorIndex = 0;
-  state = items.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
-  if (items.empty()) errorMessage = tr(STR_NO_ENTRIES);
+  topIndex = 0;
+  visibleRows = 0;
+
+  listItems.clear();
+  listItems.reserve(items.size());
+
+  for (size_t i = 0; i < items.size(); ++i) {
+    freeink::ui::ListItem row;
+    row.label = !items[i].title.empty()
+                    ? items[i].title.c_str()
+                    : (!items[i].link.empty() ? items[i].link.c_str() : tr(STR_RSS_READER));
+    row.value = !items[i].published.empty() ? items[i].published.c_str() : items[i].author.c_str();
+    row.actionValue = static_cast<int16_t>(i);
+    listItems.push_back(row);
+  }
+
+  state = BrowserState::BROWSING;
   requestUpdate();
 }
 
 void RssFeedBrowserActivity::openItem(const RssItem& item) {
   state = BrowserState::ARTICLE_LOADING;
-  statusMessage = item.title;
+  statusMessage = item.title.empty() ? tr(STR_LOADING) : item.title;
   requestUpdateAndWait();
 
   RssItem article = item;

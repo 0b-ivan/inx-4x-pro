@@ -857,7 +857,15 @@
         '<button class="btn-small btn-save-server" onclick="saveRssFeed(' + idx + ')">Save</button>' +
         (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteRssFeed(' + idx + ')">Delete</button>') +
       '</div>' +
+      '<div id="rss-result-' + id + '" style="margin-top:8px;color:var(--label-color);font-size:0.9em;"></div>' +
     '</div>';
+  }
+
+  function showRssInlineResult(id, text, isError) {
+    const result = document.getElementById('rss-result-' + id);
+    if (!result) return;
+    result.textContent = text || '';
+    result.style.color = isError ? '#c0392b' : '#1f7a4f';
   }
 
   function renderRssSection() {
@@ -914,15 +922,32 @@
 
     try {
       if (button) button.disabled = true;
+      if (testOnly) showRssInlineResult(id, 'Testing connection...', false);
       const resp = await fetch(testOnly ? '/api/rss/test' : '/api/rss', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
       });
-      if (!resp.ok) throw new Error(await resp.text());
-      showMessage(testOnly ? await resp.text() : 'RSS feed saved!', false);
+      const text = await resp.text();
+      if (!resp.ok) {
+        if (testOnly) {
+          const message = text || 'Connection test failed.';
+          showRssInlineResult(id, message, true);
+          showMessage('Error: ' + message, true);
+          return;
+        }
+        throw new Error(text);
+      }
+      if (testOnly) {
+        const message = text || 'Connection OK.';
+        showRssInlineResult(id, message, false);
+        showMessage(message, false);
+      } else {
+        showMessage('RSS feed saved!', false);
+      }
       if (!testOnly) await loadRssFeeds();
     } catch (e) {
+      if (testOnly) showRssInlineResult(id, e.message || 'Connection test failed.', true);
       showMessage('Error: ' + e.message, true);
     } finally {
       if (button) button.disabled = false;

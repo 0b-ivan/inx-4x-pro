@@ -5,9 +5,9 @@
 #include <utility>
 #include <vector>
 
+#include "apps_local/ui/ToyboxScreen.h"
 #include "RssFeedStore.h"
 #include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
 
 class RssFeedBrowserActivity final : public Activity {
  public:
@@ -22,18 +22,18 @@ class RssFeedBrowserActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  static constexpr int PAGE_ITEMS = 9;
-  static constexpr int LIST_TOP = 32;
-  static constexpr int ROW_HEIGHT = 22;
-
-  ButtonNavigator buttonNavigator;
   BrowserState state = BrowserState::CHECK_WIFI;
   RssFeed feed;
   std::vector<RssItem> items;
   std::string feedTitle;
   std::string errorMessage;
   std::string statusMessage;
-  int selectorIndex = 0;
+  int topIndex = 0;
+  int visibleRows = 0;
+  std::vector<freeink::ui::ListItem> listItems;
+
+  toybox::Interactions interactions;
+  bool interactionsReady = false;
 
   void checkAndConnectWifi();
   void launchWifiSelection();
@@ -41,5 +41,6 @@ class RssFeedBrowserActivity final : public Activity {
   void fetchFeed();
   void openItem(const RssItem& item);
   std::string fetchArticleText(const RssItem& item);
+  void pageList(int delta);
   bool preventAutoSleep() override { return true; }
 };
