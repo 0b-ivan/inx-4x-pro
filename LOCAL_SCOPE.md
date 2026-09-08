@@ -64,6 +64,10 @@ The code seams, each a deliberate, commented edit:
 | `.skills/SKILL.md` (= `CLAUDE.md`)             | The read-this-first banner pointing here, so agents find the fork rules                                                                     | ~20 lines            |
 | `SCOPE.md`                                     | One-line pointer here; it is the file that says "no games"                                                                                  | 2 lines              |
 
+| `src/network/CrossPointWebServer.cpp` | Registers RSS configuration routes on the temporary File Transfer surface | include + route registration |
+| `src/network/html/SettingsPage.html` | RSS feed configuration alongside existing OPDS settings | one section |
+| `src/activities/browser/RssFeedBrowserActivity.cpp` | Distinguishes rejected credentials from other feed failures | error mapping |
+
 The rest of the twenty-eight are identity, not seams: `README.md`, `LICENSE`,
 `GOVERNANCE.md`, `ROADMAP.md`, `.github/` templates, funding and workflows,
 `.claude/skills/README.md`. They are this fork's front matter and merge

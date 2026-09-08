@@ -291,7 +291,8 @@ void RssFeedBrowserActivity::fetchFeed() {
           feed.url, [&parser](const uint8_t* data, size_t len) { return parser.write(data, len) == len; },
           feed.username, feed.password)) {
     state = BrowserState::ERROR;
-    errorMessage = tr(STR_FETCH_FEED_FAILED);
+    errorMessage = HttpDownloader::lastStatus() == 401 ? tr(STR_AUTH_FAILED) : tr(STR_FETCH_FEED_FAILED);
+    LOG_ERR("RSS", "Feed request failed (HTTP %d)", HttpDownloader::lastStatus());
     requestUpdate();
     return;
   }

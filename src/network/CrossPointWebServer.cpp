@@ -39,6 +39,7 @@
 #include "TotpWebHandlers.h"
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
+#include "apps_local/rss/RssWebHandlers.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -304,6 +305,8 @@ void CrossPointWebServer::begin() {
     server->on("/api/fonts", HTTP_GET, [this] { handleFontList(); });
     server->on("/api/fonts/upload", HTTP_POST, [this] { handleFontUpload(); }, [this] { handleFontUploadData(); });
     server->on("/api/fonts/delete", HTTP_POST, [this] { handleFontDelete(); });
+
+    registerRssWebRoutes(*server);
 
     // OPDS server endpoints
     server->on("/api/opds", HTTP_GET, [this] { handleGetOpdsServers(); });

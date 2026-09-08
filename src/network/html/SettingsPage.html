@@ -303,6 +303,7 @@
 
   <div id="wifi-container"></div>
   <div id="opds-container"></div>
+  <div id="rss-container"></div>
 
   <div class="card">
     <p style="text-align: center; color: #95a5a6; margin: 0;">
@@ -824,6 +825,126 @@
     }
   }
 
+  // --- RSS Feed Management ---
+  // Dynamically renders an editable list of RSS feeds, communicating with the
+  // /api/rss REST endpoints. Password fields are never pre-filled for security;
+  // the "(unchanged)" placeholder indicates an existing password is preserved on save.
+  let rssFeeds = [];
+
+  function renderRssFeed(srv, idx) {
+    const isNew = idx === -1;
+    const id = isNew ? 'new' : idx;
+    return '<div class="opds-server" id="rss-' + id + '">' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Feed name</span>' +
+        '<span class="setting-control"><input type="text" id="rss-name-' + id + '" value="' + escapeHtml(srv.name || '') + '"></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">URL</span>' +
+        '<span class="setting-control"><input type="text" id="rss-url-' + id + '" value="' + escapeHtml(srv.url || '') + '"></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Username</span>' +
+        '<span class="setting-control"><input type="text" id="rss-user-' + id + '" value="' + escapeHtml(srv.username || '') + '"></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Password / app password</span>' +
+        '<span class="setting-control"><input type="password" id="rss-pass-' + id + '" placeholder="' + (srv.hasPassword ? '(unchanged)' : '') + '"></span>' +
+      '</div>' +
+      '<div class="setting-row"><label><input type="checkbox" id="rss-clear-' + id + '"> Clear saved password</label></div>' +
+      '<div class="opds-actions">' +
+        '<button class="btn-small" onclick="saveRssFeed(' + idx + ', true, this)">Test connection</button>' +
+        '<button class="btn-small btn-save-server" onclick="saveRssFeed(' + idx + ')">Save</button>' +
+        (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteRssFeed(' + idx + ')">Delete</button>') +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderRssSection() {
+    const container = document.getElementById('rss-container');
+    let html = '<div class="card"><h2>RSS feeds</h2><p>Enter a direct RSS/Atom feed URL. For Nextcloud, use your login username and an app password (Personal settings → Security). The News web page and JSON API are not RSS feeds. Browser/SSO login is not supported.</p>';
+
+    if (rssFeeds.length === 0) {
+      html += '<p style="color:var(--label-color);text-align:center;">No RSS feeds configured</p>';
+    } else {
+      rssFeeds.forEach(function(srv, idx) {
+        html += renderRssFeed(srv, idx);
+      });
+    }
+
+    html += '<div style="margin-top:12px;text-align:center;">' +
+      '<button class="btn-small btn-add" onclick="addRssFeed()">+ Add feed</button>' +
+    '</div></div>';
+    container.innerHTML = html;
+  }
+
+  async function loadRssFeeds() {
+    try {
+      const resp = await fetch('/api/rss');
+      if (!resp.ok) throw new Error('Failed to load');
+      rssFeeds = await resp.json();
+      renderRssSection();
+    } catch (e) {
+      showMessage('RSS feeds could not be loaded', true);
+    }
+  }
+
+  function addRssFeed() {
+    const container = document.getElementById('rss-container');
+    const card = container.querySelector('.card');
+    const addBtn = card.querySelector('.btn-add').parentElement;
+    // Prevent multiple unsaved new-server forms at once (idx -1 → id "new")
+    if (document.getElementById('rss-new')) return;
+    addBtn.insertAdjacentHTML('beforebegin', renderRssFeed({name:'',url:'',username:'',hasPassword:false}, -1));
+  }
+
+  async function saveRssFeed(idx, testOnly = false, button = null) {
+    const id = idx === -1 ? 'new' : idx;
+    const data = {
+      name: document.getElementById('rss-name-' + id).value.trim(),
+      url: document.getElementById('rss-url-' + id).value.trim(),
+      username: document.getElementById('rss-user-' + id).value.trim(),
+    };
+    // Only include password in payload when the user actually typed something;
+    // omitting it tells the server to keep the existing password.
+    const pass = document.getElementById('rss-pass-' + id).value;
+    if (document.getElementById('rss-clear-' + id).checked) data.password = '';
+    else if (pass) data.password = pass;
+    if (idx >= 0) data.index = idx;
+
+    try {
+      if (button) button.disabled = true;
+      const resp = await fetch(testOnly ? '/api/rss/test' : '/api/rss', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      showMessage(testOnly ? await resp.text() : 'RSS feed saved!', false);
+      if (!testOnly) await loadRssFeeds();
+    } catch (e) {
+      showMessage('Error: ' + e.message, true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function deleteRssFeed(idx) {
+    if (!confirm('Delete this RSS feed?')) return;
+    try {
+      const resp = await fetch('/api/rss/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({index: idx})
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      showMessage('RSS feed deleted', false);
+      await loadRssFeeds();
+    } catch (e) {
+      showMessage('Error: ' + e.message, true);
+    }
+  }
+
   // Sequential, not concurrent: the device's web server handles one client
   // connection at a time, and three simultaneous fetches on page load can
   // stall long enough inside a single response to trip the firmware watchdog.
@@ -831,6 +952,7 @@
     await loadSettings();
     await loadWifiNetworks();
     await loadOpdsServers();
+    await loadRssFeeds();
   })();
 </script>
 </body>
