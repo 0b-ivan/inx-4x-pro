@@ -831,6 +831,15 @@
   // the "(unchanged)" placeholder indicates an existing password is preserved on save.
   let rssFeeds = [];
 
+  function rssCacheStatus(srv) {
+    const count = Number(srv.cachedItems || 0);
+    if (count <= 0) return 'No cached entries yet';
+    let status = count + ' cached entr' + (count === 1 ? 'y' : 'ies');
+    const lastSync = Number(srv.lastSync || 0);
+    if (lastSync > 0) status += ' · last sync ' + new Date(lastSync * 1000).toLocaleString();
+    return status;
+  }
+
   function renderRssFeed(srv, idx) {
     const isNew = idx === -1;
     const id = isNew ? 'new' : idx;
@@ -852,9 +861,11 @@
         '<span class="setting-control"><input type="password" id="rss-pass-' + id + '" placeholder="' + (srv.hasPassword ? '(unchanged)' : '') + '"></span>' +
       '</div>' +
       '<div class="setting-row"><label><input type="checkbox" id="rss-clear-' + id + '"> Clear saved password</label></div>' +
+      (isNew ? '' : '<div style="margin-top:8px;color:var(--label-color);font-size:0.9em;">Cache: ' + escapeHtml(rssCacheStatus(srv)) + '</div>') +
       '<div class="opds-actions">' +
         '<button class="btn-small" onclick="saveRssFeed(' + idx + ', true, this)">Test connection</button>' +
         '<button class="btn-small btn-save-server" onclick="saveRssFeed(' + idx + ')">Save</button>' +
+        (isNew ? '' : '<button class="btn-small" onclick="syncRssFeed(' + idx + ', this)">Sync cache</button>') +
         (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteRssFeed(' + idx + ')">Delete</button>') +
       '</div>' +
       '<div id="rss-result-' + id + '" style="margin-top:8px;color:var(--label-color);font-size:0.9em;"></div>' +
@@ -870,7 +881,7 @@
 
   function renderRssSection() {
     const container = document.getElementById('rss-container');
-    let html = '<div class="card"><h2>RSS feeds</h2><p>Enter a direct RSS/Atom feed URL. For Nextcloud, use your login username and an app password (Personal settings → Security). The News web page and JSON API are not RSS feeds. Browser/SSO login is not supported.</p>';
+    let html = '<div class="card"><h2>RSS feeds</h2><p>Enter a direct RSS/Atom feed URL. Feeds are cached on the SD card for offline reading; use Sync cache for an immediate refresh. When Wi-Fi is already active, a cache older than 24 hours refreshes automatically. For Nextcloud, use your login username and an app password (Personal settings → Security). The News web page and JSON API are not RSS feeds.</p>';
 
     if (rssFeeds.length === 0) {
       html += '<p style="color:var(--label-color);text-align:center;">No RSS feeds configured</p>';
@@ -951,6 +962,36 @@
       showMessage('Error: ' + e.message, true);
     } finally {
       if (button) button.disabled = false;
+    }
+  }
+
+  async function syncRssFeed(idx, button = null) {
+    const id = idx;
+    const oldLabel = button ? button.textContent : '';
+    try {
+      if (button) {
+        button.disabled = true;
+        button.textContent = 'Syncing...';
+      }
+      showRssInlineResult(id, 'Synchronizing cache...', false);
+      const resp = await fetch('/api/rss/sync', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({index: idx})
+      });
+      const text = await resp.text();
+      if (!resp.ok) throw new Error(text || 'Cache sync failed');
+      showRssInlineResult(id, text || 'Cache synchronized.', false);
+      showMessage(text || 'RSS cache synchronized.', false);
+      await loadRssFeeds();
+    } catch (e) {
+      showRssInlineResult(id, e.message || 'Cache sync failed.', true);
+      showMessage('Error: ' + e.message, true);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = oldLabel;
+      }
     }
   }
 
