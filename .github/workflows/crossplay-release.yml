@@ -117,22 +117,20 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.25
+            ### What is new in 1.12.26
 
-            - Adds **Authenticator** as a full web-management page while the
-              reader is in File Transfer mode.
-            - Unlocks the same encrypted TOTP vault used on-device and shows
-              current codes with local countdown/progress indicators.
-            - Imports standard `otpauth://totp/...` URIs or adds SHA-1 TOTP
-              accounts manually with 6/8 digits and configurable periods.
-            - Supports deleting accounts from the browser without exposing
-              stored Base32 secrets through the API.
-            - Five failed PIN attempts trigger a 30-second request block.
-            - The File Transfer server remains plain HTTP: use Authenticator
-              web management only on a trusted private network or hotspot.
-            - Keeps the encrypted AES-256-GCM/PBKDF2 vault and X4 Pro-only
-              release line unchanged.
-            - No OTA, partition-table or installer contract changes.
+            - Xteink X4 Pro standby-screen patch.
+            - Keeps the official CrossPlay dark/light standby screen and
+              branding intact.
+            - Extends the Sleep Screen palette from 9 to 10 modes with a new
+              **Taro** option.
+            - The Taro mode uses a distinct primitive-drawn retro mark
+              without reproducing the Commodore logo.
+            - Shows the actual `CROSSPOINT_VERSION` below the Taro mark.
+            - Keeps the single HALF refresh path and avoids a bitmap/heap
+              allocation for the mark.
+            - Existing Custom, Cover, Cover + Custom, Blank, Quick Resume,
+              Transparent and Tarot modes are unchanged.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
