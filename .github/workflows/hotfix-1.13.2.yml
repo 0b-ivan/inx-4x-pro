@@ -8,10 +8,6 @@ on:
 
 permissions:
   contents: write
-  actions: write
-
-env:
-  GH_TOKEN: ${{ github.token }}
 
 jobs:
   hotfix:
@@ -21,13 +17,12 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-          fetch-tags: true
 
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
-      - name: Apply hotfix
+      - name: Apply code hotfix
         shell: bash
         run: |
           set -euo pipefail
@@ -43,7 +38,6 @@ jobs:
                   raise SystemExit(f"{path}: expected one exact match, got {count}")
               p.write_text(text.replace(old, new, 1))
 
-          # Persistent setting, enabled by default.
           replace_once(
               "src/CrossPointSettings.h",
               "  // Short power button click behaviour\n  uint8_t shortPwrBtn = IGNORE;\n",
@@ -53,7 +47,6 @@ jobs:
               "  uint8_t longPwrBtnShutdown = 1;\n",
           )
 
-          # Gate the existing X4 Pro long-hold shutdown path. Short-click handling is untouched.
           replace_once(
               "src/main.cpp",
               "  if (powerReleasedSinceWake && millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&\n"
@@ -63,7 +56,6 @@ jobs:
               "      gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {\n",
           )
 
-          # Surface the toggle in Settings > Controls beside the power-button options.
           replace_once(
               "src/SettingsList.h",
               "        SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,\n",
@@ -72,7 +64,6 @@ jobs:
               "        SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,\n",
           )
 
-          # English is the reference language; untranslated languages inherit it automatically.
           replace_once(
               "lib/I18n/translations/english.yaml",
               'STR_SHORT_PWR_BTN: "Short Power Button Click"\n',
@@ -80,7 +71,6 @@ jobs:
               'STR_LONG_PWR_BTN_SHUTDOWN: "Long-press Power Button Shutdown"\n',
           )
 
-          # Keep the local German UI natural instead of falling back to English.
           german = Path("lib/I18n/translations/german.yaml")
           text = german.read_text()
           text, n = re.subn(
@@ -94,7 +84,6 @@ jobs:
               raise SystemExit(f"german.yaml: expected one STR_SHORT_PWR_BTN, got {n}")
           german.write_text(text)
 
-          # Stable hotfix version.
           pio = Path("platformio.ini")
           text = pio.read_text()
           text, n = re.subn(
@@ -106,103 +95,22 @@ jobs:
           if n != 1:
               raise SystemExit(f"platformio.ini: expected crossplay 1.13.1 once, got {n}")
           pio.write_text(text)
-
-          # Release notes required by host-tests/release and autorelease conventions.
-          release = Path(".github/workflows/crossplay-release.yml")
-          text = release.read_text()
-          pattern = re.compile(
-              r'            ### What is new in 1\.13\.1\n\n.*?'
-              r'            PLAY NEARBY games remain:',
-              re.DOTALL,
-          )
-          replacement = (
-              "            ### What is new in 1.13.2\n\n"
-              "            - Long-pressing the Power button now uses the X4 Pro's existing\n"
-              "              deep-sleep shutdown path with peripheral power rails disabled.\n"
-              "            - A new Controls setting lets long-press Power shutdown be enabled\n"
-              "              or disabled. It is enabled by default.\n"
-              "            - Short Power-button behavior is unchanged.\n\n"
-              "            PLAY NEARBY games remain:"
-          )
-          text, n = pattern.subn(replacement, text, count=1)
-          if n != 1:
-              raise SystemExit(f"crossplay-release.yml: expected 1.13.1 notes block once, got {n}")
-          release.write_text(text)
           PY
 
-          # Regenerate tracked i18n outputs from the YAML reference.
           python3 scripts/gen_i18n.py
-
-          # This workflow is deliberately one-shot; keep main clean after the hotfix commit.
-          rm .github/workflows/hotfix-1.13.2.yml
-
           grep -Fq 'version = 1.13.2' platformio.ini
           grep -Fq 'STR_LONG_PWR_BTN_SHUTDOWN' src/SettingsList.h
           grep -Fq 'longPwrBtnShutdown' src/main.cpp
-          grep -Fq '### What is new in 1.13.2' .github/workflows/crossplay-release.yml
 
-      - name: Commit hotfix to main
-        id: commit
+      - name: Commit code hotfix to main
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add src/CrossPointSettings.h src/main.cpp src/SettingsList.h \
+                  lib/I18n/translations/english.yaml lib/I18n/translations/german.yaml \
+                  lib/I18n/I18nKeys.h lib/I18n/I18nStrings.h lib/I18n/I18nStrings.cpp \
+                  platformio.ini
           git commit -m "fix: add configurable long-press shutdown"
-          HOTFIX_SHA="$(git rev-parse HEAD)"
-          echo "sha=$HOTFIX_SHA" >> "$GITHUB_OUTPUT"
           git push origin HEAD:main
-
-      - name: Run full CrossPlay CI on hotfix commit
-        id: ci
-        shell: bash
-        env:
-          HOTFIX_SHA: ${{ steps.commit.outputs.sha }}
-        run: |
-          set -euo pipefail
-          gh workflow run crossplay-ci.yml --ref main
-
-          RUN_ID=""
-          for _ in $(seq 1 24); do
-            RUN_ID="$(gh run list --workflow crossplay-ci.yml --branch main --event workflow_dispatch --limit 30 \
-              --json databaseId,headSha \
-              --jq '.[] | select(.headSha == env.HOTFIX_SHA) | .databaseId' | head -n1)"
-            [ -n "$RUN_ID" ] && break
-            sleep 5
-          done
-          [ -n "$RUN_ID" ] || { echo "Could not find dispatched CrossPlay run" >&2; exit 1; }
-          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
-          gh run watch "$RUN_ID" --exit-status
-
-      - name: Tag tested commit and publish v1.13.2
-        id: release
-        shell: bash
-        env:
-          HOTFIX_SHA: ${{ steps.commit.outputs.sha }}
-        run: |
-          set -euo pipefail
-          git fetch origin main --tags
-          test "$(git rev-parse origin/main)" = "$HOTFIX_SHA"
-
-          if git rev-parse v1.13.2 >/dev/null 2>&1; then
-            test "$(git rev-parse v1.13.2^{commit})" = "$HOTFIX_SHA"
-          else
-            git tag v1.13.2 "$HOTFIX_SHA"
-            git push origin v1.13.2
-          fi
-
-          gh workflow run crossplay-release.yml --ref v1.13.2
-
-          RELEASE_RUN=""
-          for _ in $(seq 1 24); do
-            RELEASE_RUN="$(gh run list --workflow crossplay-release.yml --limit 30 \
-              --json databaseId,headSha,headBranch,event \
-              --jq '.[] | select(.headBranch == "v1.13.2" or .headSha == env.HOTFIX_SHA) | .databaseId' | head -n1)"
-            [ -n "$RELEASE_RUN" ] && break
-            sleep 5
-          done
-          [ -n "$RELEASE_RUN" ] || { echo "Could not find v1.13.2 release run" >&2; exit 1; }
-          echo "run_id=$RELEASE_RUN" >> "$GITHUB_OUTPUT"
-          gh run watch "$RELEASE_RUN" --exit-status
-          gh release view v1.13.2 --json url,isPrerelease,isDraft,tagName
