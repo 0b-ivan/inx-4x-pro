@@ -117,25 +117,15 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.12.27
+            ### What’s New in 1.12.28
 
-            - Configure RSS/Atom feeds in **File Transfer → Settings → RSS feeds**:
-              add, edit and delete feed URLs, usernames and app passwords.
-            - Test a feed before saving. The result distinguishes rejected login
-              credentials (HTTP 401), denied access (403), network failures and
-              responses that are not usable RSS/Atom feeds.
-            - Saved passwords are never returned to the browser. Leave the field
-              empty to preserve a password, or explicitly clear it.
-            - The reader now reports authentication failures separately when a
-              feed rejects its credentials.
-            - Nextcloud setup guidance explains app passwords and direct feed
-              URLs. The Nextcloud News JSON API and browser/SSO login are not
-              supported by the RSS reader.
-            - Includes the Taro standby mode and firmware-version display
-              prepared on main since the previous tagged release.
-
-            PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
-            Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
+            - Added
+            - RSS feed browsing now uses a Hacker News–style flow with a cleaner list layout, tap-to-open rows, and page-wise navigation via side buttons or vertical swipes.
+            - RSS connection tests under File Transfer → Settings → RSS Feeds now show inline results for each feed. 
+            - Clearer RSS authentication and connectivity error messages.
+            - Improved Wi-Fi connection UX: pressing Back during a manual connection attempt now cancels immediately and returns to the network list.
+            - RSS article reading is smoother: reaching the final page no longer automatically closes the article.
+            - Updated German wording in parts of the Toybox UI for better consistency.
 
             ### Install
 
