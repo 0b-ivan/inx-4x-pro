@@ -4,6 +4,7 @@
 #include <RssParser.h>
 #include <WebServer.h>
 
+#include "RssCache.h"
 #include "RssFeedStore.h"
 #include "network/HttpDownloader.h"
 
@@ -73,6 +74,9 @@ void listFeeds(WebServer& server) {
     doc["url"] = feeds[i].url;
     doc["username"] = feeds[i].username;
     doc["hasPassword"] = !feeds[i].password.empty();
+    const RssCacheInfo cacheInfo = rsscache::getInfo(feeds[i]);
+    doc["cachedItems"] = cacheInfo.itemCount;
+    doc["lastSync"] = cacheInfo.lastSyncEpoch;
     // One bounded feed at a time, without exposing its saved password.
     String json;
     serializeJson(doc, json);
@@ -145,6 +149,83 @@ void saveOrTest(WebServer& server, bool testOnly) {
   server.send(saved ? 200 : 500, "text/plain", saved ? "Saved" : "Could not save to SD card");
 }
 
+void syncFeed(WebServer& server) {
+  JsonDocument doc;
+  int index;
+  if (!readRequest(server, doc) || !readIndex(server, doc, index)) return;
+  if (index < 0) {
+    server.send(400, "text/plain", "Missing feed index");
+    return;
+  }
+
+  const RssFeed* feed = RSS_STORE.getFeed(static_cast<size_t>(index));
+  if (!feed) {
+    server.send(404, "text/plain", "Feed not found");
+    return;
+  }
+
+  RssParser parser;
+  size_t received = 0;
+  bool tooLarge = false;
+  const bool fetched = HttpDownloader::fetchUrl(
+      feed->url,
+      [&](const uint8_t* data, size_t length) {
+        constexpr size_t maxBytes = 512 * 1024;
+        if (length > maxBytes - received) {
+          tooLarge = true;
+          return false;
+        }
+        received += length;
+        parser.write(data, length);
+        return !parser.error();
+      },
+      feed->username, feed->password);
+  const int status = HttpDownloader::lastStatus();
+  parser.flush();
+
+  if (status == 401) {
+    server.send(422, "text/plain", "HTTP 401: login rejected");
+    return;
+  }
+  if (status == 403) {
+    server.send(422, "text/plain", "HTTP 403: access denied");
+    return;
+  }
+  if (status != 200) {
+    String error = "Feed request failed (HTTP ";
+    error += String(status);
+    error += ")";
+    server.send(422, "text/plain", error);
+    return;
+  }
+  if (tooLarge) {
+    server.send(422, "text/plain", "Feed exceeds the 512 KB sync limit");
+    return;
+  }
+  if (!parser || (parser.getItems().empty() && parser.getFeedTitle().empty())) {
+    server.send(422, "text/plain", "HTTP 200, but no usable RSS/Atom feed was received");
+    return;
+  }
+  if (!fetched) {
+    server.send(422, "text/plain", "HTTP 200, but the transfer was incomplete");
+    return;
+  }
+
+  const std::string title = parser.getFeedTitle();
+  const std::vector<RssItem> freshItems = std::move(parser).getItems();
+  std::vector<RssItem> mergedItems;
+  RssCacheInfo cacheInfo;
+  if (!rsscache::mergeAndSaveFeed(*feed, title, freshItems, mergedItems, &cacheInfo)) {
+    server.send(500, "text/plain", "Feed downloaded, but cache could not be written to SD card");
+    return;
+  }
+
+  String success = "Synced ";
+  success += String(static_cast<unsigned long>(cacheInfo.itemCount));
+  success += " cached entries.";
+  server.send(200, "text/plain", success);
+}
+
 void deleteFeed(WebServer& server) {
   JsonDocument doc;
   int index;
@@ -153,7 +234,9 @@ void deleteFeed(WebServer& server) {
     server.send(400, "text/plain", "Missing feed index");
     return;
   }
+  const RssFeed removedFeed = *RSS_STORE.getFeed(static_cast<size_t>(index));
   const bool saved = RSS_STORE.removeFeed(index);
+  if (saved) rsscache::clearFeed(removedFeed);
   server.send(saved ? 200 : 500, "text/plain", saved ? "Deleted" : "Could not save to SD card");
 }
 }  // namespace
@@ -163,5 +246,6 @@ void registerRssWebRoutes(WebServer& server) {
   server.on("/api/rss", HTTP_GET, [&server] { listFeeds(server); });
   server.on("/api/rss", HTTP_POST, [&server] { saveOrTest(server, false); });
   server.on("/api/rss/test", HTTP_POST, [&server] { saveOrTest(server, true); });
+  server.on("/api/rss/sync", HTTP_POST, [&server] { syncFeed(server); });
   server.on("/api/rss/delete", HTTP_POST, [&server] { deleteFeed(server); });
 }
