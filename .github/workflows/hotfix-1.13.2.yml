@@ -110,7 +110,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/CrossPointSettings.h src/main.cpp src/SettingsList.h \
                   lib/I18n/translations/english.yaml lib/I18n/translations/german.yaml \
-                  lib/I18n/I18nKeys.h lib/I18n/I18nStrings.h lib/I18n/I18nStrings.cpp \
                   platformio.ini
           git commit -m "fix: add configurable long-press shutdown"
           git push origin HEAD:main
