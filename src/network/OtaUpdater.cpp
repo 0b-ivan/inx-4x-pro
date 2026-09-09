@@ -77,25 +77,6 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   return OK;
 }
 
-bool OtaUpdater::selectRelease(const char* version, const char* firmwareUrl, const size_t firmwareSize) {
-  if (version == nullptr || version[0] == '\0' || firmwareUrl == nullptr || firmwareUrl[0] == '\0') {
-    updateAvailable = false;
-    return false;
-  }
-
-  latestVersion = version;
-  // Tags carry a v prefix ("v1.3.3"); CROSSPOINT_VERSION does not ("1.3.3").
-  if (!latestVersion.empty() && (latestVersion[0] == 'v' || latestVersion[0] == 'V')) {
-    latestVersion.erase(0, 1);
-  }
-  otaUrl = firmwareUrl;
-  otaSize = firmwareSize;
-  processedSize = 0;
-  totalSize = otaSize;
-  updateAvailable = true;
-  return true;
-}
-
 bool OtaUpdater::isUpdateNewer() const {
   if (!updateAvailable || latestVersion.empty() || latestVersion == CROSSPOINT_VERSION) {
     return false;
@@ -129,11 +110,11 @@ bool OtaUpdater::isUpdateNewer() const {
 
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
 
-OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgress, void* ctx, const bool allowOlder) {
+OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgress, void* ctx) {
   if (!updateAvailable || latestVersion.empty() || otaUrl.empty()) {
     return INTERNAL_UPDATE_ERROR;
   }
-  if (shouldRejectVersion(allowOlder, isUpdateNewer())) {
+  if (shouldRejectVersion(allowOlderSelection, isUpdateNewer())) {
     return UPDATE_OLDER_ERROR;
   }
 
