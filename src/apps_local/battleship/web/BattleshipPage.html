@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Battleship · CrossPlay</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f4f1e8;
+        --ink: #111;
+        --panel: #fffdf7;
+        --muted: #6b6b66;
+        --line: #111;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #171714;
+          --ink: #f4f1e8;
+          --panel: #23231f;
+          --muted: #aaa79d;
+          --line: #f4f1e8;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      main {
+        width: min(100%, 520px);
+        background: var(--panel);
+        border: 3px solid var(--line);
+        padding: 22px;
+        box-shadow: 8px 8px 0 var(--line);
+      }
+      header {
+        border-bottom: 3px solid var(--line);
+        padding-bottom: 14px;
+        margin-bottom: 24px;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(28px, 8vw, 46px);
+        letter-spacing: .04em;
+      }
+      .eyebrow {
+        margin: 0 0 8px;
+        font-size: 12px;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .status {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        font-weight: 700;
+        font-size: 18px;
+      }
+      .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--ink);
+        flex: 0 0 auto;
+      }
+      .copy {
+        margin-top: 18px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      code {
+        color: var(--ink);
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">CrossPlay · X4 Pro</p>
+        <h1>BATTLESHIP</h1>
+      </header>
+      <div class="status"><span class="dot"></span><span id="status">Connected to X4 Pro</span></div>
+      <p class="copy">
+        Browser transport is ready. Ship placement and turns come next.<br />
+        Device status: <code id="phase">checking…</code>
+      </p>
+    </main>
+    <script>
+      fetch('/api/battleship/status')
+        .then((response) => response.json())
+        .then((data) => {
+          document.getElementById('phase').textContent = data.phase || 'ready';
+        })
+        .catch(() => {
+          document.getElementById('status').textContent = 'Connection lost';
+          document.getElementById('phase').textContent = 'offline';
+        });
+    </script>
+  </body>
+</html>
