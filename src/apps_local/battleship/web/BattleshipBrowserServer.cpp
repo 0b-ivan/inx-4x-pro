@@ -40,8 +40,7 @@ bool Server::begin(const NetworkMode mode) {
 
   const bool networkReady = mode == NetworkMode::Hotspot ? startHotspot() : startExistingWifi();
   if (!networkReady) {
-    devmode::resume();
-    devModePaused_ = false;
+    releaseDevMode();
     return false;
   }
 
@@ -55,6 +54,12 @@ bool Server::begin(const NetworkMode mode) {
 
   LOG_INF("BSHIPWEB", "Browser server ready at %s (%s)", url_.c_str(), ip_.c_str());
   return true;
+}
+
+void Server::releaseDevMode() {
+  if (!devModePaused_) return;
+  devmode::resume();
+  devModePaused_ = false;
 }
 
 void Server::stop() {
@@ -76,10 +81,7 @@ void Server::stop() {
     WiFi.mode(WIFI_OFF);
   }
 
-  if (devModePaused_) {
-    devmode::resume();
-    devModePaused_ = false;
-  }
+  releaseDevMode();
 
   if (hadServer) LOG_DBG("BSHIPWEB", "Browser server stopped");
 }
