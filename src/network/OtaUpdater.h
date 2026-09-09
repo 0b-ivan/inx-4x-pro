@@ -35,5 +35,14 @@ class OtaUpdater {
   bool isUpdateNewer() const;
   const std::string& getLatestVersion() const;
   OtaUpdaterError checkForUpdate();
-  OtaUpdaterError installUpdate(ProgressCallback onProgress = nullptr, void* ctx = nullptr);
+
+  // Select a concrete release returned by the repository's release catalog.
+  // This only stages metadata; installUpdate() still performs all chip, board
+  // tag, image-size and esp_ota validation before changing the boot partition.
+  bool selectRelease(const char* version, const char* firmwareUrl, size_t firmwareSize);
+
+  // Existing callers keep the historical "newer only" behaviour.  The OTA
+  // release picker opts into allowOlder after an explicit user selection so a
+  // downgrade uses exactly the same guarded flash path as an upgrade.
+  OtaUpdaterError installUpdate(ProgressCallback onProgress = nullptr, void* ctx = nullptr, bool allowOlder = false);
 };
