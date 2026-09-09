@@ -46,6 +46,7 @@ class Server final {
   bool startHotspot();
   bool startExistingWifi();
   bool startMdns();
+  void releaseDevMode();
 
   WebServer http_{80};
   DNSServer dns_;
