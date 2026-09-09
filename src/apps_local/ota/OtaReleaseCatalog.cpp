@@ -83,7 +83,7 @@ int compareIdentifier(const char* lhsBegin, const char* lhsEnd, const char* rhsB
 
 int comparePrerelease(const char* lhs, const char* rhs) {
   if (lhs == nullptr && rhs == nullptr) return 0;
-  if (lhs == nullptr) return 1;   // stable outranks prerelease
+  if (lhs == nullptr) return 1;
   if (rhs == nullptr) return -1;
 
   const char* lp = lhs;
@@ -158,18 +158,16 @@ int OtaReleaseCatalog::compareTags(const char* lhs, const char* rhs) {
   return comparePrerelease(a.prerelease, b.prerelease);
 }
 
-void OtaReleaseCatalog::prepare(const bool includePrerelease) {
+void OtaReleaseCatalog::prepare(const bool includePrereleaseValue) {
   size_t write = 0;
   for (size_t read = 0; read < entryCount; ++read) {
     if (!isSemverTag(entries[read].tag)) continue;
-    if (!includePrerelease && entries[read].prerelease) continue;
+    if (!includePrereleaseValue && entries[read].prerelease) continue;
     if (write != read) entries[write] = entries[read];
     ++write;
   }
   entryCount = write;
 
-  // Small bounded list: insertion sort is compact, allocation-free and keeps
-  // the parser independent of STL heap behaviour.
   for (size_t i = 1; i < entryCount; ++i) {
     Entry current = entries[i];
     size_t j = i;
@@ -210,7 +208,8 @@ void OtaReleaseCatalog::commitAsset() {
 }
 
 void OtaReleaseCatalog::commitRelease() {
-  if (entryCount < MAX_RELEASES && !currentDraft && currentTagFound && currentFirmwareFound) {
+  const bool channelAllowed = includePrerelease || !currentPrerelease;
+  if (entryCount < MAX_RELEASES && channelAllowed && !currentDraft && currentTagFound && currentFirmwareFound) {
     Entry& entry = entries[entryCount++];
     safeCopy(entry.tag, sizeof(entry.tag), currentTag, strlen(currentTag));
     safeCopy(entry.firmwareUrl, sizeof(entry.firmwareUrl), currentFirmwareUrl, strlen(currentFirmwareUrl));
