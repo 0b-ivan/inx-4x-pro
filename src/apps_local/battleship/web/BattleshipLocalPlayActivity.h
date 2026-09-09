@@ -2,6 +2,7 @@
 
 #include "../../../activities/Activity.h"
 #include "../../ui/ToyboxScreen.h"
+#include "../BattleshipCore.h"
 #include "BattleshipBrowserServer.h"
 
 // The transport chooser behind Battleship's existing PLAY NEARBY row.
@@ -40,6 +41,7 @@ class BattleshipLocalPlayActivity final : public Activity {
   bool interactionsReady_ = false;
   int selected_ = 0;
 
+  bship::Game browserGame_;
   bshipweb::Server browser_;
   bool devModePaused_ = false;
   bool ownsSta_ = false;

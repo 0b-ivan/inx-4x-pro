@@ -169,6 +169,8 @@ void BattleshipLocalPlayActivity::startHotspotBrowser() {
 }
 
 void BattleshipLocalPlayActivity::enterBrowserWaiting() {
+  bship::reset(browserGame_);
+  browser_.publish(bshipweb::browserSnapshot(browserGame_, false));
   stage_ = Stage::BrowserWaiting;
   selected_ = 0;
   lastClientSeen_ = browser_.clientSeen();
@@ -220,6 +222,7 @@ void BattleshipLocalPlayActivity::loop() {
 
   if (stage_ == Stage::BrowserWaiting) {
     browser_.loop();
+    browser_.publish(bshipweb::browserSnapshot(browserGame_, browser_.clientSeen()));
     if (browser_.clientSeen() != lastClientSeen_) {
       lastClientSeen_ = browser_.clientSeen();
       requestUpdate();

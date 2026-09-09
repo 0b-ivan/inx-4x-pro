@@ -12,3 +12,20 @@ SRC=../../src/apps_local/battleship
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 $SRC/BattleshipCore.cpp \
   test_battleship.cpp -o "$BUILD_DIR/test_battleship"
 "$BUILD_DIR/test_battleship"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 $SRC/BattleshipCore.cpp \
+  $SRC/web/BrowserSnapshot.cpp test_browser_snapshot.cpp -o "$BUILD_DIR/test_browser_snapshot"
+"$BUILD_DIR/test_browser_snapshot"
+python3 test_browser_boundary.py
+
+# Network lifecycle tests do not need the generated, gzipped page bytes.
+cat > "$BUILD_DIR/BattleshipPageHtml.generated.h" <<'HEADER'
+#pragma once
+constexpr char BattleshipPageHtml[]="";
+constexpr size_t BattleshipPageHtmlCompressedSize=0;
+HEADER
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -Wno-narrowing -O2 -Istubs -I"$BUILD_DIR" \
+  $SRC/BattleshipCore.cpp $SRC/web/BrowserSnapshot.cpp $SRC/web/BattleshipBrowserServer.cpp \
+  test_browser_server.cpp -o "$BUILD_DIR/test_browser_server"
+"$BUILD_DIR/test_browser_server"
+node test_browser_page.cjs

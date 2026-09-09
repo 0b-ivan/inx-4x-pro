@@ -6,15 +6,14 @@
 #ifndef SIMULATOR
 #include <DNSServer.h>
 #include <WebServer.h>
+#include <WebSocketsServer.h>
 #endif
+
+#include "BrowserSnapshot.h"
 
 namespace bshipweb {
 
-// Minimal browser transport foundation for Battleship.
-//
-// Phase 1 deliberately serves only the browser shell. It owns no Battleship
-// state yet; the device remains the eventual authority and the browser will
-// receive a filtered public snapshot rather than bship::Game directly.
+// Dedicated read-only Battleship transport; accepts only the filtered DTO.
 class Server final {
  public:
   enum class NetworkMode : uint8_t { ExistingWifi, Hotspot };
@@ -30,6 +29,7 @@ class Server final {
   bool begin(NetworkMode mode);
   void stop();
   void loop();
+  void publish(const BrowserSnapshot& snapshot);
 
   bool running() const { return running_; }
   bool hotspot() const { return mode_ == NetworkMode::Hotspot; }
@@ -48,6 +48,8 @@ class Server final {
   bool startMdns();
   void releaseDevMode();
 
+  void sendSnapshot(uint8_t client);
+  WebSocketsServer ws_{81};
   WebServer http_{80};
   DNSServer dns_;
   bool routesConfigured_ = false;
@@ -58,6 +60,7 @@ class Server final {
   bool devModePaused_ = false;
 #endif
 
+  BrowserSnapshot snapshot_;
   NetworkMode mode_ = NetworkMode::ExistingWifi;
   bool running_ = false;
   bool clientSeen_ = false;

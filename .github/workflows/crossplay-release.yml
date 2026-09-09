@@ -114,16 +114,15 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.13.2
+            ### What is new in 1.14.0-alpha.2
 
-            - Long-pressing the Power button now uses the X4 Pro's existing
-              deep-sleep shutdown path with peripheral power rails disabled.
-            - A new Controls setting lets long-press Power shutdown be enabled
-              or disabled. It is enabled by default.
-            - Short Power-button behavior is unchanged.
+            - Browser-Crossplay foundation with read-only Battleship state over WebSocket.
+            - Live connection status, phase and turn metadata; no hidden fleet positions.
+            - Browser moves are not available yet. Hotspot and local Wi-Fi are testable.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.

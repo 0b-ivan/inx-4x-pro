@@ -88,22 +88,44 @@
         <p class="eyebrow">CrossPlay · X4 Pro</p>
         <h1>BATTLESHIP</h1>
       </header>
-      <div class="status"><span class="dot"></span><span id="status">Connected to X4 Pro</span></div>
+      <div class="status"><span class="dot"></span><span id="status">Connecting…</span></div>
       <p class="copy">
-        Browser transport is ready. Ship placement and turns come next.<br />
-        Device status: <code id="phase">checking…</code>
+        Read-only preview. Ship placement and turns come next.<br />
+        Device status: <code id="phase">offline</code><br />
+        <span id="turn"></span>
       </p>
     </main>
     <script>
-      fetch('/api/battleship/status')
-        .then((response) => response.json())
-        .then((data) => {
-          document.getElementById('phase').textContent = data.phase || 'ready';
-        })
-        .catch(() => {
-          document.getElementById('status').textContent = 'Connection lost';
-          document.getElementById('phase').textContent = 'offline';
-        });
+      const status = document.getElementById('status');
+      const phase = document.getElementById('phase');
+      const turn = document.getElementById('turn');
+      let socket;
+      let retry;
+      function connect() {
+        status.textContent = 'Connecting…';
+        socket = new WebSocket(`ws://${location.hostname}:81/battleship`);
+        socket.onmessage = (event) => {
+          let data;
+          try { data = JSON.parse(event.data); } catch { return; }
+          if (data.type !== 'state' || !['waiting', 'placement', 'playing', 'finished'].includes(data.phase)) return;
+          status.textContent = data.connected ? 'Connected to X4 Pro' : 'Waiting for X4 Pro';
+          phase.textContent = data.phase;
+          turn.textContent = data.phase === 'playing' ? (data.myTurn ? 'Your turn · read-only preview' : 'Waiting for X4 Pro') : 'Browser moves are not available yet.';
+        };
+        socket.onclose = () => {
+          status.textContent = 'Connection lost · reconnecting…';
+          phase.textContent = 'offline';
+          turn.textContent = '';
+          retry = setTimeout(connect, 2000);
+        };
+        socket.onerror = () => socket.close();
+      }
+      window.addEventListener('pagehide', () => {
+        clearTimeout(retry);
+        if (socket) { socket.onclose = null; socket.close(); }
+      });
+      window.addEventListener('pageshow', (event) => { if (event.persisted) connect(); });
+      connect();
     </script>
   </body>
 </html>

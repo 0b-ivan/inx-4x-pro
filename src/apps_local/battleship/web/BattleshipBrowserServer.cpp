@@ -50,6 +50,18 @@ bool Server::begin(const NetworkMode mode) {
 
   configureRoutes();
   http_.begin();
+  ws_.begin();
+  ws_.enableHeartbeat(5000, 3000, 2);
+  ws_.onEvent([this](uint8_t client, WStype_t type, uint8_t*, size_t) {
+    // Text, binary and fragmented application messages never mutate the game.
+    if (type == WStype_CONNECTED) {
+      clientSeen_ = true;
+      snapshot_.connected = true;
+      sendSnapshot(client);
+    } else if (type == WStype_DISCONNECTED) {
+      clientSeen_ = ws_.connectedClients() != 0;
+    }
+  });
   running_ = true;
 
   LOG_INF("BSHIPWEB", "Browser server ready at %s (%s)", url_.c_str(), ip_.c_str());
@@ -67,7 +79,11 @@ void Server::stop() {
   running_ = false;
   clientSeen_ = false;
 
-  if (hadServer) http_.stop();
+  if (hadServer) {
+    ws_.close();
+    http_.stop();
+  }
+  snapshot_ = {};
 
   if (dnsRunning_) {
     dns_.stop();
@@ -90,6 +106,22 @@ void Server::loop() {
   if (!running_) return;
   if (dnsRunning_) dns_.processNextRequest();
   http_.handleClient();
+  ws_.loop();
+}
+
+void Server::sendSnapshot(const uint8_t client) {
+  char message[128];
+  const size_t size = serializeSnapshot(snapshot_, message, sizeof(message));
+  if (size) ws_.sendTXT(client, message, size);
+}
+
+void Server::publish(const BrowserSnapshot& snapshot) {
+  if (sameSnapshot(snapshot_, snapshot)) return;
+  snapshot_ = snapshot;
+  if (!running_) return;
+  char message[128];
+  const size_t size = serializeSnapshot(snapshot_, message, sizeof(message));
+  if (size) ws_.broadcastTXT(message, size);
 }
 
 void Server::configureRoutes() {
@@ -97,16 +129,11 @@ void Server::configureRoutes() {
 
   http_.on("/", HTTP_GET, [this] { serveGamePage(); });
   http_.on(kGamePath, HTTP_GET, [this] { serveGamePage(); });
-  http_.on("/api/battleship/status", HTTP_GET, [this] {
-    clientSeen_ = true;
-    http_.send(200, "application/json", "{\"connected\":true,\"game\":\"battleship\",\"phase\":\"transport-ready\"}");
-  });
   http_.onNotFound([this] { handleNotFound(); });
   routesConfigured_ = true;
 }
 
 void Server::serveGamePage() {
-  clientSeen_ = true;
   http_.sendHeader("Content-Encoding", "gzip");
   http_.send_P(200, "text/html", BattleshipPageHtml, BattleshipPageHtmlCompressedSize);
 }
@@ -186,6 +213,7 @@ void Server::stop() {
 }
 
 void Server::loop() {}
+void Server::publish(const BrowserSnapshot& snapshot) { snapshot_ = snapshot; }
 
 }  // namespace bshipweb
 
