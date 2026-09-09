@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-// Fork-local parser for GitHub's /releases array.  It deliberately keeps a
+// Fork-local parser for GitHub's /releases array. It deliberately keeps a
 // small fixed catalog instead of buffering the full JSON response: OTA runs
 // while TLS is live and must not add a second large heap allocation beside it.
 class OtaReleaseCatalog {
@@ -24,11 +24,15 @@ class OtaReleaseCatalog {
   OtaReleaseCatalog& operator=(const OtaReleaseCatalog&) = delete;
 
   void setFirmwareAssetName(const char* name);
+  // Stable can reject prereleases while the response is still streaming so a
+  // run of fresh alphas cannot consume the bounded catalog before older stable
+  // versions are encountered.
+  void setIncludePrerelease(bool include) { includePrerelease = include; }
   void reset();
   void feed(const char* data, size_t len);
 
-  // Remove unsupported entries, apply the selected release channel, and sort
-  // newest-first using semantic-version precedence.
+  // Remove unsupported entries, apply the selected release channel again as a
+  // defensive filter, and sort newest-first using semantic-version precedence.
   void prepare(bool includePrerelease);
 
   size_t count() const { return entryCount; }
@@ -68,6 +72,7 @@ class OtaReleaseCatalog {
   StreamingJsonParser parser;
   Entry entries[MAX_RELEASES]{};
   size_t entryCount = 0;
+  bool includePrerelease = true;
 
   uint8_t depth = 0;
   uint8_t releaseDepth = 0;
