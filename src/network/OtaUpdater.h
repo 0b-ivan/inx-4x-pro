@@ -41,8 +41,15 @@ class OtaUpdater {
   // tag, image-size and esp_ota validation before changing the boot partition.
   bool selectRelease(const char* version, const char* firmwareUrl, size_t firmwareSize);
 
-  // Existing callers keep the historical "newer only" behaviour.  The OTA
+  // Pure policy seam for host tests: explicit manual selection bypasses only
+  // the version-direction rejection. All image/device validation lives later
+  // in installUpdate() and is independent of this result.
+  static constexpr bool shouldRejectVersion(const bool allowOlder, const bool isNewer) {
+    return !allowOlder && !isNewer;
+  }
+
+  // Existing callers keep the historical "newer only" behaviour. The OTA
   // release picker opts into allowOlder after an explicit user selection so a
-  // downgrade uses exactly the same guarded flash path as an upgrade.
+  // downgrade/reinstall uses exactly the same guarded flash path as an upgrade.
   OtaUpdaterError installUpdate(ProgressCallback onProgress = nullptr, void* ctx = nullptr, bool allowOlder = false);
 };
