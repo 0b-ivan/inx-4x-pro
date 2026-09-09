@@ -71,6 +71,10 @@ jobs:
       - name: Install PlatformIO Core and tooling
         run: uv pip install --system -U "$PIO_CORE_URL" esptool
 
+      - name: Check standard USB flashing configuration
+        run: |
+          python3 -m platformio project config --json-output | python3 scripts_local/check_release_usb.py
+
       - name: Build release firmware
         run: python3 -m platformio run -e gh_release_x4pro
 
@@ -115,14 +119,18 @@ jobs:
           files: dist/*
           generate_release_notes: false
           prerelease: ${{ contains(github.ref_name, '-') }}
-          make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'legacy' }}
+          make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.14.0-alpha.1
+            ### What is new in 1.13.4
 
-            **Alpha preview from feature/rss-offline-sync.** This is a prerelease
-            for testing on Xteink X4 Pro; it is not the stable update channel.
+            Regular release based on v1.14.0-alpha.1 (04752b0), with firmware
+            version 1.13.4 and the standard USB Serial/JTAG configuration.
+
+            - No Passkey/FIDO USB-HID application is included. The release build
+              checks that hardware USB serial and serial-on-boot stay enabled.
+            - Both the USB full image and OTA application image are provided.
 
             - RSS synchronization now advances one article at a time, reusing
               the existing download, extraction and SD-cache implementation.
