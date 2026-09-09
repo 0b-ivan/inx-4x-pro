@@ -51,6 +51,10 @@ class Server final {
   DNSServer dns_;
   bool routesConfigured_ = false;
   bool dnsRunning_ = false;
+  // The server itself takes a Developer Mode yield because it owns port 80 and,
+  // in hotspot mode, the radio. Callers may also hold an outer yield; DevMode's
+  // yieldDepth is intentionally nestable.
+  bool devModePaused_ = false;
 #endif
 
   NetworkMode mode_ = NetworkMode::ExistingWifi;
