@@ -133,7 +133,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   if (!updateAvailable || latestVersion.empty() || otaUrl.empty()) {
     return INTERNAL_UPDATE_ERROR;
   }
-  if (!allowOlder && !isUpdateNewer()) {
+  if (shouldRejectVersion(allowOlder, isUpdateNewer())) {
     return UPDATE_OLDER_ERROR;
   }
 
