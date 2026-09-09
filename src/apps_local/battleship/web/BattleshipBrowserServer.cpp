@@ -6,6 +6,7 @@
 #include <Logging.h>
 #include <WiFi.h>
 
+#include "../../../DevMode.h"
 #include "BattleshipPageHtml.generated.h"
 
 namespace bshipweb {
@@ -29,8 +30,20 @@ bool Server::begin(const NetworkMode mode) {
   ip_.clear();
   url_.clear();
 
+  // Port 80 and, for Hotspot, the radio are mutually exclusive with Developer
+  // Mode. Own the yield here rather than relying on a particular activity to
+  // remember it; DevMode uses a depth counter, so an outer owner can nest it.
+  if (!devModePaused_) {
+    devmode::pause();
+    devModePaused_ = true;
+  }
+
   const bool networkReady = mode == NetworkMode::Hotspot ? startHotspot() : startExistingWifi();
-  if (!networkReady) return false;
+  if (!networkReady) {
+    devmode::resume();
+    devModePaused_ = false;
+    return false;
+  }
 
   if (!startMdns()) {
     LOG_DBG("BSHIPWEB", "mDNS unavailable; IP fallback remains usable");
@@ -45,25 +58,30 @@ bool Server::begin(const NetworkMode mode) {
 }
 
 void Server::stop() {
-  if (!running_ && !dnsRunning_) return;
-
+  const bool hadServer = running_ || dnsRunning_;
   running_ = false;
   clientSeen_ = false;
-  http_.stop();
+
+  if (hadServer) http_.stop();
 
   if (dnsRunning_) {
     dns_.stop();
     dnsRunning_ = false;
   }
 
-  MDNS.end();
+  if (hadServer) MDNS.end();
 
-  if (mode_ == NetworkMode::Hotspot) {
+  if (mode_ == NetworkMode::Hotspot && hadServer) {
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
   }
 
-  LOG_DBG("BSHIPWEB", "Browser server stopped");
+  if (devModePaused_) {
+    devmode::resume();
+    devModePaused_ = false;
+  }
+
+  if (hadServer) LOG_DBG("BSHIPWEB", "Browser server stopped");
 }
 
 void Server::loop() {
