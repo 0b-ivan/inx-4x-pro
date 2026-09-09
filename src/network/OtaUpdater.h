@@ -70,7 +70,12 @@ class OtaUpdater {
   }
 
   // Keep the historical two-argument API: the simulator provides this exact
-  // firmware stub. Manual selection stores its direction policy above instead
-  // of changing the ABI used by that simulator.
+  // firmware stub. The three-argument convenience overload only records the
+  // version-direction policy and then goes through that same ABI.
   OtaUpdaterError installUpdate(ProgressCallback onProgress = nullptr, void* ctx = nullptr);
+
+  OtaUpdaterError installUpdate(ProgressCallback onProgress, void* ctx, const bool allowOlder) {
+    allowOlderSelection = allowOlder;
+    return installUpdate(onProgress, ctx);
+  }
 };
