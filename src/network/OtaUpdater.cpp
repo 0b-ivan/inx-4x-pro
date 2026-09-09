@@ -68,23 +68,32 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
     return NO_UPDATE;
   }
 
-  latestVersion = releaseParser.getTagName();
-  // Tags carry a v prefix ("v1.3.3"); CROSSPOINT_VERSION does not ("1.3.3").
-  // Comparing them raw meant isUpdateNewer()'s sscanf choked on the 'v' and
-  // compared uninitialized ints -- every install since v1.0.0 rode on that
-  // garbage reading as "newer", and a device already on the latest release
-  // was offered itself as an update. Found on hardware, naturally.
-  if (!latestVersion.empty() && (latestVersion[0] == 'v' || latestVersion[0] == 'V')) {
-    latestVersion.erase(0, 1);
+  if (!selectRelease(releaseParser.getTagName(), releaseParser.getFirmwareUrl(), releaseParser.getFirmwareSize())) {
+    return JSON_PARSE_ERROR;
   }
-  otaUrl = releaseParser.getFirmwareUrl();
-  otaSize = releaseParser.getFirmwareSize();
-  totalSize = otaSize;
-  updateAvailable = true;
 
   LOG_DBG("OTA", "Found update: tag=%s size=%zu", latestVersion.c_str(), otaSize);
   LOG_DBG("OTA", "Firmware URL: %s", otaUrl.c_str());
   return OK;
+}
+
+bool OtaUpdater::selectRelease(const char* version, const char* firmwareUrl, const size_t firmwareSize) {
+  if (version == nullptr || version[0] == '\0' || firmwareUrl == nullptr || firmwareUrl[0] == '\0') {
+    updateAvailable = false;
+    return false;
+  }
+
+  latestVersion = version;
+  // Tags carry a v prefix ("v1.3.3"); CROSSPOINT_VERSION does not ("1.3.3").
+  if (!latestVersion.empty() && (latestVersion[0] == 'v' || latestVersion[0] == 'V')) {
+    latestVersion.erase(0, 1);
+  }
+  otaUrl = firmwareUrl;
+  otaSize = firmwareSize;
+  processedSize = 0;
+  totalSize = otaSize;
+  updateAvailable = true;
+  return true;
 }
 
 bool OtaUpdater::isUpdateNewer() const {
@@ -105,28 +114,12 @@ bool OtaUpdater::isUpdateNewer() const {
   }
   sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
 
-  /*
-   * Compare major versions.
-   * If they differ, return true if latest major version greater than current major version
-   * otherwise return false.
-   */
   if (latestMajor != currentMajor) return latestMajor > currentMajor;
-
-  /*
-   * Compare minor versions.
-   * If they differ, return true if latest minor version greater than current minor version
-   * otherwise return false.
-   */
   if (latestMinor != currentMinor) return latestMinor > currentMinor;
-
-  /*
-   * Check patch versions.
-   */
   if (latestPatch != currentPatch) return latestPatch > currentPatch;
 
-  // If we reach here, it means all segments are equal.
-  // One final check, if we're on an RC build (contains "-rc"), we should consider the latest version as newer even if
-  // the segments are equal, since RC builds are pre-release versions.
+  // If all numeric segments are equal, an RC build still considers the stable
+  // release newer. Keep this legacy latest-release behaviour unchanged.
   if (strstr(currentVersion, "-rc") != nullptr) {
     return true;
   }
@@ -136,8 +129,11 @@ bool OtaUpdater::isUpdateNewer() const {
 
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
 
-OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgress, void* ctx) {
-  if (!isUpdateNewer()) {
+OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgress, void* ctx, const bool allowOlder) {
+  if (!updateAvailable || latestVersion.empty() || otaUrl.empty()) {
+    return INTERNAL_UPDATE_ERROR;
+  }
+  if (!allowOlder && !isUpdateNewer()) {
     return UPDATE_OLDER_ERROR;
   }
 
