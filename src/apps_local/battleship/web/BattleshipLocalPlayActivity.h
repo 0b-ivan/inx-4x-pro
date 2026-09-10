@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../activities/Activity.h"
+#include "../../../components/UITheme.h"
 #include "../../ui/ToyboxScreen.h"
 #include "../BattleshipCore.h"
 #include "BattleshipBrowserServer.h"
