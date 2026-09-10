@@ -38,8 +38,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Tags, for host-tests/release below: without them its notes gate
-          # cannot see what the previous tag published and skips itself.
           fetch-depth: 0
 
       - name: The tag must be the version being built
@@ -114,16 +112,22 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.13.5
+            ### What is new in 1.14.0
 
-            - OTA Updates now lets you choose Stable or Nightly / Pre-release.
-            - Available compatible X4 Pro releases can be browsed and installed directly.
-            - Explicit version selection supports upgrades, downgrades and reinstalls.
-            - Manual downgrade/reinstall bypasses only the version-direction check;
-              chip, board-tag, image-size, OTA-slot and image validation remain enforced.
+            - Added complete Battleship browser crossplay while keeping the existing X4 Pro-to-X4 Pro ESP-NOW mode intact.
+            - Browser play works over an existing Wi-Fi network or the temporary `CrossPlay-Battleship` hotspot at `crossplay.local/battleship`.
+            - Added reader-compatible player avatars and derived player names, with a clearer profile-first setup flow.
+            - Browser and X4 Pro can place fleets in parallel; the match starts only after both players are ready.
+            - Fleet setup supports direct placement, double-tap ship rotation and server-validated random placement.
+            - Browser firing uses a guarded two-tap interaction: first tap selects a target, second tap on the same cell fires.
+            - Added a compact battle HUD with fleet status, own-sea minimap, clean outside-board coordinates and clear hit/miss X marks.
+            - Added named waiting states, victory/defeat overlays, same-session rematch, secure reconnect/resume and guarded surrender.
+            - The X4 Pro remains authoritative for placement, shots, sunk state, surrender and game over; hidden host fleet positions never cross the browser boundary.
+            - OTA release browsing supports Stable and Nightly / Pre-release channels with explicit version selection, including downgrade and reinstall of compatible builds.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.

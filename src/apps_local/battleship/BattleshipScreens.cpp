@@ -103,6 +103,54 @@ fui::Rect buildStartMenu(toybox::Screen& screen, const StartModel& model) {
   return screen.body();
 }
 
+const char* localPlayRowLabel(const LocalPlayRow row) {
+  switch (row) {
+    case LocalPlayRow::X4Pro:
+      return "X4 PRO";
+    case LocalPlayRow::Browser:
+      return "BROWSER";
+    default:
+      return "";
+  }
+}
+
+fui::Rect buildLocalPlayMenu(toybox::Screen& screen, const LocalPlayModel& model) {
+  toyboxChrome(screen, "LOCAL PLAY");
+
+  const fui::Rect intro = screen.takeTop(34);
+  fui::TextStyle introStyle;
+  introStyle.font = toybox::kTileFont;
+  introStyle.align = fui::TextAlign::Left;
+  screen.target().text(intro, "CHOOSE YOUR OPPONENT", introStyle);
+
+  fui::ListItem rows[static_cast<int>(LocalPlayRow::Count)] = {};
+  for (int i = 0; i < static_cast<int>(LocalPlayRow::Count); ++i) {
+    rows[i].label = localPlayRowLabel(static_cast<LocalPlayRow>(i));
+    rows[i].actionValue = static_cast<int16_t>(i);
+  }
+
+  fui::ListProps list;
+  list.items = rows;
+  list.count = static_cast<uint16_t>(LocalPlayRow::Count);
+  list.selectedIndex = static_cast<int16_t>(model.selected);
+  list.action = ActionLocalPlayRow;
+
+  const int16_t listHeight = static_cast<int16_t>(static_cast<int>(LocalPlayRow::Count) * toybox::kRowHeight +
+                                                  (static_cast<int>(LocalPlayRow::Count) - 1) * toybox::kGutter / 2 +
+                                                  toybox::kGutter);
+  const fui::Rect content = screen.contentRect();
+  const fui::Rect listBand =
+      fui::makeRect(content.x, static_cast<int16_t>(content.bottom() - listHeight), content.width, listHeight);
+  screen.list(list, listHeight, fui::LayoutAnchor::Bottom);
+
+  // The radio mark stays attached to the existing X4-to-X4 transport. Browser
+  // deliberately has no second symbol yet: its connection screen will explain
+  // Wi-Fi/Hotspot explicitly instead of teaching a new icon without context.
+  toybox::iconAtRowRight(screen, listBand, 0, 0, linkui::nearbyMark(), model.selected == 0);
+
+  return screen.body();
+}
+
 fui::Rect buildPlaceChrome(toybox::Screen& screen, const PlaceModel& model) {
   // "PLACE YOUR FLEET" came out as "PLACE YOUR FLEE": the display cut is wide
   // and the band does not scroll, so a title has to be short enough to survive

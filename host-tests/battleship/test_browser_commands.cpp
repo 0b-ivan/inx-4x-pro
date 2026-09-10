@@ -1,0 +1,174 @@
+#include <cassert>
+#include <cstdio>
+#include <cstring>
+#include <string>
+
+#include "../../src/apps_local/battleship/web/BrowserPlayer.h"
+using namespace bshipweb;
+
+static bool parse(const std::string& text, Command& c) {
+  return parseCommand(reinterpret_cast<const uint8_t*>(text.data()), text.size(), c);
+}
+
+int main() {
+  const std::string token = "\"0123456789abcdef0123456789abcdef\"";
+  Command c;
+  assert(parse("[\"profile\"," + token + ",0,0,13,0]", c));
+  assert(c.value[1] == 13);
+  assert(parse("[\"fire\"," + token + ",7,99]", c));
+  assert(c.kind == CommandKind::Fire && c.revision == 7 && c.value[0] == 99);
+  assert(!parse("[\"fire\"," + token + ",7,100]", c));
+  assert(!parse("[\"fire\"," + token + ",7]", c));
+  assert(!parse("[\"fire\"," + token + ",7,1,2]", c));
+  assert(parse("[\"surrender\"," + token + ",8]", c));
+  assert(c.kind == CommandKind::Surrender && c.revision == 8);
+  assert(!parse("[\"surrender\"," + token + ",8,0]", c));
+  assert(parse("[\"rematch\"," + token + ",9]", c));
+  assert(c.kind == CommandKind::Rematch && c.revision == 9);
+  assert(!parse("[\"rematch\"," + token + ",9,0]", c));
+
+  for (const auto& bad : {"-1", "14", "256", "1.0", "1e0", "true", "null", "\"1\"", "01", "42949672960", "[]", "{}"}) {
+    assert(!parse("[\"profile\"," + token + ",0,0," + bad + ",0]", c));
+  }
+  for (const auto& bad : {"[\"name\",", "[\"avatar\","})
+    assert(!parse(std::string(bad) + token + ",0,0,0,0]", c));
+  assert(!parse("[\"profile\"," + token + ",0,0,0]", c));
+  assert(!parse("[\"profile\"," + token + ",0,0,0,0,0]", c));
+  assert(!parse("[\"ready\"," + token + ",0]null", c));
+  assert(!parse("[\"ready\"," + token + ",-1]", c));
+  assert(!parse("[\"ready\"," + token + ",4294967296]", c));
+  assert(!parse(std::string(129, ' '), c));
+  assert(!parseCommand(nullptr, 5, c));
+  assert(parse(" \n[\"ready\", " + token + ", 4294967295]\t", c));
+  std::string nul = "[\"ready\"," + token + ",0]";
+  nul.push_back(0);
+  assert(!parse(nul, c));
+  assert(!parse("[\"ready\",\"0123456789abcdef0123456789abcdeg\",0]", c));
+
+  bship::Game game;
+  game.turn = 1;
+  BrowserPlayer player;
+  Command action;
+  action.kind = CommandKind::Place;
+  assert(!player.apply(game, action));
+  action.kind = CommandKind::Profile;
+  for (int a = 0; a < 14; ++a)
+    for (int b = 0; b < 14; ++b)
+      for (int d = 0; d < 14; ++d) {
+        player.reset();
+        action.revision = 0;
+        action.value[0] = a;
+        action.value[1] = b;
+        action.value[2] = d;
+        assert(player.apply(game, action));
+        const auto parts = player::parse(player.name());
+        assert(parts.known() && parts.word[0] == a && parts.word[1] == b && parts.word[2] == d);
+      }
+
+  auto profile = player.view();
+  action.revision = profile.revision;
+  action.value[0] = 255;
+  assert(!player.apply(game, action));
+  assert(player.view().revision == profile.revision);
+  action.kind = CommandKind::Ready;
+  assert(!player.apply(game, action));
+  assert(!game.side[1].placed);
+
+  action.kind = CommandKind::Place;
+  for (int i = 0; i < 5; ++i) {
+    action.value[0] = i;
+    action.value[1] = i * 10;
+    action.value[2] = 1;
+    action.revision = player.view().revision;
+    assert(player.apply(game, action));
+    assert(!player.apply(game, action));
+  }
+  action.revision = player.view().revision;
+  action.value[0] = 0;
+  action.value[1] = 9;
+  action.value[2] = 1;
+  assert(!player.apply(game, action));
+  action.value[1] = 90;
+  action.value[2] = 0;
+  assert(!player.apply(game, action));
+  action.value[1] = 10;
+  action.value[2] = 1;
+  assert(!player.apply(game, action));
+  action.value[0] = 5;
+  assert(!player.apply(game, action));
+  action.value[0] = 0;
+  action.value[2] = 2;
+  assert(!player.apply(game, action));
+
+  game.turn = 0;
+  action.kind = CommandKind::Ready;
+  assert(!player.apply(game, action));
+  game.turn = 1;
+  const auto hostBefore = game.side[0];
+  assert(player.apply(game, action));
+  assert(game.side[1].placed && game.turn == 0 && player.view().ready);
+  assert(!memcmp(&hostBefore, &game.side[0], sizeof(hostBefore)));
+
+  action.revision = player.view().revision;
+  assert(!player.apply(game, action));
+  action.kind = CommandKind::Profile;
+  assert(!player.apply(game, action));
+
+  bship::Fleet x4;
+  uint32_t seed = 123;
+  bship::randomFleet(x4, seed);
+  assert(bship::place(game, 0, x4));
+  assert(bship::bothPlaced(game) && game.turn == 1);
+
+  action.kind = CommandKind::Fire;
+  action.revision = player.view().revision;
+  action.value[0] = 0;
+  assert(player.apply(game, action));
+  assert(bship::shotAt(game.side[0], 0));
+  assert(game.turn == 0);
+  assert(!player.apply(game, action));
+  action.revision = player.view().revision;
+  action.value[0] = 1;
+  assert(!player.apply(game, action));
+  game.turn = 1;
+  action.value[0] = 0;
+  assert(!player.apply(game, action));
+
+  action.kind = CommandKind::Rematch;
+  action.revision = player.view().revision;
+  assert(!player.apply(game, action));
+
+  action.kind = CommandKind::Surrender;
+  action.revision = player.view().revision;
+  const uint32_t beforeSurrender = action.revision;
+  assert(player.apply(game, action));
+  assert(player.view().revision == beforeSurrender + 1);
+  assert(bship::over(game) && bship::winner(game) == 0);
+  for (int i = 0; i < bship::kShipCount; ++i) assert(bship::sunk(game.side[1], i));
+  assert(!player.apply(game, action));
+
+  action.kind = CommandKind::Rematch;
+  action.revision = player.view().revision;
+  const auto previousName = std::string(player.name());
+  assert(player.apply(game, action));
+  assert(!game.side[0].placed && !game.side[1].placed && game.turn == 1 && !bship::over(game));
+  assert(player.view().profile && !player.view().ready && player.view().revision == action.revision + 1);
+  assert(std::string(player.name()) == previousName);
+  for (int i = 0; i < 5; ++i) assert(player.view().bow[i] == 255 && player.view().horizontal[i] == 1);
+  assert(!player.apply(game, action));
+
+  char expected[256], actual[256];
+  assert(serializePlacement(player.view(), true, expected, sizeof(expected)));
+  for (int i = 0; i < 1000; ++i) {
+    bship::randomFleet(game.side[0].fleet, seed);
+    serializePlacement(player.view(), true, actual, sizeof(actual));
+    assert(!strcmp(expected, actual));
+  }
+  assert(!serializePlacement(player.view(), true, actual, 5) && actual[0] == 0);
+
+  player.reset();
+  assert(!player.view().profile && player.view().bow[0] == 255 && player.name()[0] == 0);
+  action.revision = 0;
+  assert(!player.apply(game, action));
+  puts("Browser commands: strict parsing, 2744 profiles, placement, ready, fire, surrender, rematch, replay and private projection passed");
+}

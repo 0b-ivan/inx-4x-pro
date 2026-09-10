@@ -109,6 +109,11 @@ class BattleshipActivity final : public linkplay::LinkActivity {
   void routePlacement();
   void routeBoard();
 
+  // Hides LinkActivity::enterLink at the Battleship call site. The existing
+  // PLAY NEARBY row therefore gains one transport chooser without changing the
+  // generic link layer or the X4-to-X4 protocol.
+  void enterLink(linkplay::GameId gameId);
+
   // Setting up.
   void beginPlacement();
   void shuffleFleet();
