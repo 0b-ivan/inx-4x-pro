@@ -42,10 +42,13 @@ int main() {
   assert(token.size() == 32);
   const auto profile = "[\"profile\",\"" + token + "\",0,0,13,0]";
   ws.event(WStype_CONNECTED, 0);
-  assert(server.clientSeen() && ws.messages.size() == 1);
+  assert(server.clientSeen() && ws.messages.size() == 2);
+  assert(ws.messages.back().find("\"type\":\"f\"") != std::string::npos);
   BrowserSnapshot state{BrowserPhase::Playing, true, true};
   server.publish(state);
   const auto count = ws.messages.size();
+  assert(count == 4 && ws.messages[count - 2].find("playing") != std::string::npos);
+  assert(ws.messages.back().find("\"type\":\"f\"") != std::string::npos);
   server.publish(state);
   assert(ws.messages.size() == count);
   ws.event(WStype_BIN, 0, profile);
@@ -70,7 +73,8 @@ int main() {
   ws.event(WStype_TEXT, 0, profile);
   assert(handler.calls == 2);
   ws.event(WStype_CONNECTED, 1);
-  assert(ws.messages.back().find("playing") != std::string::npos);
+  assert(ws.messages[ws.messages.size() - 2].find("playing") != std::string::npos);
+  assert(ws.messages.back().find("\"type\":\"f\"") != std::string::npos);
   ws.event(WStype_TEXT, 1, profile);
   assert(handler.calls == 2 && ws.messages.back().find("error") != std::string::npos);
   ws.event(WStype_DISCONNECTED, 1);
@@ -86,9 +90,10 @@ int main() {
   clockMs += 100;
   ws.event(WStype_TEXT, 0, resume);
   assert(handler.calls == 3);
-  assert(ws.messages[ws.messages.size() - 3].find("placement") != std::string::npos);
-  assert(ws.messages[ws.messages.size() - 2].find("resume") != std::string::npos);
-  assert(ws.messages.back().find("playing") != std::string::npos);
+  assert(ws.messages[ws.messages.size() - 4].find("placement") != std::string::npos);
+  assert(ws.messages[ws.messages.size() - 3].find("resume") != std::string::npos);
+  assert(ws.messages[ws.messages.size() - 2].find("playing") != std::string::npos);
+  assert(ws.messages.back().find("\"type\":\"f\"") != std::string::npos);
 
   ws.event(WStype_DISCONNECTED, 0);
   http.routes.at("/battleship/session")();
@@ -114,5 +119,5 @@ int main() {
   assert(devmode::depth == 1 && WiFi.currentMode == WIFI_STA);
   devmode::resume();
   assert(devmode::depth == 0);
-  puts("Browser server: ownership, session/resume capabilities, private replies, reconnect, AP/LAN and nested radio yield passed");
+  puts("Browser server: ownership, battle/fleet frames, session/resume capabilities, reconnect, AP/LAN and nested radio yield passed");
 }
