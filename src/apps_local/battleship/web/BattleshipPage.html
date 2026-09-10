@@ -5,103 +5,38 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>Battleship · CrossPlay</title>
     <style>
-      :root {
-        color-scheme: light dark;
-        --bg: #f4f1e8;
-        --ink: #111;
-        --panel: #fffdf7;
-        --muted: #6b6b66;
-        --line: #111;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #171714;
-          --ink: #f4f1e8;
-          --panel: #23231f;
-          --muted: #aaa79d;
-          --line: #f4f1e8;
-        }
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background: var(--bg);
-        color: var(--ink);
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        display: grid;
-        place-items: center;
-        padding: 24px;
-      }
-      main {
-        width: min(100%, 520px);
-        background: var(--panel);
-        border: 3px solid var(--line);
-        padding: 22px;
-        box-shadow: 8px 8px 0 var(--line);
-      }
-      header {
-        border-bottom: 3px solid var(--line);
-        padding-bottom: 14px;
-        margin-bottom: 24px;
-      }
-      h1 {
-        margin: 0;
-        font-size: clamp(28px, 8vw, 46px);
-        letter-spacing: .04em;
-      }
-      .eyebrow {
-        margin: 0 0 8px;
-        font-size: 12px;
-        letter-spacing: .12em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-      .status {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        font-weight: 700;
-        font-size: 18px;
-      }
-      .dot {
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: var(--ink);
-        flex: 0 0 auto;
-      }
-      .copy {
-        margin-top: 18px;
-        color: var(--muted);
-        line-height: 1.5;
-      }
-      fieldset { margin: 18px 0; border: 1px solid var(--line); }
-      label { display: inline-block; margin: 6px 4px; }
-      select, button { font: inherit; padding: 8px; }
-      button { cursor: pointer; }
-      button:disabled { cursor: default; opacity: .45; }
-      #grid { display: grid; grid-template-columns: repeat(10, 1fr); margin: 12px 0; }
-      #grid button { padding: 0; aspect-ratio: 1; border: 1px solid var(--muted); font-size: 11px; }
-      #grid .ship { background: var(--ink); color: var(--panel); }
-      code {
-        color: var(--ink);
-        font-weight: 700;
-      }
+      :root { color-scheme: light dark; --bg:#f4f1e8; --ink:#111; --panel:#fffdf7; --muted:#6b6b66; --line:#111; }
+      @media (prefers-color-scheme:dark) { :root { --bg:#171714; --ink:#f4f1e8; --panel:#23231f; --muted:#aaa79d; --line:#f4f1e8; } }
+      * { box-sizing:border-box; }
+      body { margin:0; min-height:100vh; background:var(--bg); color:var(--ink); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; display:grid; place-items:center; padding:24px; }
+      main { width:min(100%,560px); background:var(--panel); border:3px solid var(--line); padding:22px; box-shadow:8px 8px 0 var(--line); }
+      header { border-bottom:3px solid var(--line); padding-bottom:14px; margin-bottom:24px; }
+      h1 { margin:0; font-size:clamp(28px,8vw,46px); letter-spacing:.04em; }
+      h2 { font-size:15px; margin:18px 0 8px; }
+      .eyebrow { margin:0 0 8px; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+      .status { display:flex; gap:12px; align-items:center; font-weight:700; font-size:18px; }
+      .dot { width:14px; height:14px; border-radius:50%; background:var(--ink); flex:0 0 auto; }
+      .copy { margin-top:18px; color:var(--muted); line-height:1.5; }
+      fieldset { margin:18px 0; border:1px solid var(--line); }
+      label { display:inline-block; margin:6px 4px; }
+      select,button { font:inherit; padding:8px; }
+      button { cursor:pointer; background:var(--panel); color:var(--ink); }
+      button:disabled { cursor:default; opacity:.45; }
+      .grid { display:grid; grid-template-columns:repeat(10,1fr); margin:12px 0; }
+      .grid button { padding:0; aspect-ratio:1; border:1px solid var(--muted); font-size:10px; min-width:0; }
+      .grid .ship { background:var(--ink); color:var(--panel); }
+      .grid .hit { background:var(--ink); color:var(--panel); outline:3px double var(--panel); outline-offset:-5px; }
+      .grid .miss::after { content:'·'; font-size:22px; font-weight:700; }
+      #battle[hidden] { display:none; }
+      code { color:var(--ink); font-weight:700; }
     </style>
   </head>
   <body>
     <main>
-      <header>
-        <p class="eyebrow">CrossPlay · X4 Pro</p>
-        <h1>BATTLESHIP</h1>
-      </header>
+      <header><p class="eyebrow">CrossPlay · X4 Pro</p><h1>BATTLESHIP</h1></header>
       <div class="status"><span class="dot"></span><span id="status">Connecting…</span></div>
-      <p class="copy">
-        Choose your player and place your ships. The X4 Pro checks each move.<br />
-        Device status: <code id="phase">offline</code><br />
-        <span id="turn"></span>
-      </p>
+      <p class="copy">Device status: <code id="phase">offline</code><br /><span id="turn"></span></p>
+
       <fieldset id="profile" disabled>
         <legend>YOUR PLAYER</legend>
         <label>Hair <select id="hair"></select></label>
@@ -109,118 +44,99 @@
         <label>Mouth <select id="mouth"></select></label>
         <button id="save" type="button">Use player</button>
       </fieldset>
+
       <fieldset id="placement" disabled>
         <legend>YOUR FLEET</legend>
-        <label>Ship <select id="ship">
-          <option value="0">Carrier · 5</option><option value="1">Battleship · 4</option>
-          <option value="2">Cruiser · 3</option><option value="3">Submarine · 3</option>
-          <option value="4">Destroyer · 2</option>
-        </select></label>
+        <label>Ship <select id="ship"><option value="0">Carrier · 5</option><option value="1">Battleship · 4</option><option value="2">Cruiser · 3</option><option value="3">Submarine · 3</option><option value="4">Destroyer · 2</option></select></label>
         <label>Direction <select id="direction"><option value="1">Across</option><option value="0">Down</option></select></label>
         <p>Tap a starting cell. To move a ship, select it and tap again.</p>
-        <div id="grid" aria-label="Your placement grid"></div>
+        <div id="grid" class="grid" aria-label="Your fleet"></div>
         <button id="ready" type="button" disabled>Confirm fleet</button>
       </fieldset>
+
+      <section id="battle" hidden>
+        <h2>ENEMY WATERS</h2>
+        <div id="target" class="grid" aria-label="Enemy waters"></div>
+        <h2>YOUR FLEET</h2>
+        <div id="own" class="grid" aria-label="Your fleet status"></div>
+      </section>
       <p id="feedback" role="status">Waiting for connection.</p>
     </main>
+
     <script>
-      const byId = id => document.getElementById(id);
-      const status = byId('status'), phase = byId('phase'), turn = byId('turn');
-      const profile = byId('profile'), placement = byId('placement'), feedback = byId('feedback');
-      const slots = ['hair', 'eyes', 'mouth'].map(byId);
-      for (const select of slots) for (let i = 0; i < 14; i++) {
-        const option = document.createElement('option');
-        option.value = i; option.textContent = String(i + 1); select.appendChild(option);
+      const byId=id=>document.getElementById(id);
+      const status=byId('status'),phase=byId('phase'),turn=byId('turn'),profile=byId('profile'),placement=byId('placement'),feedback=byId('feedback'),battle=byId('battle');
+      const slots=['hair','eyes','mouth'].map(byId);
+      for(const select of slots) for(let i=0;i<14;i++){const o=document.createElement('option');o.value=i;o.textContent=String(i+1);select.appendChild(o);}
+      const lengths=[5,4,3,3,2], cells=[], targets=[], own=[];
+      const label=cell=>`${String.fromCharCode(65+Math.floor(cell/10))}${cell%10+1}`;
+      for(let cell=0;cell<100;cell++){
+        const p=document.createElement('button');p.type='button';p.textContent=label(cell);p.onclick=()=>send('place',Number(byId('ship').value),cell,Number(byId('direction').value));byId('grid').appendChild(p);cells.push(p);
+        const t=document.createElement('button');t.type='button';t.textContent=label(cell);t.onclick=()=>fire(cell);byId('target').appendChild(t);targets.push(t);
+        const o=document.createElement('button');o.type='button';o.disabled=true;o.textContent=label(cell);byId('own').appendChild(o);own.push(o);
       }
-      const lengths = [5, 4, 3, 3, 2];
-      const cells = [];
-      for (let cell = 0; cell < 100; cell++) {
-        const button = document.createElement('button');
-        button.type = 'button'; button.textContent = `${String.fromCharCode(65 + Math.floor(cell / 10))}${cell % 10 + 1}`;
-        button.onclick = () => send('place', Number(byId('ship').value), cell, Number(byId('direction').value));
-        byId('grid').appendChild(button); cells.push(button);
+      let socket,retry,token='',revision=0,pending=false,view=null,state=null,generation=0,hidden=false;
+      function controls(){
+        const online=socket&&socket.readyState===WebSocket.OPEN&&token&&!pending;
+        profile.disabled=!online||Boolean(view&&view.ready);
+        placement.disabled=!online||!view||!view.profile||view.ready;
+        byId('ready').disabled=placement.disabled||!view||view.ships.some(s=>s[0]===255);
+        const canFire=online&&state&&state.phase==='playing'&&state.myTurn;
+        targets.forEach((b,i)=>b.disabled=!canFire||targetState(i)!==0);
       }
-      let socket, retry, token = '', revision = 0, pending = false, view = null, generation = 0, hidden = false;
-      function controls() {
-        const online = socket && socket.readyState === WebSocket.OPEN && token && !pending;
-        profile.disabled = !online || Boolean(view && view.ready);
-        placement.disabled = !online || !view || !view.profile || view.ready;
-        byId('ready').disabled = placement.disabled || !view || view.ships.some(ship => ship[0] === 255);
+      function send(kind,...values){if(!socket||socket.readyState!==WebSocket.OPEN||!token||pending)return;pending=true;controls();socket.send(JSON.stringify([kind,token,revision,...values]));}
+      function fire(cell){if(!state||!state.myTurn||targetState(cell)!==0)return;send('fire',cell);feedback.textContent=`Firing at ${label(cell)}…`;}
+      byId('save').onclick=()=>send('profile',...slots.map(s=>Number(s.value)));
+      byId('ready').onclick=()=>send('ready');
+      function validView(d){return Number.isInteger(d.revision)&&d.revision>=0&&d.revision<=4294967295&&typeof d.profile==='boolean'&&typeof d.ready==='boolean'&&typeof d.accepted==='boolean'&&Array.isArray(d.slots)&&d.slots.length===3&&d.slots.every(n=>Number.isInteger(n)&&n>=0&&n<=13)&&Array.isArray(d.ships)&&d.ships.length===5&&d.ships.every(s=>Array.isArray(s)&&s.length===2&&Number.isInteger(s[0])&&(s[0]===255||s[0]>=0&&s[0]<100)&&(s[1]===0||s[1]===1));}
+      function decode64(text,size){
+        if(typeof text!=='string')return null;const alpha='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';const out=new Uint8Array(size);let acc=0,bits=0,at=0;
+        for(const ch of text){const v=alpha.indexOf(ch);if(v<0)return null;acc=(acc<<6)|v;bits+=6;if(bits>=8){bits-=8;if(at<size)out[at++]=(acc>>bits)&255;}}
+        return at===size?out:null;
       }
-      function send(kind, ...values) {
-        if (!socket || socket.readyState !== WebSocket.OPEN || !token || pending) return;
-        pending = true; controls();
-        socket.send(JSON.stringify([kind, token, revision, ...values]));
+      function targetState(cell){
+        if(!state||!state.board)return 0;const bit=cell*2,byte=state.board[Math.floor(bit/8)],v=(byte>>(bit%8))&3;return v;
       }
-      byId('save').onclick = () => send('profile', ...slots.map(select => Number(select.value)));
-      byId('ready').onclick = () => send('ready');
-      function validView(data) {
-        return Number.isInteger(data.revision) && data.revision >= 0 && data.revision <= 4294967295 &&
-          typeof data.profile === 'boolean' && typeof data.ready === 'boolean' && typeof data.accepted === 'boolean' &&
-          Array.isArray(data.slots) && data.slots.length === 3 && data.slots.every(n => Number.isInteger(n) && n >= 0 && n <= 13) &&
-          Array.isArray(data.ships) && data.ships.length === 5 && data.ships.every(s => Array.isArray(s) && s.length === 2 &&
-            Number.isInteger(s[0]) && (s[0] === 255 || s[0] >= 0 && s[0] < 100) && (s[1] === 0 || s[1] === 1));
+      function shot(mask,cell){return mask&&((mask[Math.floor(cell/8)]>>(cell%8))&1)!==0;}
+      function shipAt(cell){
+        if(!view)return false;for(let index=0;index<5;index++){const s=view.ships[index];if(s[0]===255)continue;for(let j=0;j<lengths[index];j++)if(s[0]+j*(s[1]?1:10)===cell)return true;}return false;
       }
-      async function connect() {
-        const current = ++generation;
-        token = ''; revision = 0; view = null; pending = false; controls();
-        cells.forEach(cell => cell.className = '');
-        status.textContent = 'Connecting…';
-        try {
-          const response = await fetch('/battleship/session', {cache: 'no-store', credentials: 'same-origin'});
-          if (!response.ok) throw new Error('session');
-          const value = await response.text();
-          if (!/^[a-f0-9]{32}$/.test(value)) throw new Error('session');
-          if (hidden || current !== generation) return;
-          token = value;
-          socket = new WebSocket(`ws://${location.hostname}:81/battleship`);
-          const active = socket;
-          socket.onopen = () => { if (current === generation) { controls(); feedback.textContent = 'Choose your player. Your name and face appear on the X4 Pro.'; } };
-          socket.onmessage = event => {
-            if (current !== generation) return;
-            let data;
-            try { data = JSON.parse(event.data); } catch { return; }
-            if (!data || typeof data !== 'object') return;
-            if (data.type === 'state' && ['waiting', 'placement', 'playing', 'finished'].includes(data.phase)) {
-              status.textContent = data.connected ? 'Connected to X4 Pro' : 'Waiting for X4 Pro';
-              phase.textContent = data.phase;
-              turn.textContent = 'Shooting is not available in this version.';
-            } else if (data.type === 'placement' && validView(data)) {
-              view = data; revision = data.revision; pending = false;
-              data.slots.forEach((n, i) => slots[i].value = n);
-              cells.forEach(cell => cell.className = '');
-              data.ships.forEach((ship, index) => {
-                if (ship[0] === 255) return;
-                for (let i = 0; i < lengths[index]; i++) {
-                  const cell = ship[0] + i * (ship[1] ? 1 : 10);
-                  if (cells[cell]) cells[cell].className = 'ship';
-                }
-              });
-              feedback.textContent = data.ready ? 'Fleet confirmed. Waiting for X4 Pro setup; shooting comes next.' :
-                data.accepted ? 'Accepted by X4 Pro.' : 'Move refused. Check overlap and board edges, then try again.';
-              controls();
-            } else if (data.type === 'error') {
-              pending = false; controls();
-              feedback.textContent = 'Request refused. Another browser may own this player. Reconnect to start again.';
-            }
+      function renderBoards(){
+        cells.forEach(b=>b.className='');
+        if(view) view.ships.forEach((s,index)=>{if(s[0]===255)return;for(let j=0;j<lengths[index];j++){const c=s[0]+j*(s[1]?1:10);if(cells[c])cells[c].className='ship';}});
+        targets.forEach((b,i)=>{b.className='';const s=targetState(i);if(s===3)b.className='hit';else if(s===1)b.className='miss';});
+        own.forEach((b,i)=>{b.className=shipAt(i)?'ship':'';if(state&&shot(state.incoming,i))b.className=shipAt(i)?'hit':'miss';});
+        battle.hidden=!(view&&view.ready&&state&&(state.phase==='playing'||state.phase==='finished'));
+        controls();
+      }
+      function applyState(d){
+        if(!['waiting','placement','playing','finished'].includes(d.phase)||typeof d.myTurn!=='boolean'||!Number.isInteger(d.winner))return;
+        const board=decode64(d.b,25),incoming=decode64(d.i,13);if(!board||!incoming)return;
+        state={phase:d.phase,myTurn:d.myTurn,winner:d.winner,board,incoming};phase.textContent=d.phase;status.textContent='Connected to X4 Pro';
+        if(d.phase==='finished'){turn.textContent=d.winner===1?'YOU WIN':'X4 PRO WINS';feedback.textContent=turn.textContent;}
+        else if(d.phase==='playing'){turn.textContent=d.myTurn?'YOUR MOVE':'X4 PRO MOVE';feedback.textContent=d.myTurn?'Choose a target.':'Waiting for the X4 Pro.';}
+        else if(d.phase==='waiting'&&view&&view.ready){turn.textContent='X4 Pro is placing its fleet.';}
+        else turn.textContent='';
+        renderBoards();
+      }
+      async function connect(){
+        const current=++generation;token='';revision=0;view=null;state=null;pending=false;controls();renderBoards();status.textContent='Connecting…';
+        try{
+          const response=await fetch('/battleship/session',{cache:'no-store',credentials:'same-origin'});if(!response.ok)throw new Error('session');const value=await response.text();if(!/^[a-f0-9]{32}$/.test(value))throw new Error('session');if(hidden||current!==generation)return;
+          token=value;socket=new WebSocket(`ws://${location.hostname}:81/battleship`);const active=socket;
+          socket.onopen=()=>{if(current===generation){controls();feedback.textContent='Choose your player. Your name and face appear on the X4 Pro.';}};
+          socket.onmessage=event=>{
+            if(current!==generation)return;let d;try{d=JSON.parse(event.data);}catch{return;}if(!d||typeof d!=='object')return;
+            if(d.type==='state')applyState(d);
+            else if(d.type==='placement'&&validView(d)){view=d;revision=d.revision;pending=false;d.slots.forEach((n,i)=>slots[i].value=n);renderBoards();feedback.textContent=d.ready?'Fleet confirmed. X4 Pro is setting its fleet.':d.accepted?'Accepted by X4 Pro.':'Move refused. Check overlap and board edges.';}
+            else if(d.type==='error'){pending=false;controls();feedback.textContent='Request refused. Check turn/state or reconnect.';}
           };
-          socket.onclose = () => {
-            if (current !== generation) return;
-            token = ''; pending = false; controls();
-            status.textContent = 'Connection lost · reconnecting…'; phase.textContent = 'offline'; turn.textContent = '';
-            feedback.textContent = 'Unconfirmed placement is cleared on disconnect.';
-            if (!hidden) retry = setTimeout(connect, 2000);
-          };
-          socket.onerror = () => active.close();
-        } catch {
-          if (!hidden && current === generation) { status.textContent = 'Connection unavailable · retrying…'; retry = setTimeout(connect, 2000); }
-        }
+          socket.onclose=()=>{if(current!==generation)return;token='';pending=false;controls();status.textContent='Connection lost · reconnecting…';phase.textContent='offline';turn.textContent='';feedback.textContent='Reconnect starts a fresh browser ownership session.';if(!hidden)retry=setTimeout(connect,2000);};
+          socket.onerror=()=>active.close();
+        }catch{if(!hidden&&current===generation){status.textContent='Connection unavailable · retrying…';retry=setTimeout(connect,2000);}}
       }
-      window.addEventListener('pagehide', () => {
-        hidden = true; ++generation; clearTimeout(retry); token = ''; controls();
-        if (socket) { socket.onclose = null; socket.close(); }
-      });
-      window.addEventListener('pageshow', event => { if (event.persisted) { hidden = false; connect(); } });
+      window.addEventListener('pagehide',()=>{hidden=true;++generation;clearTimeout(retry);token='';controls();if(socket){socket.onclose=null;socket.close();}});
+      window.addEventListener('pageshow',e=>{if(e.persisted){hidden=false;connect();}});
       connect();
     </script>
   </body>
