@@ -32,6 +32,12 @@ mkdir -p "$BUILD_DIR"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 \
   ../../src/apps_local/player/PlayerName.cpp ../../src/apps_local/player/PlayerStore.cpp \
+  ../../src/apps_local/player/PlayerStoreDirectory.cpp test_directory.cpp \
+  -lsqlite3 -o "$BUILD_DIR/test_directory"
+"$BUILD_DIR/test_directory"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 \
+  ../../src/apps_local/player/PlayerName.cpp ../../src/apps_local/player/PlayerStore.cpp \
   ../../src/apps_local/player/PlayerAuth.cpp test_auth.cpp \
   -lsqlite3 -lwolfssl -o "$BUILD_DIR/test_auth"
 "$BUILD_DIR/test_auth"

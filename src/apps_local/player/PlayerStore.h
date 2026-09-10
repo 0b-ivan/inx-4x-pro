@@ -52,6 +52,10 @@ class PlayerStore {
   StoreResult findPlayerByName(const char* name, Player& out) const;
   StoreResult getPinCredential(const PlayerId& id, PinCredential& out) const;
 
+  // Allocation-free directory lookup for the player picker. Results are
+  // ordered case-insensitively by visible name and truncated to `capacity`.
+  StoreResult listPlayers(Player* out, size_t capacity, size_t& count) const;
+
   StoreResult getGameStats(const PlayerId& playerId, GameId game, GameStats& out) const;
   StoreResult saveGameStats(const GameStats& value);
 
