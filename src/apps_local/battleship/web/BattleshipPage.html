@@ -110,10 +110,10 @@
         controls();
       }
       function applyState(d){
-        if(!['waiting','placement','playing','finished'].includes(d.phase)||typeof d.myTurn!=='boolean'||!Number.isInteger(d.winner))return;
+        if(!['waiting','placement','playing','finished'].includes(d.phase)||typeof d.myTurn!=='boolean'||!Number.isInteger(d.w))return;
         const board=decode64(d.b,25),incoming=decode64(d.i,13);if(!board||!incoming)return;
-        state={phase:d.phase,myTurn:d.myTurn,winner:d.winner,board,incoming};phase.textContent=d.phase;status.textContent='Connected to X4 Pro';
-        if(d.phase==='finished'){turn.textContent=d.winner===1?'YOU WIN':'X4 PRO WINS';feedback.textContent=turn.textContent;}
+        state={phase:d.phase,myTurn:d.myTurn,winner:d.w,board,incoming};phase.textContent=d.phase;status.textContent='Connected to X4 Pro';
+        if(d.phase==='finished'){turn.textContent=d.w===1?'YOU WIN':'X4 PRO WINS';feedback.textContent=turn.textContent;}
         else if(d.phase==='playing'){turn.textContent=d.myTurn?'YOUR MOVE':'X4 PRO MOVE';feedback.textContent=d.myTurn?'Choose a target.':'Waiting for the X4 Pro.';}
         else if(d.phase==='waiting'&&view&&view.ready){turn.textContent='X4 Pro is placing its fleet.';}
         else turn.textContent='';
