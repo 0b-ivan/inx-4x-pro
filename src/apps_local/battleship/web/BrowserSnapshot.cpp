@@ -7,14 +7,23 @@
 
 namespace bshipweb {
 namespace {
-char hexDigit(const uint8_t value) { return static_cast<char>(value < 10 ? '0' + value : 'a' + value - 10); }
+constexpr char kB64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-void encodeMask(const uint8_t* bytes, char* out) {
-  for (int i = 0; i < 13; ++i) {
-    out[i * 2] = hexDigit(static_cast<uint8_t>(bytes[i] >> 4));
-    out[i * 2 + 1] = hexDigit(static_cast<uint8_t>(bytes[i] & 0x0f));
+size_t encode64(const uint8_t* bytes, const size_t size, char* out) {
+  size_t at = 0;
+  uint32_t acc = 0;
+  int bits = 0;
+  for (size_t i = 0; i < size; ++i) {
+    acc = (acc << 8) | bytes[i];
+    bits += 8;
+    while (bits >= 6) {
+      bits -= 6;
+      out[at++] = kB64[(acc >> bits) & 63u];
+    }
   }
-  out[26] = '\0';
+  if (bits) out[at++] = kB64[(acc << (6 - bits)) & 63u];
+  out[at] = '\0';
+  return at;
 }
 }  // namespace
 
@@ -41,8 +50,6 @@ BrowserSnapshot browserSnapshot(const bship::Game& game, const bool connected) {
     result.shotsAtX4[i] = game.side[x4Side].shots[i];
     result.shotsAtBrowser[i] = game.side[browserSide].shots[i];
   }
-
-  // Reveal hit information only for cells that have actually been fired at.
   for (int cell = 0; cell < bship::kCells; ++cell) {
     if (!bship::shotAt(game.side[x4Side], cell)) continue;
     if (bship::shipAt(game.side[x4Side].fleet, cell) < 0) continue;
@@ -75,19 +82,24 @@ size_t serializeSnapshot(const BrowserSnapshot& snapshot, char* out, const size_
       break;
   }
 
-  char shots[27];
-  char hits[27];
-  char incoming[27];
-  encodeMask(snapshot.shotsAtX4, shots);
-  encodeMask(snapshot.hitsAtX4, hits);
-  encodeMask(snapshot.shotsAtBrowser, incoming);
+  // Two bits per X4 cell: bit0=shot, bit1=hit. 100 cells -> 25 bytes -> 34 chars.
+  uint8_t board[25] = {};
+  for (int cell = 0; cell < bship::kCells; ++cell) {
+    const bool shot = (snapshot.shotsAtX4[cell / 8] & (1u << (cell % 8))) != 0;
+    const bool hit = (snapshot.hitsAtX4[cell / 8] & (1u << (cell % 8))) != 0;
+    const uint8_t value = static_cast<uint8_t>((shot ? 1u : 0u) | (hit ? 2u : 0u));
+    const int bit = cell * 2;
+    board[bit / 8] |= static_cast<uint8_t>(value << (bit % 8));
+  }
 
-  const int count = snprintf(
-      out, capacity,
-      "{\"type\":\"state\",\"phase\":\"%s\",\"connected\":%s,\"myTurn\":%s,\"winner\":%d,"
-      "\"shots\":\"%s\",\"hits\":\"%s\",\"incoming\":\"%s\"}",
-      phase, snapshot.connected ? "true" : "false", snapshot.myTurn ? "true" : "false", snapshot.winner, shots, hits,
-      incoming);
+  char board64[35];
+  char incoming64[19];
+  encode64(board, sizeof(board), board64);
+  encode64(snapshot.shotsAtBrowser, sizeof(snapshot.shotsAtBrowser), incoming64);
+
+  const int count = snprintf(out, capacity,
+                             "{\"type\":\"state\",\"phase\":\"%s\",\"myTurn\":%s,\"winner\":%d,\"b\":\"%s\",\"i\":\"%s\"}",
+                             phase, snapshot.myTurn ? "true" : "false", snapshot.winner, board64, incoming64);
   if (count < 0 || static_cast<size_t>(count) >= capacity) {
     out[0] = '\0';
     return 0;
