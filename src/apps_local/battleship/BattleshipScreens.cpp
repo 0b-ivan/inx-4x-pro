@@ -1,6 +1,7 @@
 #include "BattleshipScreens.h"
 
 #include <cstdio>
+#include <cstring>
 
 #include "../link/LinkScreens.h"
 
@@ -206,7 +207,13 @@ fui::Rect buildBoardChrome(toybox::Screen& screen, const BoardModel& model) {
   const fui::Rect right = fui::makeRect(static_cast<int16_t>(footer.right() - half), footer.y, half, footer.height);
 
   fui::ButtonProps primary;
-  primary.label = model.status;
+  // Once the round is over the left half is an outcome, never a second copy of
+  // the action on the right. Treat an old caller still passing PLAY AGAIN as
+  // status as GAME OVER so the visible PLAY AGAIN label always identifies the
+  // actual tappable control.
+  primary.label = model.gameOver && model.status != nullptr && std::strcmp(model.status, "PLAY AGAIN") == 0
+                      ? "GAME OVER"
+                      : model.status;
   primary.borderEdges = fui::EdgesNone;
 
   fui::ButtonProps secondary;
