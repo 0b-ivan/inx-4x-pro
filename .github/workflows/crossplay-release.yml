@@ -38,8 +38,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Tags, for host-tests/release below: without them its notes gate
-          # cannot see what the previous tag published and skips itself.
           fetch-depth: 0
 
       - name: The tag must be the version being built
@@ -118,15 +116,17 @@ jobs:
           body: |
             CrossPlay pre-release for **Xteink X4 Pro**.
 
-            ### What is new in 1.14.0-alpha.4
+            ### What is new in 1.14.0-alpha.5
 
             - Browser player profiles use exactly three validated slots (0–13); the X4 Pro derives the name and avatar.
             - Place and move your own five ships in the browser, then confirm the fleet over WebSocket.
+            - After the browser confirms its fleet, the X4 Pro now leaves the network waiting screen and enters its own fleet placement.
+            - The X4 can shuffle, move and rotate its fleet while the browser session stays connected.
+            - Once both fleets are confirmed, the session advances to the playing state. Shooting is the next implementation step.
             - The X4 Pro validates board bounds, overlap, placement phase and command revision before applying a move.
             - A session capability and a single browser owner guard commands; private placement replies go only to that browser.
-            - Unconfirmed placement is cleared on disconnect. Confirmed placement stays locked until the host leaves the session.
             - Hidden X4 fleet positions and raw game state never cross the browser transport.
-            - This alpha covers browser setup only: X4 fleet setup and shooting are not available yet.
+            - Fixed the X4 placement build by including the shared `Rect` definition in the browser activity header.
             - Hotspot, local Wi-Fi, existing ESP-NOW play and Developer Mode radio ownership are preserved.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
