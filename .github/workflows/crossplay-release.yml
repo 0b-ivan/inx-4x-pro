@@ -118,15 +118,16 @@ jobs:
           body: |
             CrossPlay pre-release for **Xteink X4 Pro**.
 
-            ### What is new in 1.14.0-alpha.3
+            ### What is new in 1.14.0-alpha.4
 
-            - Battleship Browser Crossplay now streams a read-only game snapshot over WebSocket.
-            - The browser shows connection, phase and turn state without exposing hidden fleet positions.
-            - Browser moves are intentionally not enabled yet; Hotspot and local Wi-Fi can be tested.
-            - OTA Updates now offers Stable and Nightly / Pre-release channels.
-            - Compatible releases can be selected explicitly, including upgrade, downgrade and reinstall.
-            - Manual downgrade/reinstall bypasses only the version-direction check; chip, board-tag,
-              image-size, OTA-slot and image validation remain enforced.
+            - Browser player profiles use exactly three validated slots (0–13); the X4 Pro derives the name and avatar.
+            - Place and move your own five ships in the browser, then confirm the fleet over WebSocket.
+            - The X4 Pro validates board bounds, overlap, placement phase and command revision before applying a move.
+            - A session capability and a single browser owner guard commands; private placement replies go only to that browser.
+            - Unconfirmed placement is cleared on disconnect. Confirmed placement stays locked until the host leaves the session.
+            - Hidden X4 fleet positions and raw game state never cross the browser transport.
+            - This alpha covers browser setup only: X4 fleet setup and shooting are not available yet.
+            - Hotspot, local Wi-Fi, existing ESP-NOW play and Developer Mode radio ownership are preserved.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.

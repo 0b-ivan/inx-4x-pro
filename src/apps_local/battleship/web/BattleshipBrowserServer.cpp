@@ -5,6 +5,10 @@
 #include <ESPmDNS.h>
 #include <Logging.h>
 #include <WiFi.h>
+#include <esp_system.h>
+
+#include <cstdio>
+#include <cstring>
 
 #include "../../../DevMode.h"
 #include "BattleshipPageHtml.generated.h"
@@ -24,6 +28,9 @@ Server::~Server() { stop(); }
 bool Server::begin(const NetworkMode mode) {
   if (running_) return true;
 
+  owner_ = -1;
+  commandSeen_ = false;
+  rotateToken();
   mode_ = mode;
   clientSeen_ = false;
   ssid_.clear();
@@ -52,15 +59,23 @@ bool Server::begin(const NetworkMode mode) {
   http_.begin();
   ws_.begin();
   ws_.enableHeartbeat(5000, 3000, 2);
-  ws_.onEvent([this](uint8_t client, WStype_t type, uint8_t*, size_t) {
-    // Text, binary and fragmented application messages never mutate the game.
+  ws_.onEvent([this](uint8_t client, WStype_t type, uint8_t* payload, size_t size) {
     if (type == WStype_CONNECTED) {
       clientSeen_ = true;
       snapshot_.connected = true;
       sendSnapshot(client);
     } else if (type == WStype_DISCONNECTED) {
       clientSeen_ = ws_.connectedClients() != 0;
+      if (owner_ == client) {
+        owner_ = -1;
+        commandSeen_ = false;
+        rotateToken();
+        if (disconnect_) disconnect_(context_);
+      }
+    } else if (type == WStype_TEXT) {
+      receive(client, payload, size);
     }
+    // Binary and fragmented messages are never commands.
   });
   running_ = true;
 
@@ -75,6 +90,8 @@ void Server::releaseDevMode() {
 }
 
 void Server::stop() {
+  owner_ = -1;
+  token_[0] = 0;
   const bool hadServer = running_ || dnsRunning_;
   running_ = false;
   clientSeen_ = false;
@@ -124,17 +141,59 @@ void Server::publish(const BrowserSnapshot& snapshot) {
   if (size) ws_.broadcastTXT(message, size);
 }
 
+void Server::rotateToken() {
+  for (int i = 0; i < 4; ++i) snprintf(token_ + i * 8, 9, "%08lx", static_cast<unsigned long>(esp_random()));
+}
+
+void Server::receive(uint8_t client, const uint8_t* payload, size_t size) {
+  Command command;
+  if (!running_ || !apply_ || !parseCommand(payload, size, command) || strcmp(command.token, token_) ||
+      (owner_ >= 0 && owner_ != client) || (owner_ < 0 && command.kind != CommandKind::Profile)) {
+    char error[] = "{\"type\":\"error\"}";
+    ws_.sendTXT(client, error, sizeof(error) - 1);
+    return;
+  }
+  const uint32_t now = millis();
+  if (commandSeen_ && static_cast<uint32_t>(now - lastCommandMs_) < 100) {
+    char error[] = "{\"type\":\"error\"}";
+    ws_.sendTXT(client, error, sizeof(error) - 1);
+    return;
+  }
+  commandSeen_ = true;
+  lastCommandMs_ = now;
+  PlacementView view;
+  const bool accepted = apply_(context_, command, view);
+  if (owner_ < 0) {
+    if (!accepted) {
+      char error[] = "{\"type\":\"error\"}";
+      ws_.sendTXT(client, error, sizeof(error) - 1);
+      return;
+    }
+    owner_ = client;
+  }
+  const size_t n = serializePlacement(view, accepted, reply_, sizeof(reply_));
+  if (n) ws_.sendTXT(client, reply_, n);
+}
+
 void Server::configureRoutes() {
   if (routesConfigured_) return;
 
   http_.on("/", HTTP_GET, [this] { serveGamePage(); });
   http_.on(kGamePath, HTTP_GET, [this] { serveGamePage(); });
+  http_.on("/battleship/session", HTTP_GET, [this] {
+    // Same-origin fetch supplies a CSRF capability; never expose this through CORS.
+    http_.sendHeader("Cache-Control", "no-store");
+    http_.sendHeader("Cross-Origin-Resource-Policy", "same-origin");
+    http_.send(200, "text/plain", token_);
+  });
   http_.onNotFound([this] { handleNotFound(); });
   routesConfigured_ = true;
 }
 
 void Server::serveGamePage() {
   http_.sendHeader("Content-Encoding", "gzip");
+  http_.sendHeader("Cache-Control", "no-store");
+  http_.sendHeader("X-Frame-Options", "DENY");
   http_.send_P(200, "text/html", BattleshipPageHtml, BattleshipPageHtmlCompressedSize);
 }
 

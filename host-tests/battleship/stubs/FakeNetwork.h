@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 #define PROGMEM
@@ -9,6 +10,8 @@
 #define LOG_ERR(...) ((void)0)
 constexpr int WIFI_AP = 1, WIFI_STA = 2, WIFI_OFF = 0, WL_CONNECTED = 3, HTTP_GET = 0;
 inline void delay(int) {}
+inline uint32_t clockMs = 0;
+inline uint32_t millis() { return clockMs; }
 struct IPAddress {
   std::string toString() const { return "192.168.4.1"; }
 };
@@ -38,9 +41,14 @@ struct FakeMdns {
 };
 inline FakeMdns MDNS;
 struct WebServer {
-  explicit WebServer(int) {}
+  inline static WebServer* instance = nullptr;
+  std::map<std::string, std::function<void()>> routes;
+  std::string response;
+  explicit WebServer(int) { instance = this; }
   template <class F>
-  void on(const char*, int, F) {}
+  void on(const char* path, int, F fn) {
+    routes[path] = fn;
+  }
   template <class F>
   void onNotFound(F) {}
   void begin() {}
@@ -48,7 +56,7 @@ struct WebServer {
   void handleClient() {}
   void sendHeader(const char*, const char*) {}
   void send_P(int, const char*, const char*, size_t) {}
-  void send(int, const char*, const char*) {}
+  void send(int, const char*, const char* text) { response = text; }
   int method() { return HTTP_GET; }
 };
 enum WStype_t { WStype_CONNECTED, WStype_DISCONNECTED, WStype_TEXT, WStype_BIN, WStype_FRAGMENT_TEXT_START };
@@ -56,6 +64,7 @@ struct WebSocketsServer {
   inline static WebSocketsServer* instance = nullptr;
   std::function<void(uint8_t, WStype_t, uint8_t*, size_t)> callback;
   std::vector<std::string> messages;
+  std::vector<int> recipients;
   int clients = 0;
   bool closed = false;
   explicit WebSocketsServer(int) { instance = this; }
@@ -71,14 +80,19 @@ struct WebSocketsServer {
     closed = true;
   }
   int connectedClients() { return clients; }
-  void sendTXT(uint8_t, char* data, size_t size) { messages.emplace_back(data, size); }
-  void broadcastTXT(char* data, size_t size) {
-    if (clients) messages.emplace_back(data, size);
+  void sendTXT(uint8_t client, char* data, size_t size) {
+    messages.emplace_back(data, size);
+    recipients.push_back(client);
   }
-  void event(WStype_t type) {
+  void broadcastTXT(char* data, size_t size) {
+    if (clients) {
+      messages.emplace_back(data, size);
+      recipients.push_back(-1);
+    }
+  }
+  void event(WStype_t type, uint8_t client = 0, std::string payload = "") {
     if (type == WStype_CONNECTED) ++clients;
     if (type == WStype_DISCONNECTED) --clients;
-    uint8_t payload[] = "{\"type\":\"fire\",\"cell\":42}";
-    callback(0, type, payload, sizeof(payload) - 1);
+    callback(client, type, reinterpret_cast<uint8_t*>(payload.data()), payload.size());
   }
 };

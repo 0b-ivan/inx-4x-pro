@@ -4,6 +4,7 @@
 #include "../../ui/ToyboxScreen.h"
 #include "../BattleshipCore.h"
 #include "BattleshipBrowserServer.h"
+#include "BrowserPlayer.h"
 
 // The transport chooser behind Battleship's existing PLAY NEARBY row.
 // X4 Pro returns immediately to the existing ESP-NOW LinkActivity path;
@@ -41,6 +42,7 @@ class BattleshipLocalPlayActivity final : public Activity {
   bool interactionsReady_ = false;
   int selected_ = 0;
 
+  bshipweb::BrowserPlayer browserPlayer_;
   bship::Game browserGame_;
   bshipweb::Server browser_;
   bool devModePaused_ = false;

@@ -5,8 +5,11 @@ header = (root / "BattleshipBrowserServer.h").read_text()
 page = (root / "BattleshipPage.html").read_text()
 assert "bship::Game" not in server + header
 assert "serializeSnapshot(snapshot_," in server
-assert "WStype_TEXT" not in server and "WStype_BIN" not in server
+assert "type == WStype_TEXT" in server and "type == WStype_BIN" not in server
 assert "ws_.close()" in server and "ws_.enableHeartbeat" in server
-assert "fetch(" not in page and ".send(" not in page
+assert "parseCommand(payload, size, command)" in server
+assert "strcmp(command.token, token_)" in server
+assert "owner_ != client" in server
+assert "broadcastTXT(reply_" not in server
 assert "socket.onclose" in page and "socket.onmessage" in page
-print("Browser boundary: DTO-only transport, no game actions, reconnect and cleanup passed")
+print("Browser boundary: DTO-only transport, validated commands, reconnect and cleanup passed")

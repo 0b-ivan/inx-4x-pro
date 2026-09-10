@@ -76,6 +76,14 @@
         color: var(--muted);
         line-height: 1.5;
       }
+      fieldset { margin: 18px 0; border: 1px solid var(--line); }
+      label { display: inline-block; margin: 6px 4px; }
+      select, button { font: inherit; padding: 8px; }
+      button { cursor: pointer; }
+      button:disabled { cursor: default; opacity: .45; }
+      #grid { display: grid; grid-template-columns: repeat(10, 1fr); margin: 12px 0; }
+      #grid button { padding: 0; aspect-ratio: 1; border: 1px solid var(--muted); font-size: 11px; }
+      #grid .ship { background: var(--ink); color: var(--panel); }
       code {
         color: var(--ink);
         font-weight: 700;
@@ -90,41 +98,129 @@
       </header>
       <div class="status"><span class="dot"></span><span id="status">Connecting…</span></div>
       <p class="copy">
-        Read-only preview. Ship placement and turns come next.<br />
+        Choose your player and place your ships. The X4 Pro checks each move.<br />
         Device status: <code id="phase">offline</code><br />
         <span id="turn"></span>
       </p>
+      <fieldset id="profile" disabled>
+        <legend>YOUR PLAYER</legend>
+        <label>Hair <select id="hair"></select></label>
+        <label>Eyes <select id="eyes"></select></label>
+        <label>Mouth <select id="mouth"></select></label>
+        <button id="save" type="button">Use player</button>
+      </fieldset>
+      <fieldset id="placement" disabled>
+        <legend>YOUR FLEET</legend>
+        <label>Ship <select id="ship">
+          <option value="0">Carrier · 5</option><option value="1">Battleship · 4</option>
+          <option value="2">Cruiser · 3</option><option value="3">Submarine · 3</option>
+          <option value="4">Destroyer · 2</option>
+        </select></label>
+        <label>Direction <select id="direction"><option value="1">Across</option><option value="0">Down</option></select></label>
+        <p>Tap a starting cell. To move a ship, select it and tap again.</p>
+        <div id="grid" aria-label="Your placement grid"></div>
+        <button id="ready" type="button" disabled>Confirm fleet</button>
+      </fieldset>
+      <p id="feedback" role="status">Waiting for connection.</p>
     </main>
     <script>
-      const status = document.getElementById('status');
-      const phase = document.getElementById('phase');
-      const turn = document.getElementById('turn');
-      let socket;
-      let retry;
-      function connect() {
+      const byId = id => document.getElementById(id);
+      const status = byId('status'), phase = byId('phase'), turn = byId('turn');
+      const profile = byId('profile'), placement = byId('placement'), feedback = byId('feedback');
+      const slots = ['hair', 'eyes', 'mouth'].map(byId);
+      for (const select of slots) for (let i = 0; i < 14; i++) {
+        const option = document.createElement('option');
+        option.value = i; option.textContent = String(i + 1); select.appendChild(option);
+      }
+      const lengths = [5, 4, 3, 3, 2];
+      const cells = [];
+      for (let cell = 0; cell < 100; cell++) {
+        const button = document.createElement('button');
+        button.type = 'button'; button.textContent = `${String.fromCharCode(65 + Math.floor(cell / 10))}${cell % 10 + 1}`;
+        button.onclick = () => send('place', Number(byId('ship').value), cell, Number(byId('direction').value));
+        byId('grid').appendChild(button); cells.push(button);
+      }
+      let socket, retry, token = '', revision = 0, pending = false, view = null, generation = 0, hidden = false;
+      function controls() {
+        const online = socket && socket.readyState === WebSocket.OPEN && token && !pending;
+        profile.disabled = !online || Boolean(view && view.ready);
+        placement.disabled = !online || !view || !view.profile || view.ready;
+        byId('ready').disabled = placement.disabled || !view || view.ships.some(ship => ship[0] === 255);
+      }
+      function send(kind, ...values) {
+        if (!socket || socket.readyState !== WebSocket.OPEN || !token || pending) return;
+        pending = true; controls();
+        socket.send(JSON.stringify([kind, token, revision, ...values]));
+      }
+      byId('save').onclick = () => send('profile', ...slots.map(select => Number(select.value)));
+      byId('ready').onclick = () => send('ready');
+      function validView(data) {
+        return Number.isInteger(data.revision) && data.revision >= 0 && data.revision <= 4294967295 &&
+          typeof data.profile === 'boolean' && typeof data.ready === 'boolean' && typeof data.accepted === 'boolean' &&
+          Array.isArray(data.slots) && data.slots.length === 3 && data.slots.every(n => Number.isInteger(n) && n >= 0 && n <= 13) &&
+          Array.isArray(data.ships) && data.ships.length === 5 && data.ships.every(s => Array.isArray(s) && s.length === 2 &&
+            Number.isInteger(s[0]) && (s[0] === 255 || s[0] >= 0 && s[0] < 100) && (s[1] === 0 || s[1] === 1));
+      }
+      async function connect() {
+        const current = ++generation;
+        token = ''; revision = 0; view = null; pending = false; controls();
+        cells.forEach(cell => cell.className = '');
         status.textContent = 'Connecting…';
-        socket = new WebSocket(`ws://${location.hostname}:81/battleship`);
-        socket.onmessage = (event) => {
-          let data;
-          try { data = JSON.parse(event.data); } catch { return; }
-          if (data.type !== 'state' || !['waiting', 'placement', 'playing', 'finished'].includes(data.phase)) return;
-          status.textContent = data.connected ? 'Connected to X4 Pro' : 'Waiting for X4 Pro';
-          phase.textContent = data.phase;
-          turn.textContent = data.phase === 'playing' ? (data.myTurn ? 'Your turn · read-only preview' : 'Waiting for X4 Pro') : 'Browser moves are not available yet.';
-        };
-        socket.onclose = () => {
-          status.textContent = 'Connection lost · reconnecting…';
-          phase.textContent = 'offline';
-          turn.textContent = '';
-          retry = setTimeout(connect, 2000);
-        };
-        socket.onerror = () => socket.close();
+        try {
+          const response = await fetch('/battleship/session', {cache: 'no-store', credentials: 'same-origin'});
+          if (!response.ok) throw new Error('session');
+          const value = await response.text();
+          if (!/^[a-f0-9]{32}$/.test(value)) throw new Error('session');
+          if (hidden || current !== generation) return;
+          token = value;
+          socket = new WebSocket(`ws://${location.hostname}:81/battleship`);
+          const active = socket;
+          socket.onopen = () => { if (current === generation) { controls(); feedback.textContent = 'Choose your player. Your name and face appear on the X4 Pro.'; } };
+          socket.onmessage = event => {
+            if (current !== generation) return;
+            let data;
+            try { data = JSON.parse(event.data); } catch { return; }
+            if (!data || typeof data !== 'object') return;
+            if (data.type === 'state' && ['waiting', 'placement', 'playing', 'finished'].includes(data.phase)) {
+              status.textContent = data.connected ? 'Connected to X4 Pro' : 'Waiting for X4 Pro';
+              phase.textContent = data.phase;
+              turn.textContent = 'Shooting is not available in this version.';
+            } else if (data.type === 'placement' && validView(data)) {
+              view = data; revision = data.revision; pending = false;
+              data.slots.forEach((n, i) => slots[i].value = n);
+              cells.forEach(cell => cell.className = '');
+              data.ships.forEach((ship, index) => {
+                if (ship[0] === 255) return;
+                for (let i = 0; i < lengths[index]; i++) {
+                  const cell = ship[0] + i * (ship[1] ? 1 : 10);
+                  if (cells[cell]) cells[cell].className = 'ship';
+                }
+              });
+              feedback.textContent = data.ready ? 'Fleet confirmed. Waiting for X4 Pro setup; shooting comes next.' :
+                data.accepted ? 'Accepted by X4 Pro.' : 'Move refused. Check overlap and board edges, then try again.';
+              controls();
+            } else if (data.type === 'error') {
+              pending = false; controls();
+              feedback.textContent = 'Request refused. Another browser may own this player. Reconnect to start again.';
+            }
+          };
+          socket.onclose = () => {
+            if (current !== generation) return;
+            token = ''; pending = false; controls();
+            status.textContent = 'Connection lost · reconnecting…'; phase.textContent = 'offline'; turn.textContent = '';
+            feedback.textContent = 'Unconfirmed placement is cleared on disconnect.';
+            if (!hidden) retry = setTimeout(connect, 2000);
+          };
+          socket.onerror = () => active.close();
+        } catch {
+          if (!hidden && current === generation) { status.textContent = 'Connection unavailable · retrying…'; retry = setTimeout(connect, 2000); }
+        }
       }
       window.addEventListener('pagehide', () => {
-        clearTimeout(retry);
+        hidden = true; ++generation; clearTimeout(retry); token = ''; controls();
         if (socket) { socket.onclose = null; socket.close(); }
       });
-      window.addEventListener('pageshow', (event) => { if (event.persisted) connect(); });
+      window.addEventListener('pageshow', event => { if (event.persisted) { hidden = false; connect(); } });
       connect();
     </script>
   </body>

@@ -9,11 +9,12 @@
 #include <WebSocketsServer.h>
 #endif
 
+#include "BrowserCommands.h"
 #include "BrowserSnapshot.h"
 
 namespace bshipweb {
 
-// Dedicated read-only Battleship transport; accepts only the filtered DTO.
+// Dedicated Battleship transport; only explicit command and view DTOs cross here.
 class Server final {
  public:
   enum class NetworkMode : uint8_t { ExistingWifi, Hotspot };
@@ -30,6 +31,12 @@ class Server final {
   void stop();
   void loop();
   void publish(const BrowserSnapshot& snapshot);
+
+  void setCommands(void* context, bool (*apply)(void*, const Command&, PlacementView&), void (*disconnect)(void*)) {
+    context_ = context;
+    apply_ = apply;
+    disconnect_ = disconnect;
+  }
 
   bool running() const { return running_; }
   bool hotspot() const { return mode_ == NetworkMode::Hotspot; }
@@ -49,6 +56,15 @@ class Server final {
   void releaseDevMode();
 
   void sendSnapshot(uint8_t client);
+  void receive(uint8_t client, const uint8_t* payload, size_t size);
+  void rotateToken();
+  char token_[33] = {};
+  int owner_ = -1;
+  uint32_t lastCommandMs_ = 0;
+  bool commandSeen_ = false;
+  // Fixed member buffer avoids growing the activity-loop stack or per-message heap.
+  char reply_[256] = {};
+
   WebSocketsServer ws_{81};
   WebServer http_{80};
   DNSServer dns_;
@@ -60,6 +76,9 @@ class Server final {
   bool devModePaused_ = false;
 #endif
 
+  void* context_ = nullptr;
+  bool (*apply_)(void*, const Command&, PlacementView&) = nullptr;
+  void (*disconnect_)(void*) = nullptr;
   BrowserSnapshot snapshot_;
   NetworkMode mode_ = NetworkMode::ExistingWifi;
   bool running_ = false;

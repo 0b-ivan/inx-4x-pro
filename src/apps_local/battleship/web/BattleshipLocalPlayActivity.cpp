@@ -12,6 +12,7 @@
 #include "../../../components/UITheme.h"
 #include "../../../fontIds.h"
 #include "../../../util/QrUtils.h"
+#include "../../player/PlayerAvatar.h"
 #include "../../ui/Toybox.h"
 #include "../../ui/ToyboxFonts.h"
 #include "../../ui/ToyboxTheme.h"
@@ -64,6 +65,22 @@ void BattleshipLocalPlayActivity::onEnter() {
   toybox::ensureFonts(renderer);
   stage_ = Stage::Transport;
   selected_ = 0;
+  browser_.setCommands(
+      this,
+      [](void* context, const bshipweb::Command& command, bshipweb::PlacementView& view) {
+        auto& activity = *static_cast<BattleshipLocalPlayActivity*>(context);
+        RenderLock lock(activity);
+        const bool accepted = activity.browserPlayer_.apply(activity.browserGame_, command);
+        view = activity.browserPlayer_.view();
+        if (accepted) activity.requestUpdate();
+        return accepted;
+      },
+      [](void* context) {
+        auto& activity = *static_cast<BattleshipLocalPlayActivity*>(context);
+        RenderLock lock(activity);
+        if (!activity.browserPlayer_.view().ready) activity.browserPlayer_.reset();
+        activity.requestUpdate();
+      });
   requestUpdate();
 }
 
@@ -170,6 +187,9 @@ void BattleshipLocalPlayActivity::startHotspotBrowser() {
 
 void BattleshipLocalPlayActivity::enterBrowserWaiting() {
   bship::reset(browserGame_);
+  // Browser owns side 1 and places first; the X4 fleet stays entirely on the host.
+  browserGame_.turn = 1;
+  browserPlayer_.reset();
   browser_.publish(bshipweb::browserSnapshot(browserGame_, false));
   stage_ = Stage::BrowserWaiting;
   selected_ = 0;
@@ -270,12 +290,27 @@ void BattleshipLocalPlayActivity::drawBrowserWaiting() {
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, width, metrics.headerHeight}, "BATTLESHIP", nullptr);
   GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, width, metrics.tabBarHeight},
-                    browser_.hotspot() ? "BROWSER · HOTSPOT" : "BROWSER · WI-FI");
+                    browserPlayer_.view().ready     ? "BROWSER FLEET READY"
+                    : browserPlayer_.view().profile ? "BROWSER PLACING SHIPS"
+                    : browser_.hotspot()            ? "BROWSER · HOTSPOT"
+                                                    : "BROWSER · WI-FI");
 
   int y = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 2;
-  renderer.drawCenteredText(UI_10_FONT_ID, y, browser_.clientSeen() ? "BROWSER CONNECTED" : "WAITING FOR BROWSER", true,
-                            EpdFontFamily::BOLD);
-  y += renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing;
+  renderer.drawCenteredText(UI_10_FONT_ID, y,
+                            browserPlayer_.view().profile ? browserPlayer_.name()
+                            : browser_.clientSeen()       ? "BROWSER CONNECTED"
+                                                          : "WAITING FOR BROWSER",
+                            true, EpdFontFamily::BOLD);
+  int statusHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  if (browserPlayer_.view().profile) {
+    auto target = toybox::makeTarget(renderer);
+    const int16_t pixels = player::avatarPixels(player::AvatarSize::Row);
+    player::drawAvatar(
+        target, fui::Rect{static_cast<int16_t>(metrics.verticalSpacing), static_cast<int16_t>(y), pixels, pixels},
+        browserPlayer_.name(), player::AvatarSize::Row);
+    if (pixels > statusHeight) statusHeight = pixels;
+  }
+  y += statusHeight + metrics.verticalSpacing;
 
   const std::string ipUrl = std::string("http://") + browser_.ip() + "/battleship";
   if (browser_.hotspot()) {
