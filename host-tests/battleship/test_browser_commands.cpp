@@ -5,18 +5,26 @@
 
 #include "../../src/apps_local/battleship/web/BrowserPlayer.h"
 using namespace bshipweb;
+
 static bool parse(const std::string& text, Command& c) {
   return parseCommand(reinterpret_cast<const uint8_t*>(text.data()), text.size(), c);
 }
+
 int main() {
   const std::string token = "\"0123456789abcdef0123456789abcdef\"";
   Command c;
   assert(parse("[\"profile\"," + token + ",0,0,13,0]", c));
   assert(c.value[1] == 13);
+  assert(parse("[\"fire\"," + token + ",7,99]", c));
+  assert(c.kind == CommandKind::Fire && c.revision == 7 && c.value[0] == 99);
+  assert(!parse("[\"fire\"," + token + ",7,100]", c));
+  assert(!parse("[\"fire\"," + token + ",7]", c));
+  assert(!parse("[\"fire\"," + token + ",7,1,2]", c));
+
   for (const auto& bad : {"-1", "14", "256", "1.0", "1e0", "true", "null", "\"1\"", "01", "42949672960", "[]", "{}"}) {
     assert(!parse("[\"profile\"," + token + ",0,0," + bad + ",0]", c));
   }
-  for (const auto& bad : {"[\"fire\",", "[\"name\",", "[\"avatar\","})
+  for (const auto& bad : {"[\"name\",", "[\"avatar\","})
     assert(!parse(std::string(bad) + token + ",0,0,0,0]", c));
   assert(!parse("[\"profile\"," + token + ",0,0,0]", c));
   assert(!parse("[\"profile\"," + token + ",0,0,0,0,0]", c));
@@ -50,6 +58,7 @@ int main() {
         const auto parts = player::parse(player.name());
         assert(parts.known() && parts.word[0] == a && parts.word[1] == b && parts.word[2] == d);
       }
+
   auto profile = player.view();
   action.revision = profile.revision;
   action.value[0] = 255;
@@ -58,6 +67,7 @@ int main() {
   action.kind = CommandKind::Ready;
   assert(!player.apply(game, action));
   assert(!game.side[1].placed);
+
   action.kind = CommandKind::Place;
   for (int i = 0; i < 5; ++i) {
     action.value[0] = i;
@@ -65,24 +75,25 @@ int main() {
     action.value[2] = 1;
     action.revision = player.view().revision;
     assert(player.apply(game, action));
-    assert(!player.apply(game, action));  // duplicate/replayed revision
+    assert(!player.apply(game, action));
   }
   action.revision = player.view().revision;
   action.value[0] = 0;
   action.value[1] = 9;
   action.value[2] = 1;
-  assert(!player.apply(game, action));  // row wrap
+  assert(!player.apply(game, action));
   action.value[1] = 90;
   action.value[2] = 0;
-  assert(!player.apply(game, action));  // bottom edge
+  assert(!player.apply(game, action));
   action.value[1] = 10;
   action.value[2] = 1;
-  assert(!player.apply(game, action));  // overlaps second ship
+  assert(!player.apply(game, action));
   action.value[0] = 5;
   assert(!player.apply(game, action));
   action.value[0] = 0;
   action.value[2] = 2;
   assert(!player.apply(game, action));
+
   game.turn = 0;
   action.kind = CommandKind::Ready;
   assert(!player.apply(game, action));
@@ -91,22 +102,45 @@ int main() {
   assert(player.apply(game, action));
   assert(game.side[1].placed && game.turn == 0 && player.view().ready);
   assert(!memcmp(&hostBefore, &game.side[0], sizeof(hostBefore)));
+
   action.revision = player.view().revision;
   assert(!player.apply(game, action));
   action.kind = CommandKind::Profile;
   assert(!player.apply(game, action));
+
+  // X4 places second; browser gets first shot because the original browser placement passed the turn to side 0.
+  bship::Fleet x4;
+  uint32_t seed = 123;
+  bship::randomFleet(x4, seed);
+  assert(bship::place(game, 0, x4));
+  assert(bship::bothPlaced(game) && game.turn == 1);
+
+  action.kind = CommandKind::Fire;
+  action.revision = player.view().revision;
+  action.value[0] = 0;
+  assert(player.apply(game, action));
+  assert(bship::shotAt(game.side[0], 0));
+  assert(game.turn == 0);
+  assert(!player.apply(game, action));  // stale revision
+  action.revision = player.view().revision;
+  action.value[0] = 1;
+  assert(!player.apply(game, action));  // not browser turn
+  game.turn = 1;
+  action.value[0] = 0;
+  assert(!player.apply(game, action));  // duplicate target
+
   char expected[256], actual[256];
   assert(serializePlacement(player.view(), true, expected, sizeof(expected)));
-  uint32_t seed = 123;
   for (int i = 0; i < 1000; ++i) {
     bship::randomFleet(game.side[0].fleet, seed);
     serializePlacement(player.view(), true, actual, sizeof(actual));
     assert(!strcmp(expected, actual));
   }
   assert(!serializePlacement(player.view(), true, actual, 5) && actual[0] == 0);
+
   player.reset();
   assert(!player.view().profile && player.view().bow[0] == 255 && player.name()[0] == 0);
   action.revision = 0;
-  assert(!player.apply(game, action));  // a committed seat cannot be reclaimed
-  puts("Browser commands: strict parsing, 2744 profiles, placement, replay, ready and private projection passed");
+  assert(!player.apply(game, action));
+  puts("Browser commands: strict parsing, 2744 profiles, placement, ready, fire, replay and private projection passed");
 }
