@@ -20,6 +20,9 @@ int main() {
   assert(!parse("[\"fire\"," + token + ",7,100]", c));
   assert(!parse("[\"fire\"," + token + ",7]", c));
   assert(!parse("[\"fire\"," + token + ",7,1,2]", c));
+  assert(parse("[\"surrender\"," + token + ",8]", c));
+  assert(c.kind == CommandKind::Surrender && c.revision == 8);
+  assert(!parse("[\"surrender\"," + token + ",8,0]", c));
   assert(parse("[\"rematch\"," + token + ",9]", c));
   assert(c.kind == CommandKind::Rematch && c.revision == 9);
   assert(!parse("[\"rematch\"," + token + ",9,0]", c));
@@ -134,8 +137,18 @@ int main() {
   action.kind = CommandKind::Rematch;
   action.revision = player.view().revision;
   assert(!player.apply(game, action));
-  for (int cell = 0; cell < bship::kCells; ++cell) bship::markShot(game.side[0], cell);
-  assert(bship::over(game));
+
+  action.kind = CommandKind::Surrender;
+  action.revision = player.view().revision;
+  const uint32_t beforeSurrender = action.revision;
+  assert(player.apply(game, action));
+  assert(player.view().revision == beforeSurrender + 1);
+  assert(bship::over(game) && bship::winner(game) == 0);
+  for (int i = 0; i < bship::kShipCount; ++i) assert(bship::sunk(game.side[1], i));
+  assert(!player.apply(game, action));
+
+  action.kind = CommandKind::Rematch;
+  action.revision = player.view().revision;
   const auto previousName = std::string(player.name());
   assert(player.apply(game, action));
   assert(!game.side[0].placed && !game.side[1].placed && game.turn == 1 && !bship::over(game));
@@ -157,5 +170,5 @@ int main() {
   assert(!player.view().profile && player.view().bow[0] == 255 && player.name()[0] == 0);
   action.revision = 0;
   assert(!player.apply(game, action));
-  puts("Browser commands: strict parsing, 2744 profiles, placement, ready, fire, rematch, replay and private projection passed");
+  puts("Browser commands: strict parsing, 2744 profiles, placement, ready, fire, surrender, rematch, replay and private projection passed");
 }
