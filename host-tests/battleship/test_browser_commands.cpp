@@ -20,6 +20,9 @@ int main() {
   assert(!parse("[\"fire\"," + token + ",7,100]", c));
   assert(!parse("[\"fire\"," + token + ",7]", c));
   assert(!parse("[\"fire\"," + token + ",7,1,2]", c));
+  assert(parse("[\"rematch\"," + token + ",9]", c));
+  assert(c.kind == CommandKind::Rematch && c.revision == 9);
+  assert(!parse("[\"rematch\"," + token + ",9,0]", c));
 
   for (const auto& bad : {"-1", "14", "256", "1.0", "1e0", "true", "null", "\"1\"", "01", "42949672960", "[]", "{}"}) {
     assert(!parse("[\"profile\"," + token + ",0,0," + bad + ",0]", c));
@@ -108,7 +111,6 @@ int main() {
   action.kind = CommandKind::Profile;
   assert(!player.apply(game, action));
 
-  // X4 places second; browser gets first shot because the original browser placement passed the turn to side 0.
   bship::Fleet x4;
   uint32_t seed = 123;
   bship::randomFleet(x4, seed);
@@ -121,13 +123,26 @@ int main() {
   assert(player.apply(game, action));
   assert(bship::shotAt(game.side[0], 0));
   assert(game.turn == 0);
-  assert(!player.apply(game, action));  // stale revision
+  assert(!player.apply(game, action));
   action.revision = player.view().revision;
   action.value[0] = 1;
-  assert(!player.apply(game, action));  // not browser turn
+  assert(!player.apply(game, action));
   game.turn = 1;
   action.value[0] = 0;
-  assert(!player.apply(game, action));  // duplicate target
+  assert(!player.apply(game, action));
+
+  action.kind = CommandKind::Rematch;
+  action.revision = player.view().revision;
+  assert(!player.apply(game, action));
+  for (int cell = 0; cell < bship::kCells; ++cell) bship::markShot(game.side[0], cell);
+  assert(bship::over(game));
+  const auto previousName = std::string(player.name());
+  assert(player.apply(game, action));
+  assert(!game.side[0].placed && !game.side[1].placed && game.turn == 1 && !bship::over(game));
+  assert(player.view().profile && !player.view().ready && player.view().revision == action.revision + 1);
+  assert(std::string(player.name()) == previousName);
+  for (int i = 0; i < 5; ++i) assert(player.view().bow[i] == 255 && player.view().horizontal[i] == 1);
+  assert(!player.apply(game, action));
 
   char expected[256], actual[256];
   assert(serializePlacement(player.view(), true, expected, sizeof(expected)));
@@ -142,5 +157,5 @@ int main() {
   assert(!player.view().profile && player.view().bow[0] == 255 && player.name()[0] == 0);
   action.revision = 0;
   assert(!player.apply(game, action));
-  puts("Browser commands: strict parsing, 2744 profiles, placement, ready, fire, replay and private projection passed");
+  puts("Browser commands: strict parsing, 2744 profiles, placement, ready, fire, rematch, replay and private projection passed");
 }
