@@ -1,4 +1,4 @@
-name: CrossPlay alpha8 one-shot
+name: CrossPlay stable promotion prep
 
 on:
   push:
@@ -9,64 +9,35 @@ on:
 
 permissions:
   contents: write
-  actions: write
 
 jobs:
-  prepare-tag-dispatch:
+  prepare-stable-version:
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-      TAG: v1.14.0-alpha.8
     steps:
       - uses: actions/checkout@v6
         with:
           ref: feature/battleship-browser-crossplay
           fetch-depth: 0
-          fetch-tags: true
 
-      - name: Prepare alpha.8 version
+      - name: Prepare v1.14.0
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           p = Path('platformio.ini')
           s = p.read_text()
-          old = 'version = 1.14.0-alpha.7'
+          old = 'version = 1.14.0-alpha.8'
           if old not in s:
-              raise SystemExit('expected alpha.7 version not found')
-          p.write_text(s.replace(old, 'version = 1.14.0-alpha.8', 1))
+              raise SystemExit('expected alpha.8 version not found')
+          p.write_text(s.replace(old, 'version = 1.14.0', 1))
           PY
-          grep -Fq '### What is new in 1.14.0-alpha.8' .github/workflows/crossplay-release.yml
+          grep -Fq '### What is new in 1.14.0' .github/workflows/crossplay-release.yml
 
-      - name: Validate implementation
-        run: |
-          set -euo pipefail
-          bash host-tests/battleship/run.sh
-          bash host-tests/ota/run.sh
-          bash host-tests/release/run.sh
-          sudo apt-get update
-          sudo apt-get install -y libsdl2-dev
-          python3 -m pip install -q platformio
-          python3 -m platformio run -e simulator_x4_pro
-
-      - name: Commit prepared version
+      - name: Commit prepared stable version
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add platformio.ini
-          git commit -m "chore: prepare v1.14.0-alpha.8"
+          git commit -m "chore: prepare v1.14.0"
           git push origin HEAD:feature/battleship-browser-crossplay
-          echo "RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-
-      - name: Tag and dispatch standard release
-        run: |
-          set -euo pipefail
-          git fetch origin --tags
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "$TAG already exists; refusing to move an existing release tag."
-            exit 1
-          fi
-          git tag "$TAG" "$RELEASE_SHA"
-          git push origin "$TAG"
-          gh workflow run crossplay-release.yml --ref "$TAG"
