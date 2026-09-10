@@ -1,0 +1,73 @@
+name: Prepare v1.14.2 once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/prepare-v1.14.2-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Guard release version
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin refs/tags/v1.14.2 >/dev/null 2>&1; then
+            echo "v1.14.2 already exists; refusing to move or replace it." >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          ini = Path('platformio.ini')
+          text = ini.read_text()
+          pattern = r'(\[crossplay\]\nversion\s*=\s*)1\.14\.1'
+          text, count = re.subn(pattern, r'\g<1>1.14.2', text, count=1)
+          if count != 1:
+              raise SystemExit('expected [crossplay] version 1.14.1 exactly once')
+          ini.write_text(text)
+
+          wf = Path('.github/workflows/crossplay-release.yml')
+          text = wf.read_text()
+          start = '            ### What is new in 1.14.1\n'
+          end = '            PLAY NEARBY games remain:'
+          if start not in text or end not in text:
+              raise SystemExit('release-note markers not found')
+          before, rest = text.split(start, 1)
+          _, after = rest.split(end, 1)
+          notes = '''            ### What is new in 1.14.2
+
+            - The Battleship browser now shows the X4 Pro player's real device-wide player name instead of the generic `X4 PRO` label.
+            - Sinking a ship now produces a short match announcement; the affected ship flashes several times and then remains dark without hit crosses.
+            - The same sunk-ship presentation is used for both fleets while hidden opponent ship positions and orientation remain private.
+            - Fixed the X4 Pro result perspective so losing your own fleet shows `YOU LOSE` and defeating the browser fleet shows `YOU WIN`.
+            - Added an explicit X4 Pro `SURRENDER` action with a second confirmation tap.
+            - Added an explicit X4 Pro `PLAY AGAIN` action after the match; rematches keep the existing browser seat/session instead of forcing a reconnect.
+            - Kept the three-part turn HUD, active-player inversion, hit feedback, two-tap firing and secure resume behavior from v1.14.1.
+
+'''
+          wf.write_text(before + notes + end + after)
+          PY
+
+      - name: Validate release contract
+        run: bash host-tests/release/run.sh
+
+      - name: Commit prepared stable release
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/prepare-v1.14.2-once.yml
+          git add platformio.ini .github/workflows/crossplay-release.yml
+          git commit -m "chore: prepare v1.14.2"
+          git push origin HEAD:main
