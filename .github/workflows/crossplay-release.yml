@@ -116,17 +116,19 @@ jobs:
           body: |
             CrossPlay pre-release for **Xteink X4 Pro**.
 
-            ### What is new in 1.14.0-alpha.6
+            ### What is new in 1.14.0-alpha.7
 
-            - Battleship Browser CrossPlay is now playable end to end against the X4 Pro: placement, turn-based firing, hits, misses, sunk ships and winner state.
-            - After the browser confirms its fleet, the X4 Pro automatically switches into its own fleet placement and then into the live board once both sides are ready.
-            - The browser gets a live enemy target board plus its own fleet status while the X4 Pro remains the authoritative game host.
-            - Added validated browser `fire` commands with turn, duplicate-shot, bounds and revision checks.
-            - Added in-session rematches with **PLAY AGAIN**; the player profile stays while fleets and shots reset for the new round.
-            - Browser reload/reconnect can securely resume a confirmed match using a separate resume capability and matching revision.
-            - Unconfirmed drafts are still discarded on disconnect, and a different browser cannot take over the active seat.
-            - Hidden X4 fleet positions and raw `bship::Game` state never cross the browser transport.
-            - Hotspot, local Wi-Fi, existing X4-to-X4 ESP-NOW play and Developer Mode radio ownership remain unchanged.
+            - Reworked the Battleship browser UI into clearer setup and battle states for phone screens.
+            - Browser player profiles now show the same layered pixel avatar vocabulary as the X4 Pro, plus the derived player name.
+            - Board coordinates moved outside the cells; fleet and target cells are now visually clean.
+            - Double-tap a placed ship to rotate it; the separate direction selector is gone.
+            - Added **RANDOMIZE** for a server-validated random fleet layout before confirmation.
+            - Player/setup controls disappear once battle starts and are replaced by a compact turn and fleet-status HUD.
+            - Hits and misses use clear X marks instead of small centre dots.
+            - Your fleet summary shows intact, damaged and sunk ships; enemy ship identities are revealed only once they are actually sunk.
+            - Game over now displays a prominent **VICTORY** or **DEFEAT** banner over the battle board with **PLAY AGAIN** underneath.
+            - Kept the public battle snapshot within the existing 128-byte WebSocket budget while adding sunk-ship status; hidden X4 fleet positions remain private.
+            - Existing end-to-end browser play, secure resume, rematch, hotspot/Wi-Fi and X4-to-X4 ESP-NOW play remain intact.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
