@@ -24,6 +24,7 @@ enum : fui::ActionId {
   ActionReady = 4,
   ActionPlayAgain = 5,
   ActionLocalPlayRow = 6,
+  ActionSurrender = 7,
 };
 
 // The front door. Battleship opens here rather than on a board, so that "tap
@@ -73,10 +74,9 @@ struct PlaceModel {
 
 fui::Rect buildPlaceChrome(toybox::Screen& screen, const PlaceModel& model);
 
-// Playing. The status capsule is the trigger: it says FIRE when a cell is
-// aimed, reports what happened when it is not, and becomes PLAY AGAIN at the
-// end. One control, three jobs, and it is the largest thing on the screen that
-// is not a grid.
+// Playing. The bottom row keeps the current action/status on the left and the
+// destructive surrender action on the right. Once the game is over, the same
+// row becomes an explicit outcome plus PLAY AGAIN.
 struct BoardModel {
   // What just happened, on its own line under the rule: "C4: HIT", "THEY SANK
   // YOUR CRUISER". Separate from the capsule because one of them reports and
@@ -84,9 +84,11 @@ struct BoardModel {
   // itself is a control you stop trusting.
   const char* report = "";
   const char* status = "";
-  // A cell is aimed and it is your turn, so the capsule is armed.
+  // A cell is aimed and it is your turn, so the left control is armed.
   bool canFire = false;
   bool gameOver = false;
+  bool canSurrender = false;
+  bool surrenderArmed = false;
   // Who you are playing, or null against the computer. Same treatment as
   // chess's, from the same shared helper, so the two games place it identically.
   const char* theirName = nullptr;
