@@ -116,18 +116,17 @@ jobs:
           body: |
             CrossPlay pre-release for **Xteink X4 Pro**.
 
-            ### What is new in 1.14.0-alpha.5
+            ### What is new in 1.14.0-alpha.6
 
-            - Browser player profiles use exactly three validated slots (0–13); the X4 Pro derives the name and avatar.
-            - Place and move your own five ships in the browser, then confirm the fleet over WebSocket.
-            - After the browser confirms its fleet, the X4 Pro now leaves the network waiting screen and enters its own fleet placement.
-            - The X4 can shuffle, move and rotate its fleet while the browser session stays connected.
-            - Once both fleets are confirmed, the session advances to the playing state. Shooting is the next implementation step.
-            - The X4 Pro validates board bounds, overlap, placement phase and command revision before applying a move.
-            - A session capability and a single browser owner guard commands; private placement replies go only to that browser.
-            - Hidden X4 fleet positions and raw game state never cross the browser transport.
-            - Fixed the X4 placement build by including the shared `Rect` definition in the browser activity header.
-            - Hotspot, local Wi-Fi, existing ESP-NOW play and Developer Mode radio ownership are preserved.
+            - Battleship Browser CrossPlay is now playable end to end against the X4 Pro: placement, turn-based firing, hits, misses, sunk ships and winner state.
+            - After the browser confirms its fleet, the X4 Pro automatically switches into its own fleet placement and then into the live board once both sides are ready.
+            - The browser gets a live enemy target board plus its own fleet status while the X4 Pro remains the authoritative game host.
+            - Added validated browser `fire` commands with turn, duplicate-shot, bounds and revision checks.
+            - Added in-session rematches with **PLAY AGAIN**; the player profile stays while fleets and shots reset for the new round.
+            - Browser reload/reconnect can securely resume a confirmed match using a separate resume capability and matching revision.
+            - Unconfirmed drafts are still discarded on disconnect, and a different browser cannot take over the active seat.
+            - Hidden X4 fleet positions and raw `bship::Game` state never cross the browser transport.
+            - Hotspot, local Wi-Fi, existing X4-to-X4 ESP-NOW play and Developer Mode radio ownership remain unchanged.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
