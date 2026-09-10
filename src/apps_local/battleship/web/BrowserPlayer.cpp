@@ -7,11 +7,22 @@ void BrowserPlayer::reset() {
   view_ = {};
   name_[0] = 0;
 }
+
 bool BrowserPlayer::apply(bship::Game& game, const Command& c) {
   constexpr int side = 1;
-  if (c.revision != view_.revision || view_.revision == std::numeric_limits<uint32_t>::max() || view_.ready ||
-      game.side[side].placed || bship::bothPlaced(game) || bship::over(game))
+  if (c.revision != view_.revision || view_.revision == std::numeric_limits<uint32_t>::max() || bship::over(game))
     return false;
+
+  if (c.kind == CommandKind::Fire) {
+    if (!view_.ready || !bship::bothPlaced(game) || game.turn != side || c.value[0] >= bship::kCells) return false;
+    if (bship::shotAt(game.side[0], c.value[0])) return false;
+    if (!bship::fire(game, c.value[0])) return false;
+    ++view_.revision;
+    return true;
+  }
+
+  if (view_.ready || game.side[side].placed || bship::bothPlaced(game)) return false;
+
   if (c.kind == CommandKind::Profile) {
     player::Name parts;
     for (int i = 0; i < 3; ++i) {
@@ -34,9 +45,11 @@ bool BrowserPlayer::apply(bship::Game& game, const Command& c) {
     } else if (c.kind == CommandKind::Ready) {
       if (!bship::place(game, side, draft)) return false;
       view_.ready = true;
-    } else
+    } else {
       return false;
+    }
   }
+
   ++view_.revision;
   return true;
 }
