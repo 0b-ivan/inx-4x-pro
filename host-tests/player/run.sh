@@ -1,7 +1,7 @@
 #!/bin/sh
-# Builds and runs the shared player tests. The domain model and the composing
-# half of PlayerName stay freestanding; the store suite links host SQLite so the
-# same persistence code can be exercised without a device.
+# Builds and runs the shared player tests. The domain model and progression
+# logic stay freestanding; the store suite links host SQLite so the same
+# persistence code can be exercised without a device.
 #
 #   host-tests/player/run.sh
 set -e
@@ -19,6 +19,11 @@ mkdir -p "$BUILD_DIR"
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 \
   test_domain.cpp -o "$BUILD_DIR/test_domain"
 "$BUILD_DIR/test_domain"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 \
+  ../../src/apps_local/player/PlayerProgression.cpp test_progression.cpp \
+  -o "$BUILD_DIR/test_progression"
+"$BUILD_DIR/test_progression"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 \
   ../../src/apps_local/player/PlayerName.cpp ../../src/apps_local/player/PlayerStore.cpp \
