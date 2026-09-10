@@ -4,13 +4,65 @@
 #include <I18n.h>
 #include <WiFi.h>
 
+#ifndef SIMULATOR
+#include <Preferences.h>
+#endif
+
+#include <algorithm>
+#include <string>
+
 #include "DevMode.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/HttpDownloader.h"
 #include "network/OtaUpdater.h"
+
+#ifndef SIMULATOR
+#include "network/FirmwareBoardTag.h"
+#endif
+
+namespace {
+constexpr char releasesUrl[] = "https://api.github.com/repos/0b-ivan/inx-4x-pro/releases?per_page=30";
+constexpr char otaPrefsNamespace[] = "ota-update";
+constexpr char otaChannelKey[] = "channel";
+constexpr uint8_t maxPersistedChannel = 1;
+
+uint8_t loadPersistedOtaChannel() {
+#ifdef SIMULATOR
+  return 0;
+#else
+  Preferences prefs;
+  if (!prefs.begin(otaPrefsNamespace, true)) return 0;
+  const uint8_t channel = prefs.getUChar(otaChannelKey, 0);
+  prefs.end();
+  return channel <= maxPersistedChannel ? channel : 0;
+#endif
+}
+
+void savePersistedOtaChannel(const uint8_t channel) {
+#ifndef SIMULATOR
+  Preferences prefs;
+  if (!prefs.begin(otaPrefsNamespace, false)) return;
+  prefs.putUChar(otaChannelKey, channel <= maxPersistedChannel ? channel : 0);
+  prefs.end();
+#else
+  (void)channel;
+#endif
+}
+
+const char* releaseAssetName() {
+#ifdef SIMULATOR
+  // The X4 Pro release contract is the legacy firmware.bin asset name.  The
+  // native simulator has no board tag header, so keep the same value here.
+  return "firmware.bin";
+#else
+  return CROSSPOINT_RELEASE_ASSET;
+#endif
+}
+}  // namespace
 
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
@@ -19,40 +71,87 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     return;
   }
 
-  LOG_DBG("OTA", "WiFi connected, checking for update");
+  LOG_DBG("OTA", "WiFi connected, loading release catalog");
+  loadReleaseCatalog();
+}
 
+void OtaUpdateActivity::loadReleaseCatalog() {
   {
     RenderLock lock(*this);
-    state = CHECKING_FOR_UPDATE;
+    state = CHECKING_RELEASES;
+    failedDetail = nullptr;
   }
   requestUpdateAndWait();
 
-  const auto res = updater.checkForUpdate();
-  // NO_UPDATE here means the release carries no firmware asset for this board
-  // (expected until per-board assets are published) — not a failure.
-  if (res == OtaUpdater::NO_UPDATE) {
-    LOG_DBG("OTA", "No firmware asset for this board in latest release");
-    {
-      RenderLock lock(*this);
-      state = NO_UPDATE;
-    }
-    return;
-  }
-  if (res != OtaUpdater::OK) {
-    LOG_DBG("OTA", "Update check failed: %d", res);
+  const bool includePrerelease = releaseChannel == CHANNEL_PRERELEASE;
+  releaseCatalog.setFirmwareAssetName(releaseAssetName());
+  releaseCatalog.setIncludePrerelease(includePrerelease);
+  releaseCatalog.reset();
+
+  const bool ok = HttpDownloader::fetchUrl(releasesUrl, [this](const uint8_t* data, const size_t len) {
+    releaseCatalog.feed(reinterpret_cast<const char*>(data), len);
+    return true;
+  });
+  if (!ok) {
+    LOG_ERR("OTA", "Release catalog fetch failed (HTTP %d)", HttpDownloader::lastStatus());
     {
       RenderLock lock(*this);
       state = FAILED;
     }
+    requestUpdate();
     return;
   }
 
-  if (!updater.isUpdateNewer()) {
-    LOG_DBG("OTA", "No new update available");
+  releaseCatalog.prepare(includePrerelease);
+  LOG_INF("OTA", "Release catalog: %u compatible entries (%s channel)", static_cast<unsigned>(releaseCatalog.count()),
+          includePrerelease ? "pre-release" : "stable");
+
+  if (releaseCatalog.count() == 0) {
     {
       RenderLock lock(*this);
       state = NO_UPDATE;
     }
+    requestUpdate();
+    return;
+  }
+
+  {
+    RenderLock lock(*this);
+    selectedRow = releaseChannel == CHANNEL_PRERELEASE ? 1 : 0;
+    releaseTop = 0;
+    state = BROWSING_RELEASES;
+  }
+  requestUpdate();
+}
+
+void OtaUpdateActivity::setReleaseChannel(const uint8_t channel) {
+  const uint8_t normalized = channel == CHANNEL_PRERELEASE ? CHANNEL_PRERELEASE : CHANNEL_STABLE;
+  if (releaseChannel == normalized) return;
+
+  releaseChannel = normalized;
+  savePersistedOtaChannel(releaseChannel);
+  loadReleaseCatalog();
+}
+
+void OtaUpdateActivity::activateSelectedRow() {
+  if (selectedRow == 0) {
+    setReleaseChannel(CHANNEL_STABLE);
+    return;
+  }
+  if (selectedRow == 1) {
+    setReleaseChannel(CHANNEL_PRERELEASE);
+    return;
+  }
+
+  const size_t releaseIndex = static_cast<size_t>(selectedRow - 2);
+  const auto* entry = releaseCatalog.at(releaseIndex);
+  if (entry == nullptr || !updater.selectRelease(entry->tag, entry->firmwareUrl, entry->firmwareSize)) {
+    LOG_ERR("OTA", "Failed to select release row %d", selectedRow);
+    {
+      RenderLock lock(*this);
+      state = FAILED;
+    }
+    requestUpdate();
     return;
   }
 
@@ -61,13 +160,15 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     state = WAITING_CONFIRMATION;
   }
   const char* options[] = {tr(STR_CANCEL), tr(STR_UPDATE)};
-  // Default the selection to Update so the hardware Confirm button installs,
-  // matching the pre-popup layout (Back = cancel, Confirm = update).
-  confirmPopup.show(tr(STR_NEW_UPDATE), options, 2, 1, [this](const int idx) {
+  confirmPopup.show("Install firmware", options, 2, 1, [this](const int idx) {
     if (idx == 1) {
       runUpdateInstall();
     } else {
-      finish();
+      {
+        RenderLock lock(*this);
+        state = BROWSING_RELEASES;
+      }
+      requestUpdate();
     }
   });
   requestUpdate();
@@ -76,11 +177,13 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
 void OtaUpdateActivity::onEnter() {
   Activity::onEnter();
 
-  // Turn on WiFi immediately
+  releaseChannel = loadPersistedOtaChannel();
+  selectedRow = releaseChannel == CHANNEL_PRERELEASE ? 1 : 0;
+  releaseTop = 0;
+
   LOG_DBG("OTA", "Turning on WiFi...");
   WiFi.mode(WIFI_STA);
 
-  // Launch WiFi selection subactivity
   LOG_DBG("OTA", "Launching WifiSelectionActivity...");
   startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
@@ -89,18 +192,61 @@ void OtaUpdateActivity::onEnter() {
 void OtaUpdateActivity::onExit() {
   Activity::onExit();
 
-  // Success path reboots via the SHUTTING_DOWN state's plain ESP.restart()
-  // (loop() above) so the new firmware boots normally. Back-out paths land
-  // here with wifi still active; silent-restart to free the LWIP/mbedTLS
-  // fragmentation, same as the other wifi activities.
-  // Not ours to put down if Developer Mode brought it up: this branch reboots
-  // the device, and doing that every time the updater exits while dev mode
-  // is on is indistinguishable from a crash.
   if (WiFi.getMode() != WIFI_MODE_NULL && !devmode::holdsRadio()) {
     WiFi.disconnect(false);
     delay(30);
     silentRestart();
   }
+}
+
+void OtaUpdateActivity::keepSelectionVisible(const size_t visibleReleaseRows) {
+  if (selectedRow < 2 || visibleReleaseRows == 0) return;
+
+  const size_t selectedRelease = static_cast<size_t>(selectedRow - 2);
+  if (selectedRelease < releaseTop) {
+    releaseTop = selectedRelease;
+  } else if (selectedRelease >= releaseTop + visibleReleaseRows) {
+    releaseTop = selectedRelease - visibleReleaseRows + 1;
+  }
+}
+
+void OtaUpdateActivity::renderReleaseBrowser() {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  const int height = renderer.getLineHeight(UI_10_FONT_ID);
+  const int rowStep = height + metrics.verticalSpacing;
+
+  int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y, "Channel");
+  y += rowStep;
+
+  const std::string stable = std::string(selectedRow == 0 ? "> " : "  ") + "Stable";
+  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y, stable.c_str());
+  y += rowStep;
+
+  const std::string prerelease = std::string(selectedRow == 1 ? "> " : "  ") + "Nightly / Pre-release";
+  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y, prerelease.c_str());
+  y += rowStep + metrics.verticalSpacing;
+
+  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y, "Available versions");
+  y += rowStep;
+
+  const int usableBottom = pageHeight - height * 2;
+  const size_t visibleReleaseRows = static_cast<size_t>(std::max(1, (usableBottom - y) / rowStep));
+  keepSelectionVisible(visibleReleaseRows);
+
+  const size_t end = std::min(releaseCatalog.count(), releaseTop + visibleReleaseRows);
+  for (size_t i = releaseTop; i < end; ++i) {
+    const auto* entry = releaseCatalog.at(i);
+    if (entry == nullptr) continue;
+    const std::string line = std::string(selectedRow == static_cast<int>(i + 2) ? "> " : "  ") + entry->tag;
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y, line.c_str());
+    y += rowStep;
+  }
+
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "Select", "Previous", "Next");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void OtaUpdateActivity::render(RenderLock&&) {
@@ -110,7 +256,8 @@ void OtaUpdateActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_UPDATE));
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
+                 state == BROWSING_RELEASES ? "OTA Updates" : tr(STR_UPDATE));
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height) / 2;
 
@@ -118,23 +265,22 @@ void OtaUpdateActivity::render(RenderLock&&) {
   if (state == UPDATE_IN_PROGRESS) {
     LOG_DBG("OTA", "Update progress: %d / %d", updater.getProcessedSize(), updater.getTotalSize());
     updaterProgress = static_cast<float>(updater.getProcessedSize()) / static_cast<float>(updater.getTotalSize());
-    // Only update every 2% at the most
     if (static_cast<int>(updaterProgress * 50) == lastUpdaterPercentage / 2) {
       return;
     }
     lastUpdaterPercentage = static_cast<int>(updaterProgress * 100);
   }
 
-  if (state == CHECKING_FOR_UPDATE) {
+  if (state == CHECKING_RELEASES) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_CHECKING_UPDATE));
+  } else if (state == BROWSING_RELEASES) {
+    renderReleaseBrowser();
   } else if (state == WAITING_CONFIRMATION) {
-    // Version info sits in the upper part of the screen so the centered
-    // Cancel/Update popup doesn't cover it (same layout as ConfirmationActivity).
     const int infoTop = pageHeight / 6;
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, infoTop,
                       (std::string(tr(STR_CURRENT_VERSION)) + CROSSPOINT_VERSION).c_str());
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, infoTop + height + metrics.verticalSpacing,
-                      (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
+                      (std::string("Selected version: ") + updater.getLatestVersion()).c_str());
 
     if (confirmPopup.processRender(renderer, mappedInput)) return;
   } else if (state == UPDATE_IN_PROGRESS) {
@@ -147,14 +293,12 @@ void OtaUpdateActivity::render(RenderLock&&) {
         static_cast<int>(updaterProgress * 100), 100);
 
     y += metrics.progressBarHeight + metrics.verticalSpacing;
-    // Percent label is drawn by BaseTheme::drawProgressBar; this slot is left intentionally empty
-    // so the bytes line below stays at the same Y it was at when the activity drew its own percent.
     y += height + metrics.verticalSpacing;
     renderer.drawCenteredText(
         UI_10_FONT_ID, y,
         (std::to_string(updater.getProcessedSize()) + " / " + std::to_string(updater.getTotalSize())).c_str());
   } else if (state == NO_UPDATE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NO_UPDATE), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top, "No compatible releases", true, EpdFontFamily::BOLD);
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FAILED) {
@@ -173,7 +317,7 @@ void OtaUpdateActivity::render(RenderLock&&) {
 }
 
 void OtaUpdateActivity::runUpdateInstall() {
-  LOG_DBG("OTA", "New update available, starting download...");
+  LOG_INF("OTA", "Installing explicitly selected release %s", updater.getLatestVersion().c_str());
   {
     RenderLock lock(*this);
     state = UPDATE_IN_PROGRESS;
@@ -181,12 +325,10 @@ void OtaUpdateActivity::runUpdateInstall() {
   requestUpdateAndWait();
   const auto res = updater.installUpdate(
       [](void* ctx) {
-        // immediate=true notifies the render task directly. The default deferred path only
-        // sets a flag consumed at the end of ActivityManager::loop(), which never runs while
-        // installUpdate() blocks this task.
         static_cast<OtaUpdateActivity*>(ctx)->requestUpdate(true);
       },
-      this);
+      this,
+      true);
 
   if (res != OtaUpdater::OK) {
     LOG_DBG("OTA", "Update failed: %d", res);
@@ -206,7 +348,6 @@ void OtaUpdateActivity::runUpdateInstall() {
     state = FINISHED;
   }
   requestUpdateAndWait();
-  // Hold the completion screen briefly so the user sees it, then restart.
   delay(3000);
   {
     RenderLock lock(*this);
@@ -215,23 +356,92 @@ void OtaUpdateActivity::runUpdateInstall() {
 }
 
 void OtaUpdateActivity::loop() {
-  if (state == WAITING_CONFIRMATION) {
-    if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
-    // Popup dismissed without a selection (Back button or tap outside): cancel.
-    finish();
-    return;
-  }
+  if (state == BROWSING_RELEASES) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const int pageWidth = renderer.getScreenWidth();
+    const int pageHeight = renderer.getScreenHeight();
+    const int height = renderer.getLineHeight(UI_10_FONT_ID);
+    const int rowStep = height + metrics.verticalSpacing;
+    const int channelRowsTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + rowStep;
+    const int versionRowsTop = channelRowsTop + rowStep * 2 + metrics.verticalSpacing + rowStep;
+    const int usableBottom = pageHeight - height * 2;
+    const size_t visibleReleaseRows = static_cast<size_t>(std::max(1, (usableBottom - versionRowsTop) / rowStep));
+    const int totalRows = static_cast<int>(releaseCatalog.count()) + 2;
 
-  if (state == FAILED) {
-    int x = 0;
-    int y = 0;
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(x, y)) {
+    const bool previous = mappedInput.wasPressed(MappedInputManager::Button::NavPrevious) ||
+                          mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+                          mappedInput.wasPressed(MappedInputManager::Button::PageBack);
+    const bool next = mappedInput.wasPressed(MappedInputManager::Button::NavNext) ||
+                      mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+                      mappedInput.wasPressed(MappedInputManager::Button::PageForward);
+
+    if (previous && selectedRow > 0) {
+      --selectedRow;
+      keepSelectionVisible(visibleReleaseRows);
+      requestUpdate();
+      return;
+    }
+    if (next && selectedRow + 1 < totalRows) {
+      ++selectedRow;
+      keepSelectionVisible(visibleReleaseRows);
+      requestUpdate();
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      activateSelectedRow();
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       finish();
+      return;
+    }
+
+    int touchedRow = -1;
+    const auto channelTouch = mappedInput.rowTouch(touchedRow, channelRowsTop, rowStep, 2, metrics.contentSidePadding,
+                                                   pageWidth - metrics.contentSidePadding, height);
+    if (channelTouch != MappedInputManager::RowTouch::None) {
+      selectedRow = touchedRow;
+      requestUpdate();
+      if (channelTouch == MappedInputManager::RowTouch::Tap) activateSelectedRow();
+      return;
+    }
+
+    const int visibleCount = static_cast<int>(std::min(visibleReleaseRows, releaseCatalog.count() - releaseTop));
+    touchedRow = -1;
+    const auto releaseTouch = mappedInput.rowTouch(touchedRow, versionRowsTop, rowStep, visibleCount,
+                                                   metrics.contentSidePadding, pageWidth - metrics.contentSidePadding,
+                                                   height);
+    if (releaseTouch != MappedInputManager::RowTouch::None) {
+      selectedRow = static_cast<int>(releaseTop) + touchedRow + 2;
+      requestUpdate();
+      if (releaseTouch == MappedInputManager::RowTouch::Tap) activateSelectedRow();
+      return;
+    }
+
+    const auto swipe = mappedInput.wasSwipe();
+    if (swipe == MappedInputManager::SwipeDir::Up && selectedRow + 1 < totalRows) {
+      ++selectedRow;
+      keepSelectionVisible(visibleReleaseRows);
+      requestUpdate();
+    } else if (swipe == MappedInputManager::SwipeDir::Down && selectedRow > 0) {
+      --selectedRow;
+      keepSelectionVisible(visibleReleaseRows);
+      requestUpdate();
     }
     return;
   }
 
-  if (state == NO_UPDATE) {
+  if (state == WAITING_CONFIRMATION) {
+    if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+    {
+      RenderLock lock(*this);
+      state = BROWSING_RELEASES;
+    }
+    requestUpdate();
+    return;
+  }
+
+  if (state == FAILED || state == NO_UPDATE) {
     int x = 0;
     int y = 0;
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(x, y)) {
