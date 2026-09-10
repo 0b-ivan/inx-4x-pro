@@ -44,6 +44,8 @@ class BattleshipLocalPlayActivity final : public Activity {
   void startX4Placement();
   void commitX4Fleet();
   void startMatchIfReady();
+  void surrenderX4();
+  void rematchFromX4();
   void cleanupBrowserNetwork();
   void finishCancelled();
 
@@ -90,6 +92,7 @@ class BattleshipLocalPlayActivity final : public Activity {
   char x4Status_[48] = {};
   char x4Report_[48] = {};
   bool x4Ready_ = false;
+  bool x4SurrenderArmed_ = false;
   bool devModePaused_ = false;
   bool ownsSta_ = false;
   bool lastClientSeen_ = false;
