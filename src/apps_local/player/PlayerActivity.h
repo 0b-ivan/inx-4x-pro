@@ -1,17 +1,13 @@
 #pragma once
 
-// The PLAYER screen: read the stored name, draw the face it describes, roll a
-// word when one is tapped.
-//
-// Deliberately thin, the way ShelfFolderActivity is. Everything worth testing
-// is somewhere else: the words and the rolling in PlayerName (freestanding),
-// the face in PlayerAvatar (freestanding), the layout in PlayerScreen
-// (freestanding). What is left here is storage, the render lock and one switch.
-
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 
 #include "../../activities/Activity.h"
 #include "../ui/ToyboxScreen.h"
+#include "PlayerRuntime.h"
 
 class PlayerActivity final : public Activity {
  public:
@@ -25,6 +21,25 @@ class PlayerActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
+  enum class View : uint8_t { Hub, Callsign };
+
+  void refreshPlayers();
+  void setMessage(const char* message);
+  void startLogin(size_t index);
+  void startRegistrationName();
+  void startRegistrationPin();
+
+  int activePlayerIndex() const;
+
   toybox::Interactions interactions;
   bool interactionsReady = false;
+  View view_ = View::Hub;
+
+  std::array<player::Player, player::PlayerRuntime::kPlayerListCapacity> players_{};
+  std::array<freeink::ui::ListItem, player::PlayerRuntime::kPlayerListCapacity> playerItems_{};
+  size_t playerCount_ = 0;
+
+  player::PlayerId pendingLoginId_{};
+  std::array<char, player::kMaxPlayerNameLength + 1> pendingName_{};
+  std::array<char, 64> message_{};
 };

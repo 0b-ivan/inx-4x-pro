@@ -13,6 +13,7 @@ namespace player {
 namespace {
 
 constexpr char kDatabasePath[] = "/.crosspoint/player.db";
+constexpr char kPlayerDirectory[] = "/.crosspoint";
 
 bool runtimeRandomFill(void*, uint8_t* output, const size_t size) {
   if (output == nullptr) return false;
@@ -48,7 +49,10 @@ bool PlayerRuntime::begin() {
     status_ = RuntimeStatus::VfsError;
     return false;
   }
-  if (!Storage.mkdir("/.crosspoint")) {
+  // main.cpp normally creates /.crosspoint at mount time. Keep begin()
+  // independently safe without treating "already exists" as an error on an
+  // SdFat implementation whose mkdir() return convention may differ.
+  if (!Storage.exists(kPlayerDirectory) && !Storage.mkdir(kPlayerDirectory)) {
     status_ = RuntimeStatus::StorageUnavailable;
     return false;
   }

@@ -1,0 +1,125 @@
+#include "PlayerHubScreen.h"
+
+#include <cstdio>
+
+#include "PlayerAvatar.h"
+
+namespace playerhubui {
+
+void buildPlayerHub(toybox::Screen& screen, const Model& model) {
+  namespace fui = freeink::ui;
+
+  fui::HeaderProps header;
+  header.title = "PLAYERS";
+  header.borderEdges = fui::EdgesNone;
+  toybox::absoluteChrome(screen);
+  toybox::headerBand(screen, header);
+  toybox::headerRule(screen);
+  screen.insetContent(fui::Insets{toybox::kGutter * 3, toybox::kMargin, toybox::kMargin, toybox::kMargin});
+
+  // These three controls never move. Eligibility only changes enabled state,
+  // which avoids a full-layout jump on the slow panel after the first match.
+  const fui::Rect actions = screen.takeBottom(toybox::kRowHeight, toybox::kGutter);
+  constexpr int kActionGap = 6;
+  const int16_t actionWidth = static_cast<int16_t>((actions.width - 2 * kActionGap) / 3);
+  const fui::Rect guestButton = fui::makeRect(actions.x, actions.y, actionWidth, actions.height);
+  const fui::Rect callsignButton =
+      fui::makeRect(static_cast<int16_t>(guestButton.right() + kActionGap), actions.y, actionWidth, actions.height);
+  const fui::Rect registerButton =
+      fui::makeRect(static_cast<int16_t>(callsignButton.right() + kActionGap), actions.y,
+                    static_cast<int16_t>(actions.right() - callsignButton.right() - kActionGap), actions.height);
+
+  fui::ButtonProps guest;
+  guest.label = "GUEST";
+  guest.action = ActionUseGuest;
+  guest.enabled = model.guestAvailable && !model.guestSelected;
+  if (!guest.enabled) guest.styles = toybox::disabledButtonStyles();
+  screen.button(guest, guestButton);
+
+  fui::ButtonProps callsign;
+  callsign.label = "CALLSIGN";
+  callsign.action = ActionEditCallsign;
+  callsign.enabled = model.guestAvailable && model.guestSelected;
+  if (!callsign.enabled) callsign.styles = toybox::disabledButtonStyles();
+  screen.button(callsign, callsignButton);
+
+  fui::ButtonProps registration;
+  registration.label = "REGISTER";
+  registration.action = ActionRegisterGuest;
+  registration.enabled = model.guestAvailable && model.guestSelected && model.canRegisterGuest;
+  if (!registration.enabled) registration.styles = toybox::disabledButtonStyles();
+  screen.button(registration, registerButton);
+
+  // Current local identity. The visible account name and the generated
+  // callsign are separate: the callsign remains the compact avatar source.
+  const fui::Rect card = screen.takeTop(92, toybox::kGutter);
+  screen.target().stroke(card, fui::Paint::solid(fui::Color::Black), toybox::kHairline, 10);
+
+  constexpr int16_t kFace = 48;
+  const fui::Rect face = fui::makeRect(static_cast<int16_t>(card.x + toybox::kGutter),
+                                       static_cast<int16_t>(card.y + (card.height - kFace) / 2), kFace, kFace);
+  if (model.currentCallsign != nullptr && model.currentCallsign[0] != '\0') {
+    player::drawAvatar(screen.target(), face, model.currentCallsign, player::AvatarSize::Row);
+  }
+
+  const int16_t textX = static_cast<int16_t>(face.right() + toybox::kGutter);
+  const fui::Rect textBand = fui::makeRect(textX, card.y,
+                                           static_cast<int16_t>(card.right() - toybox::kGutter - textX), card.height);
+
+  fui::TextStyle nameStyle;
+  nameStyle.font = toybox::kUiFont;
+  nameStyle.align = fui::TextAlign::Left;
+  nameStyle.color = fui::Color::Black;
+  screen.target().text(fui::makeRect(textBand.x, textBand.y, textBand.width, 42), model.currentName, nameStyle);
+
+  fui::TextStyle smallStyle;
+  smallStyle.font = toybox::kSmallFont;
+  smallStyle.align = fui::TextAlign::Left;
+  smallStyle.color = fui::Color::Black;
+  screen.target().text(fui::makeRect(textBand.x, static_cast<int16_t>(textBand.y + 39), textBand.width, 24),
+                       model.currentCallsign, smallStyle);
+
+  char fallback[48]{};
+  const char* status = model.message;
+  if (status == nullptr || status[0] == '\0') {
+    if (!model.guestAvailable) {
+      status = "PLAYER STORAGE UNAVAILABLE";
+    } else if (model.guestSelected) {
+      if (model.canRegisterGuest) {
+        std::snprintf(fallback, sizeof(fallback), "%u MATCH%s - READY TO REGISTER",
+                      static_cast<unsigned>(model.guestCompletedMatches),
+                      model.guestCompletedMatches == 1 ? "" : "ES");
+      } else {
+        std::snprintf(fallback, sizeof(fallback), "PLAY ONE MATCH TO REGISTER");
+      }
+      status = fallback;
+    } else {
+      status = "REGISTERED PLAYER";
+    }
+  }
+  screen.target().text(fui::makeRect(textBand.x, static_cast<int16_t>(textBand.y + 64), textBand.width, 24), status,
+                       smallStyle);
+
+  if (model.playerCount > 0 && model.players != nullptr) {
+    fui::ListProps list;
+    list.items = model.players;
+    list.count = static_cast<uint16_t>(model.playerCount);
+    list.topIndex = 0;
+    list.selectedIndex = static_cast<int16_t>(model.activePlayerIndex);
+    list.action = ActionLoginPlayer;
+    // Eight persisted profiles fit with the current 480x800 layout. Keeping the
+    // complete directory visible means the picker needs no scroll cache/state.
+    list.rowHeight = 57;
+    list.rowGap = 4;
+    list.centerSingleLine = true;
+    screen.list(list);
+  } else {
+    fui::TextStyle emptyStyle;
+    emptyStyle.font = toybox::kUiFont;
+    emptyStyle.align = fui::TextAlign::Center;
+    emptyStyle.color = fui::Color::Black;
+    screen.target().text(screen.body(), "NO SAVED PLAYERS YET", emptyStyle);
+  }
+}
+
+}  // namespace playerhubui
