@@ -1,7 +1,14 @@
 #include "PlayerAuth.h"
 
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcpp"
+#endif
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 namespace player {
 
