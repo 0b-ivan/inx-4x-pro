@@ -61,6 +61,7 @@ class Reader {
   const uint8_t* end;
 };
 }  // namespace
+
 bool parseCommand(const uint8_t* bytes, size_t size, Command& out) {
   if (!bytes || !size || size > kMaxCommandBytes) return false;
   Reader r(bytes, size);
@@ -72,10 +73,14 @@ bool parseCommand(const uint8_t* bytes, size_t size, Command& out) {
     candidate.kind = CommandKind::Place;
   else if (r.literal("\"ready\""))
     candidate.kind = CommandKind::Ready;
+  else if (r.literal("\"fire\""))
+    candidate.kind = CommandKind::Fire;
   else
     return false;
+
   if (!r.take(',') || !r.token(candidate.token) || !r.take(',') || !r.number(candidate.revision)) return false;
-  if (candidate.kind != CommandKind::Ready) {
+
+  if (candidate.kind == CommandKind::Profile || candidate.kind == CommandKind::Place) {
     for (int i = 0; i < 3; ++i) {
       uint32_t value;
       if (!r.take(',') || !r.number(value)) return false;
@@ -83,11 +88,17 @@ bool parseCommand(const uint8_t* bytes, size_t size, Command& out) {
       if (value > limit) return false;
       candidate.value[i] = static_cast<uint8_t>(value);
     }
+  } else if (candidate.kind == CommandKind::Fire) {
+    uint32_t cell;
+    if (!r.take(',') || !r.number(cell) || cell > 99) return false;
+    candidate.value[0] = static_cast<uint8_t>(cell);
   }
+
   if (!r.take(']') || !r.done()) return false;
   out = candidate;
   return true;
 }
+
 size_t serializePlacement(const PlacementView& v, bool accepted, char* out, size_t capacity) {
   if (!out || !capacity) return 0;
   const int n =
