@@ -71,6 +71,8 @@ bool parseCommand(const uint8_t* bytes, size_t size, Command& out) {
     candidate.kind = CommandKind::Profile;
   else if (r.literal("\"place\""))
     candidate.kind = CommandKind::Place;
+  else if (r.literal("\"randomize\""))
+    candidate.kind = CommandKind::Randomize;
   else if (r.literal("\"ready\""))
     candidate.kind = CommandKind::Ready;
   else if (r.literal("\"fire\""))
