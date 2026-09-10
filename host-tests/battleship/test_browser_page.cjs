@@ -3,10 +3,10 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = fs.readFileSync('../../src/apps_local/battleship/web/BattleshipPage.html', 'utf8');
 function element() { return {textContent:'', innerHTML:'', value:'0', disabled:true, className:'', hidden:false, children:[], appendChild(child) { this.children.push(child); }, setAttribute() {}}; }
-const ids = ['app','status','phase','turn','profile','placement','feedback','hair','eyes','mouth','ship','grid','save','randomize','ready','battle','target','own','surrender','rematch','avatar','playerName','hudName','hud','setupState','hudTurn','ownSummary','enemySummary','enemyName','youPanel','enemyPanel','resultBanner'];
+const ids = ['app','status','phase','turn','profile','placement','feedback','hair','eyes','mouth','ship','grid','save','randomize','ready','battle','target','own','surrender','rematch','avatar','playerName','hudName','hud','setupState','hudTurn','ownSummary','enemySummary','enemyName','youPanel','enemyPanel','eventBanner','resultBanner'];
 const elements = Object.fromEntries(ids.map(id => [id,element()]));
 const cols=[element(),element()],rows=[element(),element()];
-const sockets = [], events = {}, sent = [], store = new Map();
+const sockets = [], events = {}, sent = [], store = new Map(), delayed=[];
 let reconnect, now=1000;
 class Socket {
   static OPEN = 1;
@@ -25,7 +25,7 @@ vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], {
   location:{hostname:'crossplay.local'}, WebSocket:Socket, sessionStorage,
   window:{addEventListener:(name,fn)=>events[name]=fn}, Uint8Array,
   Date:{now:()=>now},
-  setTimeout:(fn,ms)=>{if(ms>=1000){reconnect=fn;return 1;}fn();return 2;}, clearTimeout:()=>{reconnect=null;}
+  setTimeout:(fn,ms)=>{if(ms===2000){reconnect=fn;return 1;}if(ms>=1000){delayed.push(fn);return 2;}fn();return 3;}, clearTimeout:()=>{reconnect=null;}
 });
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incoming='A'.repeat(18))=>({type:'s',phase,myTurn,w:winner,b:board,i:incoming,s:sunk});
@@ -33,12 +33,14 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   assert.match(html,/filter:brightness\(0\) invert\(1\)/);
   assert.match(html,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(html,/side-panel\.active/);
-  assert.match(html,/ship-segment/);
-  assert.match(html,/impact-shake/);
-  assert.match(html,/ship-flash/);
+  assert.match(html,/sunk-segment/);
+  assert.match(html,/ship-sunk-flash/);
+  assert.match(html,/d\.type==='peer'/);
   assert.match(html,/d\.type==='f'/);
   await flush();
   const socket=sockets[0];socket.onopen();
+  socket.onmessage({data:JSON.stringify({type:'peer',name:'SPIKY WINK BEARD'})});
+  assert.equal(elements.enemyName.textContent,'SPIKY WINK BEARD');
   assert.equal(elements.hair.children.length,14);
   assert.equal(elements.grid.children.length,100);
   assert.equal(elements.target.children.length,100);
@@ -101,11 +103,20 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   socket.onmessage({data:JSON.stringify({type:'f',h:[1,0,0,0,0]})});
   assert.doesNotMatch(elements.youPanel.className,/active/);
   assert.match(elements.enemyPanel.className,/active/);
-  assert.equal(elements.hudTurn.textContent,'X4 PRO TURN');
+  assert.equal(elements.hudTurn.textContent,'SPIKY WINK BEARD TURN');
+
+  // Sunk ships flash, announce the event, then remain as dark segments without X marks.
+  socket.onmessage({data:JSON.stringify(emptyState('playing',false,-1,1,'AAAAAw'+ 'A'.repeat(28)))});
+  socket.onmessage({data:JSON.stringify({type:'f',h:[5,0,0,0,0]})});
+  assert.equal(elements.eventBanner.textContent,'YOU SANK SPIKY WINK BEARD: CARRIER');
+  assert.match(elements.eventBanner.className,/show/);
+  assert.match(elements.enemySummary.children[0].className,/sunk/);
+  assert.ok(elements.enemySummary.children[0].children.every(segment=>/sunk-segment/.test(segment.className) && !/ hit/.test(segment.className)));
 
   socket.close();reconnect();await flush();
   assert.equal(sockets.length,2);
   const resumed=sockets[1];resumed.onopen();
+  resumed.onmessage({data:JSON.stringify({type:'peer',name:'SPIKY WINK BEARD'})});
   assert.deepEqual(sent[5],['resume',token,5,resume]);
   resumed.onmessage({data:JSON.stringify(fireReply)});
   resumed.onmessage({data:JSON.stringify({type:'resume',token:resume})});
@@ -136,5 +147,5 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   events.pagehide();assert.equal(reconnect,null);
   events.pageshow({persisted:true});await flush();
   assert.equal(sockets.length,3);
-  console.log('Browser page: three-way HUD, active-turn inversion, fleet damage boxes, impact feedback, two-tap fire, surrender, secure resume and rematch passed');
+  console.log('Browser page: peer identity, sunk announcements/visuals, active-turn inversion, fleet damage boxes, two-tap fire, surrender, secure resume and rematch passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
