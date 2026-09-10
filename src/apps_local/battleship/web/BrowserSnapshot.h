@@ -19,6 +19,8 @@ struct BrowserSnapshot {
   uint8_t shotsAtX4[13] = {};
   uint8_t hitsAtX4[13] = {};
   uint8_t shotsAtBrowser[13] = {};
+  // One bit per X4 ship, revealed only after that ship is sunk.
+  uint8_t sunkAtX4 = 0;
 };
 
 BrowserSnapshot browserSnapshot(const bship::Game& game, bool connected);
