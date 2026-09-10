@@ -10,8 +10,22 @@ void BrowserPlayer::reset() {
 
 bool BrowserPlayer::apply(bship::Game& game, const Command& c) {
   constexpr int side = 1;
-  if (c.revision != view_.revision || view_.revision == std::numeric_limits<uint32_t>::max() || bship::over(game))
-    return false;
+  if (c.revision != view_.revision || view_.revision == std::numeric_limits<uint32_t>::max()) return false;
+
+  if (c.kind == CommandKind::Rematch) {
+    if (!view_.profile || !view_.ready || !bship::over(game)) return false;
+    bship::reset(game);
+    game.turn = side;
+    view_.ready = false;
+    for (int i = 0; i < 5; ++i) {
+      view_.bow[i] = 255;
+      view_.horizontal[i] = 1;
+    }
+    ++view_.revision;
+    return true;
+  }
+
+  if (bship::over(game)) return false;
 
   if (c.kind == CommandKind::Fire) {
     if (!view_.ready || !bship::bothPlaced(game) || game.turn != side || c.value[0] >= bship::kCells) return false;
