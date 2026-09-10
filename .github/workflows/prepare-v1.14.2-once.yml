@@ -36,41 +36,16 @@ jobs:
           if count != 1:
               raise SystemExit('expected [crossplay] version 1.14.1 exactly once')
           ini.write_text(text)
-
-          wf = Path('.github/workflows/crossplay-release.yml')
-          text = wf.read_text()
-          start = '            ### What is new in 1.14.1\n'
-          end = '            PLAY NEARBY games remain:'
-          if start not in text or end not in text:
-              raise SystemExit('release-note markers not found')
-          before, rest = text.split(start, 1)
-          _, after = rest.split(end, 1)
-          indent = '            '
-          lines = [
-              '### What is new in 1.14.2',
-              '',
-              '- The Battleship browser now shows the X4 Pro player\'s real device-wide player name instead of the generic `X4 PRO` label.',
-              '- Sinking a ship now produces a short match announcement; the affected ship flashes several times and then remains dark without hit crosses.',
-              '- The same sunk-ship presentation is used for both fleets while hidden opponent ship positions and orientation remain private.',
-              '- Fixed the X4 Pro result perspective so losing your own fleet shows `YOU LOSE` and defeating the browser fleet shows `YOU WIN`.',
-              '- Added an explicit X4 Pro `SURRENDER` action with a second confirmation tap.',
-              '- Added an explicit X4 Pro `PLAY AGAIN` action after the match; rematches keep the existing browser seat/session instead of forcing a reconnect.',
-              '- Kept the three-part turn HUD, active-player inversion, hit feedback, two-tap firing and secure resume behavior from v1.14.1.',
-              '',
-          ]
-          notes = '\n'.join(indent + line if line else '' for line in lines) + '\n'
-          wf.write_text(before + notes + end + after)
           PY
 
       - name: Validate release contract
         run: bash host-tests/release/run.sh
 
-      - name: Commit prepared stable release
+      - name: Commit prepared stable version
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/prepare-v1.14.2-once.yml
-          git add platformio.ini .github/workflows/crossplay-release.yml
+          git add platformio.ini
           git commit -m "chore: prepare v1.14.2"
           git push origin HEAD:main
