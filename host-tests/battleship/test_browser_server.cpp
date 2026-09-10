@@ -16,6 +16,7 @@ int main() {
   using namespace bshipweb;
   Server server;
   Handler handler;
+  server.setOpponentName("SPIKY WINK BEARD");
   server.setCommands(
       &handler,
       [](void* p, const Command& command, PlacementView& v) {
@@ -42,12 +43,14 @@ int main() {
   assert(token.size() == 32);
   const auto profile = "[\"profile\",\"" + token + "\",0,0,13,0]";
   ws.event(WStype_CONNECTED, 0);
-  assert(server.clientSeen() && ws.messages.size() == 2);
-  assert(ws.messages.back().find("\"type\":\"f\"") != std::string::npos);
+  assert(server.clientSeen() && ws.messages.size() == 3);
+  assert(ws.messages[0].find("\"type\":\"s\"") != std::string::npos);
+  assert(ws.messages[1].find("\"type\":\"f\"") != std::string::npos);
+  assert(ws.messages[2] == "{\"type\":\"peer\",\"name\":\"SPIKY WINK BEARD\"}");
   BrowserSnapshot state{BrowserPhase::Playing, true, true};
   server.publish(state);
   const auto count = ws.messages.size();
-  assert(count == 4 && ws.messages[count - 2].find("playing") != std::string::npos);
+  assert(count == 5 && ws.messages[count - 2].find("playing") != std::string::npos);
   assert(ws.messages.back().find("\"type\":\"f\"") != std::string::npos);
   server.publish(state);
   assert(ws.messages.size() == count);
@@ -73,8 +76,9 @@ int main() {
   ws.event(WStype_TEXT, 0, profile);
   assert(handler.calls == 2);
   ws.event(WStype_CONNECTED, 1);
-  assert(ws.messages[ws.messages.size() - 2].find("playing") != std::string::npos);
-  assert(ws.messages.back().find("\"type\":\"f\"") != std::string::npos);
+  assert(ws.messages[ws.messages.size() - 3].find("playing") != std::string::npos);
+  assert(ws.messages[ws.messages.size() - 2].find("\"type\":\"f\"") != std::string::npos);
+  assert(ws.messages.back().find("SPIKY WINK BEARD") != std::string::npos);
   ws.event(WStype_TEXT, 1, profile);
   assert(handler.calls == 2 && ws.messages.back().find("error") != std::string::npos);
   ws.event(WStype_DISCONNECTED, 1);
@@ -86,6 +90,7 @@ int main() {
   const auto freshToken = http.response;
   assert(freshToken != token);
   ws.event(WStype_CONNECTED, 0);
+  assert(ws.messages.back().find("SPIKY WINK BEARD") != std::string::npos);
   const auto resume = "[\"resume\",\"" + freshToken + "\",2,\"" + resumeToken + "\"]";
   clockMs += 100;
   ws.event(WStype_TEXT, 0, resume);
@@ -119,5 +124,5 @@ int main() {
   assert(devmode::depth == 1 && WiFi.currentMode == WIFI_STA);
   devmode::resume();
   assert(devmode::depth == 0);
-  puts("Browser server: ownership, battle/fleet frames, session/resume capabilities, reconnect, AP/LAN and nested radio yield passed");
+  puts("Browser server: ownership, battle/fleet/peer frames, session/resume capabilities, reconnect, AP/LAN and nested radio yield passed");
 }
