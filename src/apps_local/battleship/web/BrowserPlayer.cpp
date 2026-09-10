@@ -63,6 +63,13 @@ bool BrowserPlayer::apply(bship::Game& game, const Command& c) {
       if (!bship::canPlace(draft, c.value[0], ship)) return false;
       view_.bow[c.value[0]] = ship.bow;
       view_.horizontal[c.value[0]] = ship.horizontal;
+    } else if (c.kind == CommandKind::Randomize) {
+      uint32_t seed = 0x9e3779b9u ^ (view_.revision * 2654435761u);
+      bship::randomFleet(draft, seed);
+      for (int i = 0; i < 5; ++i) {
+        view_.bow[i] = draft.ships[i].bow;
+        view_.horizontal[i] = draft.ships[i].horizontal;
+      }
     } else if (c.kind == CommandKind::Ready) {
       if (!bship::place(game, side, draft)) return false;
       view_.ready = true;
