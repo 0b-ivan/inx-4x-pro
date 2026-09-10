@@ -2,7 +2,11 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = fs.readFileSync('../../src/apps_local/battleship/web/BattleshipPage.html', 'utf8');
-function element() { return {textContent:'', innerHTML:'', value:'0', disabled:true, className:'', hidden:false, children:[], appendChild(child) { this.children.push(child); }, setAttribute() {}}; }
+function element() {
+  const node = {textContent:'', value:'0', disabled:true, className:'', hidden:false, children:[], _innerHTML:'', appendChild(child) { this.children.push(child); }, setAttribute() {}};
+  Object.defineProperty(node,'innerHTML',{get(){return this._innerHTML;},set(value){this._innerHTML=value;this.children=[];}});
+  return node;
+}
 const ids = ['app','status','phase','turn','profile','placement','feedback','hair','eyes','mouth','ship','grid','save','randomize','ready','battle','target','own','surrender','rematch','avatar','playerName','hudName','hud','setupState','hudTurn','ownSummary','enemySummary','enemyName','youPanel','enemyPanel','eventBanner','resultBanner'];
 const elements = Object.fromEntries(ids.map(id => [id,element()]));
 const cols=[element(),element()],rows=[element(),element()];
@@ -88,8 +92,8 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   assert.match(elements.youPanel.className,/active/);
   assert.doesNotMatch(elements.enemyPanel.className,/active/);
   assert.equal(elements.hudTurn.textContent,'YOUR TURN · SELECT TARGET');
-  assert.ok(elements.ownSummary.children.length>=5);
-  assert.ok(elements.enemySummary.children.length>=5);
+  assert.equal(elements.ownSummary.children.length,5);
+  assert.equal(elements.enemySummary.children.length,5);
 
   // A target is only armed on the first tap and fired on the second tap.
   elements.target.children[12].onclick();
