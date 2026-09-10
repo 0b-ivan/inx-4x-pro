@@ -60,6 +60,7 @@ bool Server::begin(const NetworkMode mode) {
       clientSeen_ = true;
       snapshot_.connected = true;
       sendSnapshot(client);
+      sendOpponentName(client);
     } else if (type == WStype_DISCONNECTED) {
       clientSeen_ = ws_.connectedClients() != 0;
       if (owner_ == client) {
@@ -127,6 +128,14 @@ void Server::sendSnapshot(const uint8_t client) {
   if (size) ws_.sendTXT(client, message, size);
   size = serializeFleetStatus(snapshot_, message, sizeof(message));
   if (size) ws_.sendTXT(client, message, size);
+}
+
+void Server::sendOpponentName(const uint8_t client) {
+  // player::name() currently guarantees a short generated name made from known
+  // uppercase words and spaces, so it is safe to place directly in this JSON
+  // string. The future typed-name PlayerService should own escaping/validation.
+  const int n = snprintf(reply_, sizeof(reply_), "{\"type\":\"peer\",\"name\":\"%s\"}", opponentName_.c_str());
+  if (n > 0 && static_cast<size_t>(n) < sizeof(reply_)) ws_.sendTXT(client, reply_, static_cast<size_t>(n));
 }
 
 void Server::sendResumeCapability(const uint8_t client) {
