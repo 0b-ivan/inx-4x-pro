@@ -56,8 +56,12 @@ BrowserSnapshot browserSnapshot(const bship::Game& game, const bool connected) {
     result.hitsAtX4[cell / 8] |= static_cast<uint8_t>(1u << (cell % 8));
   }
   for (int ship = 0; ship < bship::kShipCount; ++ship) {
-    if (game.side[x4Side].placed && bship::sunk(game.side[x4Side], ship))
-      result.sunkAtX4 |= static_cast<uint8_t>(1u << ship);
+    if (!game.side[x4Side].placed) continue;
+    for (int segment = 0; segment < bship::kShipLength[ship]; ++segment) {
+      const int cell = bship::shipCell(game.side[x4Side].fleet.ships[ship], segment);
+      if (bship::shotAt(game.side[x4Side], cell)) ++result.hitsByX4Ship[ship];
+    }
+    if (bship::sunk(game.side[x4Side], ship)) result.sunkAtX4 |= static_cast<uint8_t>(1u << ship);
   }
   return result;
 }
@@ -66,7 +70,8 @@ bool sameSnapshot(const BrowserSnapshot& a, const BrowserSnapshot& b) {
   return a.phase == b.phase && a.connected == b.connected && a.myTurn == b.myTurn && a.winner == b.winner &&
          a.sunkAtX4 == b.sunkAtX4 && memcmp(a.shotsAtX4, b.shotsAtX4, sizeof(a.shotsAtX4)) == 0 &&
          memcmp(a.hitsAtX4, b.hitsAtX4, sizeof(a.hitsAtX4)) == 0 &&
-         memcmp(a.shotsAtBrowser, b.shotsAtBrowser, sizeof(a.shotsAtBrowser)) == 0;
+         memcmp(a.shotsAtBrowser, b.shotsAtBrowser, sizeof(a.shotsAtBrowser)) == 0 &&
+         memcmp(a.hitsByX4Ship, b.hitsByX4Ship, sizeof(a.hitsByX4Ship)) == 0;
 }
 
 size_t serializeSnapshot(const BrowserSnapshot& snapshot, char* out, const size_t capacity) {
@@ -101,12 +106,23 @@ size_t serializeSnapshot(const BrowserSnapshot& snapshot, char* out, const size_
   encode64(board, sizeof(board), board64);
   encode64(snapshot.shotsAtBrowser, sizeof(snapshot.shotsAtBrowser), incoming64);
 
-  // Keep the discriminator compact: the full snapshot must fit the existing
-  // 128-byte WebSocket payload budget, including the new public sunk mask.
+  // Keep the battle-state frame within the existing fixed 128-byte budget.
   const int count = snprintf(out, capacity,
                              "{\"type\":\"s\",\"phase\":\"%s\",\"myTurn\":%s,\"w\":%d,\"b\":\"%s\",\"i\":\"%s\",\"s\":%u}",
                              phase, snapshot.myTurn ? "true" : "false", snapshot.winner, board64, incoming64,
                              snapshot.sunkAtX4);
+  if (count < 0 || static_cast<size_t>(count) >= capacity) {
+    out[0] = '\0';
+    return 0;
+  }
+  return static_cast<size_t>(count);
+}
+
+size_t serializeFleetStatus(const BrowserSnapshot& snapshot, char* out, const size_t capacity) {
+  if (!out || !capacity) return 0;
+  const int count = snprintf(out, capacity, "{\"type\":\"f\",\"h\":[%u,%u,%u,%u,%u]}", snapshot.hitsByX4Ship[0],
+                             snapshot.hitsByX4Ship[1], snapshot.hitsByX4Ship[2], snapshot.hitsByX4Ship[3],
+                             snapshot.hitsByX4Ship[4]);
   if (count < 0 || static_cast<size_t>(count) >= capacity) {
     out[0] = '\0';
     return 0;
