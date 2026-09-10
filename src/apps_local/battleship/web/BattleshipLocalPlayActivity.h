@@ -38,6 +38,7 @@ class BattleshipLocalPlayActivity final : public Activity {
   void enterBrowserWaiting();
   void startX4Placement();
   void commitX4Fleet();
+  void startMatchIfReady();
   void cleanupBrowserNetwork();
   void finishCancelled();
 
@@ -61,11 +62,11 @@ class BattleshipLocalPlayActivity final : public Activity {
   void drawNetworkChoice();
   void drawBrowserWaiting();
   void drawX4Placement();
-  void drawPlaying();
   void drawX4PlaceGrid();
   void drawX4PlaceRoster();
   void drawTargetGrid();
   void drawOwnFleetGrid();
+  void drawPlaying();
 
   Stage stage_ = Stage::Transport;
   toybox::Interactions interactions_;
@@ -83,6 +84,7 @@ class BattleshipLocalPlayActivity final : public Activity {
   uint8_t seenLastShot_ = 0;
   char x4Status_[48] = {};
   char x4Report_[48] = {};
+  bool x4Ready_ = false;
   bool devModePaused_ = false;
   bool ownsSta_ = false;
   bool lastClientSeen_ = false;
