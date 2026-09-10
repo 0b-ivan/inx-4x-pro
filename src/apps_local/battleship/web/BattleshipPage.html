@@ -12,7 +12,7 @@
       main { width:min(100%,560px); background:var(--panel); border:3px solid var(--line); padding:22px; box-shadow:8px 8px 0 var(--line); }
       header { border-bottom:3px solid var(--line); padding-bottom:14px; margin-bottom:18px; }
       h1 { margin:0; font-size:clamp(28px,8vw,46px); letter-spacing:.04em; }
-      h2 { font-size:15px; margin:18px 0 8px; }
+      h2 { font-size:15px; margin:12px 0 6px; }
       .eyebrow { margin:0 0 8px; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
       .status { display:flex; gap:12px; align-items:center; font-weight:700; font-size:18px; }
       .dot { width:14px; height:14px; border-radius:50%; background:var(--ink); flex:0 0 auto; }
@@ -23,8 +23,8 @@
       button { cursor:pointer; background:var(--panel); color:var(--ink); border:1px solid var(--line); }
       button:disabled { cursor:default; opacity:.45; }
       .player-card { display:grid; grid-template-columns:92px 1fr; gap:14px; align-items:center; margin:8px 0 12px; }
-      .avatar { position:relative; width:92px; aspect-ratio:1; border:2px solid var(--line); background:var(--bg); overflow:hidden; }
-      .avatar svg { position:absolute; inset:0; width:100%; height:100%; }
+      .avatar { position:relative; width:92px; aspect-ratio:1; border:2px solid var(--line); background:#111; overflow:hidden; }
+      .avatar svg { position:absolute; inset:0; width:100%; height:100%; filter:brightness(0) invert(1); }
       .player-name { font-size:18px; font-weight:700; line-height:1.2; }
       .player-slots { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
       .player-slots label { margin:0; font-size:11px; color:var(--muted); }
@@ -32,34 +32,56 @@
       .actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
       .actions button { min-height:44px; font-weight:700; }
       .hint { color:var(--muted); line-height:1.4; font-size:13px; }
-      .board { display:grid; grid-template-columns:20px 1fr; grid-template-rows:20px 1fr; gap:4px; margin:10px 0; }
+      .board { display:grid; grid-template-columns:20px 1fr; grid-template-rows:20px 1fr; gap:4px; margin:6px 0; }
       .col-labels { grid-column:2; display:grid; grid-template-columns:repeat(10,1fr); color:var(--muted); font-size:9px; text-align:center; align-items:end; }
       .row-labels { grid-row:2; display:grid; grid-template-rows:repeat(10,1fr); color:var(--muted); font-size:9px; text-align:right; align-items:center; padding-right:2px; }
       .grid { grid-column:2; grid-row:2; display:grid; grid-template-columns:repeat(10,1fr); position:relative; }
       .grid button { padding:0; aspect-ratio:1; border:1px solid var(--muted); min-width:0; position:relative; }
+      .grid button:disabled { opacity:1; cursor:default; }
       .grid .ship { background:var(--ship); }
       .grid .hit::before,.grid .hit::after,.grid .miss::before,.grid .miss::after { content:''; position:absolute; left:12%; right:12%; top:48%; height:2px; background:currentColor; transform:rotate(45deg); transform-origin:center; }
       .grid .hit::after,.grid .miss::after { transform:rotate(-45deg); }
       .grid .hit { background:var(--ship); color:var(--panel); }
       .grid .miss { color:var(--ink); }
       .grid .selected { outline:3px solid var(--ink); outline-offset:-4px; }
-      #battle[hidden],#rematch[hidden],#hud[hidden],#setupState[hidden] { display:none; }
-      #rematch { width:100%; margin-top:12px; border:2px solid var(--line); font-weight:700; min-height:48px; }
-      .match-header { border:2px solid var(--line); padding:12px; margin:14px 0; }
-      .match-top { display:flex; justify-content:space-between; gap:12px; align-items:center; }
-      .turn { font-weight:800; font-size:17px; }
-      .fleet-summary { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px; font-size:11px; }
-      .fleet-summary strong { display:block; margin-bottom:5px; }
-      .fleet-line { display:flex; justify-content:space-between; gap:6px; padding:2px 0; }
+      .grid .selected-target { outline:4px double var(--ink); outline-offset:-5px; }
+      #battle[hidden],#rematch[hidden],#hud[hidden],#setupState[hidden],#profile[hidden],#placement[hidden],#surrender[hidden] { display:none; }
+      #rematch,#surrender { width:100%; margin-top:10px; border:2px solid var(--line); font-weight:700; min-height:44px; }
+      #surrender { border-style:dashed; }
+      .match-header { border:2px solid var(--line); padding:10px; margin:10px 0 8px; }
+      .match-top { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+      .turn { font-weight:800; font-size:15px; text-align:right; }
+      .battle-info { display:grid; grid-template-columns:minmax(0,1fr) 112px; gap:10px; align-items:start; margin-top:8px; }
+      .fleet-summary { display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:9px; min-width:0; }
+      .fleet-summary strong { display:block; margin-bottom:4px; font-size:9px; }
+      .fleet-line { display:flex; justify-content:space-between; gap:4px; padding:1px 0; white-space:nowrap; }
       .fleet-line.sunk { text-decoration:line-through; opacity:.55; }
+      .mini-map strong { display:block; margin-bottom:4px; font-size:9px; }
+      .mini-grid { grid-column:auto; grid-row:auto; width:112px; border:1px solid var(--line); }
+      .mini-grid button { border-width:0 1px 1px 0; }
       .board-shell { position:relative; }
       .result-banner { display:none; position:absolute; z-index:3; left:8%; right:8%; top:42%; padding:16px 8px; border:4px solid var(--line); background:var(--panel); color:var(--ink); text-align:center; font-weight:900; font-size:clamp(26px,9vw,46px); box-shadow:6px 6px 0 var(--line); }
       .result-banner.show { display:block; }
+      main.in-battle { padding:12px; }
+      main.in-battle header { display:none; }
+      main.in-battle .status { font-size:12px; gap:7px; margin-bottom:4px; }
+      main.in-battle .dot { width:8px; height:8px; }
+      main.in-battle #feedback { font-size:11px; margin:8px 0 0; color:var(--muted); }
       code { color:var(--ink); font-weight:700; }
+      @media (max-width:600px) {
+        body { padding:8px; }
+        main { padding:14px; box-shadow:4px 4px 0 var(--line); }
+        .player-card { grid-template-columns:78px 1fr; gap:10px; }
+        .avatar { width:78px; }
+        .battle-info { grid-template-columns:minmax(0,1fr) 96px; gap:8px; }
+        .mini-grid { width:96px; }
+        .fleet-summary { font-size:8px; gap:6px; }
+        .fleet-summary strong { font-size:8px; }
+      }
     </style>
   </head>
   <body>
-    <main>
+    <main id="app">
       <header><p class="eyebrow">CrossPlay · X4 Pro</p><h1>BATTLESHIP</h1></header>
       <div class="status"><span class="dot"></span><span id="status">Connecting…</span></div>
       <p id="setupState" class="copy">Device status: <code id="phase">offline</code><br /><span id="turn"></span></p>
@@ -80,7 +102,7 @@
         <button id="save" type="button">USE PLAYER</button>
       </fieldset>
 
-      <fieldset id="placement" disabled>
+      <fieldset id="placement" hidden disabled>
         <legend>PLACE YOUR FLEET</legend>
         <label>Ship <select id="ship"><option value="0">Carrier · 5</option><option value="1">Battleship · 4</option><option value="2">Cruiser · 3</option><option value="3">Submarine · 3</option><option value="4">Destroyer · 2</option></select></label>
         <p class="hint">Tap a ship to select it, then tap a cell to move it. Double tap a placed ship to rotate it.</p>
@@ -90,7 +112,10 @@
 
       <section id="hud" class="match-header" hidden>
         <div class="match-top"><div><div class="eyebrow">MATCH</div><div id="hudName" class="player-name"></div></div><div id="hudTurn" class="turn"></div></div>
-        <div class="fleet-summary"><div><strong>YOUR FLEET</strong><div id="ownSummary"></div></div><div><strong>ENEMY FLEET</strong><div id="enemySummary"></div></div></div>
+        <div class="battle-info">
+          <div class="fleet-summary"><div><strong>YOUR FLEET</strong><div id="ownSummary"></div></div><div><strong>ENEMY FLEET</strong><div id="enemySummary"></div></div></div>
+          <div class="mini-map"><strong>YOUR SEA</strong><div id="own" class="grid mini-grid" aria-label="Your fleet minimap"></div></div>
+        </div>
       </section>
 
       <section id="battle" hidden>
@@ -99,9 +124,8 @@
           <div id="resultBanner" class="result-banner"></div>
           <div class="board"><div class="col-labels"></div><div class="row-labels"></div><div id="target" class="grid" aria-label="Enemy waters"></div></div>
         </div>
-        <h2>YOUR FLEET</h2>
-        <div class="board"><div class="col-labels"></div><div class="row-labels"></div><div id="own" class="grid" aria-label="Your fleet status"></div></div>
       </section>
+      <button id="surrender" type="button" hidden disabled>SURRENDER</button>
       <button id="rematch" type="button" hidden disabled>PLAY AGAIN</button>
       <p id="feedback" role="status">Waiting for connection.</p>
     </main>
@@ -109,7 +133,7 @@
     <script>
       /*__BATTLESHIP_AVATAR_SVGS__*/
       const byId=id=>document.getElementById(id);
-      const status=byId('status'),phase=byId('phase'),turn=byId('turn'),profile=byId('profile'),placement=byId('placement'),feedback=byId('feedback'),battle=byId('battle'),rematch=byId('rematch'),hud=byId('hud'),setupState=byId('setupState');
+      const shell=byId('app'),status=byId('status'),phase=byId('phase'),turn=byId('turn'),profile=byId('profile'),placement=byId('placement'),feedback=byId('feedback'),battle=byId('battle'),rematch=byId('rematch'),surrender=byId('surrender'),hud=byId('hud'),setupState=byId('setupState');
       const slots=['hair','eyes','mouth'].map(byId), storageKey='crossplay-battleship-resume-v1';
       const words=[['BALD','TUFTY','SLICK','WAVY','CURLY','SPIKY','PUNK','MOP','BUN','BRAIDS','PONY','BOB','LONG','AFRO'],['GRIM','SAD','SLY','SQUINT','SLEEPY','BLINK','GLAD','WINK','BEADY','WIDE','CROSS','BUSHY','SPECS','SHADES'],['GRIN','TEETH','SMIRK','GLUM','POUT','FROWN','GASP','TONGUE','FANGS','SCRUFF','TASH','GOATEE','MUTTON','BEARD']];
       for(let si=0;si<slots.length;si++)for(let i=0;i<14;i++){const o=document.createElement('option');o.value=i;o.textContent=words[si][i];slots[si].appendChild(o);}
@@ -119,11 +143,12 @@
       document.querySelectorAll('.row-labels').forEach(col=>{for(let n=0;n<10;n++){const s=document.createElement('span');s.textContent=String.fromCharCode(65+n);col.appendChild(s);}});
       for(let cell=0;cell<100;cell++){
         const p=document.createElement('button');p.type='button';p.setAttribute('aria-label',label(cell));p.onclick=()=>placeTap(cell);byId('grid').appendChild(p);cells.push(p);
-        const t=document.createElement('button');t.type='button';t.setAttribute('aria-label',label(cell));t.onclick=()=>fire(cell);byId('target').appendChild(t);targets.push(t);
+        const t=document.createElement('button');t.type='button';t.setAttribute('aria-label',label(cell));t.onclick=()=>targetTap(cell);byId('target').appendChild(t);targets.push(t);
         const o=document.createElement('button');o.type='button';o.disabled=true;o.setAttribute('aria-label',label(cell));byId('own').appendChild(o);own.push(o);
       }
-      let selectedShip=0,lastShipTap=-1,lastShipTapAt=0;
+      let selectedShip=0,lastShipTap=-1,lastShipTapAt=0,selectedTarget=-1,surrenderArmed=false;
       function playerParts(){return slots.map((s,i)=>words[i][Number(s.value)]);}
+      function playerName(){return playerParts().join(' ');}
       function renderAvatar(){const p=playerParts();byId('playerName').textContent=p.join(' ');byId('hudName').textContent=p.join(' ');byId('avatar').innerHTML=avatarSvg.base+(avatarSvg.hair[p[0]]||'')+(avatarSvg.eyes[p[1]]||'')+(avatarSvg.mouth[p[2]]||'');}
       slots.forEach(s=>s.onchange=renderAvatar);renderAvatar();
       function shipIndexAt(cell){if(!view)return-1;for(let index=0;index<5;index++){const s=view.ships[index];if(s[0]===255)continue;for(let j=0;j<lengths[index];j++)if(s[0]+j*(s[1]?1:10)===cell)return index;}return-1;}
@@ -134,22 +159,28 @@
       function saveResume(){try{if(resumeToken&&view&&view.ready)sessionStorage.setItem(storageKey,JSON.stringify({token:resumeToken,view}));else sessionStorage.removeItem(storageKey);}catch{}}
       function controls(){
         const online=socket&&socket.readyState===WebSocket.OPEN&&token&&!pending;
+        const hasProfile=Boolean(view&&view.profile);
         const inBattle=Boolean(view&&view.ready&&state&&(state.phase==='playing'||state.phase==='finished'));
-        profile.disabled=!online||Boolean(view&&view.ready)||Boolean(state&&state.phase==='finished');
-        placement.disabled=!online||!view||!view.profile||view.ready;
+        profile.hidden=hasProfile||inBattle;
+        placement.hidden=!hasProfile||Boolean(view&&view.ready)||inBattle;
+        profile.disabled=!online||hasProfile||Boolean(state&&state.phase==='finished');
+        placement.disabled=!online||!hasProfile||Boolean(view&&view.ready);
         byId('ready').disabled=placement.disabled||!view||view.ships.some(s=>s[0]===255);
         byId('randomize').disabled=placement.disabled;
-        profile.hidden=inBattle;placement.hidden=inBattle;setupState.hidden=inBattle;hud.hidden=!inBattle;
+        setupState.hidden=inBattle;hud.hidden=!inBattle;shell.className=inBattle?'in-battle':'';
         const canFire=online&&state&&state.phase==='playing'&&state.myTurn;
         targets.forEach((b,i)=>b.disabled=!canFire||targetState(i)!==0);
+        surrender.hidden=!(state&&state.phase==='playing');surrender.disabled=!online||surrender.hidden;
+        surrender.textContent=surrenderArmed?'CONFIRM SURRENDER':'SURRENDER';
         rematch.hidden=!(state&&state.phase==='finished');rematch.disabled=!online||rematch.hidden;
       }
       function send(kind,...values){if(!socket||socket.readyState!==WebSocket.OPEN||!token||pending)return;pending=true;controls();socket.send(JSON.stringify([kind,token,revision,...values]));}
-      function fire(cell){if(!state||!state.myTurn||targetState(cell)!==0)return;send('fire',cell);feedback.textContent=`Firing at ${label(cell)}…`;}
+      function targetTap(cell){if(!state||!state.myTurn||targetState(cell)!==0||pending)return;surrenderArmed=false;if(selectedTarget===cell){selectedTarget=-1;send('fire',cell);feedback.textContent=`Firing at ${label(cell)}…`;return;}selectedTarget=cell;feedback.textContent=`Target ${label(cell)} selected. Tap again to fire.`;renderBoards();}
       byId('save').onclick=()=>send('profile',...slots.map(s=>Number(s.value)));
       byId('randomize').onclick=()=>{send('randomize');feedback.textContent='Randomizing fleet…';};
       byId('ready').onclick=()=>send('ready');
-      rematch.onclick=()=>{if(!state||state.phase!=='finished')return;send('rematch');feedback.textContent='Starting a new round…';};
+      surrender.onclick=()=>{if(!state||state.phase!=='playing'||pending)return;if(!surrenderArmed){surrenderArmed=true;selectedTarget=-1;feedback.textContent='Tap CONFIRM SURRENDER to give up this round.';controls();renderBoards();return;}surrenderArmed=false;send('surrender');feedback.textContent='Surrendering…';};
+      rematch.onclick=()=>{if(!state||state.phase!=='finished')return;selectedTarget=-1;surrenderArmed=false;send('rematch');feedback.textContent='Starting a new round…';};
       function validView(d){return d&&Number.isInteger(d.revision)&&d.revision>=0&&d.revision<=4294967295&&typeof d.profile==='boolean'&&typeof d.ready==='boolean'&&typeof d.accepted==='boolean'&&Array.isArray(d.slots)&&d.slots.length===3&&d.slots.every(n=>Number.isInteger(n)&&n>=0&&n<=13)&&Array.isArray(d.ships)&&d.ships.length===5&&d.ships.every(s=>Array.isArray(s)&&s.length===2&&Number.isInteger(s[0])&&(s[0]===255||s[0]>=0&&s[0]<100)&&(s[1]===0||s[1]===1));}
       function decode64(text,size){if(typeof text!=='string')return null;const alpha='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';const out=new Uint8Array(size);let acc=0,bits=0,at=0;for(const ch of text){const v=alpha.indexOf(ch);if(v<0)return null;acc=(acc<<6)|v;bits+=6;if(bits>=8){bits-=8;if(at<size)out[at++]=(acc>>bits)&255;}}return at===size?out:null;}
       function targetState(cell){if(!state||!state.board)return 0;const bit=cell*2,byte=state.board[Math.floor(bit/8)];return(byte>>(bit%8))&3;}
@@ -160,39 +191,40 @@
       function renderBoards(){
         cells.forEach(b=>b.className='');
         if(view)view.ships.forEach((s,index)=>{if(s[0]===255)return;for(let j=0;j<lengths[index];j++){const c=s[0]+j*(s[1]?1:10);if(cells[c])cells[c].className='ship'+(index===selectedShip?' selected':'');}});
-        targets.forEach((b,i)=>{b.className='';const s=targetState(i);if(s===3)b.className='hit';else if(s===1)b.className='miss';});
+        targets.forEach((b,i)=>{b.className='';const s=targetState(i);if(s===3)b.className='hit';else if(s===1)b.className='miss';else if(i===selectedTarget)b.className='selected-target';});
         own.forEach((b,i)=>{b.className=shipAt(i)?'ship':'';if(state&&shot(state.incoming,i))b.className=shipAt(i)?'hit':'miss';});
         const inBattle=view&&view.ready&&state&&(state.phase==='playing'||state.phase==='finished');battle.hidden=!inBattle;
         const banner=byId('resultBanner');banner.className='result-banner';banner.textContent='';if(state&&state.phase==='finished'){banner.textContent=state.winner===1?'VICTORY':'DEFEAT';banner.className='result-banner show';}
-        byId('hudTurn').textContent=state&&state.phase==='finished'?(state.winner===1?'VICTORY':'DEFEAT'):(state&&state.myTurn?'YOUR TURN':'X4 PRO TURN');renderSummary();controls();
+        byId('hudTurn').textContent=state&&state.phase==='finished'?(state.winner===1?'VICTORY':'DEFEAT'):(state&&state.myTurn?'YOUR TURN':'WAITING FOR X4 PRO');renderSummary();controls();
       }
       function applyState(d){
         if(!['waiting','placement','playing','finished'].includes(d.phase)||typeof d.myTurn!=='boolean'||!Number.isInteger(d.w)||!Number.isInteger(d.s)||d.s<0||d.s>31)return;
         const board=decode64(d.b,25),incoming=decode64(d.i,13);if(!board||!incoming)return;
         state={phase:d.phase,myTurn:d.myTurn,winner:d.w,board,incoming,sunkMask:d.s};phase.textContent=d.phase;status.textContent='Connected to X4 Pro';
+        if(d.phase!=='playing'||!d.myTurn)selectedTarget=-1;if(d.phase!=='playing')surrenderArmed=false;
         if(d.phase==='finished'){turn.textContent=d.w===1?'YOU WIN':'X4 PRO WINS';feedback.textContent=turn.textContent;}
-        else if(d.phase==='playing'){turn.textContent=d.myTurn?'YOUR MOVE':'X4 PRO MOVE';feedback.textContent=d.myTurn?'Choose a target.':'Waiting for the X4 Pro.';}
-        else if(d.phase==='waiting'&&view&&view.ready){turn.textContent='X4 Pro is placing its fleet.';}
+        else if(d.phase==='playing'){turn.textContent=d.myTurn?'YOUR MOVE':'WAITING FOR X4 PRO';feedback.textContent=d.myTurn?'Select a target, then tap it again to fire.':'Waiting for X4 Pro.';}
+        else if(d.phase==='waiting'&&view&&view.ready){turn.textContent='WAITING FOR X4 PRO';feedback.textContent='Your fleet is ready. Waiting for X4 Pro.';}
         else if(d.phase==='placement'&&view&&view.profile){turn.textContent='Place your fleet for the new round.';}
         else turn.textContent='';
         renderBoards();
       }
       async function connect(){
-        const current=++generation;token='';state=null;pending=false;resuming=false;controls();renderBoards();status.textContent='Connecting…';
+        const current=++generation;token='';state=null;pending=false;resuming=false;selectedTarget=-1;surrenderArmed=false;controls();renderBoards();status.textContent='Connecting…';
         try{
           const response=await fetch('/battleship/session',{cache:'no-store',credentials:'same-origin'});if(!response.ok)throw new Error('session');const value=await response.text();if(!/^[a-f0-9]{32}$/.test(value))throw new Error('session');if(hidden||current!==generation)return;
           token=value;socket=new WebSocket(`ws://${location.hostname}:81/battleship`);const active=socket;
-          socket.onopen=()=>{if(current!==generation)return;if(resumeToken&&view&&view.ready){resuming=true;send('resume',resumeToken);feedback.textContent='Restoring your match…';}else{controls();feedback.textContent='Choose your player. Your name and face appear on the X4 Pro.';}};
+          socket.onopen=()=>{if(current!==generation)return;if(resumeToken&&view&&view.ready){resuming=true;send('resume',resumeToken);feedback.textContent='Restoring your match…';}else{controls();feedback.textContent=view&&view.profile?'Place your fleet. X4 Pro can place in parallel.':'Choose your player. Your name and face appear on the X4 Pro.';}};
           socket.onmessage=event=>{
             if(current!==generation)return;let d;try{d=JSON.parse(event.data);}catch{return;}if(!d||typeof d!=='object')return;
             if(d.type==='s')applyState(d);
             else if(d.type==='resume'&&/^[a-f0-9]{32}$/.test(d.token)){resumeToken=d.token;saveResume();}
-            else if(d.type==='placement'&&validView(d)){view=d;revision=d.revision;pending=false;resuming=false;d.slots.forEach((n,i)=>slots[i].value=n);renderAvatar();saveResume();renderBoards();feedback.textContent=d.ready?(state&&state.phase==='playing'?'Match restored.':'Fleet confirmed. X4 Pro is setting its fleet.'):d.accepted?(state&&state.phase==='finished'?'New round ready. Place your fleet.':'Accepted by X4 Pro.'):'Move refused. Check overlap and board edges.';}
+            else if(d.type==='placement'&&validView(d)){view=d;revision=d.revision;pending=false;resuming=false;d.slots.forEach((n,i)=>slots[i].value=n);renderAvatar();saveResume();renderBoards();feedback.textContent=d.ready?(state&&state.phase==='playing'?'Match restored.':'Fleet confirmed. Waiting for X4 Pro.'):d.accepted?(d.profile&&d.ships.every(s=>s[0]===255)?'Player ready. Place your fleet while X4 Pro places theirs.':'Accepted by X4 Pro.'):'Move refused. Check overlap and board edges.';}
             else if(d.type==='error'){
               pending=false;if(resuming){resuming=false;resumeToken='';view=null;revision=0;saveResume();feedback.textContent='Saved match could not be restored.';}else feedback.textContent='Request refused. Check turn/state or reconnect.';controls();
             }
           };
-          socket.onclose=()=>{if(current!==generation)return;token='';pending=false;resuming=false;controls();status.textContent='Connection lost · reconnecting…';phase.textContent='offline';turn.textContent='';feedback.textContent=resumeToken&&view&&view.ready?'Match paused. Reconnecting…':'Unconfirmed placement is cleared on disconnect.';if(!hidden)retry=setTimeout(connect,2000);};
+          socket.onclose=()=>{if(current!==generation)return;token='';pending=false;resuming=false;selectedTarget=-1;surrenderArmed=false;controls();status.textContent='Connection lost · reconnecting…';phase.textContent='offline';turn.textContent='';feedback.textContent=resumeToken&&view&&view.ready?'Match paused. Reconnecting…':'Unconfirmed placement is cleared on disconnect.';if(!hidden)retry=setTimeout(connect,2000);};
           socket.onerror=()=>active.close();
         }catch{if(!hidden&&current===generation){status.textContent='Connection unavailable · retrying…';retry=setTimeout(connect,2000);}}
       }
