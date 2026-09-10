@@ -2,6 +2,7 @@
 
 #include "../../../activities/Activity.h"
 #include "../../../components/UITheme.h"
+#include "../../player/PlayerName.h"
 #include "../../ui/ToyboxScreen.h"
 #include "../BattleshipCore.h"
 #include "BattleshipBrowserServer.h"
@@ -10,7 +11,11 @@
 class BattleshipLocalPlayActivity final : public Activity {
  public:
   BattleshipLocalPlayActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("BattleshipLocalPlay", renderer, mappedInput) {}
+      : Activity("BattleshipLocalPlay", renderer, mappedInput) {
+    // The reader already has one device-wide Player identity. Reuse it for the
+    // browser opponent instead of presenting the hardware model as a player.
+    browser_.setOpponentName(player::name());
+  }
 
   void onEnter() override;
   void onExit() override;
@@ -39,6 +44,8 @@ class BattleshipLocalPlayActivity final : public Activity {
   void startX4Placement();
   void commitX4Fleet();
   void startMatchIfReady();
+  void surrenderX4();
+  void rematchFromX4();
   void cleanupBrowserNetwork();
   void finishCancelled();
 
@@ -85,6 +92,7 @@ class BattleshipLocalPlayActivity final : public Activity {
   char x4Status_[48] = {};
   char x4Report_[48] = {};
   bool x4Ready_ = false;
+  bool x4SurrenderArmed_ = false;
   bool devModePaused_ = false;
   bool ownsSta_ = false;
   bool lastClientSeen_ = false;

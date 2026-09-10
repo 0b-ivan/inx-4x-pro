@@ -23,7 +23,7 @@
 
 namespace {
 namespace fui = freeink::ui;
-constexpr fui::ActionId kActionNetworkRow = 7;
+constexpr fui::ActionId kActionNetworkRow = 8;
 constexpr int kQrSize = 170;
 constexpr int kFleetCell = 16;
 constexpr int kMissRing = 3;
@@ -80,6 +80,7 @@ void BattleshipLocalPlayActivity::onEnter() {
           activity.x4AimCell_ = -1;
           activity.seenLastShot_ = 0;
           activity.x4Ready_ = false;
+          activity.x4SurrenderArmed_ = false;
           activity.x4Status_[0] = '\0';
           activity.x4Report_[0] = '\0';
           activity.startX4Placement();
@@ -94,9 +95,14 @@ void BattleshipLocalPlayActivity::onEnter() {
         }
 
         if (command.kind == bshipweb::CommandKind::Fire) {
+          activity.x4SurrenderArmed_ = false;
           activity.reportLastShot(true);
           activity.seenLastShot_ = activity.browserGame_.lastShot;
           activity.x4AimCell_ = -1;
+        } else if (command.kind == bshipweb::CommandKind::Surrender) {
+          activity.x4SurrenderArmed_ = false;
+          activity.x4AimCell_ = -1;
+          std::snprintf(activity.x4Report_, sizeof(activity.x4Report_), "%s SURRENDERED", activity.browserPlayer_.name());
         }
         activity.browser_.publish(bshipweb::browserSnapshot(activity.browserGame_, activity.browser_.clientSeen()));
         activity.requestUpdate();
@@ -110,6 +116,7 @@ void BattleshipLocalPlayActivity::onEnter() {
           if (activity.stage_ == Stage::X4Placement) {
             activity.stage_ = Stage::BrowserWaiting;
             activity.x4Ready_ = false;
+            activity.x4SurrenderArmed_ = false;
             activity.selectedX4Ship_ = -1;
           }
         }
@@ -221,6 +228,7 @@ void BattleshipLocalPlayActivity::enterBrowserWaiting() {
   x4AimCell_ = -1;
   seenLastShot_ = 0;
   x4Ready_ = false;
+  x4SurrenderArmed_ = false;
   x4Status_[0] = '\0';
   x4Report_[0] = '\0';
   browser_.publish(bshipweb::browserSnapshot(browserGame_, false));
@@ -234,6 +242,7 @@ void BattleshipLocalPlayActivity::startX4Placement() {
   bship::randomFleet(x4Fleet_, seed_);
   selectedX4Ship_ = -1;
   x4Ready_ = false;
+  x4SurrenderArmed_ = false;
   std::snprintf(x4Status_, sizeof(x4Status_), "SET YOUR FLEET");
   stage_ = Stage::X4Placement;
   browser_.publish(bshipweb::browserSnapshot(browserGame_, browser_.clientSeen()));
@@ -262,6 +271,7 @@ void BattleshipLocalPlayActivity::startMatchIfReady() {
     return;
   }
   x4AimCell_ = -1;
+  x4SurrenderArmed_ = false;
   x4Report_[0] = '\0';
   std::snprintf(x4Status_, sizeof(x4Status_), "WAITING FOR %s", browserPlayer_.name());
   stage_ = Stage::Playing;
@@ -403,6 +413,10 @@ void BattleshipLocalPlayActivity::handleX4PlaceTap(const int cell) {
 
 void BattleshipLocalPlayActivity::aimX4Shot(const int cell) {
   if (stage_ != Stage::Playing || bship::over(browserGame_) || browserGame_.turn != 0) return;
+  if (x4SurrenderArmed_) {
+    x4SurrenderArmed_ = false;
+    x4Report_[0] = '\0';
+  }
   if (bship::shotAt(browserGame_.side[1], cell)) {
     std::snprintf(x4Report_, sizeof(x4Report_), "ALREADY FIRED THERE");
     requestUpdate();
@@ -423,11 +437,60 @@ void BattleshipLocalPlayActivity::fireX4Shot() {
     LOG_ERR("BSHIPWEB", "X4 shot was refused by BattleshipCore");
     return;
   }
+  x4SurrenderArmed_ = false;
   reportLastShot(false);
   seenLastShot_ = browserGame_.lastShot;
   x4AimCell_ = -1;
   browser_.publish(bshipweb::browserSnapshot(browserGame_, browser_.clientSeen()));
   requestUpdate();
+}
+
+void BattleshipLocalPlayActivity::surrenderX4() {
+  if (stage_ != Stage::Playing || bship::over(browserGame_)) return;
+  if (!x4SurrenderArmed_) {
+    x4SurrenderArmed_ = true;
+    x4AimCell_ = -1;
+    std::snprintf(x4Report_, sizeof(x4Report_), "SURRENDER THIS ROUND?");
+    requestUpdate();
+    return;
+  }
+
+  for (int ship = 0; ship < bship::kShipCount; ++ship) {
+    for (int segment = 0; segment < bship::kShipLength[ship]; ++segment) {
+      bship::markShot(browserGame_.side[0], bship::shipCell(browserGame_.side[0].fleet.ships[ship], segment));
+    }
+  }
+  browserGame_.lastShot = 0;
+  x4SurrenderArmed_ = false;
+  x4AimCell_ = -1;
+  std::snprintf(x4Report_, sizeof(x4Report_), "YOU SURRENDERED");
+  browser_.publish(bshipweb::browserSnapshot(browserGame_, browser_.clientSeen()));
+  requestUpdate();
+}
+
+void BattleshipLocalPlayActivity::rematchFromX4() {
+  if (stage_ != Stage::Playing || !bship::over(browserGame_)) return;
+
+  bshipweb::Command command;
+  command.kind = bshipweb::CommandKind::Rematch;
+  command.revision = browserPlayer_.view().revision;
+  if (!browserPlayer_.apply(browserGame_, command)) {
+    LOG_ERR("BSHIPWEB", "X4 rematch request was refused");
+    return;
+  }
+
+  // A device-side rematch has no browser command response of its own, so push
+  // the new placement view explicitly. That keeps the browser revision and
+  // ready flag in lockstep without reconnecting or changing seats.
+  browser_.publishPlacement(browserPlayer_.view());
+  selectedX4Ship_ = -1;
+  x4AimCell_ = -1;
+  seenLastShot_ = 0;
+  x4Ready_ = false;
+  x4SurrenderArmed_ = false;
+  x4Status_[0] = '\0';
+  x4Report_[0] = '\0';
+  startX4Placement();
 }
 
 void BattleshipLocalPlayActivity::reportLastShot(const bool browserShot) {
@@ -447,9 +510,12 @@ void BattleshipLocalPlayActivity::reportLastShot(const bool browserShot) {
     else
       std::snprintf(x4Report_, sizeof(x4Report_), hit ? "%s: HIT" : "%s: MISS", where);
   }
-  if (bship::over(browserGame_))
-    std::snprintf(x4Status_, sizeof(x4Status_), bship::winner(browserGame_) == 0 ? "YOU WIN" : "%s WINS", browserPlayer_.name());
-  else if (browserGame_.turn == 0)
+  if (bship::over(browserGame_)) {
+    if (bship::defeated(browserGame_.side[0]))
+      std::snprintf(x4Status_, sizeof(x4Status_), "YOU LOSE");
+    else
+      std::snprintf(x4Status_, sizeof(x4Status_), "YOU WIN");
+  } else if (browserGame_.turn == 0)
     std::snprintf(x4Status_, sizeof(x4Status_), "YOUR MOVE");
   else
     std::snprintf(x4Status_, sizeof(x4Status_), "WAITING FOR %s", browserPlayer_.name());
@@ -499,6 +565,14 @@ void BattleshipLocalPlayActivity::routePlayingInput() {
     const fui::ActionEvent event = interactions_.route(input);
     if (event.action == bshipui::ActionFire) {
       fireX4Shot();
+      return;
+    }
+    if (event.action == bshipui::ActionSurrender) {
+      surrenderX4();
+      return;
+    }
+    if (event.action == bshipui::ActionPlayAgain) {
+      rematchFromX4();
       return;
     }
   }
@@ -720,18 +794,20 @@ void BattleshipLocalPlayActivity::drawPlaying() {
   toybox::Screen screen(frame);
   bshipui::BoardModel model;
   model.report = x4Report_;
-  char waiting[48] = {};
   if (bship::over(browserGame_))
-    model.status = bship::winner(browserGame_) == 0 ? "YOU WIN" : "THEY WIN";
-  else if (browserGame_.turn != 0) {
-    std::snprintf(waiting, sizeof(waiting), "WAITING FOR %s", browserPlayer_.name());
-    model.status = waiting;
-  } else if (x4AimCell_ < 0)
-    model.status = "TAP A TARGET";
+    model.status = bship::defeated(browserGame_.side[0]) ? "YOU LOSE" : "YOU WIN";
+  else if (x4SurrenderArmed_)
+    model.status = "SURRENDER?";
+  else if (browserGame_.turn != 0)
+    model.status = "THEIR TURN";
+  else if (x4AimCell_ < 0)
+    model.status = "SELECT TARGET";
   else
-    model.status = "TAP AGAIN TO FIRE";
-  model.canFire = browserGame_.turn == 0 && x4AimCell_ >= 0 && !bship::over(browserGame_);
+    model.status = "FIRE";
+  model.canFire = browserGame_.turn == 0 && x4AimCell_ >= 0 && !bship::over(browserGame_) && !x4SurrenderArmed_;
   model.gameOver = bship::over(browserGame_);
+  model.canSurrender = !model.gameOver;
+  model.surrenderArmed = x4SurrenderArmed_;
   model.theirName = browserPlayer_.name();
   const fui::Rect slot = bshipui::buildBoardChrome(screen, model);
   x4BodySlot_ = Rect{slot.x, slot.y, slot.width, slot.height};

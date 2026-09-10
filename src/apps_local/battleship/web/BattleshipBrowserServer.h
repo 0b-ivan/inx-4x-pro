@@ -29,6 +29,8 @@ class Server final {
   void stop();
   void loop();
   void publish(const BrowserSnapshot& snapshot);
+  void publishPlacement(const PlacementView& view);
+  void setOpponentName(const char* name) { opponentName_ = name && *name ? name : "X4 PRO"; }
 
   void setCommands(void* context, bool (*apply)(void*, const Command&, PlacementView&), void (*disconnect)(void*)) {
     context_ = context;
@@ -54,6 +56,7 @@ class Server final {
   void releaseDevMode();
 
   void sendSnapshot(uint8_t client);
+  void sendOpponentName(uint8_t client);
   void sendResumeCapability(uint8_t client);
   void receive(uint8_t client, const uint8_t* payload, size_t size);
   void rotateToken();
@@ -80,6 +83,7 @@ class Server final {
   NetworkMode mode_ = NetworkMode::ExistingWifi;
   bool running_ = false;
   bool clientSeen_ = false;
+  std::string opponentName_ = "X4 PRO";
   std::string ssid_;
   std::string ip_;
   std::string url_;
