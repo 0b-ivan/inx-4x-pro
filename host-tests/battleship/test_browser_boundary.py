@@ -8,6 +8,7 @@ assert "bship::Game" not in server + header
 assert "serializeSnapshot(snapshot_," in server
 assert "serializeFleetStatus(snapshot_," in server
 assert "hitsByX4Ship" in snapshot and "fleet.ships[ship]" in snapshot
+assert "sendOpponentName(client)" in server and '\"type\":\"peer\"' in server
 assert "type == WStype_TEXT" in server and "type == WStype_BIN" not in server
 assert "ws_.close()" in server and "ws_.enableHeartbeat" in server
 assert "parseCommand(payload, size, command)" in server
@@ -21,6 +22,7 @@ assert "filter:brightness(0) invert(1)" in page
 assert "id=\"placement\" hidden" in page
 assert "grid-template-columns:repeat(3,minmax(0,1fr))" in page
 assert "side-panel.active" in page
-assert "impact-shake" in page and "ship-flash" in page
-assert "d.type==='f'" in page
-print("Browser boundary: DTO-only transport, damage-only fleet status, three-way turn HUD, two-tap fire, surrender guard and cleanup passed")
+assert "impact-shake" in page and "ship-flash" in page and "ship-sunk-flash" in page
+assert "sunk-segment" in page and "eventBanner" in page
+assert "d.type==='f'" in page and "d.type==='peer'" in page
+print("Browser boundary: DTO-only transport, peer identity, sunk feedback, three-way turn HUD, two-tap fire, surrender guard and cleanup passed")
