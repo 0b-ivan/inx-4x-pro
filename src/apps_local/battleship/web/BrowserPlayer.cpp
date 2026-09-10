@@ -32,6 +32,18 @@ bool BrowserPlayer::apply(bship::Game& game, const Command& c) {
     return true;
   }
 
+  if (c.kind == CommandKind::Surrender) {
+    if (!view_.ready || !bship::bothPlaced(game) || bship::over(game)) return false;
+    for (int ship = 0; ship < bship::kShipCount; ++ship) {
+      for (int cell = 0; cell < bship::kShipLength[ship]; ++cell) {
+        bship::markShot(game.side[side], bship::shipCell(game.side[side].fleet.ships[ship], cell));
+      }
+    }
+    game.lastShot = 0;
+    ++view_.revision;
+    return true;
+  }
+
   if (bship::over(game)) return false;
 
   if (c.kind == CommandKind::Fire) {
