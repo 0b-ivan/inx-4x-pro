@@ -25,8 +25,6 @@ class Server final {
   Server(const Server&) = delete;
   Server& operator=(const Server&) = delete;
 
-  // ExistingWifi expects an already-connected STA. Hotspot creates the same
-  // simple open-network shape the reader's file-transfer screen already uses.
   bool begin(NetworkMode mode);
   void stop();
   void loop();
@@ -56,13 +54,15 @@ class Server final {
   void releaseDevMode();
 
   void sendSnapshot(uint8_t client);
+  void sendResumeCapability(uint8_t client);
   void receive(uint8_t client, const uint8_t* payload, size_t size);
   void rotateToken();
+  void rotateResumeToken();
   char token_[33] = {};
+  char resumeToken_[33] = {};
   int owner_ = -1;
   uint32_t lastCommandMs_ = 0;
   bool commandSeen_ = false;
-  // Fixed member buffer avoids growing the activity-loop stack or per-message heap.
   char reply_[256] = {};
 
   WebSocketsServer ws_{81};
@@ -70,9 +70,6 @@ class Server final {
   DNSServer dns_;
   bool routesConfigured_ = false;
   bool dnsRunning_ = false;
-  // The server itself takes a Developer Mode yield because it owns port 80 and,
-  // in hotspot mode, the radio. Callers may also hold an outer yield; DevMode's
-  // yieldDepth is intentionally nestable.
   bool devModePaused_ = false;
 #endif
 
