@@ -24,28 +24,19 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Prepare alpha.5 metadata
+      - name: Prepare alpha.5 version
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-
           p = Path('platformio.ini')
           s = p.read_text()
           old = 'version = 1.14.0-alpha.4'
           if old not in s:
               raise SystemExit('expected alpha.4 version not found')
           p.write_text(s.replace(old, 'version = 1.14.0-alpha.5', 1))
-
-          p = Path('.github/workflows/crossplay-release.yml')
-          s = p.read_text()
-          s = s.replace('### What is new in 1.14.0-alpha.4', '### What is new in 1.14.0-alpha.5', 1)
-          old_bullet = '- This alpha covers browser setup only: X4 fleet setup and shooting are not available yet.'
-          new_bullets = '''- After the browser confirms its fleet, the X4 Pro now leaves the network waiting screen and enters its own fleet placement.\n            - The X4 can shuffle, move and rotate its fleet while the browser session stays connected.\n            - Once both fleets are confirmed, the session advances to the playing state. Shooting is the next implementation step.\n            - Fix the X4 placement build by including the shared `Rect` definition in the browser activity header.'''
-          if old_bullet not in s:
-              raise SystemExit('expected alpha.4 scope bullet not found')
-          p.write_text(s.replace(old_bullet, new_bullets, 1))
           PY
+          grep -Fq '### What is new in 1.14.0-alpha.5' .github/workflows/crossplay-release.yml
 
       - name: Validate implementation
         run: |
@@ -58,12 +49,12 @@ jobs:
           python3 -m pip install -q platformio
           python3 -m platformio run -e simulator_x4_pro
 
-      - name: Commit prepared release
+      - name: Commit prepared version
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add platformio.ini .github/workflows/crossplay-release.yml
+          git add platformio.ini
           git commit -m "chore: prepare v1.14.0-alpha.5"
           git push origin HEAD:feature/battleship-browser-crossplay
           echo "RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
