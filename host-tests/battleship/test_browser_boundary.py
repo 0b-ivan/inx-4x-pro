@@ -12,4 +12,9 @@ assert "strcmp(command.token, token_)" in server
 assert "owner_ != client" in server
 assert "broadcastTXT(reply_" not in server
 assert "socket.onclose" in page and "socket.onmessage" in page
-print("Browser boundary: DTO-only transport, validated commands, reconnect and cleanup passed")
+assert "selectedTarget===cell" in page and "send('fire',cell)" in page
+assert "CONFIRM SURRENDER" in page and "send('surrender')" in page
+assert "filter:brightness(0) invert(1)" in page
+assert "id=\"placement\" hidden" in page
+assert "mini-grid" in page
+print("Browser boundary: DTO-only transport, validated commands, two-tap fire, surrender guard, staged UI and cleanup passed")
