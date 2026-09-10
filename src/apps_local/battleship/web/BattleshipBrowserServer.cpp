@@ -123,7 +123,9 @@ void Server::loop() {
 
 void Server::sendSnapshot(const uint8_t client) {
   char message[128];
-  const size_t size = serializeSnapshot(snapshot_, message, sizeof(message));
+  size_t size = serializeSnapshot(snapshot_, message, sizeof(message));
+  if (size) ws_.sendTXT(client, message, size);
+  size = serializeFleetStatus(snapshot_, message, sizeof(message));
   if (size) ws_.sendTXT(client, message, size);
 }
 
@@ -138,7 +140,9 @@ void Server::publish(const BrowserSnapshot& snapshot) {
   snapshot_ = snapshot;
   if (!running_) return;
   char message[128];
-  const size_t size = serializeSnapshot(snapshot_, message, sizeof(message));
+  size_t size = serializeSnapshot(snapshot_, message, sizeof(message));
+  if (size) ws_.broadcastTXT(message, size);
+  size = serializeFleetStatus(snapshot_, message, sizeof(message));
   if (size) ws_.broadcastTXT(message, size);
 }
 
