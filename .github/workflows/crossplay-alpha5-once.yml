@@ -1,4 +1,4 @@
-name: CrossPlay alpha6 one-shot
+name: CrossPlay alpha7 one-shot
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      TAG: v1.14.0-alpha.6
+      TAG: v1.14.0-alpha.7
     steps:
       - uses: actions/checkout@v6
         with:
@@ -24,19 +24,19 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Prepare alpha.6 version
+      - name: Prepare alpha.7 version
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           p = Path('platformio.ini')
           s = p.read_text()
-          old = 'version = 1.14.0-alpha.5'
+          old = 'version = 1.14.0-alpha.6'
           if old not in s:
-              raise SystemExit('expected alpha.5 version not found')
-          p.write_text(s.replace(old, 'version = 1.14.0-alpha.6', 1))
+              raise SystemExit('expected alpha.6 version not found')
+          p.write_text(s.replace(old, 'version = 1.14.0-alpha.7', 1))
           PY
-          grep -Fq '### What is new in 1.14.0-alpha.6' .github/workflows/crossplay-release.yml
+          grep -Fq '### What is new in 1.14.0-alpha.7' .github/workflows/crossplay-release.yml
 
       - name: Validate implementation
         run: |
@@ -55,7 +55,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add platformio.ini
-          git commit -m "chore: prepare v1.14.0-alpha.6"
+          git commit -m "chore: prepare v1.14.0-alpha.7"
           git push origin HEAD:feature/battleship-browser-crossplay
           echo "RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
