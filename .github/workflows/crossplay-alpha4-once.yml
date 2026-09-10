@@ -1,0 +1,50 @@
+name: CrossPlay alpha4 one-shot
+
+on:
+  push:
+    branches:
+      - feature/battleship-browser-crossplay
+    paths:
+      - .github/workflows/crossplay-alpha4-once.yml
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  tag-and-dispatch:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_SHA: faf33c5bd9dff77c67587790f7f8de17d43ab908
+      TAG: v1.14.0-alpha.4
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Verify prepared release
+        run: |
+          set -euo pipefail
+          VERSION="$(awk '/^\[crossplay\]/{f=1;next} /^\[/{f=0} f && /^version *=/{print $3; exit}' platformio.ini)"
+          test "$VERSION" = "1.14.0-alpha.4"
+          grep -Fq "### What is new in 1.14.0-alpha.4" .github/workflows/crossplay-release.yml
+          bash host-tests/battleship/run.sh
+          bash host-tests/ota/run.sh
+          bash host-tests/release/run.sh
+
+      - name: Tag validated source and dispatch standard release
+        run: |
+          set -euo pipefail
+          git fetch origin --tags
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists; leaving it unchanged."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "$TAG" "$RELEASE_SHA"
+            git push origin "$TAG"
+          fi
+          gh workflow run crossplay-release.yml --ref "$TAG"
