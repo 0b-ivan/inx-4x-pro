@@ -3,9 +3,9 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = fs.readFileSync('../../src/apps_local/battleship/web/BattleshipPage.html', 'utf8');
 function element() { return {textContent:'', innerHTML:'', value:'0', disabled:true, className:'', hidden:false, children:[], appendChild(child) { this.children.push(child); }, setAttribute() {}}; }
-const ids = ['status','phase','turn','profile','placement','feedback','hair','eyes','mouth','ship','grid','save','randomize','ready','battle','target','own','rematch','avatar','playerName','hudName','hud','setupState','hudTurn','ownSummary','enemySummary','resultBanner'];
+const ids = ['app','status','phase','turn','profile','placement','feedback','hair','eyes','mouth','ship','grid','save','randomize','ready','battle','target','own','surrender','rematch','avatar','playerName','hudName','hud','setupState','hudTurn','ownSummary','enemySummary','resultBanner'];
 const elements = Object.fromEntries(ids.map(id => [id,element()]));
-const cols=[element(),element(),element()],rows=[element(),element(),element()];
+const cols=[element(),element()],rows=[element(),element()];
 const sockets = [], events = {}, sent = [], store = new Map();
 let reconnect, now=1000;
 class Socket {
@@ -30,6 +30,8 @@ vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], {
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const emptyState=(phase,myTurn=false,winner=-1,sunk=0)=>({type:'s',phase,myTurn,w:winner,b:'A'.repeat(34),i:'A'.repeat(18),s:sunk});
 (async()=>{
+  assert.match(html,/filter:brightness\(0\) invert\(1\)/);
+  assert.match(html,/mini-grid/);
   await flush();
   const socket=sockets[0];socket.onopen();
   assert.equal(elements.hair.children.length,14);
@@ -39,6 +41,7 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0)=>({type:'s',phase,myTurn,
   assert.equal(cols[0].children.length,10);
   assert.equal(rows[0].children.length,10);
   assert.equal(elements.profile.disabled,false);
+  assert.equal(elements.placement.hidden,true);
   assert.match(elements.avatar.innerHTML,/svg/);
 
   elements.save.onclick();
@@ -46,6 +49,8 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0)=>({type:'s',phase,myTurn,
   const view={type:'placement',accepted:true,profile:true,ready:false,revision:1,slots:[0,13,0],ships:Array.from({length:5},()=>[255,1])};
   socket.onmessage({data:JSON.stringify(view)});
   socket.onmessage({data:JSON.stringify({type:'resume',token:resume})});
+  assert.equal(elements.profile.hidden,true);
+  assert.equal(elements.placement.hidden,false);
 
   elements.randomize.onclick();
   assert.deepEqual(sent[1],['randomize',token,1]);
@@ -65,11 +70,18 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0)=>({type:'s',phase,myTurn,
   const ready={...rotated,ready:true,revision:4};
   socket.onmessage({data:JSON.stringify(ready)});
   assert.equal(store.size,1);
+  assert.equal(elements.placement.hidden,true);
 
   socket.onmessage({data:JSON.stringify(emptyState('playing',true))});
   assert.equal(elements.profile.hidden,true);
   assert.equal(elements.placement.hidden,true);
   assert.equal(elements.hud.hidden,false);
+  assert.equal(elements.app.className,'in-battle');
+
+  // A target is only armed on the first tap and fired on the second tap.
+  elements.target.children[12].onclick();
+  assert.equal(sent.length,4);
+  assert.match(elements.target.children[12].className,/selected-target/);
   elements.target.children[12].onclick();
   assert.deepEqual(sent[4],['fire',token,4,12]);
   const fireReply={...ready,revision:5};
@@ -82,19 +94,31 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0)=>({type:'s',phase,myTurn,
   assert.deepEqual(sent[5],['resume',token,5,resume]);
   resumed.onmessage({data:JSON.stringify(fireReply)});
   resumed.onmessage({data:JSON.stringify({type:'resume',token:resume})});
+  resumed.onmessage({data:JSON.stringify(emptyState('playing',true))});
+
+  // Surrender also needs an explicit second confirmation tap.
+  elements.surrender.onclick();
+  assert.equal(sent.length,6);
+  assert.equal(elements.surrender.textContent,'CONFIRM SURRENDER');
+  elements.surrender.onclick();
+  assert.deepEqual(sent[6],['surrender',token,5]);
+  resumed.onmessage({data:JSON.stringify({type:'error'})});
+
   resumed.onmessage({data:JSON.stringify(emptyState('finished',false,1,3))});
   assert.equal(elements.resultBanner.textContent,'VICTORY');
   assert.match(elements.resultBanner.className,/show/);
+  assert.equal(elements.surrender.hidden,true);
   assert.equal(elements.rematch.hidden,false);
   elements.rematch.onclick();
-  assert.deepEqual(sent[6],['rematch',token,5]);
+  assert.deepEqual(sent[7],['rematch',token,5]);
   resumed.onmessage({data:JSON.stringify(emptyState('placement'))});
   const replay={...view,revision:6,slots:ready.slots};
   resumed.onmessage({data:JSON.stringify(replay)});
   assert.equal(store.size,0);
+  assert.equal(elements.placement.hidden,false);
 
   events.pagehide();assert.equal(reconnect,null);
   events.pageshow({persisted:true});await flush();
   assert.equal(sockets.length,3);
-  console.log('Browser page: avatar, clean boards, randomize, double-tap rotate, battle HUD, result banner, secure resume and rematch passed');
+  console.log('Browser page: white avatar, staged setup, minimap HUD, double-tap rotate, two-tap fire, surrender, result banner, secure resume and rematch passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
