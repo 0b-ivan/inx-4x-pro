@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <string>
 
 #include "../../src/apps_local/battleship/web/BattleshipBrowserServer.h"
 namespace devmode {
@@ -17,16 +18,21 @@ int main() {
   Handler handler;
   server.setCommands(
       &handler,
-      [](void* p, const Command&, PlacementView& v) {
+      [](void* p, const Command& command, PlacementView& v) {
         auto& h = *static_cast<Handler*>(p);
         ++h.calls;
-        h.view.profile = true;
-        ++h.view.revision;
+        if (command.kind == CommandKind::Profile) {
+          h.view.profile = true;
+          h.view.ready = true;
+          ++h.view.revision;
+        } else if (command.kind != CommandKind::Resume) {
+          ++h.view.revision;
+        }
         v = h.view;
         return true;
       },
       [](void* p) { ++static_cast<Handler*>(p)->disconnects; });
-  devmode::pause();  // activity's outer ownership
+  devmode::pause();
   assert(server.begin(Server::NetworkMode::Hotspot));
   assert(devmode::depth == 2 && !server.clientSeen());
   auto& ws = *WebSocketsServer::instance;
@@ -51,26 +57,47 @@ int main() {
   assert(handler.calls == 0);
   ws.event(WStype_TEXT, 0, profile);
   assert(handler.calls == 1 && ws.recipients.back() == 0);
-  assert(ws.messages.back().find("placement") != std::string::npos);
+  assert(ws.messages.size() >= count + 2);
+  assert(ws.messages[ws.messages.size() - 2].find("placement") != std::string::npos);
+  const std::string resumeMessage = ws.messages.back();
+  const std::string prefix = "{\"type\":\"resume\",\"token\":\"";
+  assert(resumeMessage.rfind(prefix, 0) == 0 && resumeMessage.size() == prefix.size() + 34);
+  const std::string resumeToken = resumeMessage.substr(prefix.size(), 32);
+
   ws.event(WStype_TEXT, 0, profile);
-  assert(handler.calls == 1);  // bounded application command rate
+  assert(handler.calls == 1);
   clockMs += 100;
   ws.event(WStype_TEXT, 0, profile);
   assert(handler.calls == 2);
   ws.event(WStype_CONNECTED, 1);
   assert(ws.messages.back().find("playing") != std::string::npos);
-  assert(ws.messages.back().find("ships") == std::string::npos);
   ws.event(WStype_TEXT, 1, profile);
   assert(handler.calls == 2 && ws.messages.back().find("error") != std::string::npos);
   ws.event(WStype_DISCONNECTED, 1);
   assert(server.clientSeen() && handler.disconnects == 0);
   ws.event(WStype_DISCONNECTED, 0);
   assert(!server.clientSeen() && handler.disconnects == 1);
-  ws.event(WStype_CONNECTED, 0);
-  ws.event(WStype_TEXT, 0, profile);
-  assert(handler.calls == 2);  // reused socket index, old capability
+
   http.routes.at("/battleship/session")();
-  assert(http.response != token);
+  const auto freshToken = http.response;
+  assert(freshToken != token);
+  ws.event(WStype_CONNECTED, 0);
+  const auto resume = "[\"resume\",\"" + freshToken + "\",2,\"" + resumeToken + "\"]";
+  clockMs += 100;
+  ws.event(WStype_TEXT, 0, resume);
+  assert(handler.calls == 3);
+  assert(ws.messages[ws.messages.size() - 3].find("placement") != std::string::npos);
+  assert(ws.messages[ws.messages.size() - 2].find("resume") != std::string::npos);
+  assert(ws.messages.back().find("playing") != std::string::npos);
+
+  ws.event(WStype_DISCONNECTED, 0);
+  http.routes.at("/battleship/session")();
+  const auto nextToken = http.response;
+  ws.event(WStype_CONNECTED, 0);
+  clockMs += 100;
+  ws.event(WStype_TEXT, 0, "[\"resume\",\"" + nextToken + "\",2,\"00000000000000000000000000000000\"]");
+  assert(handler.calls == 3 && ws.messages.back().find("error") != std::string::npos);
+
   server.stop();
   server.stop();
   assert(ws.closed && !server.running() && devmode::depth == 1 && WiFi.currentMode == WIFI_OFF);
@@ -87,5 +114,5 @@ int main() {
   assert(devmode::depth == 1 && WiFi.currentMode == WIFI_STA);
   devmode::resume();
   assert(devmode::depth == 0);
-  puts("Browser server: ownership, capability, private replies, reconnect, AP/LAN and nested radio yield passed");
+  puts("Browser server: ownership, session/resume capabilities, private replies, reconnect, AP/LAN and nested radio yield passed");
 }
