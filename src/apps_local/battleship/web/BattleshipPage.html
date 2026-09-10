@@ -185,7 +185,7 @@
           socket.onopen=()=>{if(current!==generation)return;if(resumeToken&&view&&view.ready){resuming=true;send('resume',resumeToken);feedback.textContent='Restoring your match…';}else{controls();feedback.textContent='Choose your player. Your name and face appear on the X4 Pro.';}};
           socket.onmessage=event=>{
             if(current!==generation)return;let d;try{d=JSON.parse(event.data);}catch{return;}if(!d||typeof d!=='object')return;
-            if(d.type==='state')applyState(d);
+            if(d.type==='s')applyState(d);
             else if(d.type==='resume'&&/^[a-f0-9]{32}$/.test(d.token)){resumeToken=d.token;saveResume();}
             else if(d.type==='placement'&&validView(d)){view=d;revision=d.revision;pending=false;resuming=false;d.slots.forEach((n,i)=>slots[i].value=n);renderAvatar();saveResume();renderBoards();feedback.textContent=d.ready?(state&&state.phase==='playing'?'Match restored.':'Fleet confirmed. X4 Pro is setting its fleet.'):d.accepted?(state&&state.phase==='finished'?'New round ready. Place your fleet.':'Accepted by X4 Pro.'):'Move refused. Check overlap and board edges.';}
             else if(d.type==='error'){
