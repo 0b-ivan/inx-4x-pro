@@ -55,12 +55,16 @@ BrowserSnapshot browserSnapshot(const bship::Game& game, const bool connected) {
     if (bship::shipAt(game.side[x4Side].fleet, cell) < 0) continue;
     result.hitsAtX4[cell / 8] |= static_cast<uint8_t>(1u << (cell % 8));
   }
+  for (int ship = 0; ship < bship::kShipCount; ++ship) {
+    if (game.side[x4Side].placed && bship::sunk(game.side[x4Side], ship))
+      result.sunkAtX4 |= static_cast<uint8_t>(1u << ship);
+  }
   return result;
 }
 
 bool sameSnapshot(const BrowserSnapshot& a, const BrowserSnapshot& b) {
   return a.phase == b.phase && a.connected == b.connected && a.myTurn == b.myTurn && a.winner == b.winner &&
-         memcmp(a.shotsAtX4, b.shotsAtX4, sizeof(a.shotsAtX4)) == 0 &&
+         a.sunkAtX4 == b.sunkAtX4 && memcmp(a.shotsAtX4, b.shotsAtX4, sizeof(a.shotsAtX4)) == 0 &&
          memcmp(a.hitsAtX4, b.hitsAtX4, sizeof(a.hitsAtX4)) == 0 &&
          memcmp(a.shotsAtBrowser, b.shotsAtBrowser, sizeof(a.shotsAtBrowser)) == 0;
 }
@@ -98,8 +102,9 @@ size_t serializeSnapshot(const BrowserSnapshot& snapshot, char* out, const size_
   encode64(snapshot.shotsAtBrowser, sizeof(snapshot.shotsAtBrowser), incoming64);
 
   const int count = snprintf(out, capacity,
-                             "{\"type\":\"state\",\"phase\":\"%s\",\"myTurn\":%s,\"w\":%d,\"b\":\"%s\",\"i\":\"%s\"}",
-                             phase, snapshot.myTurn ? "true" : "false", snapshot.winner, board64, incoming64);
+                             "{\"type\":\"state\",\"phase\":\"%s\",\"myTurn\":%s,\"w\":%d,\"b\":\"%s\",\"i\":\"%s\",\"s\":%u}",
+                             phase, snapshot.myTurn ? "true" : "false", snapshot.winner, board64, incoming64,
+                             snapshot.sunkAtX4);
   if (count < 0 || static_cast<size_t>(count) >= capacity) {
     out[0] = '\0';
     return 0;
