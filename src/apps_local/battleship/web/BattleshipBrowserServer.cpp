@@ -31,15 +31,13 @@ bool Server::begin(const NetworkMode mode) {
   owner_ = -1;
   commandSeen_ = false;
   rotateToken();
+  rotateResumeToken();
   mode_ = mode;
   clientSeen_ = false;
   ssid_.clear();
   ip_.clear();
   url_.clear();
 
-  // Port 80 and, for Hotspot, the radio are mutually exclusive with Developer
-  // Mode. Own the yield here rather than relying on a particular activity to
-  // remember it; DevMode uses a depth counter, so an outer owner can nest it.
   if (!devModePaused_) {
     devmode::pause();
     devModePaused_ = true;
@@ -51,9 +49,7 @@ bool Server::begin(const NetworkMode mode) {
     return false;
   }
 
-  if (!startMdns()) {
-    LOG_DBG("BSHIPWEB", "mDNS unavailable; IP fallback remains usable");
-  }
+  if (!startMdns()) LOG_DBG("BSHIPWEB", "mDNS unavailable; IP fallback remains usable");
 
   configureRoutes();
   http_.begin();
@@ -75,7 +71,6 @@ bool Server::begin(const NetworkMode mode) {
     } else if (type == WStype_TEXT) {
       receive(client, payload, size);
     }
-    // Binary and fragmented messages are never commands.
   });
   running_ = true;
 
@@ -92,6 +87,7 @@ void Server::releaseDevMode() {
 void Server::stop() {
   owner_ = -1;
   token_[0] = 0;
+  resumeToken_[0] = 0;
   const bool hadServer = running_ || dnsRunning_;
   running_ = false;
   clientSeen_ = false;
@@ -115,7 +111,6 @@ void Server::stop() {
   }
 
   releaseDevMode();
-
   if (hadServer) LOG_DBG("BSHIPWEB", "Browser server stopped");
 }
 
@@ -132,6 +127,12 @@ void Server::sendSnapshot(const uint8_t client) {
   if (size) ws_.sendTXT(client, message, size);
 }
 
+void Server::sendResumeCapability(const uint8_t client) {
+  if (!resumeToken_[0]) return;
+  const int n = snprintf(reply_, sizeof(reply_), "{\"type\":\"resume\",\"token\":\"%s\"}", resumeToken_);
+  if (n > 0 && static_cast<size_t>(n) < sizeof(reply_)) ws_.sendTXT(client, reply_, static_cast<size_t>(n));
+}
+
 void Server::publish(const BrowserSnapshot& snapshot) {
   if (sameSnapshot(snapshot_, snapshot)) return;
   snapshot_ = snapshot;
@@ -145,14 +146,26 @@ void Server::rotateToken() {
   for (int i = 0; i < 4; ++i) snprintf(token_ + i * 8, 9, "%08lx", static_cast<unsigned long>(esp_random()));
 }
 
+void Server::rotateResumeToken() {
+  for (int i = 0; i < 4; ++i) snprintf(resumeToken_ + i * 8, 9, "%08lx", static_cast<unsigned long>(esp_random()));
+}
+
 void Server::receive(uint8_t client, const uint8_t* payload, size_t size) {
   Command command;
   if (!running_ || !apply_ || !parseCommand(payload, size, command) || strcmp(command.token, token_) ||
-      (owner_ >= 0 && owner_ != client) || (owner_ < 0 && command.kind != CommandKind::Profile)) {
+      (owner_ >= 0 && owner_ != client) ||
+      (owner_ < 0 && command.kind != CommandKind::Profile && command.kind != CommandKind::Resume)) {
     char error[] = "{\"type\":\"error\"}";
     ws_.sendTXT(client, error, sizeof(error) - 1);
     return;
   }
+
+  if (command.kind == CommandKind::Resume && strcmp(command.resumeToken, resumeToken_)) {
+    char error[] = "{\"type\":\"error\"}";
+    ws_.sendTXT(client, error, sizeof(error) - 1);
+    return;
+  }
+
   const uint32_t now = millis();
   if (commandSeen_ && static_cast<uint32_t>(now - lastCommandMs_) < 100) {
     char error[] = "{\"type\":\"error\"}";
@@ -161,6 +174,7 @@ void Server::receive(uint8_t client, const uint8_t* payload, size_t size) {
   }
   commandSeen_ = true;
   lastCommandMs_ = now;
+
   PlacementView view;
   const bool accepted = apply_(context_, command, view);
   if (owner_ < 0) {
@@ -170,9 +184,13 @@ void Server::receive(uint8_t client, const uint8_t* payload, size_t size) {
       return;
     }
     owner_ = client;
+    if (command.kind == CommandKind::Profile) rotateResumeToken();
   }
+
   const size_t n = serializePlacement(view, accepted, reply_, sizeof(reply_));
   if (n) ws_.sendTXT(client, reply_, n);
+  if (accepted && (command.kind == CommandKind::Profile || command.kind == CommandKind::Resume)) sendResumeCapability(client);
+  if (command.kind == CommandKind::Resume) sendSnapshot(client);
 }
 
 void Server::configureRoutes() {
@@ -181,7 +199,6 @@ void Server::configureRoutes() {
   http_.on("/", HTTP_GET, [this] { serveGamePage(); });
   http_.on(kGamePath, HTTP_GET, [this] { serveGamePage(); });
   http_.on("/battleship/session", HTTP_GET, [this] {
-    // Same-origin fetch supplies a CSRF capability; never expose this through CORS.
     http_.sendHeader("Cache-Control", "no-store");
     http_.sendHeader("Cross-Origin-Resource-Policy", "same-origin");
     http_.send(200, "text/plain", token_);
@@ -198,9 +215,6 @@ void Server::serveGamePage() {
 }
 
 void Server::handleNotFound() {
-  // In AP mode every hostname resolves to us. Serving the game shell for GET
-  // requests gives phones a useful captive-portal landing page instead of a
-  // dead 404 when their connectivity probe opens automatically.
   if (mode_ == NetworkMode::Hotspot && http_.method() == HTTP_GET) {
     serveGamePage();
     return;
