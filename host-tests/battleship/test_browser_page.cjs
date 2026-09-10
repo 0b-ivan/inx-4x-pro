@@ -24,7 +24,7 @@ vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], {
   setTimeout: fn => { reconnect=fn; return 1; }, clearTimeout: () => { reconnect=null; }
 });
 const flush = () => new Promise(resolve => setImmediate(resolve));
-const emptyState = (phase,myTurn=false,winner=-1) => ({type:'state',phase,myTurn,winner,b:'A'.repeat(34),i:'A'.repeat(18)});
+const emptyState = (phase,myTurn=false,winner=-1) => ({type:'state',phase,myTurn,w:winner,b:'A'.repeat(34),i:'A'.repeat(18)});
 (async () => {
   await flush();
   const socket=sockets[0]; socket.onopen();
