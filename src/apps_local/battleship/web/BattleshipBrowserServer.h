@@ -29,6 +29,7 @@ class Server final {
   void stop();
   void loop();
   void publish(const BrowserSnapshot& snapshot);
+  void publishPlacement(const PlacementView& view);
   void setOpponentName(const char* name) { opponentName_ = name && *name ? name : "X4 PRO"; }
 
   void setCommands(void* context, bool (*apply)(void*, const Command&, PlacementView&), void (*disconnect)(void*)) {
