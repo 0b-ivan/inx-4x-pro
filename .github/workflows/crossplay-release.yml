@@ -116,19 +116,17 @@ jobs:
           body: |
             CrossPlay pre-release for **Xteink X4 Pro**.
 
-            ### What is new in 1.14.0-alpha.7
+            ### What is new in 1.14.0-alpha.8
 
-            - Reworked the Battleship browser UI into clearer setup and battle states for phone screens.
-            - Browser player profiles now show the same layered pixel avatar vocabulary as the X4 Pro, plus the derived player name.
-            - Board coordinates moved outside the cells; fleet and target cells are now visually clean.
-            - Double-tap a placed ship to rotate it; the separate direction selector is gone.
-            - Added **RANDOMIZE** for a server-validated random fleet layout before confirmation.
-            - Player/setup controls disappear once battle starts and are replaced by a compact turn and fleet-status HUD.
-            - Hits and misses use clear X marks instead of small centre dots.
-            - Your fleet summary shows intact, damaged and sunk ships; enemy ship identities are revealed only once they are actually sunk.
-            - Game over now displays a prominent **VICTORY** or **DEFEAT** banner over the battle board with **PLAY AGAIN** underneath.
-            - Kept the public battle snapshot within the existing 128-byte WebSocket budget while adding sunk-ship status; hidden X4 fleet positions remain private.
-            - Existing end-to-end browser play, secure resume, rematch, hotspot/Wi-Fi and X4-to-X4 ESP-NOW play remain intact.
+            - Battleship browser setup now starts with the player profile only; fleet placement appears after the player is accepted by the X4 Pro.
+            - Player avatars are rendered in high-contrast white on the dark browser UI for much better readability.
+            - Browser and X4 Pro can now place their fleets in parallel. The match starts only after both players have confirmed their fleets.
+            - Waiting states now use the actual browser player name instead of a generic browser label.
+            - Browser firing now uses a guarded two-tap interaction: first tap selects a target, second tap on the same cell fires.
+            - The battle HUD was compacted so fleet statistics and the player's own sea fit together, with the own board shown as a minimap beside the status data.
+            - Added a guarded **SURRENDER** action during an unfinished match; a second confirmation is required before conceding.
+            - Existing random placement, double-tap ship rotation, clean outside-board coordinates, hit/miss X marks, victory/defeat banner, rematch and secure reconnect remain intact.
+            - The X4 Pro remains authoritative for placement, shots, sunk state, surrender and game over; hidden host fleet positions never cross the browser boundary.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
