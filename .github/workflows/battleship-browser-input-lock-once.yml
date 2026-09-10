@@ -39,7 +39,7 @@ jobs:
           old = "      const shell=byId('app'),status=byId('status'),phase=byId('phase'),turn=byId('turn'),profile=byId('profile'),placement=byId('placement'),feedback=byId('feedback'),battle=byId('battle'),rematch=byId('rematch'),surrender=byId('surrender'),hud=byId('hud'),setupState=byId('setupState'),youPanel=byId('youPanel'),enemyPanel=byId('enemyPanel'),eventBanner=byId('eventBanner');\n"
           new = (old
                  + "      window.addEventListener('contextmenu',event=>event.preventDefault());\n"
-                 + "      const lockBattleScroll=event=>{if(shell.className.split(/\\\\s+/).includes('in-battle'))event.preventDefault();};\n"
+                 + "      const lockBattleScroll=event=>{if(shell.className.split(/\\s+/).includes('in-battle'))event.preventDefault();};\n"
                  + "      window.addEventListener('touchmove',lockBattleScroll,{passive:false});\n"
                  + "      window.addEventListener('wheel',lockBattleScroll,{passive:false});\n")
           if old not in text:
@@ -51,11 +51,11 @@ jobs:
           text = test.read_text()
           old = "  assert.match(html,/side-panel\\.active/);\n"
           new = (old
-                 + "  assert.match(html,/touch-action:manipulation/);\n"
-                 + "  assert.match(html,/body:has\\\\(main\\\\.in-battle\\\\)/);\n"
-                 + "  assert.match(html,/contextmenu/);\n"
-                 + "  assert.match(html,/touchmove/);\n"
-                 + "  assert.match(html,/wheel/);\n")
+                 + "  assert.ok(html.includes('touch-action:manipulation'));\n"
+                 + "  assert.ok(html.includes('body:has(main.in-battle)'));\n"
+                 + "  assert.ok(html.includes(\"window.addEventListener('contextmenu'\"));\n"
+                 + "  assert.ok(html.includes(\"window.addEventListener('touchmove'\"));\n"
+                 + "  assert.ok(html.includes(\"window.addEventListener('wheel'\"));\n")
           if old not in text:
               raise SystemExit('test insertion point not found')
           text = text.replace(old, new, 1)
