@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Battleship · CrossPlay</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f4f1e8;
+        --ink: #111;
+        --panel: #fffdf7;
+        --muted: #6b6b66;
+        --line: #111;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #171714;
+          --ink: #f4f1e8;
+          --panel: #23231f;
+          --muted: #aaa79d;
+          --line: #f4f1e8;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      main {
+        width: min(100%, 520px);
+        background: var(--panel);
+        border: 3px solid var(--line);
+        padding: 22px;
+        box-shadow: 8px 8px 0 var(--line);
+      }
+      header {
+        border-bottom: 3px solid var(--line);
+        padding-bottom: 14px;
+        margin-bottom: 24px;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(28px, 8vw, 46px);
+        letter-spacing: .04em;
+      }
+      .eyebrow {
+        margin: 0 0 8px;
+        font-size: 12px;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .status {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        font-weight: 700;
+        font-size: 18px;
+      }
+      .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--ink);
+        flex: 0 0 auto;
+      }
+      .copy {
+        margin-top: 18px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      code {
+        color: var(--ink);
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">CrossPlay · X4 Pro</p>
+        <h1>BATTLESHIP</h1>
+      </header>
+      <div class="status"><span class="dot"></span><span id="status">Connecting…</span></div>
+      <p class="copy">
+        Read-only preview. Ship placement and turns come next.<br />
+        Device status: <code id="phase">offline</code><br />
+        <span id="turn"></span>
+      </p>
+    </main>
+    <script>
+      const status = document.getElementById('status');
+      const phase = document.getElementById('phase');
+      const turn = document.getElementById('turn');
+      let socket;
+      let retry;
+      function connect() {
+        status.textContent = 'Connecting…';
+        socket = new WebSocket(`ws://${location.hostname}:81/battleship`);
+        socket.onmessage = (event) => {
+          let data;
+          try { data = JSON.parse(event.data); } catch { return; }
+          if (data.type !== 'state' || !['waiting', 'placement', 'playing', 'finished'].includes(data.phase)) return;
+          status.textContent = data.connected ? 'Connected to X4 Pro' : 'Waiting for X4 Pro';
+          phase.textContent = data.phase;
+          turn.textContent = data.phase === 'playing' ? (data.myTurn ? 'Your turn · read-only preview' : 'Waiting for X4 Pro') : 'Browser moves are not available yet.';
+        };
+        socket.onclose = () => {
+          status.textContent = 'Connection lost · reconnecting…';
+          phase.textContent = 'offline';
+          turn.textContent = '';
+          retry = setTimeout(connect, 2000);
+        };
+        socket.onerror = () => socket.close();
+      }
+      window.addEventListener('pagehide', () => {
+        clearTimeout(retry);
+        if (socket) { socket.onclose = null; socket.close(); }
+      });
+      window.addEventListener('pageshow', (event) => { if (event.persisted) connect(); });
+      connect();
+    </script>
+  </body>
+</html>

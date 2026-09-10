@@ -23,6 +23,7 @@ enum : fui::ActionId {
   ActionShuffle = 3,
   ActionReady = 4,
   ActionPlayAgain = 5,
+  ActionLocalPlayRow = 6,
 };
 
 // The front door. Battleship opens here rather than on a board, so that "tap
@@ -48,6 +49,18 @@ const char* startRowLabel(StartRow row);
 // own material and carry the app's own data; a picture of a fleet would be
 // wallpaper by the third day, and a picture of *your* last game is not.
 fui::Rect buildStartMenu(toybox::Screen& screen, const StartModel& model);
+
+// PLAY NEARBY keeps its place on the front door. This second screen only asks
+// which transport should satisfy that intent, so the existing X4 Pro path and
+// the new browser path stay explicit and cannot accidentally share lifecycle.
+enum class LocalPlayRow : uint8_t { X4Pro, Browser, Count };
+
+struct LocalPlayModel {
+  int selected = 0;
+};
+
+const char* localPlayRowLabel(LocalPlayRow row);
+fui::Rect buildLocalPlayMenu(toybox::Screen& screen, const LocalPlayModel& model);
 
 // Setting up. One grid, two buttons, and a line of instruction that changes as
 // you learn what the screen does.
