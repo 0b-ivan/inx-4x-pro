@@ -191,27 +191,41 @@ fui::Rect buildPlaceChrome(toybox::Screen& screen, const PlaceModel& model) {
 fui::Rect buildBoardChrome(toybox::Screen& screen, const BoardModel& model) {
   toyboxChrome(screen, "BATTLESHIP");
 
-  // Taken before the capsule so the two can never argue about the space, and
-  // drawn at the top because the eye goes there first and then to the grid.
+  // What happened last remains a separate line. The bottom row is now always
+  // explicit about actions: FIRE / SURRENDER while playing, and outcome /
+  // PLAY AGAIN once the round has ended.
   const fui::Rect line = screen.takeTop(26, toybox::kGutter / 2);
   fui::TextStyle reportStyle;
   reportStyle.font = toybox::kTileFont;
   reportStyle.align = fui::TextAlign::Left;
   screen.target().text(line, model.report, reportStyle);
 
-  fui::ButtonProps status;
-  status.label = model.status;
-  // Registering no action is what makes the capsule inert while it is only
-  // reporting: with NO_ACTION the component draws it and adds nothing to the
-  // hit table, so there is no tappable region to drift out of step with the
-  // label. It is a button exactly when it says something you can press.
-  status.action = model.gameOver ? static_cast<fui::ActionId>(ActionPlayAgain)
-                                 : (model.canFire ? static_cast<fui::ActionId>(ActionFire) : fui::NO_ACTION);
-  status.borderEdges = fui::EdgesNone;
-  // Present but not pressable: dithered rather than absent, so the trigger does
-  // not appear and disappear as you aim.
-  if (!model.gameOver && !model.canFire) status.styles = toybox::disabledButtonStyles();
-  screen.button(status, linkui::withOpponentFace(screen, screen.takeBottom(toybox::kPillHeight), model.theirName));
+  const fui::Rect footer = linkui::withOpponentFace(screen, screen.takeBottom(toybox::kPillHeight), model.theirName);
+  const int16_t half = static_cast<int16_t>((footer.width - toybox::kGutter) / 2);
+  const fui::Rect left = fui::makeRect(footer.x, footer.y, half, footer.height);
+  const fui::Rect right = fui::makeRect(static_cast<int16_t>(footer.right() - half), footer.y, half, footer.height);
+
+  fui::ButtonProps primary;
+  primary.label = model.status;
+  primary.borderEdges = fui::EdgesNone;
+
+  fui::ButtonProps secondary;
+  secondary.borderEdges = fui::EdgesNone;
+
+  if (model.gameOver) {
+    primary.action = fui::NO_ACTION;
+    secondary.label = "PLAY AGAIN";
+    secondary.action = static_cast<fui::ActionId>(ActionPlayAgain);
+  } else {
+    primary.action = model.canFire ? static_cast<fui::ActionId>(ActionFire) : fui::NO_ACTION;
+    if (!model.canFire) primary.styles = toybox::disabledButtonStyles();
+    secondary.label = model.surrenderArmed ? "CONFIRM" : "SURRENDER";
+    secondary.action = model.canSurrender ? static_cast<fui::ActionId>(ActionSurrender) : fui::NO_ACTION;
+    if (!model.canSurrender) secondary.styles = toybox::disabledButtonStyles();
+  }
+
+  screen.button(primary, left);
+  screen.button(secondary, right);
 
   return screen.body();
 }
