@@ -59,7 +59,7 @@ int main() {
   CHECK(service.registerGuest(first, "IVAN", "1234", 1789069000ULL, profile) ==
         player::PlayerServiceResult::GuestNotEligible);
   CHECK(service.registerGuest(first, "IVAN", "12x4", 1789069000ULL, profile) ==
-        player::PlayerServiceResult::InvalidPin);
+        player::PlayerServiceResult::GuestNotEligible);
 
   const player::PlayerId firstId = first.id;
   const player::Callsign firstCallsign = first.callsign;
@@ -73,6 +73,10 @@ int main() {
   first = guests[0];
   opponent = guests[1];
 
+  CHECK(service.registerGuest(first, "IVAN", "12x4", 1789069000ULL, profile) ==
+        player::PlayerServiceResult::InvalidPin);
+  CHECK(first.active());
+  CHECK(first.completedMatches == 1);
   CHECK(service.registerGuest(first, "IVAN", "1234", 1789069000ULL, profile) == player::PlayerServiceResult::Ok);
   CHECK(!first.active());
   CHECK(profile.id == firstId);
