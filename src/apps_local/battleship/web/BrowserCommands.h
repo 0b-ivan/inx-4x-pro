@@ -4,7 +4,7 @@
 
 namespace bshipweb {
 constexpr size_t kMaxCommandBytes = 128;
-enum class CommandKind : uint8_t { Profile, Place, Ready, Fire, Rematch, Resume };
+enum class CommandKind : uint8_t { Profile, Place, Randomize, Ready, Fire, Rematch, Resume };
 struct Command {
   CommandKind kind = CommandKind::Profile;
   char token[33] = {};
