@@ -27,7 +27,8 @@
       .grid .ship { background:var(--ink); color:var(--panel); }
       .grid .hit { background:var(--ink); color:var(--panel); outline:3px double var(--panel); outline-offset:-5px; }
       .grid .miss::after { content:'·'; font-size:22px; font-weight:700; }
-      #battle[hidden] { display:none; }
+      #battle[hidden],#rematch[hidden] { display:none; }
+      #rematch { width:100%; margin-top:12px; border:2px solid var(--line); font-weight:700; }
       code { color:var(--ink); font-weight:700; }
     </style>
   </head>
@@ -60,12 +61,13 @@
         <h2>YOUR FLEET</h2>
         <div id="own" class="grid" aria-label="Your fleet status"></div>
       </section>
+      <button id="rematch" type="button" hidden disabled>PLAY AGAIN</button>
       <p id="feedback" role="status">Waiting for connection.</p>
     </main>
 
     <script>
       const byId=id=>document.getElementById(id);
-      const status=byId('status'),phase=byId('phase'),turn=byId('turn'),profile=byId('profile'),placement=byId('placement'),feedback=byId('feedback'),battle=byId('battle');
+      const status=byId('status'),phase=byId('phase'),turn=byId('turn'),profile=byId('profile'),placement=byId('placement'),feedback=byId('feedback'),battle=byId('battle'),rematch=byId('rematch');
       const slots=['hair','eyes','mouth'].map(byId);
       for(const select of slots) for(let i=0;i<14;i++){const o=document.createElement('option');o.value=i;o.textContent=String(i+1);select.appendChild(o);}
       const lengths=[5,4,3,3,2], cells=[], targets=[], own=[];
@@ -78,32 +80,27 @@
       let socket,retry,token='',revision=0,pending=false,view=null,state=null,generation=0,hidden=false;
       function controls(){
         const online=socket&&socket.readyState===WebSocket.OPEN&&token&&!pending;
-        profile.disabled=!online||Boolean(view&&view.ready);
+        profile.disabled=!online||Boolean(view&&view.ready)||Boolean(state&&state.phase==='finished');
         placement.disabled=!online||!view||!view.profile||view.ready;
         byId('ready').disabled=placement.disabled||!view||view.ships.some(s=>s[0]===255);
         const canFire=online&&state&&state.phase==='playing'&&state.myTurn;
         targets.forEach((b,i)=>b.disabled=!canFire||targetState(i)!==0);
+        rematch.hidden=!(state&&state.phase==='finished');
+        rematch.disabled=!online||rematch.hidden;
       }
       function send(kind,...values){if(!socket||socket.readyState!==WebSocket.OPEN||!token||pending)return;pending=true;controls();socket.send(JSON.stringify([kind,token,revision,...values]));}
       function fire(cell){if(!state||!state.myTurn||targetState(cell)!==0)return;send('fire',cell);feedback.textContent=`Firing at ${label(cell)}…`;}
       byId('save').onclick=()=>send('profile',...slots.map(s=>Number(s.value)));
       byId('ready').onclick=()=>send('ready');
+      rematch.onclick=()=>{if(!state||state.phase!=='finished')return;send('rematch');feedback.textContent='Starting a new round…';};
       function validView(d){return Number.isInteger(d.revision)&&d.revision>=0&&d.revision<=4294967295&&typeof d.profile==='boolean'&&typeof d.ready==='boolean'&&typeof d.accepted==='boolean'&&Array.isArray(d.slots)&&d.slots.length===3&&d.slots.every(n=>Number.isInteger(n)&&n>=0&&n<=13)&&Array.isArray(d.ships)&&d.ships.length===5&&d.ships.every(s=>Array.isArray(s)&&s.length===2&&Number.isInteger(s[0])&&(s[0]===255||s[0]>=0&&s[0]<100)&&(s[1]===0||s[1]===1));}
-      function decode64(text,size){
-        if(typeof text!=='string')return null;const alpha='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';const out=new Uint8Array(size);let acc=0,bits=0,at=0;
-        for(const ch of text){const v=alpha.indexOf(ch);if(v<0)return null;acc=(acc<<6)|v;bits+=6;if(bits>=8){bits-=8;if(at<size)out[at++]=(acc>>bits)&255;}}
-        return at===size?out:null;
-      }
-      function targetState(cell){
-        if(!state||!state.board)return 0;const bit=cell*2,byte=state.board[Math.floor(bit/8)],v=(byte>>(bit%8))&3;return v;
-      }
+      function decode64(text,size){if(typeof text!=='string')return null;const alpha='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';const out=new Uint8Array(size);let acc=0,bits=0,at=0;for(const ch of text){const v=alpha.indexOf(ch);if(v<0)return null;acc=(acc<<6)|v;bits+=6;if(bits>=8){bits-=8;if(at<size)out[at++]=(acc>>bits)&255;}}return at===size?out:null;}
+      function targetState(cell){if(!state||!state.board)return 0;const bit=cell*2,byte=state.board[Math.floor(bit/8)];return(byte>>(bit%8))&3;}
       function shot(mask,cell){return mask&&((mask[Math.floor(cell/8)]>>(cell%8))&1)!==0;}
-      function shipAt(cell){
-        if(!view)return false;for(let index=0;index<5;index++){const s=view.ships[index];if(s[0]===255)continue;for(let j=0;j<lengths[index];j++)if(s[0]+j*(s[1]?1:10)===cell)return true;}return false;
-      }
+      function shipAt(cell){if(!view)return false;for(let index=0;index<5;index++){const s=view.ships[index];if(s[0]===255)continue;for(let j=0;j<lengths[index];j++)if(s[0]+j*(s[1]?1:10)===cell)return true;}return false;}
       function renderBoards(){
         cells.forEach(b=>b.className='');
-        if(view) view.ships.forEach((s,index)=>{if(s[0]===255)return;for(let j=0;j<lengths[index];j++){const c=s[0]+j*(s[1]?1:10);if(cells[c])cells[c].className='ship';}});
+        if(view)view.ships.forEach((s,index)=>{if(s[0]===255)return;for(let j=0;j<lengths[index];j++){const c=s[0]+j*(s[1]?1:10);if(cells[c])cells[c].className='ship';}});
         targets.forEach((b,i)=>{b.className='';const s=targetState(i);if(s===3)b.className='hit';else if(s===1)b.className='miss';});
         own.forEach((b,i)=>{b.className=shipAt(i)?'ship':'';if(state&&shot(state.incoming,i))b.className=shipAt(i)?'hit':'miss';});
         battle.hidden=!(view&&view.ready&&state&&(state.phase==='playing'||state.phase==='finished'));
@@ -116,6 +113,7 @@
         if(d.phase==='finished'){turn.textContent=d.w===1?'YOU WIN':'X4 PRO WINS';feedback.textContent=turn.textContent;}
         else if(d.phase==='playing'){turn.textContent=d.myTurn?'YOUR MOVE':'X4 PRO MOVE';feedback.textContent=d.myTurn?'Choose a target.':'Waiting for the X4 Pro.';}
         else if(d.phase==='waiting'&&view&&view.ready){turn.textContent='X4 Pro is placing its fleet.';}
+        else if(d.phase==='placement'&&view&&view.profile){turn.textContent='Place your fleet for the new round.';}
         else turn.textContent='';
         renderBoards();
       }
@@ -128,7 +126,7 @@
           socket.onmessage=event=>{
             if(current!==generation)return;let d;try{d=JSON.parse(event.data);}catch{return;}if(!d||typeof d!=='object')return;
             if(d.type==='state')applyState(d);
-            else if(d.type==='placement'&&validView(d)){view=d;revision=d.revision;pending=false;d.slots.forEach((n,i)=>slots[i].value=n);renderBoards();feedback.textContent=d.ready?'Fleet confirmed. X4 Pro is setting its fleet.':d.accepted?'Accepted by X4 Pro.':'Move refused. Check overlap and board edges.';}
+            else if(d.type==='placement'&&validView(d)){view=d;revision=d.revision;pending=false;d.slots.forEach((n,i)=>slots[i].value=n);renderBoards();feedback.textContent=d.ready?'Fleet confirmed. X4 Pro is setting its fleet.':d.accepted?(state&&state.phase==='finished'?'New round ready. Place your fleet.':'Accepted by X4 Pro.'):'Move refused. Check overlap and board edges.';}
             else if(d.type==='error'){pending=false;controls();feedback.textContent='Request refused. Check turn/state or reconnect.';}
           };
           socket.onclose=()=>{if(current!==generation)return;token='';pending=false;controls();status.textContent='Connection lost · reconnecting…';phase.textContent='offline';turn.textContent='';feedback.textContent='Reconnect starts a fresh browser ownership session.';if(!hidden)retry=setTimeout(connect,2000);};
