@@ -7,9 +7,6 @@
 #include "BattleshipBrowserServer.h"
 #include "BrowserPlayer.h"
 
-// The transport chooser behind Battleship's existing PLAY NEARBY row.
-// X4 Pro returns immediately to the existing ESP-NOW LinkActivity path;
-// Browser stays here and owns Wi-Fi + the small HTTP server until Back.
 class BattleshipLocalPlayActivity final : public Activity {
  public:
   BattleshipLocalPlayActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -33,6 +30,7 @@ class BattleshipLocalPlayActivity final : public Activity {
 
   void routeChoiceInput();
   void routeX4PlacementInput();
+  void routePlayingInput();
   void chooseTransport(int index);
   void chooseNetwork(int index);
   void startWifiBrowser();
@@ -44,6 +42,8 @@ class BattleshipLocalPlayActivity final : public Activity {
   void finishCancelled();
 
   GridGeometry x4PlaceGrid() const;
+  GridGeometry targetGrid() const;
+  GridGeometry ownFleetGrid() const;
   static int cellAt(const GridGeometry& grid, int x, int y);
   static Rect cellRect(const GridGeometry& grid, int cell);
   Rect x4PlaceRosterRect() const;
@@ -53,6 +53,9 @@ class BattleshipLocalPlayActivity final : public Activity {
   void moveX4Ship(int cell);
   void handleX4PlaceTap(int cell);
   void shuffleX4Fleet();
+  void aimX4Shot(int cell);
+  void fireX4Shot();
+  void reportLastShot(bool browserShot);
 
   void drawTransportChoice();
   void drawNetworkChoice();
@@ -61,6 +64,8 @@ class BattleshipLocalPlayActivity final : public Activity {
   void drawPlaying();
   void drawX4PlaceGrid();
   void drawX4PlaceRoster();
+  void drawTargetGrid();
+  void drawOwnFleetGrid();
 
   Stage stage_ = Stage::Transport;
   toybox::Interactions interactions_;
@@ -74,7 +79,10 @@ class BattleshipLocalPlayActivity final : public Activity {
   Rect x4BodySlot_{};
   uint32_t seed_ = 1;
   int selectedX4Ship_ = -1;
+  int x4AimCell_ = -1;
+  uint8_t seenLastShot_ = 0;
   char x4Status_[48] = {};
+  char x4Report_[48] = {};
   bool devModePaused_ = false;
   bool ownsSta_ = false;
   bool lastClientSeen_ = false;
