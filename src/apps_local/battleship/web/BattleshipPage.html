@@ -5,30 +5,56 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>Battleship · CrossPlay</title>
     <style>
-      :root { color-scheme: light dark; --bg:#f4f1e8; --ink:#111; --panel:#fffdf7; --muted:#6b6b66; --line:#111; }
-      @media (prefers-color-scheme:dark) { :root { --bg:#171714; --ink:#f4f1e8; --panel:#23231f; --muted:#aaa79d; --line:#f4f1e8; } }
+      :root { color-scheme: light dark; --bg:#f4f1e8; --ink:#111; --panel:#fffdf7; --muted:#6b6b66; --line:#111; --ship:#111; }
+      @media (prefers-color-scheme:dark) { :root { --bg:#171714; --ink:#f4f1e8; --panel:#23231f; --muted:#aaa79d; --line:#f4f1e8; --ship:#c9c7be; } }
       * { box-sizing:border-box; }
-      body { margin:0; min-height:100vh; background:var(--bg); color:var(--ink); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; display:grid; place-items:center; padding:24px; }
+      body { margin:0; min-height:100vh; background:var(--bg); color:var(--ink); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; display:grid; place-items:start center; padding:24px; }
       main { width:min(100%,560px); background:var(--panel); border:3px solid var(--line); padding:22px; box-shadow:8px 8px 0 var(--line); }
-      header { border-bottom:3px solid var(--line); padding-bottom:14px; margin-bottom:24px; }
+      header { border-bottom:3px solid var(--line); padding-bottom:14px; margin-bottom:18px; }
       h1 { margin:0; font-size:clamp(28px,8vw,46px); letter-spacing:.04em; }
       h2 { font-size:15px; margin:18px 0 8px; }
       .eyebrow { margin:0 0 8px; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
       .status { display:flex; gap:12px; align-items:center; font-weight:700; font-size:18px; }
       .dot { width:14px; height:14px; border-radius:50%; background:var(--ink); flex:0 0 auto; }
-      .copy { margin-top:18px; color:var(--muted); line-height:1.5; }
+      .copy { margin-top:12px; color:var(--muted); line-height:1.5; }
       fieldset { margin:18px 0; border:1px solid var(--line); }
       label { display:inline-block; margin:6px 4px; }
       select,button { font:inherit; padding:8px; }
-      button { cursor:pointer; background:var(--panel); color:var(--ink); }
+      button { cursor:pointer; background:var(--panel); color:var(--ink); border:1px solid var(--line); }
       button:disabled { cursor:default; opacity:.45; }
-      .grid { display:grid; grid-template-columns:repeat(10,1fr); margin:12px 0; }
-      .grid button { padding:0; aspect-ratio:1; border:1px solid var(--muted); font-size:10px; min-width:0; }
-      .grid .ship { background:var(--ink); color:var(--panel); }
-      .grid .hit { background:var(--ink); color:var(--panel); outline:3px double var(--panel); outline-offset:-5px; }
-      .grid .miss::after { content:'·'; font-size:22px; font-weight:700; }
-      #battle[hidden],#rematch[hidden] { display:none; }
-      #rematch { width:100%; margin-top:12px; border:2px solid var(--line); font-weight:700; }
+      .player-card { display:grid; grid-template-columns:92px 1fr; gap:14px; align-items:center; margin:8px 0 12px; }
+      .avatar { position:relative; width:92px; aspect-ratio:1; border:2px solid var(--line); background:var(--bg); overflow:hidden; }
+      .avatar svg { position:absolute; inset:0; width:100%; height:100%; }
+      .player-name { font-size:18px; font-weight:700; line-height:1.2; }
+      .player-slots { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+      .player-slots label { margin:0; font-size:11px; color:var(--muted); }
+      .player-slots select { width:100%; margin-top:4px; }
+      .actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+      .actions button { min-height:44px; font-weight:700; }
+      .hint { color:var(--muted); line-height:1.4; font-size:13px; }
+      .board { display:grid; grid-template-columns:20px 1fr; grid-template-rows:20px 1fr; gap:4px; margin:10px 0; }
+      .col-labels { grid-column:2; display:grid; grid-template-columns:repeat(10,1fr); color:var(--muted); font-size:9px; text-align:center; align-items:end; }
+      .row-labels { grid-row:2; display:grid; grid-template-rows:repeat(10,1fr); color:var(--muted); font-size:9px; text-align:right; align-items:center; padding-right:2px; }
+      .grid { grid-column:2; grid-row:2; display:grid; grid-template-columns:repeat(10,1fr); position:relative; }
+      .grid button { padding:0; aspect-ratio:1; border:1px solid var(--muted); min-width:0; position:relative; }
+      .grid .ship { background:var(--ship); }
+      .grid .hit::before,.grid .hit::after,.grid .miss::before,.grid .miss::after { content:''; position:absolute; left:12%; right:12%; top:48%; height:2px; background:currentColor; transform:rotate(45deg); transform-origin:center; }
+      .grid .hit::after,.grid .miss::after { transform:rotate(-45deg); }
+      .grid .hit { background:var(--ship); color:var(--panel); }
+      .grid .miss { color:var(--ink); }
+      .grid .selected { outline:3px solid var(--ink); outline-offset:-4px; }
+      #battle[hidden],#rematch[hidden],#hud[hidden],#setupState[hidden] { display:none; }
+      #rematch { width:100%; margin-top:12px; border:2px solid var(--line); font-weight:700; min-height:48px; }
+      .match-header { border:2px solid var(--line); padding:12px; margin:14px 0; }
+      .match-top { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+      .turn { font-weight:800; font-size:17px; }
+      .fleet-summary { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px; font-size:11px; }
+      .fleet-summary strong { display:block; margin-bottom:5px; }
+      .fleet-line { display:flex; justify-content:space-between; gap:6px; padding:2px 0; }
+      .fleet-line.sunk { text-decoration:line-through; opacity:.55; }
+      .board-shell { position:relative; }
+      .result-banner { display:none; position:absolute; z-index:3; left:8%; right:8%; top:42%; padding:16px 8px; border:4px solid var(--line); background:var(--panel); color:var(--ink); text-align:center; font-weight:900; font-size:clamp(26px,9vw,46px); box-shadow:6px 6px 0 var(--line); }
+      .result-banner.show { display:block; }
       code { color:var(--ink); font-weight:700; }
     </style>
   </head>
@@ -36,82 +62,114 @@
     <main>
       <header><p class="eyebrow">CrossPlay · X4 Pro</p><h1>BATTLESHIP</h1></header>
       <div class="status"><span class="dot"></span><span id="status">Connecting…</span></div>
-      <p class="copy">Device status: <code id="phase">offline</code><br /><span id="turn"></span></p>
+      <p id="setupState" class="copy">Device status: <code id="phase">offline</code><br /><span id="turn"></span></p>
 
       <fieldset id="profile" disabled>
         <legend>YOUR PLAYER</legend>
-        <label>Hair <select id="hair"></select></label>
-        <label>Eyes <select id="eyes"></select></label>
-        <label>Mouth <select id="mouth"></select></label>
-        <button id="save" type="button">Use player</button>
+        <div class="player-card">
+          <div id="avatar" class="avatar" aria-label="Player avatar"></div>
+          <div>
+            <div id="playerName" class="player-name">BALD GRIM GRIN</div>
+            <div class="player-slots">
+              <label>Hair<select id="hair"></select></label>
+              <label>Eyes<select id="eyes"></select></label>
+              <label>Mouth<select id="mouth"></select></label>
+            </div>
+          </div>
+        </div>
+        <button id="save" type="button">USE PLAYER</button>
       </fieldset>
 
       <fieldset id="placement" disabled>
-        <legend>YOUR FLEET</legend>
+        <legend>PLACE YOUR FLEET</legend>
         <label>Ship <select id="ship"><option value="0">Carrier · 5</option><option value="1">Battleship · 4</option><option value="2">Cruiser · 3</option><option value="3">Submarine · 3</option><option value="4">Destroyer · 2</option></select></label>
-        <label>Direction <select id="direction"><option value="1">Across</option><option value="0">Down</option></select></label>
-        <p>Tap a starting cell. To move a ship, select it and tap again.</p>
-        <div id="grid" class="grid" aria-label="Your fleet"></div>
-        <button id="ready" type="button" disabled>Confirm fleet</button>
+        <p class="hint">Tap a ship to select it, then tap a cell to move it. Double tap a placed ship to rotate it.</p>
+        <div id="placeBoard" class="board"><div class="col-labels"></div><div class="row-labels"></div><div id="grid" class="grid" aria-label="Your fleet"></div></div>
+        <div class="actions"><button id="randomize" type="button">RANDOMIZE</button><button id="ready" type="button" disabled>CONFIRM FLEET</button></div>
       </fieldset>
+
+      <section id="hud" class="match-header" hidden>
+        <div class="match-top"><div><div class="eyebrow">MATCH</div><div id="hudName" class="player-name"></div></div><div id="hudTurn" class="turn"></div></div>
+        <div class="fleet-summary"><div><strong>YOUR FLEET</strong><div id="ownSummary"></div></div><div><strong>ENEMY FLEET</strong><div id="enemySummary"></div></div></div>
+      </section>
 
       <section id="battle" hidden>
         <h2>ENEMY WATERS</h2>
-        <div id="target" class="grid" aria-label="Enemy waters"></div>
+        <div class="board-shell">
+          <div id="resultBanner" class="result-banner"></div>
+          <div class="board"><div class="col-labels"></div><div class="row-labels"></div><div id="target" class="grid" aria-label="Enemy waters"></div></div>
+        </div>
         <h2>YOUR FLEET</h2>
-        <div id="own" class="grid" aria-label="Your fleet status"></div>
+        <div class="board"><div class="col-labels"></div><div class="row-labels"></div><div id="own" class="grid" aria-label="Your fleet status"></div></div>
       </section>
       <button id="rematch" type="button" hidden disabled>PLAY AGAIN</button>
       <p id="feedback" role="status">Waiting for connection.</p>
     </main>
 
     <script>
+      /*__BATTLESHIP_AVATAR_SVGS__*/
       const byId=id=>document.getElementById(id);
-      const status=byId('status'),phase=byId('phase'),turn=byId('turn'),profile=byId('profile'),placement=byId('placement'),feedback=byId('feedback'),battle=byId('battle'),rematch=byId('rematch');
+      const status=byId('status'),phase=byId('phase'),turn=byId('turn'),profile=byId('profile'),placement=byId('placement'),feedback=byId('feedback'),battle=byId('battle'),rematch=byId('rematch'),hud=byId('hud'),setupState=byId('setupState');
       const slots=['hair','eyes','mouth'].map(byId), storageKey='crossplay-battleship-resume-v1';
-      for(const select of slots) for(let i=0;i<14;i++){const o=document.createElement('option');o.value=i;o.textContent=String(i+1);select.appendChild(o);}
-      const lengths=[5,4,3,3,2], cells=[], targets=[], own=[];
+      const words=[['BALD','TUFTY','SLICK','WAVY','CURLY','SPIKY','PUNK','MOP','BUN','BRAIDS','PONY','BOB','LONG','AFRO'],['GRIM','SAD','SLY','SQUINT','SLEEPY','BLINK','GLAD','WINK','BEADY','WIDE','CROSS','BUSHY','SPECS','SHADES'],['GRIN','TEETH','SMIRK','GLUM','POUT','FROWN','GASP','TONGUE','FANGS','SCRUFF','TASH','GOATEE','MUTTON','BEARD']];
+      for(let si=0;si<slots.length;si++)for(let i=0;i<14;i++){const o=document.createElement('option');o.value=i;o.textContent=words[si][i];slots[si].appendChild(o);}
+      const lengths=[5,4,3,3,2], shipNames=['Carrier','Battleship','Cruiser','Submarine','Destroyer'], cells=[], targets=[], own=[];
       const label=cell=>`${String.fromCharCode(65+Math.floor(cell/10))}${cell%10+1}`;
+      document.querySelectorAll('.col-labels').forEach(row=>{for(let n=1;n<=10;n++){const s=document.createElement('span');s.textContent=n;row.appendChild(s);}});
+      document.querySelectorAll('.row-labels').forEach(col=>{for(let n=0;n<10;n++){const s=document.createElement('span');s.textContent=String.fromCharCode(65+n);col.appendChild(s);}});
       for(let cell=0;cell<100;cell++){
-        const p=document.createElement('button');p.type='button';p.textContent=label(cell);p.onclick=()=>send('place',Number(byId('ship').value),cell,Number(byId('direction').value));byId('grid').appendChild(p);cells.push(p);
-        const t=document.createElement('button');t.type='button';t.textContent=label(cell);t.onclick=()=>fire(cell);byId('target').appendChild(t);targets.push(t);
-        const o=document.createElement('button');o.type='button';o.disabled=true;o.textContent=label(cell);byId('own').appendChild(o);own.push(o);
+        const p=document.createElement('button');p.type='button';p.setAttribute('aria-label',label(cell));p.onclick=()=>placeTap(cell);byId('grid').appendChild(p);cells.push(p);
+        const t=document.createElement('button');t.type='button';t.setAttribute('aria-label',label(cell));t.onclick=()=>fire(cell);byId('target').appendChild(t);targets.push(t);
+        const o=document.createElement('button');o.type='button';o.disabled=true;o.setAttribute('aria-label',label(cell));byId('own').appendChild(o);own.push(o);
       }
+      let selectedShip=0,lastShipTap=-1,lastShipTapAt=0;
+      function playerParts(){return slots.map((s,i)=>words[i][Number(s.value)]);}
+      function renderAvatar(){const p=playerParts();byId('playerName').textContent=p.join(' ');byId('hudName').textContent=p.join(' ');byId('avatar').innerHTML=avatarSvg.base+(avatarSvg.hair[p[0]]||'')+(avatarSvg.eyes[p[1]]||'')+(avatarSvg.mouth[p[2]]||'');}
+      slots.forEach(s=>s.onchange=renderAvatar);renderAvatar();
+      function shipIndexAt(cell){if(!view)return-1;for(let index=0;index<5;index++){const s=view.ships[index];if(s[0]===255)continue;for(let j=0;j<lengths[index];j++)if(s[0]+j*(s[1]?1:10)===cell)return index;}return-1;}
+      function placeTap(cell){if(!view||view.ready||pending)return;const hit=shipIndexAt(cell),now=Date.now();if(hit>=0){selectedShip=hit;byId('ship').value=String(hit);if(lastShipTap===hit&&now-lastShipTapAt<380){const s=view.ships[hit];lastShipTap=-1;lastShipTapAt=0;send('place',hit,s[0],s[1]?0:1);return;}lastShipTap=hit;lastShipTapAt=now;renderBoards();return;}lastShipTap=-1;const s=view.ships[selectedShip];send('place',selectedShip,cell,s&&s[0]!==255?s[1]:1);}
+      byId('ship').onchange=()=>{selectedShip=Number(byId('ship').value);renderBoards();};
       function loadResume(){try{const v=JSON.parse(sessionStorage.getItem(storageKey)||'null');return v&&/^[a-f0-9]{32}$/.test(v.token)&&validView(v.view)?v:null;}catch{return null;}}
       let saved=loadResume(),socket,retry,token='',resumeToken=saved?saved.token:'',revision=saved?saved.view.revision:0,pending=false,view=saved?saved.view:null,state=null,generation=0,hidden=false,resuming=false;
       function saveResume(){try{if(resumeToken&&view&&view.ready)sessionStorage.setItem(storageKey,JSON.stringify({token:resumeToken,view}));else sessionStorage.removeItem(storageKey);}catch{}}
       function controls(){
         const online=socket&&socket.readyState===WebSocket.OPEN&&token&&!pending;
+        const inBattle=Boolean(view&&view.ready&&state&&(state.phase==='playing'||state.phase==='finished'));
         profile.disabled=!online||Boolean(view&&view.ready)||Boolean(state&&state.phase==='finished');
         placement.disabled=!online||!view||!view.profile||view.ready;
         byId('ready').disabled=placement.disabled||!view||view.ships.some(s=>s[0]===255);
+        byId('randomize').disabled=placement.disabled;
+        profile.hidden=inBattle;placement.hidden=inBattle;setupState.hidden=inBattle;hud.hidden=!inBattle;
         const canFire=online&&state&&state.phase==='playing'&&state.myTurn;
         targets.forEach((b,i)=>b.disabled=!canFire||targetState(i)!==0);
-        rematch.hidden=!(state&&state.phase==='finished');
-        rematch.disabled=!online||rematch.hidden;
+        rematch.hidden=!(state&&state.phase==='finished');rematch.disabled=!online||rematch.hidden;
       }
       function send(kind,...values){if(!socket||socket.readyState!==WebSocket.OPEN||!token||pending)return;pending=true;controls();socket.send(JSON.stringify([kind,token,revision,...values]));}
       function fire(cell){if(!state||!state.myTurn||targetState(cell)!==0)return;send('fire',cell);feedback.textContent=`Firing at ${label(cell)}…`;}
       byId('save').onclick=()=>send('profile',...slots.map(s=>Number(s.value)));
+      byId('randomize').onclick=()=>{send('randomize');feedback.textContent='Randomizing fleet…';};
       byId('ready').onclick=()=>send('ready');
       rematch.onclick=()=>{if(!state||state.phase!=='finished')return;send('rematch');feedback.textContent='Starting a new round…';};
       function validView(d){return d&&Number.isInteger(d.revision)&&d.revision>=0&&d.revision<=4294967295&&typeof d.profile==='boolean'&&typeof d.ready==='boolean'&&typeof d.accepted==='boolean'&&Array.isArray(d.slots)&&d.slots.length===3&&d.slots.every(n=>Number.isInteger(n)&&n>=0&&n<=13)&&Array.isArray(d.ships)&&d.ships.length===5&&d.ships.every(s=>Array.isArray(s)&&s.length===2&&Number.isInteger(s[0])&&(s[0]===255||s[0]>=0&&s[0]<100)&&(s[1]===0||s[1]===1));}
       function decode64(text,size){if(typeof text!=='string')return null;const alpha='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';const out=new Uint8Array(size);let acc=0,bits=0,at=0;for(const ch of text){const v=alpha.indexOf(ch);if(v<0)return null;acc=(acc<<6)|v;bits+=6;if(bits>=8){bits-=8;if(at<size)out[at++]=(acc>>bits)&255;}}return at===size?out:null;}
       function targetState(cell){if(!state||!state.board)return 0;const bit=cell*2,byte=state.board[Math.floor(bit/8)];return(byte>>(bit%8))&3;}
       function shot(mask,cell){return mask&&((mask[Math.floor(cell/8)]>>(cell%8))&1)!==0;}
-      function shipAt(cell){if(!view)return false;for(let index=0;index<5;index++){const s=view.ships[index];if(s[0]===255)continue;for(let j=0;j<lengths[index];j++)if(s[0]+j*(s[1]?1:10)===cell)return true;}return false;}
+      function shipAt(cell){return shipIndexAt(cell)>=0;}
+      function ownShipStatus(index){if(!view||view.ships[index][0]===255)return'NOT PLACED';let hits=0;for(let j=0;j<lengths[index];j++)if(state&&shot(state.incoming,view.ships[index][0]+j*(view.ships[index][1]?1:10)))hits++;return hits===lengths[index]?'SUNK':hits?`${hits} HIT`:'OK';}
+      function renderSummary(){const ownBox=byId('ownSummary'),enemyBox=byId('enemySummary');ownBox.innerHTML='';enemyBox.innerHTML='';for(let i=0;i<5;i++){const os=document.createElement('div'),statusText=ownShipStatus(i);os.className='fleet-line'+(statusText==='SUNK'?' sunk':'');os.innerHTML=`<span>${shipNames[i]}</span><span>${statusText}</span>`;ownBox.appendChild(os);const es=document.createElement('div'),sunk=Boolean(state&&(state.sunkMask&(1<<i)));es.className='fleet-line'+(sunk?' sunk':'');es.innerHTML=`<span>${shipNames[i]}</span><span>${sunk?'SUNK':'?'}</span>`;enemyBox.appendChild(es);}}
       function renderBoards(){
         cells.forEach(b=>b.className='');
-        if(view)view.ships.forEach((s,index)=>{if(s[0]===255)return;for(let j=0;j<lengths[index];j++){const c=s[0]+j*(s[1]?1:10);if(cells[c])cells[c].className='ship';}});
+        if(view)view.ships.forEach((s,index)=>{if(s[0]===255)return;for(let j=0;j<lengths[index];j++){const c=s[0]+j*(s[1]?1:10);if(cells[c])cells[c].className='ship'+(index===selectedShip?' selected':'');}});
         targets.forEach((b,i)=>{b.className='';const s=targetState(i);if(s===3)b.className='hit';else if(s===1)b.className='miss';});
         own.forEach((b,i)=>{b.className=shipAt(i)?'ship':'';if(state&&shot(state.incoming,i))b.className=shipAt(i)?'hit':'miss';});
-        battle.hidden=!(view&&view.ready&&state&&(state.phase==='playing'||state.phase==='finished'));
-        controls();
+        const inBattle=view&&view.ready&&state&&(state.phase==='playing'||state.phase==='finished');battle.hidden=!inBattle;
+        const banner=byId('resultBanner');banner.className='result-banner';banner.textContent='';if(state&&state.phase==='finished'){banner.textContent=state.winner===1?'VICTORY':'DEFEAT';banner.className='result-banner show';}
+        byId('hudTurn').textContent=state&&state.phase==='finished'?(state.winner===1?'VICTORY':'DEFEAT'):(state&&state.myTurn?'YOUR TURN':'X4 PRO TURN');renderSummary();controls();
       }
       function applyState(d){
-        if(!['waiting','placement','playing','finished'].includes(d.phase)||typeof d.myTurn!=='boolean'||!Number.isInteger(d.w))return;
+        if(!['waiting','placement','playing','finished'].includes(d.phase)||typeof d.myTurn!=='boolean'||!Number.isInteger(d.w)||!Number.isInteger(d.s)||d.s<0||d.s>31)return;
         const board=decode64(d.b,25),incoming=decode64(d.i,13);if(!board||!incoming)return;
-        state={phase:d.phase,myTurn:d.myTurn,winner:d.w,board,incoming};phase.textContent=d.phase;status.textContent='Connected to X4 Pro';
+        state={phase:d.phase,myTurn:d.myTurn,winner:d.w,board,incoming,sunkMask:d.s};phase.textContent=d.phase;status.textContent='Connected to X4 Pro';
         if(d.phase==='finished'){turn.textContent=d.w===1?'YOU WIN':'X4 PRO WINS';feedback.textContent=turn.textContent;}
         else if(d.phase==='playing'){turn.textContent=d.myTurn?'YOUR MOVE':'X4 PRO MOVE';feedback.textContent=d.myTurn?'Choose a target.':'Waiting for the X4 Pro.';}
         else if(d.phase==='waiting'&&view&&view.ready){turn.textContent='X4 Pro is placing its fleet.';}
@@ -129,12 +187,9 @@
             if(current!==generation)return;let d;try{d=JSON.parse(event.data);}catch{return;}if(!d||typeof d!=='object')return;
             if(d.type==='state')applyState(d);
             else if(d.type==='resume'&&/^[a-f0-9]{32}$/.test(d.token)){resumeToken=d.token;saveResume();}
-            else if(d.type==='placement'&&validView(d)){view=d;revision=d.revision;pending=false;resuming=false;d.slots.forEach((n,i)=>slots[i].value=n);saveResume();renderBoards();feedback.textContent=d.ready?(state&&state.phase==='playing'?'Match restored.':'Fleet confirmed. X4 Pro is setting its fleet.'):d.accepted?(state&&state.phase==='finished'?'New round ready. Place your fleet.':'Accepted by X4 Pro.'):'Move refused. Check overlap and board edges.';}
+            else if(d.type==='placement'&&validView(d)){view=d;revision=d.revision;pending=false;resuming=false;d.slots.forEach((n,i)=>slots[i].value=n);renderAvatar();saveResume();renderBoards();feedback.textContent=d.ready?(state&&state.phase==='playing'?'Match restored.':'Fleet confirmed. X4 Pro is setting its fleet.'):d.accepted?(state&&state.phase==='finished'?'New round ready. Place your fleet.':'Accepted by X4 Pro.'):'Move refused. Check overlap and board edges.';}
             else if(d.type==='error'){
-              pending=false;
-              if(resuming){resuming=false;resumeToken='';view=null;revision=0;saveResume();feedback.textContent='Saved match could not be restored.';}
-              else feedback.textContent='Request refused. Check turn/state or reconnect.';
-              controls();
+              pending=false;if(resuming){resuming=false;resumeToken='';view=null;revision=0;saveResume();feedback.textContent='Saved match could not be restored.';}else feedback.textContent='Request refused. Check turn/state or reconnect.';controls();
             }
           };
           socket.onclose=()=>{if(current!==generation)return;token='';pending=false;resuming=false;controls();status.textContent='Connection lost · reconnecting…';phase.textContent='offline';turn.textContent='';feedback.textContent=resumeToken&&view&&view.ready?'Match paused. Reconnecting…':'Unconfirmed placement is cleared on disconnect.';if(!hidden)retry=setTimeout(connect,2000);};
