@@ -74,7 +74,16 @@ void BattleshipLocalPlayActivity::onEnter() {
         const bool accepted = activity.browserPlayer_.apply(activity.browserGame_, command);
         view = activity.browserPlayer_.view();
         if (!accepted) return false;
-        if (view.ready && activity.stage_ == Stage::BrowserWaiting) activity.startX4Placement();
+        if (command.kind == bshipweb::CommandKind::Rematch) {
+          activity.stage_ = Stage::BrowserWaiting;
+          activity.selectedX4Ship_ = -1;
+          activity.x4AimCell_ = -1;
+          activity.seenLastShot_ = 0;
+          activity.x4Status_[0] = '\0';
+          activity.x4Report_[0] = '\0';
+        } else if (view.ready && activity.stage_ == Stage::BrowserWaiting) {
+          activity.startX4Placement();
+        }
         if (command.kind == bshipweb::CommandKind::Fire) {
           activity.reportLastShot(true);
           activity.seenLastShot_ = activity.browserGame_.lastShot;
