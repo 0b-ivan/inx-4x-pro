@@ -120,7 +120,7 @@ jobs:
             pio-build-${{ runner.os }}-simulator_x4_pro-
 
       - name: Install simulator host libraries
-        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libssl-dev libsqlite3-dev
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libssl-dev libsqlite3-dev libwolfssl-dev
 
       - name: Build simulator
         run: python3 -m platformio run -e simulator_x4_pro
@@ -149,8 +149,8 @@ jobs:
         run: |
           uv pip install --system -U "$PIO_CORE_URL"
 
-      - name: Install player-store host library
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - name: Install player host libraries
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libwolfssl-dev
 
       - name: Host tests
         run: |

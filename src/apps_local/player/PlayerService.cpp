@@ -1,6 +1,7 @@
 #include "PlayerService.h"
 
 #include <climits>
+#include <cstring>
 
 #include "PlayerName.h"
 
@@ -35,6 +36,18 @@ bool validGame(const GameId game) {
 
 bool validResult(const MatchResult result) {
   return result == MatchResult::Player1Win || result == MatchResult::Player2Win || result == MatchResult::Draw;
+}
+
+bool validRegisteredName(const char* name, size_t& length) {
+  if (name == nullptr || name[0] == '\0') return false;
+  length = 0;
+  while (length <= kMaxPlayerNameLength && name[length] != '\0') ++length;
+  return length > 0 && length <= kMaxPlayerNameLength;
+}
+
+bool hasGuestProgress(const GuestGameStats& stats) {
+  return stats.wins != 0 || stats.losses != 0 || stats.draws != 0 || stats.currentStreak != 0 ||
+         stats.bestStreak != 0 || stats.xp != 0;
 }
 
 uint16_t saturatingAdd16(const uint16_t value, const uint16_t add) {
@@ -152,6 +165,60 @@ PlayerServiceResult PlayerService::createGuest(GuestSession& out) {
   }
 
   return PlayerServiceResult::RandomUnavailable;
+}
+
+PlayerServiceResult PlayerService::registerGuest(GuestSession& guest, const char* name, const char* pin,
+                                                 const uint64_t createdAt, Player& out) {
+  size_t nameLength = 0;
+  if (!guest.active() || !validRegisteredName(name, nameLength) || createdAt > static_cast<uint64_t>(INT64_MAX)) {
+    return PlayerServiceResult::InvalidArgument;
+  }
+  if (guest.completedMatches == 0) return PlayerServiceResult::GuestNotEligible;
+  if (!PlayerAuth::validPin(pin)) return PlayerServiceResult::InvalidPin;
+
+  Player existing{};
+  const StoreResult nameLookup = store_.findPlayerByName(name, existing);
+  if (nameLookup == StoreResult::Ok) return PlayerServiceResult::NameTaken;
+  if (nameLookup == StoreResult::InvalidArgument) return PlayerServiceResult::InvalidArgument;
+  if (nameLookup != StoreResult::NotFound) return PlayerServiceResult::StorageError;
+
+  PinCredential credential{};
+  const PinHashResult pinResult = auth_.createCredential(pin, credential);
+  if (pinResult == PinHashResult::InvalidPin) return PlayerServiceResult::InvalidPin;
+  if (pinResult == PinHashResult::RandomUnavailable) return PlayerServiceResult::RandomUnavailable;
+  if (pinResult != PinHashResult::Ok) return PlayerServiceResult::CryptoError;
+
+  Player profile{};
+  profile.id = guest.id;
+  std::memcpy(profile.name, name, nameLength + 1U);
+  profile.callsign = guest.callsign;
+  profile.createdAt = createdAt;
+
+  GameStats stats[kGuestGameCount]{};
+  size_t statsCount = 0;
+  for (size_t i = 0; i < guest.games.size(); ++i) {
+    const GuestGameStats& source = guest.games[i];
+    if (!hasGuestProgress(source)) continue;
+
+    GameStats& target = stats[statsCount++];
+    target.playerId = profile.id;
+    target.game = static_cast<GameId>(i + 1U);
+    target.wins = source.wins;
+    target.losses = source.losses;
+    target.draws = source.draws;
+    target.currentStreak = source.currentStreak;
+    target.bestStreak = source.bestStreak;
+    target.xp = source.xp;
+  }
+  if (statsCount == 0) return PlayerServiceResult::GuestNotEligible;
+
+  const StoreResult stored = store_.createRegisteredPlayer(profile, credential, stats, statsCount);
+  if (stored == StoreResult::NameTaken) return PlayerServiceResult::NameTaken;
+  if (stored != StoreResult::Ok) return PlayerServiceResult::StorageError;
+
+  out = profile;
+  guest = GuestSession{};
+  return PlayerServiceResult::Ok;
 }
 
 uint16_t PlayerService::xpForMatch(const GameId game, const MatchOutcome outcome) {

@@ -1,5 +1,6 @@
 #include "PlayerStore.h"
 
+#include <array>
 #include <cstring>
 
 #include <sqlite3.h>
@@ -60,6 +61,11 @@ bool validName(const char* name) {
   return length > 0 && length <= kMaxPlayerNameLength;
 }
 
+bool validPlayer(const Player& value) {
+  return !value.id.empty() && validName(value.name) && value.callsign.known() &&
+         value.createdAt <= static_cast<uint64_t>(INT64_MAX);
+}
+
 int bindId(sqlite3_stmt* statement, int index, const PlayerId& id) {
   return sqlite3_bind_blob(statement, index, id.bytes.data(), static_cast<int>(id.bytes.size()), SQLITE_STATIC);
 }
@@ -108,6 +114,20 @@ bool bindGameStats(sqlite3_stmt* statement, const GameStats& value) {
          sqlite3_bind_int64(statement, 6, value.currentStreak) == SQLITE_OK &&
          sqlite3_bind_int64(statement, 7, value.bestStreak) == SQLITE_OK &&
          sqlite3_bind_int64(statement, 8, value.xp) == SQLITE_OK;
+}
+
+bool bindCredential(sqlite3_stmt* statement, int hashIndex, int saltIndex, const PinCredential& credential) {
+  std::array<uint8_t, kPinCredentialBlobSize> blob{};
+  blob[0] = static_cast<uint8_t>(credential.version);
+  std::memcpy(blob.data() + 1, credential.hash.data(), credential.hash.size());
+  return sqlite3_bind_blob(statement, hashIndex, blob.data(), static_cast<int>(blob.size()), SQLITE_TRANSIENT) == SQLITE_OK &&
+         sqlite3_bind_blob(statement, saltIndex, credential.salt.data(), static_cast<int>(credential.salt.size()),
+                           SQLITE_TRANSIENT) == SQLITE_OK;
+}
+
+StoreResult rollback(sqlite3* db, StoreResult result) {
+  sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+  return result;
 }
 
 }  // namespace
@@ -192,8 +212,7 @@ StoreResult PlayerStore::readSchemaVersion(int& version) const {
 
 StoreResult PlayerStore::createPlayer(const Player& value) {
   if (db_ == nullptr) return StoreResult::NotOpen;
-  if (value.id.empty() || !validName(value.name) || !value.callsign.known()) return StoreResult::InvalidArgument;
-  if (value.createdAt > static_cast<uint64_t>(INT64_MAX)) return StoreResult::InvalidArgument;
+  if (!validPlayer(value)) return StoreResult::InvalidArgument;
 
   constexpr char sql[] =
       "INSERT INTO players(id, name, callsign_hair, callsign_eyes, callsign_mouth, created_at) "
@@ -222,6 +241,66 @@ StoreResult PlayerStore::createPlayer(const Player& value) {
   }
   sqlite3_finalize(statement);
   return result;
+}
+
+StoreResult PlayerStore::createRegisteredPlayer(const Player& value, const PinCredential& credential,
+                                                const GameStats* stats, const size_t statsCount) {
+  if (db_ == nullptr) return StoreResult::NotOpen;
+  if (!validPlayer(value) || !credential.supported() || (statsCount > 0 && stats == nullptr)) {
+    return StoreResult::InvalidArgument;
+  }
+  for (size_t i = 0; i < statsCount; ++i) {
+    if (stats[i].playerId != value.id || stats[i].game == GameId::Unknown) return StoreResult::InvalidArgument;
+  }
+
+  if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) != SQLITE_OK) return StoreResult::SqlError;
+
+  constexpr char sql[] =
+      "INSERT INTO players(id, name, pin_hash, pin_salt, callsign_hair, callsign_eyes, callsign_mouth, created_at) "
+      "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);";
+  sqlite3_stmt* statement = nullptr;
+  StoreResult result = prepare(db_, sql, &statement);
+  if (result != StoreResult::Ok) return rollback(db_, result);
+
+  const bool bound =
+      bindId(statement, 1, value.id) == SQLITE_OK &&
+      sqlite3_bind_text(statement, 2, value.name, -1, SQLITE_STATIC) == SQLITE_OK &&
+      bindCredential(statement, 3, 4, credential) &&
+      sqlite3_bind_int(statement, 5, value.callsign.word[SlotHair]) == SQLITE_OK &&
+      sqlite3_bind_int(statement, 6, value.callsign.word[SlotEyes]) == SQLITE_OK &&
+      sqlite3_bind_int(statement, 7, value.callsign.word[SlotMouth]) == SQLITE_OK &&
+      sqlite3_bind_int64(statement, 8, static_cast<sqlite3_int64>(value.createdAt)) == SQLITE_OK;
+  if (!bound) {
+    sqlite3_finalize(statement);
+    return rollback(db_, StoreResult::SqlError);
+  }
+
+  const int insertStep = sqlite3_step(statement);
+  const int insertError = sqlite3_extended_errcode(db_);
+  sqlite3_finalize(statement);
+  if (insertStep != SQLITE_DONE) {
+    return rollback(db_, insertError == SQLITE_CONSTRAINT_UNIQUE ? StoreResult::NameTaken : StoreResult::SqlError);
+  }
+
+  if (statsCount > 0) {
+    result = prepare(db_, kUpsertGameStatsSql, &statement);
+    if (result != StoreResult::Ok) return rollback(db_, result);
+
+    for (size_t i = 0; i < statsCount; ++i) {
+      sqlite3_reset(statement);
+      sqlite3_clear_bindings(statement);
+      if (!bindGameStats(statement, stats[i]) || sqlite3_step(statement) != SQLITE_DONE) {
+        sqlite3_finalize(statement);
+        return rollback(db_, StoreResult::SqlError);
+      }
+    }
+    sqlite3_finalize(statement);
+  }
+
+  if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+    return rollback(db_, StoreResult::SqlError);
+  }
+  return StoreResult::Ok;
 }
 
 StoreResult PlayerStore::getPlayer(const PlayerId& id, Player& out) const {
@@ -276,6 +355,55 @@ StoreResult PlayerStore::findPlayerByName(const char* name, Player& out) const {
   }
   sqlite3_finalize(statement);
   return result;
+}
+
+StoreResult PlayerStore::getPinCredential(const PlayerId& id, PinCredential& out) const {
+  if (db_ == nullptr) return StoreResult::NotOpen;
+  if (id.empty()) return StoreResult::InvalidArgument;
+
+  sqlite3_stmt* statement = nullptr;
+  StoreResult result = prepare(db_, "SELECT pin_hash, pin_salt FROM players WHERE id = ?1;", &statement);
+  if (result != StoreResult::Ok) return result;
+  if (bindId(statement, 1, id) != SQLITE_OK) {
+    sqlite3_finalize(statement);
+    return StoreResult::SqlError;
+  }
+
+  const int step = sqlite3_step(statement);
+  if (step == SQLITE_DONE) {
+    sqlite3_finalize(statement);
+    return StoreResult::NotFound;
+  }
+  if (step != SQLITE_ROW) {
+    sqlite3_finalize(statement);
+    return StoreResult::SqlError;
+  }
+
+  const void* hashBlob = sqlite3_column_blob(statement, 0);
+  const int hashBytes = sqlite3_column_bytes(statement, 0);
+  const void* saltBlob = sqlite3_column_blob(statement, 1);
+  const int saltBytes = sqlite3_column_bytes(statement, 1);
+  if (hashBlob == nullptr || saltBlob == nullptr) {
+    sqlite3_finalize(statement);
+    return StoreResult::CredentialMissing;
+  }
+  if (hashBytes != static_cast<int>(kPinCredentialBlobSize) || saltBytes != static_cast<int>(kPinSaltSize)) {
+    sqlite3_finalize(statement);
+    return StoreResult::CredentialMissing;
+  }
+
+  const auto* hashBytesPtr = static_cast<const uint8_t*>(hashBlob);
+  PinCredential credential{};
+  credential.version = static_cast<PinKdfVersion>(hashBytesPtr[0]);
+  if (!credential.supported()) {
+    sqlite3_finalize(statement);
+    return StoreResult::CredentialMissing;
+  }
+  std::memcpy(credential.hash.data(), hashBytesPtr + 1, credential.hash.size());
+  std::memcpy(credential.salt.data(), saltBlob, credential.salt.size());
+  sqlite3_finalize(statement);
+  out = credential;
+  return StoreResult::Ok;
 }
 
 StoreResult PlayerStore::playerExists(const PlayerId& id, bool& exists) const {
@@ -363,25 +491,20 @@ StoreResult PlayerStore::saveGameStatsBatch(const GameStats* values, const size_
 
   sqlite3_stmt* statement = nullptr;
   StoreResult result = prepare(db_, kUpsertGameStatsSql, &statement);
-  if (result != StoreResult::Ok) {
-    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    return result;
-  }
+  if (result != StoreResult::Ok) return rollback(db_, result);
 
   for (size_t i = 0; i < count; ++i) {
     sqlite3_reset(statement);
     sqlite3_clear_bindings(statement);
     if (!bindGameStats(statement, values[i]) || sqlite3_step(statement) != SQLITE_DONE) {
       sqlite3_finalize(statement);
-      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-      return StoreResult::SqlError;
+      return rollback(db_, StoreResult::SqlError);
     }
   }
   sqlite3_finalize(statement);
 
   if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK) {
-    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    return StoreResult::SqlError;
+    return rollback(db_, StoreResult::SqlError);
   }
   return StoreResult::Ok;
 }

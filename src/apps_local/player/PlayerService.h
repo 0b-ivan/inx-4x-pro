@@ -5,7 +5,9 @@
 
 #include "GuestSession.h"
 #include "Match.h"
+#include "PlayerAuth.h"
 #include "PlayerStore.h"
+#include "RandomSource.h"
 
 namespace player {
 
@@ -14,20 +16,32 @@ enum class PlayerServiceResult : uint8_t {
   InvalidArgument,
   RandomUnavailable,
   PlayerNotFound,
+  GuestNotEligible,
+  NameTaken,
+  InvalidPin,
+  CryptoError,
   StorageError,
 };
-
-// Injectable so the shared service remains host-testable and does not hardwire
-// esp_random()/Arduino into the domain layer. Device integration can supply a
-// tiny adapter around esp_fill_random().
-using RandomFill = bool (*)(void* context, uint8_t* out, size_t size);
 
 class PlayerService {
  public:
   PlayerService(PlayerStore& store, RandomFill randomFill, void* randomContext = nullptr)
-      : store_(store), randomFill_(randomFill), randomContext_(randomContext) {}
+      : store_(store),
+        randomFill_(randomFill),
+        randomContext_(randomContext),
+        auth_(store, randomFill, randomContext) {}
 
   PlayerServiceResult createGuest(GuestSession& out);
+
+  // A guest becomes persistent only after at least one completed match. The
+  // guest keeps its generated PlayerId/callsign, and every accumulated game row
+  // is inserted atomically with the new profile and PIN credential.
+  PlayerServiceResult registerGuest(GuestSession& guest, const char* name, const char* pin,
+                                    uint64_t createdAt, Player& out);
+
+  AuthResult authenticate(const PlayerId& playerId, const char* pin) {
+    return auth_.authenticate(playerId, pin);
+  }
 
   // `guests` is the small set of RAM-only guest sessions participating in the
   // current match. Resolution is a linear scan over that tiny set, not a hash
@@ -41,6 +55,7 @@ class PlayerService {
   PlayerStore& store_;
   RandomFill randomFill_ = nullptr;
   void* randomContext_ = nullptr;
+  PlayerAuth auth_;
 };
 
 }  // namespace player

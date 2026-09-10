@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "GameStats.h"
+#include "PinCredential.h"
 #include "Player.h"
 
 struct sqlite3;
@@ -17,6 +18,7 @@ enum class StoreResult : uint8_t {
   InvalidArgument,
   NameTaken,
   NotFound,
+  CredentialMissing,
   SqlError,
   UnsupportedSchema,
 };
@@ -41,9 +43,14 @@ class PlayerStore {
   bool isOpen() const { return db_ != nullptr; }
   int schemaVersion() const { return schemaVersion_; }
 
+  // Legacy/plain player creation remains useful for migration and low-level
+  // store tests. Normal registered profiles should use createRegisteredPlayer().
   StoreResult createPlayer(const Player& value);
+  StoreResult createRegisteredPlayer(const Player& value, const PinCredential& credential,
+                                     const GameStats* stats, size_t statsCount);
   StoreResult getPlayer(const PlayerId& id, Player& out) const;
   StoreResult findPlayerByName(const char* name, Player& out) const;
+  StoreResult getPinCredential(const PlayerId& id, PinCredential& out) const;
 
   StoreResult getGameStats(const PlayerId& playerId, GameId game, GameStats& out) const;
   StoreResult saveGameStats(const GameStats& value);
