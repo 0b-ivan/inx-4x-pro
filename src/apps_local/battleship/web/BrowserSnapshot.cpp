@@ -98,7 +98,7 @@ size_t serializeSnapshot(const BrowserSnapshot& snapshot, char* out, const size_
   encode64(snapshot.shotsAtBrowser, sizeof(snapshot.shotsAtBrowser), incoming64);
 
   const int count = snprintf(out, capacity,
-                             "{\"type\":\"state\",\"phase\":\"%s\",\"myTurn\":%s,\"winner\":%d,\"b\":\"%s\",\"i\":\"%s\"}",
+                             "{\"type\":\"state\",\"phase\":\"%s\",\"myTurn\":%s,\"w\":%d,\"b\":\"%s\",\"i\":\"%s\"}",
                              phase, snapshot.myTurn ? "true" : "false", snapshot.winner, board64, incoming64);
   if (count < 0 || static_cast<size_t>(count) >= capacity) {
     out[0] = '\0';
