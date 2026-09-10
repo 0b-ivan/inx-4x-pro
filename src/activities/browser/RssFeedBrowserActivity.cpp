@@ -13,11 +13,16 @@
 #include <cstdio>
 #include <cstring>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/reader/RssArticleActivity.h"
 #include "apps_local/ShelfScreen.h"
 #include "apps_local/rss/RssCache.h"
+#include "apps_local/rss/RssOrder.h"
+#include "apps_local/rss/RssReadingSettings.h"
+#include "apps_local/rss/RssSync.h"
+#include "apps_local/rss/RssTime.h"
 #include "apps_local/ui/Toybox.h"
 #include "apps_local/ui/ToyboxFonts.h"
 #include "apps_local/ui/ToyboxTheme.h"
@@ -26,167 +31,18 @@
 #include "network/HttpDownloader.h"
 
 namespace {
-constexpr size_t MAX_ARTICLE_HTML_BYTES = 40 * 1024;
 constexpr freeink::ui::ActionId ACTION_OPEN_ITEM = 1;
 
 int16_t listRowHeight(const freeink::ui::DrawTarget& target, const freeink::ui::ThemeTokens& tokens) {
-  return static_cast<int16_t>(2 * target.lineHeight(tokens.bodyText.font) + toybox::kGutter);
+  return static_cast<int16_t>(target.lineHeight(tokens.bodyText.font) + target.lineHeight(toybox::kSmallFont) +
+                              toybox::kGutter);
 }
 
-bool startsWithAtCaseInsensitive(const std::string& text, const size_t pos, const char* prefix) {
-  const size_t len = strlen(prefix);
-  if (pos + len > text.size()) return false;
-  for (size_t i = 0; i < len; i++) {
-    const char lhs = static_cast<char>(tolower(static_cast<unsigned char>(text[pos + i])));
-    const char rhs = static_cast<char>(tolower(static_cast<unsigned char>(prefix[i])));
-    if (lhs != rhs) return false;
-  }
-  return true;
-}
-
-size_t findCaseInsensitive(const std::string& text, const char* needle, const size_t start = 0) {
-  const size_t needleLen = strlen(needle);
-  if (needleLen == 0) return start <= text.size() ? start : std::string::npos;
-  if (needleLen > text.size() || start > text.size() - needleLen) return std::string::npos;
-  for (size_t pos = start; pos <= text.size() - needleLen; pos++) {
-    if (startsWithAtCaseInsensitive(text, pos, needle)) return pos;
-  }
-  return std::string::npos;
-}
-
-std::string resolveArticleUrl(const std::string& baseUrl, const std::string& href) {
-  if (href.empty()) return {};
-  if (href.starts_with("http://") || href.starts_with("https://")) return href;
-  const size_t schemeEnd = baseUrl.find("://");
-  if (schemeEnd == std::string::npos) return {};
-  if (href.starts_with("//")) return baseUrl.substr(0, schemeEnd) + ":" + href;
-
-  const size_t hostStart = schemeEnd + 3;
-  const size_t pathStart = baseUrl.find('/', hostStart);
-  const std::string origin = pathStart == std::string::npos ? baseUrl : baseUrl.substr(0, pathStart);
-  if (href[0] == '/') return origin + href;
-
-  size_t queryStart = baseUrl.find_first_of("?#", hostStart);
-  if (queryStart == std::string::npos) queryStart = baseUrl.size();
-  size_t dirEnd = baseUrl.rfind('/', queryStart);
-  if (dirEnd == std::string::npos || dirEnd < hostStart) return origin + "/" + href;
-  return baseUrl.substr(0, dirEnd + 1) + href;
-}
-
-std::string extractAmpHtmlUrl(const std::string& html, const std::string& baseUrl) {
-  size_t pos = 0;
-  while ((pos = findCaseInsensitive(html, "<link", pos)) != std::string::npos) {
-    const size_t tagEnd = html.find('>', pos + 5);
-    if (tagEnd == std::string::npos) break;
-    const size_t tagLen = tagEnd - pos + 1;
-    if (findCaseInsensitive(html.substr(pos, tagLen), "amphtml") == std::string::npos) {
-      pos = tagEnd + 1;
-      continue;
-    }
-
-    const size_t hrefPos = findCaseInsensitive(html, "href", pos);
-    if (hrefPos == std::string::npos || hrefPos > tagEnd) {
-      pos = tagEnd + 1;
-      continue;
-    }
-    size_t valueStart = html.find('=', hrefPos + 4);
-    if (valueStart == std::string::npos || valueStart > tagEnd) {
-      pos = tagEnd + 1;
-      continue;
-    }
-    valueStart++;
-    while (valueStart < tagEnd && isspace(static_cast<unsigned char>(html[valueStart]))) valueStart++;
-    if (valueStart >= tagEnd) {
-      pos = tagEnd + 1;
-      continue;
-    }
-
-    const char quote = (html[valueStart] == '"' || html[valueStart] == '\'') ? html[valueStart++] : '\0';
-    size_t valueEnd = valueStart;
-    while (valueEnd < tagEnd) {
-      if ((quote && html[valueEnd] == quote) ||
-          (!quote && (isspace(static_cast<unsigned char>(html[valueEnd])) || html[valueEnd] == '>'))) {
-        break;
-      }
-      valueEnd++;
-    }
-    return resolveArticleUrl(baseUrl, html.substr(valueStart, valueEnd - valueStart));
-  }
-  return {};
-}
-
-std::string wikipediaRenderUrl(const std::string& url) {
-  const size_t schemeEnd = url.find("://");
-  if (schemeEnd == std::string::npos) return {};
-  const size_t hostStart = schemeEnd + 3;
-  const size_t pathStart = url.find('/', hostStart);
-  if (pathStart == std::string::npos) return {};
-
-  const std::string host = url.substr(hostStart, pathStart - hostStart);
-  if (host.find("wikipedia.org") == std::string::npos) return {};
-  if (url.compare(pathStart, 6, "/wiki/") != 0) return {};
-
-  size_t titleEnd = url.find_first_of("?#", pathStart + 6);
-  if (titleEnd == std::string::npos) titleEnd = url.size();
-  if (titleEnd <= pathStart + 6) return {};
-
-  const std::string title = url.substr(pathStart + 6, titleEnd - pathStart - 6);
-  return url.substr(0, schemeEnd + 3) + host + "/w/index.php?title=" + title + "&action=render";
-}
-
-bool fetchArticleHtml(const std::string& url, const std::string& username, const std::string& password,
-                      std::string& outHtml) {
-  outHtml.clear();
-  outHtml.reserve(4096);
-  size_t total = 0;
-  bool truncated = false;
-  const bool fetched = HttpDownloader::fetchUrl(
-      url,
-      [&](const uint8_t* data, const size_t len) {
-        if (total >= MAX_ARTICLE_HTML_BYTES) {
-          truncated = true;
-          return false;
-        }
-        const size_t copyLen = std::min(len, MAX_ARTICLE_HTML_BYTES - total);
-        if (copyLen > 0) {
-          outHtml.append(reinterpret_cast<const char*>(data), copyLen);
-          total += copyLen;
-        }
-        if (total >= MAX_ARTICLE_HTML_BYTES) {
-          truncated = true;
-          return false;
-        }
-        return true;
-      },
-      username, password);
-
-  if (truncated) LOG_DBG("RSS", "Article HTML truncated at %u bytes: %s", static_cast<unsigned>(total), url.c_str());
-  return fetched || !outHtml.empty();
-}
-
-std::string compactPublishedDate(const std::string& value) {
-  if (value.size() >= 10 && value[4] == '-' && value[7] == '-') return value.substr(0, 10);
-
-  size_t start = value.find(',');
-  start = start == std::string::npos ? 0 : start + 1;
-  while (start < value.size() && isspace(static_cast<unsigned char>(value[start]))) ++start;
-  if (start >= value.size()) return {};
-
-  size_t pos = start;
-  int tokens = 0;
-  while (pos < value.size()) {
-    while (pos < value.size() && isspace(static_cast<unsigned char>(value[pos]))) ++pos;
-    if (pos >= value.size()) break;
-    while (pos < value.size() && !isspace(static_cast<unsigned char>(value[pos]))) ++pos;
-    ++tokens;
-    if (tokens == 3) return value.substr(start, pos - start);
-  }
-  return value;
-}
 }  // namespace
 
 void RssFeedBrowserActivity::onEnter() {
   Activity::onEnter();
+  RSS_READING_SETTINGS.loadFromFile();
   toybox::ensureFonts(renderer);
 
   state = BrowserState::CHECK_WIFI;
@@ -201,8 +57,9 @@ void RssFeedBrowserActivity::onEnter() {
   interactionsReady = false;
 
   RssCacheInfo cacheInfo;
-  if (rsscache::loadFeed(feed, feedTitle, items, &cacheInfo)) {
+  if (rsscache::loadFeed(feed, feedTitle, items, &cacheInfo, RSS_READING_SETTINGS.showRead)) {
     LOG_DBG("RSS", "Loaded %u cached entries for %s", static_cast<unsigned>(items.size()), feed.url.c_str());
+    cacheMessage = tr(STR_RSS_SAVED_FEED);
     rebuildListItems();
     state = BrowserState::BROWSING;
     requestUpdateAndWait();
@@ -261,7 +118,8 @@ void RssFeedBrowserActivity::loop() {
   const MappedInputManager::SwipeDir swipe = mappedInput.wasSwipe();
   const bool next =
       mappedInput.wasReleased(MappedInputManager::Button::Down) || swipe == MappedInputManager::SwipeDir::Up;
-  const bool prev = mappedInput.wasReleased(MappedInputManager::Button::Up) || swipe == MappedInputManager::SwipeDir::Down;
+  const bool prev =
+      mappedInput.wasReleased(MappedInputManager::Button::Up) || swipe == MappedInputManager::SwipeDir::Down;
   if (next || prev) {
     pageList(next ? 1 : -1);
     return;
@@ -302,7 +160,8 @@ void RssFeedBrowserActivity::render(RenderLock&&) {
   if (state == BrowserState::BROWSING) {
     renderer.clearScreen();
 
-    auto target = toybox::makeTarget(renderer, toybox::readingFaces());
+    auto target = toybox::makeTarget(
+        renderer, toybox::Faces{toybox::kReadingSmallFontId, toybox::kReadingBoldFontId, toybox::kReadingBoldFontId});
     const fui::DeviceContext device = target.deviceContext();
     const fui::ThemeTokens& tokens = toybox::themeTokens();
     const fui::InputSnapshot noInput{};
@@ -316,13 +175,27 @@ void RssFeedBrowserActivity::render(RenderLock&&) {
     toybox::absoluteChrome(screen);
     toybox::headerBand(screen, header);
     toybox::headerRule(screen);
-    screen.insetContent(fui::Insets{toybox::kGutter * 3, toybox::kMargin, toybox::kMargin, toybox::kMargin});
+    screen.insetContent(fui::Insets{toybox::kGutter * 3, toybox::kMargin,
+                                    static_cast<int16_t>(UITheme::getInstance().getStatusBarHeight() +
+                                                         renderer.getLineHeight(UI_10_FONT_ID) + toybox::kGutter),
+                                    toybox::kMargin});
+
+    std::string status = wifiConnected() ? tr(STR_RSS_ONLINE) : tr(STR_RSS_OFFLINE);
+    if (!cacheMessage.empty()) status += " / " + cacheMessage;
+    auto statusStyle = tokens.smallText;
+    statusStyle.font = toybox::kSmallFont;
+    statusStyle.maxLines = 2;
+    target.text(screen.takeTop(2 * target.lineHeight(toybox::kSmallFont) + toybox::kGutter), status.c_str(),
+                statusStyle);
 
     if (listItems.empty()) {
       screen.centeredText(tr(STR_NO_ENTRIES), screen.theme().bodyText);
     } else {
       const int16_t rowHeight = listRowHeight(target, tokens);
-      visibleRows = fui::listVisibleRows(screen.body(), rowHeight, tokens.listRowGap);
+      // Reserve the largest two-line title row so paging cannot skip rows
+      // when FreeInkUI expands a wrapped label above its subtitle.
+      visibleRows =
+          fui::listVisibleRows(screen.body(), rowHeight + target.lineHeight(tokens.bodyText.font), tokens.listRowGap);
       if (visibleRows > 0) {
         const int pages = shelfui::pageCountFor(static_cast<int>(listItems.size()), visibleRows);
         const int maxTop = pages > 0 ? (pages - 1) * visibleRows : 0;
@@ -332,17 +205,26 @@ void RssFeedBrowserActivity::render(RenderLock&&) {
 
       fui::ListProps list;
       list.items = listItems.data();
-      list.count = static_cast<uint16_t>(listItems.size());
+      list.count = static_cast<uint16_t>(std::min(static_cast<int>(listItems.size()), topIndex + visibleRows));
       list.topIndex = static_cast<uint16_t>(topIndex);
       list.selectedIndex = -1;
       list.action = ACTION_OPEN_ITEM;
       list.rowHeight = rowHeight;
       list.labelText = tokens.bodyText;
       list.labelText.maxLines = 2;
+      list.subtitleText = tokens.smallText;
+      list.subtitleText.font = toybox::kSmallFont;
+      list.scrollIndicator = false;
       list.valueText = tokens.smallText;
       list.valueText.align = fui::TextAlign::Right;
       list.balanceWrappedLabelWithValue = false;
       screen.list(list);
+      char page[32];
+      snprintf(page, sizeof(page), "%d / %d", shelfui::pageFor(topIndex, visibleRows) + 1,
+               shelfui::pageCountFor(static_cast<int>(listItems.size()), visibleRows));
+      renderer.drawCenteredText(
+          UI_10_FONT_ID,
+          pageHeight - UITheme::getInstance().getStatusBarHeight() - renderer.getLineHeight(UI_10_FONT_ID), page);
     }
 
     interactionsReady = true;
@@ -416,6 +298,7 @@ void RssFeedBrowserActivity::fetchFeed() {
           feed.username, feed.password)) {
     LOG_ERR("RSS", "Feed request failed (HTTP %d)", HttpDownloader::lastStatus());
     if (hasFallback) {
+      cacheMessage = tr(STR_RSS_REFRESH_FAILED);
       state = BrowserState::BROWSING;
       requestUpdate();
       return;
@@ -429,6 +312,7 @@ void RssFeedBrowserActivity::fetchFeed() {
 
   if (!parser) {
     if (hasFallback) {
+      cacheMessage = tr(STR_RSS_REFRESH_FAILED);
       state = BrowserState::BROWSING;
       requestUpdate();
       return;
@@ -446,6 +330,7 @@ void RssFeedBrowserActivity::fetchFeed() {
   const bool cacheSaved = rsscache::mergeAndSaveFeed(feed, freshTitle, freshItems, mergedItems, &cacheInfo);
   if (!cacheSaved) LOG_ERR("RSS", "Feed loaded, but cache write failed");
 
+  cacheMessage = cacheSaved ? tr(STR_RSS_SAVED_FEED) : tr(STR_RSS_NOT_SAVED);
   feedTitle = freshTitle.empty() ? feedTitle : freshTitle;
   items = mergedItems.empty() && !freshItems.empty() ? freshItems : std::move(mergedItems);
   topIndex = 0;
@@ -457,20 +342,30 @@ void RssFeedBrowserActivity::fetchFeed() {
 }
 
 void RssFeedBrowserActivity::rebuildListItems() {
+  if (!RSS_READING_SETTINGS.showRead) {
+    std::erase_if(items, [&](const RssItem& item) { return rsscache::isRead(feed, item); });
+  }
+  rssorder::sort(items, RSS_READING_SETTINGS.newestFirst);
   listValues.clear();
   listValues.reserve(items.size());
-  for (const auto& item : items) listValues.push_back(compactPublishedDate(item.published));
+  std::string cachedText;
+  for (const auto& item : items) {
+    std::string value = rsstime::formatPublished(item.published, SETTINGS.clockUtcOffsetQ);
+    if (!value.empty()) value += " / ";
+    value += rsscache::loadArticle(feed, item, cachedText)
+                 ? tr(STR_RSS_OFFLINE_ARTICLE)
+                 : (item.content.empty() ? tr(STR_RSS_NEEDS_DOWNLOAD) : tr(STR_RSS_FEED_EXCERPT));
+    listValues.push_back(std::move(value));
+  }
 
   listItems.clear();
   listItems.reserve(items.size());
   for (size_t i = 0; i < items.size(); ++i) {
     freeink::ui::ListItem row;
-    row.label = !items[i].title.empty()
-                    ? items[i].title.c_str()
-                    : (!items[i].link.empty() ? items[i].link.c_str() : tr(STR_RSS_READER));
-    row.value = !listValues[i].empty()
-                    ? listValues[i].c_str()
-                    : (!items[i].author.empty() ? items[i].author.c_str() : "");
+    row.label = !items[i].title.empty() ? items[i].title.c_str()
+                                        : (!items[i].link.empty() ? items[i].link.c_str() : tr(STR_RSS_READER));
+    row.subtitle =
+        !listValues[i].empty() ? listValues[i].c_str() : (!items[i].author.empty() ? items[i].author.c_str() : "");
     row.actionValue = static_cast<int16_t>(i);
     listItems.push_back(row);
   }
@@ -480,56 +375,35 @@ void RssFeedBrowserActivity::openItem(const RssItem& item) {
   RssItem article = item;
   std::string cachedArticle;
   const bool hasCachedArticle = rsscache::loadArticle(feed, item, cachedArticle);
-  if (hasCachedArticle && cachedArticle.size() > article.content.size()) article.content = cachedArticle;
+  if (hasCachedArticle) article.content = cachedArticle;
+  std::string availability = hasCachedArticle ? tr(STR_RSS_ARTICLE_SAVED) : tr(STR_RSS_FEED_TEXT);
 
-  const bool canFetchArticle = !hasCachedArticle && wifiConnected() &&
-                               (item.link.starts_with("http://") || item.link.starts_with("https://"));
+  const bool canFetchArticle =
+      !hasCachedArticle && (item.link.starts_with("http://") || item.link.starts_with("https://"));
   if (canFetchArticle) {
     state = BrowserState::ARTICLE_LOADING;
     statusMessage = item.title.empty() ? tr(STR_LOADING) : item.title;
     requestUpdateAndWait();
 
-    std::string extracted = fetchArticleText(item);
-    if (!extracted.empty() && extracted.size() > article.content.size()) {
+    rsssync::WifiSession wifi;
+    auto* fontCache = renderer.getFontCacheManager();
+    if (fontCache) fontCache->clearCache();
+    std::string extracted = wifi.connect() ? rsssync::fetchArticleText(feed, item) : std::string{};
+    if (!extracted.empty()) {
       article.content = extracted;
-      if (!rsscache::saveArticle(feed, item, extracted)) LOG_ERR("RSS", "Could not cache article text");
+      availability = rsscache::saveArticle(feed, item, extracted) ? tr(STR_RSS_ARTICLE_SAVED) : tr(STR_RSS_NOT_SAVED);
+    } else {
+      availability = tr(STR_RSS_DOWNLOAD_FAILED);
     }
   }
 
   state = BrowserState::BROWSING;
-  startActivityForResult(std::make_unique<RssArticleActivity>(renderer, mappedInput, article),
-                         [this](const ActivityResult&) { requestUpdate(); });
-}
-
-std::string RssFeedBrowserActivity::fetchArticleText(const RssItem& item) {
-  if (!item.link.starts_with("http://") && !item.link.starts_with("https://")) return {};
-
-  auto* fontCache = renderer.getFontCacheManager();
-  if (fontCache) fontCache->clearCache();
-
-  auto fetchAndExtract = [&](const std::string& url, std::string& sourceHtml) -> std::string {
-    sourceHtml.clear();
-    if (!fetchArticleHtml(url, feed.username, feed.password, sourceHtml)) return {};
-    return HtmlArticleExtractor::extractReadableText(sourceHtml);
-  };
-
-  std::string html;
-  std::string extracted = fetchAndExtract(item.link, html);
-  if (!extracted.empty()) return extracted;
-
-  std::string ampUrl = extractAmpHtmlUrl(html, item.link);
-  if (!ampUrl.empty() && ampUrl != item.link) {
-    extracted = fetchAndExtract(ampUrl, html);
-    if (!extracted.empty()) return extracted;
-  }
-
-  const std::string wikiUrl = wikipediaRenderUrl(item.link);
-  if (!wikiUrl.empty() && wikiUrl != item.link && wikiUrl != ampUrl) {
-    extracted = fetchAndExtract(wikiUrl, html);
-    if (!extracted.empty()) return extracted;
-  }
-
-  return {};
+  startActivityForResult(std::make_unique<RssArticleActivity>(renderer, mappedInput, article,
+                                                              feedTitle.empty() ? feed.name : feedTitle, availability),
+                         [this](const ActivityResult&) {
+                           rebuildListItems();
+                           requestUpdate();
+                         });
 }
 
 bool RssFeedBrowserActivity::wifiConnected() const {
