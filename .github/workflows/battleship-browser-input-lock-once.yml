@@ -28,21 +28,20 @@ jobs:
           text = page.read_text()
 
           old = "      * { box-sizing:border-box; }\n"
-          new = """      * { box-sizing:border-box; }
-      html { touch-action:manipulation; }
-      html:has(main.in-battle),body:has(main.in-battle) { height:100%; overflow:hidden; overscroll-behavior:none; }
-      main.in-battle { -webkit-touch-callout:none; }
-"""
+          new = (old
+                 + "      html { touch-action:manipulation; }\n"
+                 + "      html:has(main.in-battle),body:has(main.in-battle) { height:100%; overflow:hidden; overscroll-behavior:none; }\n"
+                 + "      main.in-battle { -webkit-touch-callout:none; }\n")
           if old not in text:
               raise SystemExit('CSS insertion point not found')
           text = text.replace(old, new, 1)
 
           old = "      const shell=byId('app'),status=byId('status'),phase=byId('phase'),turn=byId('turn'),profile=byId('profile'),placement=byId('placement'),feedback=byId('feedback'),battle=byId('battle'),rematch=byId('rematch'),surrender=byId('surrender'),hud=byId('hud'),setupState=byId('setupState'),youPanel=byId('youPanel'),enemyPanel=byId('enemyPanel'),eventBanner=byId('eventBanner');\n"
-          new = old + """      window.addEventListener('contextmenu',event=>event.preventDefault());
-      const lockBattleScroll=event=>{if(shell.className.split(/\\s+/).includes('in-battle'))event.preventDefault();};
-      window.addEventListener('touchmove',lockBattleScroll,{passive:false});
-      window.addEventListener('wheel',lockBattleScroll,{passive:false});
-"""
+          new = (old
+                 + "      window.addEventListener('contextmenu',event=>event.preventDefault());\n"
+                 + "      const lockBattleScroll=event=>{if(shell.className.split(/\\\\s+/).includes('in-battle'))event.preventDefault();};\n"
+                 + "      window.addEventListener('touchmove',lockBattleScroll,{passive:false});\n"
+                 + "      window.addEventListener('wheel',lockBattleScroll,{passive:false});\n")
           if old not in text:
               raise SystemExit('JS insertion point not found')
           text = text.replace(old, new, 1)
@@ -51,12 +50,12 @@ jobs:
           test = Path('host-tests/battleship/test_browser_page.cjs')
           text = test.read_text()
           old = "  assert.match(html,/side-panel\\.active/);\n"
-          new = old + """  assert.match(html,/touch-action:manipulation/);
-  assert.match(html,/body:has\\(main\\.in-battle\\)/);
-  assert.match(html,/contextmenu/);
-  assert.match(html,/touchmove/);
-  assert.match(html,/wheel/);
-"""
+          new = (old
+                 + "  assert.match(html,/touch-action:manipulation/);\n"
+                 + "  assert.match(html,/body:has\\\\(main\\\\.in-battle\\\\)/);\n"
+                 + "  assert.match(html,/contextmenu/);\n"
+                 + "  assert.match(html,/touchmove/);\n"
+                 + "  assert.match(html,/wheel/);\n")
           if old not in text:
               raise SystemExit('test insertion point not found')
           text = text.replace(old, new, 1)
