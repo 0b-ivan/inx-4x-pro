@@ -75,6 +75,8 @@ bool parseCommand(const uint8_t* bytes, size_t size, Command& out) {
     candidate.kind = CommandKind::Ready;
   else if (r.literal("\"fire\""))
     candidate.kind = CommandKind::Fire;
+  else if (r.literal("\"rematch\""))
+    candidate.kind = CommandKind::Rematch;
   else
     return false;
 
