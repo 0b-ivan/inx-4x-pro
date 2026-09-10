@@ -116,18 +116,15 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.14.0
+            ### What is new in 1.14.1
 
-            - Added complete Battleship browser crossplay while keeping the existing X4 Pro-to-X4 Pro ESP-NOW mode intact.
-            - Browser play works over an existing Wi-Fi network or the temporary `CrossPlay-Battleship` hotspot at `crossplay.local/battleship`.
-            - Added reader-compatible player avatars and derived player names, with a clearer profile-first setup flow.
-            - Browser and X4 Pro can place fleets in parallel; the match starts only after both players are ready.
-            - Fleet setup supports direct placement, double-tap ship rotation and server-validated random placement.
-            - Browser firing uses a guarded two-tap interaction: first tap selects a target, second tap on the same cell fires.
-            - Added a compact battle HUD with fleet status, own-sea minimap, clean outside-board coordinates and clear hit/miss X marks.
-            - Added named waiting states, victory/defeat overlays, same-session rematch, secure reconnect/resume and guarded surrender.
-            - The X4 Pro remains authoritative for placement, shots, sunk state, surrender and game over; hidden host fleet positions never cross the browser boundary.
-            - OTA release browsing supports Stable and Nightly / Pre-release channels with explicit version selection, including downgrade and reinstall of compatible builds.
+            - Reworked the Battleship browser match header into three equal sections for **YOU**, **OPPONENT** and **YOUR SEA**.
+            - The active player's panel is now inverted so it is immediately obvious whose turn it is.
+            - Fleet status is shown as ship segments instead of text-only status; hits are marked directly on each ship.
+            - New incoming hits shake the match frame and briefly flash the affected ship row for clearer combat feedback.
+            - Increased match typography while keeping the own-sea minimap compact.
+            - Opponent damage is transmitted only as per-ship public hit counts; hidden ship positions and orientation remain private.
+            - Two-tap firing, surrender, rematch and secure resume behavior remain unchanged.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
