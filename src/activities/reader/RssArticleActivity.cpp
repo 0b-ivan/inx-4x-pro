@@ -10,6 +10,7 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
+#include "apps_local/rss/RssTime.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -71,35 +72,51 @@ void RssArticleActivity::initializeLayout() {
 
   viewportWidth = renderer.getScreenWidth() - marginLeft - marginRight;
   const int viewportHeight = renderer.getScreenHeight() - marginTop - marginBottom;
-  linesPerPage = std::max(1, viewportHeight / renderer.getLineHeight(fontId));
 
   buildLines();
-  totalPages = std::max(1, static_cast<int>((lines.size() + linesPerPage - 1) / linesPerPage));
+  pageStarts.clear();
+  pageStarts.reserve(MAX_ARTICLE_LINES);
+  pageStarts.push_back(0);
+  int used = 0;
+  for (int i = 0; i < static_cast<int>(lines.size()); ++i) {
+    const int height = renderer.getLineHeight(lineFont(i));
+    if (used > 0 && used + height > viewportHeight) {
+      pageStarts.push_back(i);
+      used = 0;
+    }
+    used += height;
+  }
+  totalPages = static_cast<int>(pageStarts.size());
   initialized = true;
 }
 
-std::string RssArticleActivity::articleText() const {
-  std::string text;
-  if (!item.title.empty()) text += item.title + "\n\n";
-  if (!item.author.empty() || !item.published.empty()) {
-    if (!item.author.empty()) text += item.author;
-    if (!item.author.empty() && !item.published.empty()) text += " - ";
-    if (!item.published.empty()) text += item.published;
-    text += "\n\n";
-  }
-  if (!item.content.empty()) {
-    text += item.content;
-  } else if (!item.link.empty()) {
-    text += item.link;
-  }
-  return text;
+int RssArticleActivity::lineFont(const int index) const {
+  return index >= titleEnd && index < headerEnd ? UI_10_FONT_ID : fontId;
 }
 
 void RssArticleActivity::buildLines() {
   lines.clear();
   lines.reserve(MAX_ARTICLE_LINES);
 
-  std::string text = articleText();
+  // Header lines share the existing bounded line storage; page offsets avoid
+  // duplicating body text when the title and metadata use different heights.
+  if (!item.title.empty()) {
+    if (renderer.isSdCardFont(fontId)) renderer.ensureSdCardFontReady(fontId, item.title.c_str(), 0x02);
+    auto title = renderer.wrappedText(fontId, item.title.c_str(), viewportWidth, 12, EpdFontFamily::BOLD);
+    lines.insert(lines.end(), title.begin(), title.end());
+  }
+  titleEnd = static_cast<int>(lines.size());
+  const auto appendMetadata = [&](const std::string& value) {
+    if (value.empty()) return;
+    auto wrapped = renderer.wrappedText(UI_10_FONT_ID, value.c_str(), viewportWidth, 4);
+    lines.insert(lines.end(), wrapped.begin(), wrapped.end());
+  };
+  appendMetadata(rsstime::formatPublished(item.published, SETTINGS.clockUtcOffsetQ));
+  appendMetadata(source + (source.empty() || item.author.empty() ? "" : " / ") + item.author);
+  appendMetadata(availability);
+  if (!lines.empty()) lines.emplace_back();
+  headerEnd = static_cast<int>(lines.size());
+  std::string text = item.content.empty() ? tr(STR_NO_ARTICLE_TEXT) : item.content;
   std::replace(text.begin(), text.end(), '\r', '\n');
 
   size_t start = 0;
@@ -125,31 +142,32 @@ void RssArticleActivity::buildLines() {
 }
 
 void RssArticleActivity::renderPage() {
-  const int lineHeight = renderer.getLineHeight(fontId);
-  const int startLine = currentPage * linesPerPage;
-  const int endLine = std::min(static_cast<int>(lines.size()), startLine + linesPerPage);
+  const int startLine = pageStarts[currentPage];
+  const int endLine = currentPage + 1 < totalPages ? pageStarts[currentPage + 1] : static_cast<int>(lines.size());
 
   auto renderLines = [&]() {
     int y = marginTop;
     for (int i = startLine; i < endLine; i++) {
       const auto& line = lines[i];
+      const int drawFont = lineFont(i);
+      const auto style = i < titleEnd ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
       if (!line.empty()) {
         int x = marginLeft;
-        uint8_t effectiveAlignment = SETTINGS.paragraphAlignment;
+        uint8_t effectiveAlignment = i < headerEnd ? CrossPointSettings::LEFT_ALIGN : SETTINGS.paragraphAlignment;
         const bool lineIsRtl = BidiUtils::startsWithRtl(line.c_str(), BidiUtils::RTL_PARAGRAPH_PROBE_DEPTH);
         if (lineIsRtl && (effectiveAlignment == CrossPointSettings::LEFT_ALIGN ||
                           effectiveAlignment == CrossPointSettings::JUSTIFIED)) {
           effectiveAlignment = CrossPointSettings::RIGHT_ALIGN;
         }
-        const int textWidth = renderer.getTextAdvanceX(fontId, line.c_str(), EpdFontFamily::REGULAR);
+        const int textWidth = renderer.getTextAdvanceX(drawFont, line.c_str(), style);
         if (effectiveAlignment == CrossPointSettings::CENTER_ALIGN) {
           x = marginLeft + (viewportWidth - textWidth) / 2;
         } else if (effectiveAlignment == CrossPointSettings::RIGHT_ALIGN) {
           x = marginLeft + viewportWidth - textWidth;
         }
-        renderer.drawText(fontId, x, y, line.c_str());
+        renderer.drawText(drawFont, x, y, line.c_str(), true, style);
       }
-      y += lineHeight;
+      y += renderer.getLineHeight(drawFont);
     }
   };
 

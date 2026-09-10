@@ -197,3 +197,11 @@ because it was the only app-capable one with a desktop simulator. That reason
 expired: the simulator is now CrossPoint's own, and the X4 Pro environment
 always was. Basing on CrossPoint directly costs nothing we were using and drops
 a quarter of a million lines of reading features this fork does not touch.
+
+### RSS offline scheduling seams
+
+`src/main.cpp` initializes the RSS scheduler after storage and arms its timer
+before sleep. Timer wakes sync without opening a screen and return to sleep.
+The existing RSS browser and article reader delegate article downloads and local
+date formatting to `src/apps_local/rss/`; the web settings template exposes the
+schedule. The release version remains unchanged.

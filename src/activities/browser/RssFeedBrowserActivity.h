@@ -5,9 +5,9 @@
 #include <utility>
 #include <vector>
 
-#include "apps_local/ui/ToyboxScreen.h"
 #include "RssFeedStore.h"
 #include "activities/Activity.h"
+#include "apps_local/ui/ToyboxScreen.h"
 
 class RssFeedBrowserActivity final : public Activity {
  public:
@@ -28,6 +28,7 @@ class RssFeedBrowserActivity final : public Activity {
   std::string feedTitle;
   std::string errorMessage;
   std::string statusMessage;
+  std::string cacheMessage;
   int topIndex = 0;
   int visibleRows = 0;
   std::vector<std::string> listValues;
@@ -42,7 +43,6 @@ class RssFeedBrowserActivity final : public Activity {
   void fetchFeed();
   void rebuildListItems();
   void openItem(const RssItem& item);
-  std::string fetchArticleText(const RssItem& item);
   void pageList(int delta);
   bool wifiConnected() const;
   bool preventAutoSleep() override { return true; }

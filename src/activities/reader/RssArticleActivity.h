@@ -9,8 +9,10 @@
 
 class RssArticleActivity final : public Activity {
  public:
-  RssArticleActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, RssItem item)
-      : Activity("RssArticle", renderer, mappedInput), item(std::move(item)) {}
+  RssArticleActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, RssItem item,
+                     std::string source = {}, std::string availability = {})
+      : Activity("RssArticle", renderer, mappedInput), item(std::move(item)),
+        source(std::move(source)), availability(std::move(availability)) {}
 
   void onEnter() override;
   void onExit() override;
@@ -23,9 +25,13 @@ class RssArticleActivity final : public Activity {
 
   RssItem item;
   std::vector<std::string> lines;
+  std::string source;
+  std::string availability;
+  std::vector<int> pageStarts;
+  int titleEnd = 0;
+  int headerEnd = 0;
   int currentPage = 0;
   int totalPages = 1;
-  int linesPerPage = 1;
   int viewportWidth = 0;
   int marginTop = 0;
   int marginRight = 0;
@@ -38,5 +44,5 @@ class RssArticleActivity final : public Activity {
   void initializeLayout();
   void buildLines();
   void renderPage();
-  std::string articleText() const;
+  int lineFont(int index) const;
 };

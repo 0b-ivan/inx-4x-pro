@@ -9,15 +9,21 @@ const elements = {};
 const posts = [];
 const messages = [];
 let responseOk = true;
+let syncStatus = {state:'idle',active:false,feedsTotal:1,feedsDone:0,feedsFailed:0,articlesTotal:2,articlesSaved:0,articlesFailed:0};
+let scheduledPoll = null;
 const context = vm.createContext({
   document: {getElementById:id=>elements[id]},
   fetch: async (url, options)=>{
-    posts.push({url,data:JSON.parse(options.body)});
+    posts.push({url,data:options?.body ? JSON.parse(options.body) : null});
+    if (url === '/api/rss/reading') return {ok:responseOk,text:async()=> 'Could not save to SD card',json:async()=>posts.at(-1).data};
+    if (url.startsWith('/api/rss/sync')) return {ok:responseOk,text:async()=> 'Busy',json:async()=>syncStatus};
     return {ok:responseOk,text:async()=>responseOk?'Feed OK':'HTTP 401: login rejected'};
   },
   showMessage:(text,error)=>messages.push({text,error}),
   escapeHtml:s=>s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),
-  confirm:()=>true
+  confirm:()=>true,
+  clearTimeout:()=>{scheduledPoll=null;},
+  setTimeout:fn=>{scheduledPoll=fn;return 1;}
 });
 const start=script.indexOf('  // --- RSS Feed Management ---');
 const end=script.indexOf('  // Sequential, not concurrent:',start);
@@ -56,5 +62,41 @@ function form(id) {
   await context.deleteRssFeed(0);
   assert.equal(posts.at(-1).url,'/api/rss/delete');
   assert.equal(posts.at(-1).data.index,0);
-  console.log('PASS: full JS syntax; preserve, replace and clear password; trim URL; unsaved test; error display; escaped rendering; delete');
+  elements['rss-newest-first']={checked:false};
+  elements['rss-show-read']={checked:true};
+  await context.saveRssReading(button);
+  assert.deepEqual(posts.at(-1).data,{newestFirst:false,showRead:true});
+  assert.equal(messages.at(-1).error,false);
+  responseOk=false;
+  await context.saveRssReading(button);
+  assert.equal(messages.at(-1).error,true);
+  assert.match(messages.at(-1).text,/not saved/);
+  assert.equal(button.disabled,false);
+  responseOk=true;
+  elements['rss-sync-progress']={textContent:'',style:{}};
+  elements['rss-sync-cancel']={hidden:true};
+  syncStatus={...syncStatus,state:'articles',active:true,articlesSaved:1};
+  await context.syncRssFeed(null,button);
+  assert.equal(button.disabled,false);
+  assert.match(elements['rss-sync-progress'].textContent,/1\/2 planned articles saved/);
+  assert.equal(elements['rss-sync-cancel'].hidden,false);
+  assert.equal(typeof scheduledPoll,'function');
+  assert.equal(elements['rss-sync-progress'].textContent.includes('Sync complete'),false);
+  syncStatus={...syncStatus,state:'cancelled',active:false};
+  await context.cancelRssSync();
+  assert.equal(posts.at(-1).url,'/api/rss/sync/cancel');
+  assert.equal(elements['rss-sync-cancel'].hidden,true);
+  assert.match(elements['rss-sync-progress'].textContent,/Sync cancelled/);
+  syncStatus={...syncStatus,state:'incomplete',articlesFailed:1,feedsFailed:1};
+  await context.pollRssSync();
+  assert.match(elements['rss-sync-progress'].textContent,/Sync incomplete/);
+  assert.equal(scheduledPoll,null);
+  syncStatus={...syncStatus,state:'complete',articlesSaved:2,articlesFailed:0,feedsFailed:0};
+  await context.pollRssSync();
+  assert.match(elements['rss-sync-progress'].textContent,/Sync complete/);
+  responseOk=false;
+  await context.pollRssSync();
+  assert.match(elements['rss-sync-progress'].textContent,/status unavailable/);
+  assert.equal(typeof scheduledPoll,'function');
+  console.log('PASS: sync progress, cancellation, incomplete results, reconnect; full JS syntax; preserve, replace and clear password; trim URL; unsaved test; error display; escaped rendering; delete');
 })().catch(e=>{console.error(e);process.exit(1)});

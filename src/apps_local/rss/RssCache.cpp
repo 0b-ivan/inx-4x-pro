@@ -56,6 +56,15 @@ std::string articlePath(const RssFeed& feed, const RssItem& item, const char* su
   return path;
 }
 
+std::string readPath(const RssFeed& feed, const RssItem& item) {
+  const uint32_t identity =
+      !item.guid.empty() ? hashString(item.guid) : (!item.link.empty() ? hashString(item.link) : itemHash(item));
+  char path[96];
+  snprintf(path, sizeof(path), "%s/%08lx-%08lx.read", CACHE_DIR, static_cast<unsigned long>(hashString(feed.url)),
+           static_cast<unsigned long>(identity));
+  return path;
+}
+
 template <typename T>
 bool writePod(HalFile& file, const T& value) {
   return file.write(&value, sizeof(value)) == sizeof(value);
@@ -83,12 +92,6 @@ bool readString(HalFile& file, std::string& value, const size_t maxBytes) {
     return false;
   }
   return true;
-}
-
-bool sameItem(const RssItem& lhs, const RssItem& rhs) {
-  if (!lhs.guid.empty() && !rhs.guid.empty()) return lhs.guid == rhs.guid;
-  if (!lhs.link.empty() && !rhs.link.empty()) return lhs.link == rhs.link;
-  return !lhs.title.empty() && lhs.title == rhs.title && lhs.published == rhs.published;
 }
 
 RssItem boundedItem(const RssItem& source) {
@@ -159,7 +162,36 @@ bool writeFeedFile(const RssFeed& feed, const std::string& feedTitle, const std:
 
 namespace rsscache {
 
-bool loadFeed(const RssFeed& feed, std::string& feedTitle, std::vector<RssItem>& items, RssCacheInfo* info) {
+bool isRead(const RssFeed& feed, const RssItem& item) { return Storage.exists(readPath(feed, item).c_str()); }
+
+bool markReadAndRemove(const RssFeed& feed, const RssItem& item) {
+  if (!Storage.ensureDirectoryExists(CACHE_DIR)) return false;
+  HalFile marker;
+  if (!Storage.openFileForWrite("RSS", readPath(feed, item), marker)) return false;
+  marker.close();
+  bool removed = true;
+  for (const char* suffix : {".article", ".pending"}) {
+    const std::string path = articlePath(feed, item, suffix);
+    if (Storage.exists(path.c_str()) && !Storage.remove(path.c_str())) removed = false;
+  }
+  std::string title;
+  std::vector<RssItem> items;
+  RssCacheInfo info;
+  if (!loadFeed(feed, title, items, &info, true)) return false;
+  for (auto& cached : items) {
+    if (isRead(feed, cached)) cached.content.clear();
+  }
+  return writeFeedFile(feed, title, items, info.lastSyncEpoch) && removed;
+}
+
+bool sameItem(const RssItem& lhs, const RssItem& rhs) {
+  if (!lhs.guid.empty() && !rhs.guid.empty()) return lhs.guid == rhs.guid;
+  if (!lhs.link.empty() && !rhs.link.empty()) return lhs.link == rhs.link;
+  return !lhs.title.empty() && lhs.title == rhs.title && lhs.published == rhs.published;
+}
+
+bool loadFeed(const RssFeed& feed, std::string& feedTitle, std::vector<RssItem>& items, RssCacheInfo* info,
+              const bool includeRead) {
   feedTitle.clear();
   items.clear();
   if (info) *info = RssCacheInfo{};
@@ -188,7 +220,7 @@ bool loadFeed(const RssFeed& feed, std::string& feedTitle, std::vector<RssItem>&
       LOG_ERR("RSS", "RSS cache ended unexpectedly: %s", path.c_str());
       return false;
     }
-    items.push_back(std::move(item));
+    if (includeRead || !isRead(feed, item)) items.push_back(std::move(item));
   }
 
   if (info) {
@@ -204,7 +236,7 @@ bool mergeAndSaveFeed(const RssFeed& feed, const std::string& freshTitle, const 
   std::string oldTitle;
   std::vector<RssItem> oldItems;
   RssCacheInfo oldInfo;
-  loadFeed(feed, oldTitle, oldItems, &oldInfo);
+  loadFeed(feed, oldTitle, oldItems, &oldInfo, true);
 
   mergedItems.clear();
   mergedItems.reserve(MAX_CACHED_ITEMS);
@@ -216,7 +248,12 @@ bool mergeAndSaveFeed(const RssFeed& feed, const std::string& freshTitle, const 
     if (duplicate == mergedItems.end()) mergedItems.push_back(boundedItem(candidate));
   };
 
+  // Keep retry metadata ahead of ordinary cached entries when the index is full.
+  for (const auto& old : oldItems) {
+    if (!isRead(feed, old) && articlePending(feed, old)) appendUnique(old);
+  }
   for (const auto& fresh : freshItems) {
+    if (isRead(feed, fresh)) continue;
     RssItem candidate = fresh;
     const auto previous = std::find_if(oldItems.begin(), oldItems.end(),
                                        [&](const RssItem& existing) { return sameItem(existing, fresh); });
@@ -228,8 +265,32 @@ bool mergeAndSaveFeed(const RssFeed& feed, const std::string& freshTitle, const 
   }
 
   for (const auto& old : oldItems) {
+    if (isRead(feed, old)) continue;
     appendUnique(old);
     if (mergedItems.size() >= MAX_CACHED_ITEMS) break;
+  }
+
+  // Read entries retain only metadata, after unread entries in the bounded index.
+  const std::vector<RssItem>* sources[] = {&freshItems, &oldItems};
+  for (const auto* source : sources) {
+    for (const auto& item : *source) {
+      if (!isRead(feed, item)) continue;
+      RssItem metadata = item;
+      metadata.content.clear();
+      appendUnique(std::move(metadata));
+    }
+  }
+
+  // Never replace an index if doing so would strand a pending download.
+  const auto retained = [&](const RssItem& item) {
+    return isRead(feed, item) || !articlePending(feed, item) ||
+           std::any_of(mergedItems.begin(), mergedItems.end(),
+                       [&](const RssItem& merged) { return sameItem(merged, item); });
+  };
+  if (!std::all_of(oldItems.begin(), oldItems.end(), retained) ||
+      !std::all_of(freshItems.begin(), freshItems.end(), retained)) {
+    LOG_ERR("RSS", "Pending articles exceed RSS cache capacity");
+    return false;
   }
 
   const std::string title = !freshTitle.empty() ? freshTitle : oldTitle;
@@ -287,8 +348,19 @@ bool loadArticle(const RssFeed& feed, const RssItem& item, std::string& text) {
   return !text.empty();
 }
 
+bool articlePending(const RssFeed& feed, const RssItem& item) {
+  return Storage.exists(articlePath(feed, item, ".pending").c_str());
+}
+
+bool markArticlePending(const RssFeed& feed, const RssItem& item) {
+  if (articlePending(feed, item)) return true;
+  if (!Storage.ensureDirectoryExists(CACHE_DIR)) return false;
+  HalFile file;
+  return Storage.openFileForWrite("RSS", articlePath(feed, item, ".pending"), file);
+}
+
 bool saveArticle(const RssFeed& feed, const RssItem& item, const std::string& text) {
-  if (text.empty() || !Storage.ensureDirectoryExists(CACHE_DIR)) return false;
+  if (text.empty() || text.size() > MAX_ARTICLE_BYTES || !Storage.ensureDirectoryExists(CACHE_DIR)) return false;
 
   const std::string finalPath = articlePath(feed, item, ".article");
   const std::string tempPath = articlePath(feed, item, ".article.tmp");
@@ -310,6 +382,8 @@ bool saveArticle(const RssFeed& feed, const RssItem& item, const std::string& te
     Storage.remove(tempPath.c_str());
     return false;
   }
+  const std::string pending = articlePath(feed, item, ".pending");
+  if (Storage.exists(pending.c_str())) Storage.remove(pending.c_str());
   return true;
 }
 

@@ -6,6 +6,10 @@
 
 #include "RssCache.h"
 #include "RssFeedStore.h"
+#include "RssReadingSettings.h"
+#include "RssSync.h"
+#include "RssSyncSettings.h"
+#include "RssTime.h"
 #include "network/HttpDownloader.h"
 
 namespace {
@@ -132,7 +136,14 @@ void testFeed(WebServer& server, const RssFeed& feed) {
   }
 }
 
+bool requireIdle(WebServer& server) {
+  if (!rsssync::active()) return true;
+  server.send(409, "text/plain", "RSS sync is running. Wait or cancel before changing feeds or settings.");
+  return false;
+}
+
 void saveOrTest(WebServer& server, bool testOnly) {
+  if (!requireIdle(server)) return;
   JsonDocument doc;
   int index;
   RssFeed feed;
@@ -149,84 +160,123 @@ void saveOrTest(WebServer& server, bool testOnly) {
   server.send(saved ? 200 : 500, "text/plain", saved ? "Saved" : "Could not save to SD card");
 }
 
+void syncStatus(WebServer& server, int status = 200) {
+  const auto& progress = rsssync::progress();
+  const char* state = "idle";
+  switch (progress.state) {
+    case rsssync::SyncState::Idle:
+      break;
+    case rsssync::SyncState::Connecting:
+      state = "connecting";
+      break;
+    case rsssync::SyncState::Feed:
+      state = "feed";
+      break;
+    case rsssync::SyncState::Articles:
+      state = "articles";
+      break;
+    case rsssync::SyncState::Complete:
+      state = "complete";
+      break;
+    case rsssync::SyncState::Incomplete:
+      state = "incomplete";
+      break;
+    case rsssync::SyncState::Cancelled:
+      state = "cancelled";
+      break;
+  }
+  JsonDocument doc;
+  doc["state"] = state;
+  doc["active"] = rsssync::active();
+  doc["feedsTotal"] = progress.feedsTotal;
+  doc["feedsDone"] = progress.feedsDone;
+  doc["feedsFailed"] = progress.feedsFailed;
+  doc["articlesTotal"] = progress.articlesTotal;
+  doc["articlesSaved"] = progress.articlesSaved;
+  doc["articlesFailed"] = progress.articlesFailed;
+  doc["failedFeedMask"] = progress.failedFeedMask;
+  String body;
+  serializeJson(doc, body);
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(status, "application/json", body);
+}
+
 void syncFeed(WebServer& server) {
+  if (!requireIdle(server)) return;
   JsonDocument doc;
   int index;
   if (!readRequest(server, doc) || !readIndex(server, doc, index)) return;
-  if (index < 0) {
-    server.send(400, "text/plain", "Missing feed index");
+  if (!rsssync::start(index < 0 ? nullptr : RSS_STORE.getFeed(index))) {
+    server.send(409, "text/plain", "No feeds to synchronize");
     return;
   }
+  syncStatus(server, 202);
+}
 
-  const RssFeed* feed = RSS_STORE.getFeed(static_cast<size_t>(index));
-  if (!feed) {
-    server.send(404, "text/plain", "Feed not found");
-    return;
+void syncSettings(WebServer& server, bool save) {
+  auto& settings = RSS_SYNC_SETTINGS;
+  if (save) {
+    if (!requireIdle(server)) return;
+    JsonDocument doc;
+    int minute;
+    if (!readRequest(server, doc)) return;
+    if (!doc["enabled"].is<bool>() || !doc["time"].is<const char*>() ||
+        !rsstime::parseSyncTime(doc["time"].as<const char*>(), minute)) {
+      server.send(400, "text/plain", "Expected enabled and a time in HH:MM format");
+      return;
+    }
+    const bool oldEnabled = settings.enabled;
+    const int oldMinute = settings.minute;
+    settings.enabled = doc["enabled"].as<bool>();
+    settings.minute = minute;
+    if ((oldEnabled != settings.enabled || oldMinute != minute) && !settings.saveToFile()) {
+      settings.enabled = oldEnabled;
+      settings.minute = oldMinute;
+      server.send(500, "text/plain", "Could not save schedule to SD card");
+      return;
+    }
   }
+  JsonDocument doc;
+  char time[6];
+  snprintf(time, sizeof(time), "%02d:%02d", settings.minute / 60, settings.minute % 60);
+  doc["enabled"] = settings.enabled;
+  doc["time"] = time;
+  String body;
+  serializeJson(doc, body);
+  server.send(200, "application/json", body);
+}
 
-  RssParser parser;
-  size_t received = 0;
-  bool tooLarge = false;
-  const bool fetched = HttpDownloader::fetchUrl(
-      feed->url,
-      [&](const uint8_t* data, size_t length) {
-        constexpr size_t maxBytes = 512 * 1024;
-        if (length > maxBytes - received) {
-          tooLarge = true;
-          return false;
-        }
-        received += length;
-        parser.write(data, length);
-        return !parser.error();
-      },
-      feed->username, feed->password);
-  const int status = HttpDownloader::lastStatus();
-  parser.flush();
-
-  if (status == 401) {
-    server.send(422, "text/plain", "HTTP 401: login rejected");
-    return;
+void readingSettings(WebServer& server, bool save) {
+  auto& settings = RSS_READING_SETTINGS;
+  if (save) {
+    JsonDocument doc;
+    if (!readRequest(server, doc)) return;
+    if (!doc["newestFirst"].is<bool>() || !doc["showRead"].is<bool>()) {
+      server.send(400, "text/plain", "Expected newestFirst and showRead as booleans");
+      return;
+    }
+    const bool oldNewest = settings.newestFirst;
+    const bool oldShow = settings.showRead;
+    settings.newestFirst = doc["newestFirst"].as<bool>();
+    settings.showRead = doc["showRead"].as<bool>();
+    if ((settings.newestFirst != oldNewest || settings.showRead != oldShow) && !settings.saveToFile()) {
+      settings.newestFirst = oldNewest;
+      settings.showRead = oldShow;
+      server.send(500, "text/plain", "Could not save reading preferences to SD card");
+      return;
+    }
   }
-  if (status == 403) {
-    server.send(422, "text/plain", "HTTP 403: access denied");
-    return;
-  }
-  if (status != 200) {
-    String error = "Feed request failed (HTTP ";
-    error += String(status);
-    error += ")";
-    server.send(422, "text/plain", error);
-    return;
-  }
-  if (tooLarge) {
-    server.send(422, "text/plain", "Feed exceeds the 512 KB sync limit");
-    return;
-  }
-  if (!parser || (parser.getItems().empty() && parser.getFeedTitle().empty())) {
-    server.send(422, "text/plain", "HTTP 200, but no usable RSS/Atom feed was received");
-    return;
-  }
-  if (!fetched) {
-    server.send(422, "text/plain", "HTTP 200, but the transfer was incomplete");
-    return;
-  }
-
-  const std::string title = parser.getFeedTitle();
-  const std::vector<RssItem> freshItems = std::move(parser).getItems();
-  std::vector<RssItem> mergedItems;
-  RssCacheInfo cacheInfo;
-  if (!rsscache::mergeAndSaveFeed(*feed, title, freshItems, mergedItems, &cacheInfo)) {
-    server.send(500, "text/plain", "Feed downloaded, but cache could not be written to SD card");
-    return;
-  }
-
-  String success = "Synced ";
-  success += String(static_cast<unsigned long>(cacheInfo.itemCount));
-  success += " cached entries.";
-  server.send(200, "text/plain", success);
+  JsonDocument doc;
+  doc["newestFirst"] = settings.newestFirst;
+  doc["showRead"] = settings.showRead;
+  String body;
+  serializeJson(doc, body);
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", body);
 }
 
 void deleteFeed(WebServer& server) {
+  if (!requireIdle(server)) return;
   JsonDocument doc;
   int index;
   if (!readRequest(server, doc) || !readIndex(server, doc, index)) return;
@@ -243,9 +293,19 @@ void deleteFeed(WebServer& server) {
 
 void registerRssWebRoutes(WebServer& server) {
   RSS_STORE.loadFromFile();
+  RSS_READING_SETTINGS.loadFromFile();
+  server.on("/api/rss/reading", HTTP_GET, [&server] { readingSettings(server, false); });
+  server.on("/api/rss/reading", HTTP_POST, [&server] { readingSettings(server, true); });
+  server.on("/api/rss/schedule", HTTP_GET, [&server] { syncSettings(server, false); });
+  server.on("/api/rss/schedule", HTTP_POST, [&server] { syncSettings(server, true); });
   server.on("/api/rss", HTTP_GET, [&server] { listFeeds(server); });
   server.on("/api/rss", HTTP_POST, [&server] { saveOrTest(server, false); });
   server.on("/api/rss/test", HTTP_POST, [&server] { saveOrTest(server, true); });
+  server.on("/api/rss/sync", HTTP_GET, [&server] { syncStatus(server); });
+  server.on("/api/rss/sync/cancel", HTTP_POST, [&server] {
+    rsssync::cancel();
+    syncStatus(server);
+  });
   server.on("/api/rss/sync", HTTP_POST, [&server] { syncFeed(server); });
   server.on("/api/rss/delete", HTTP_POST, [&server] { deleteFeed(server); });
 }
