@@ -30,7 +30,7 @@ int main() {
   char expected[128], actual[128];
   const size_t expectedSize = serializeSnapshot(browserSnapshot(game, true), expected, sizeof(expected));
   assert(expectedSize > 0 && expectedSize < sizeof(expected));
-  assert(strstr(expected, "\"type\":\"state\"") != nullptr);
+  assert(strstr(expected, "\"type\":\"s\"") != nullptr);
   assert(strstr(expected, "\"phase\":\"playing\"") != nullptr);
   assert(strstr(expected, "\"myTurn\":true") != nullptr);
   assert(strstr(expected, "\"b\":\"") != nullptr);
@@ -53,8 +53,11 @@ int main() {
   assert(strcmp(actual, expected) != 0);
 
   for (int cell = 0; cell < bship::kCells; ++cell) bship::markShot(game.side[0], cell);
-  assert(browserSnapshot(game, true).phase == BrowserPhase::Finished);
-  assert(!browserSnapshot(game, true).myTurn);
+  const auto finished = browserSnapshot(game, true);
+  assert(finished.phase == BrowserPhase::Finished);
+  assert(!finished.myTurn);
+  assert(serializeSnapshot(finished, actual, sizeof(actual)) > 0);
+  assert(strlen(actual) < sizeof(actual));
   assert(!sameSnapshot(browserSnapshot(game, true), browserSnapshot(game, false)));
   assert(sameSnapshot(browserSnapshot(game, true), browserSnapshot(game, true)));
   assert(serializeSnapshot({}, nullptr, 0) == 0);
