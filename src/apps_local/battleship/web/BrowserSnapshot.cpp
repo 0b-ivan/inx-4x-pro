@@ -101,8 +101,10 @@ size_t serializeSnapshot(const BrowserSnapshot& snapshot, char* out, const size_
   encode64(board, sizeof(board), board64);
   encode64(snapshot.shotsAtBrowser, sizeof(snapshot.shotsAtBrowser), incoming64);
 
+  // Keep the discriminator compact: the full snapshot must fit the existing
+  // 128-byte WebSocket payload budget, including the new public sunk mask.
   const int count = snprintf(out, capacity,
-                             "{\"type\":\"state\",\"phase\":\"%s\",\"myTurn\":%s,\"w\":%d,\"b\":\"%s\",\"i\":\"%s\",\"s\":%u}",
+                             "{\"type\":\"s\",\"phase\":\"%s\",\"myTurn\":%s,\"w\":%d,\"b\":\"%s\",\"i\":\"%s\",\"s\":%u}",
                              phase, snapshot.myTurn ? "true" : "false", snapshot.winner, board64, incoming64,
                              snapshot.sunkAtX4);
   if (count < 0 || static_cast<size_t>(count) >= capacity) {
