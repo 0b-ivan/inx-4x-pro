@@ -77,6 +77,8 @@ bool parseCommand(const uint8_t* bytes, size_t size, Command& out) {
     candidate.kind = CommandKind::Fire;
   else if (r.literal("\"rematch\""))
     candidate.kind = CommandKind::Rematch;
+  else if (r.literal("\"resume\""))
+    candidate.kind = CommandKind::Resume;
   else
     return false;
 
@@ -94,6 +96,8 @@ bool parseCommand(const uint8_t* bytes, size_t size, Command& out) {
     uint32_t cell;
     if (!r.take(',') || !r.number(cell) || cell > 99) return false;
     candidate.value[0] = static_cast<uint8_t>(cell);
+  } else if (candidate.kind == CommandKind::Resume) {
+    if (!r.take(',') || !r.token(candidate.resumeToken)) return false;
   }
 
   if (!r.take(']') || !r.done()) return false;
