@@ -114,16 +114,19 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
           body: |
-            CrossPlay release for **Xteink X4 Pro**.
+            CrossPlay pre-release for **Xteink X4 Pro**.
 
-            ### What is new in 1.13.5
+            ### What is new in 1.14.0-alpha.3
 
-            - OTA Updates now lets you choose Stable or Nightly / Pre-release.
-            - Available compatible X4 Pro releases can be browsed and installed directly.
-            - Explicit version selection supports upgrades, downgrades and reinstalls.
-            - Manual downgrade/reinstall bypasses only the version-direction check;
-              chip, board-tag, image-size, OTA-slot and image validation remain enforced.
+            - Battleship Browser Crossplay now streams a read-only game snapshot over WebSocket.
+            - The browser shows connection, phase and turn state without exposing hidden fleet positions.
+            - Browser moves are intentionally not enabled yet; Hotspot and local Wi-Fi can be tested.
+            - OTA Updates now offers Stable and Nightly / Pre-release channels.
+            - Compatible releases can be selected explicitly, including upgrade, downgrade and reinstall.
+            - Manual downgrade/reinstall bypasses only the version-direction check; chip, board-tag,
+              image-size, OTA-slot and image validation remain enforced.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
