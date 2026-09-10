@@ -1,0 +1,149 @@
+name: Feature alpha release
+
+on:
+  push:
+    branches:
+      - "release-alpha/**"
+    paths:
+      - ".release/version"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: feature-alpha-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PIO_CORE_URL: https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Prepare immutable alpha source
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < .release/version)"
+          case "$VERSION" in
+            *-alpha.*) ;;
+            *) echo "Feature releases must use an -alpha.N version, got: $VERSION" >&2; exit 1 ;;
+          esac
+          TAG="v${VERSION}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "${TAG} already exists" >&2
+            exit 1
+          fi
+
+          python3 - "$VERSION" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          version = sys.argv[1]
+          path = Path("platformio.ini")
+          text = path.read_text()
+          updated, count = re.subn(
+              r"(\[crossplay\]\nversion\s*=\s*)[^\n]+",
+              rf"\g<1>{version}",
+              text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("could not update [crossplay] version")
+          path.write_text(updated)
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add platformio.ini .release/version
+          git commit -m "chore(release): prepare ${TAG}"
+
+          SHA="$(git rev-parse HEAD)"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Install host and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+          uv pip install --system -U "$PIO_CORE_URL" esptool
+
+      - name: Player host tests
+        run: bash host-tests/player/run.sh
+
+      - name: Build X4 Pro alpha firmware
+        run: python3 -m platformio run -e gh_release_x4pro
+
+      - name: Build release artefacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          mkdir -p dist
+          python -m esptool --chip esp32s3 merge-bin --format raw \
+            -o "dist/crossplay-${TAG}-x4pro-full.bin" \
+            -fm keep -fs keep -ff keep \
+            0x0     .pio/build/gh_release_x4pro/bootloader.bin \
+            0x8000  .pio/build/gh_release_x4pro/partitions.bin \
+            0x10000 .pio/build/gh_release_x4pro/firmware.bin
+          cp .pio/build/gh_release_x4pro/firmware.bin dist/firmware.bin
+          cp .pio/build/gh_release_x4pro/firmware.elf "dist/crossplay-${TAG}-x4pro.elf"
+
+          test "$(dd if="dist/crossplay-${TAG}-x4pro-full.bin" bs=1 skip=0 count=2 2>/dev/null | xxd -p)" = "e903"
+          test "$(dd if="dist/crossplay-${TAG}-x4pro-full.bin" bs=1 skip=32768 count=2 2>/dev/null | xxd -p)" = "aa50"
+          test "$(dd if="dist/crossplay-${TAG}-x4pro-full.bin" bs=1 skip=65536 count=2 2>/dev/null | xxd -p)" = "e907"
+          ls -lh dist
+
+      - name: Tag tested source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag "${{ steps.version.outputs.tag }}" "${{ steps.version.outputs.sha }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Publish alpha release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ steps.version.outputs.sha }}
+          name: ${{ steps.version.outputs.tag }}
+          prerelease: true
+          generate_release_notes: false
+          files: dist/*
+          body: |
+            CrossPlay alpha test release for **Xteink X4 Pro**.
+
+            ### What is new in 1.15.0-alpha.1
+
+            - Added the shared, game-independent player domain foundation for Battleship, Chess and future multiplayer games.
+            - Added SQLite-backed persistent players and per-game statistics with compact 128-bit player IDs.
+            - Registered player names are globally unique while the generated avatar/callsign remains a separate identity element.
+            - Added global XP and level calculation without duplicating derived data in the database.
+            - Added a compact six-axis play-style profile: strategy, tactics, precision, risk, endurance and versatility.
+            - Added five automatically derived player classes: Commander, Strategist, Tactician, Fortune Seeker and All-Rounder.
+            - The radar payload is only six bytes; labels, graphics and future profile rendering are intended to run in the browser.
+            - The implementation avoids hash maps and heap-heavy lookup structures in the progression path.
+
+            **Alpha note:** this release mainly validates the new player/persistence/progression foundation. Registration/login UI, achievements, Chess Elo and Battleship match integration are not wired into the visible UI yet.
+
+            ### Install
+
+            - USB full image: `crossplay-v1.15.0-alpha.1-x4pro-full.bin`
+            - OTA app image: `firmware.bin`
