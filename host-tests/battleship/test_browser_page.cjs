@@ -3,7 +3,7 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = fs.readFileSync('../../src/apps_local/battleship/web/BattleshipPage.html', 'utf8');
 function element() { return {textContent:'', value:'0', disabled:true, className:'', hidden:false, children:[], appendChild(child) { this.children.push(child); }}; }
-const ids = ['status','phase','turn','profile','placement','feedback','hair','eyes','mouth','ship','direction','grid','save','ready','battle','target','own'];
+const ids = ['status','phase','turn','profile','placement','feedback','hair','eyes','mouth','ship','direction','grid','save','ready','battle','target','own','rematch'];
 const elements = Object.fromEntries(ids.map(id => [id,element()]));
 elements.direction.value = '1';
 const sockets = [], events = {}, sent = [];
@@ -34,6 +34,7 @@ const emptyState = (phase,myTurn=false,winner=-1) => ({type:'state',phase,myTurn
   assert.equal(elements.own.children.length,100);
   assert.equal(elements.profile.disabled,false);
   assert.equal(elements.placement.disabled,true);
+  assert.equal(elements.rematch.hidden,true);
 
   elements.save.onclick();
   assert.deepEqual(sent[0],['profile',token,0,0,0,0]);
@@ -75,8 +76,23 @@ const emptyState = (phase,myTurn=false,winner=-1) => ({type:'state',phase,myTurn
 
   socket.onmessage({data: JSON.stringify(emptyState('finished',false,1))});
   assert.equal(elements.turn.textContent,'YOU WIN');
+  assert.equal(elements.rematch.hidden,false);
+  assert.equal(elements.rematch.disabled,false);
+  elements.rematch.onclick();
+  assert.deepEqual(sent[4],['rematch',token,4]);
+  assert.equal(elements.rematch.disabled,true);
+
+  socket.onmessage({data: JSON.stringify(emptyState('placement'))});
+  const replay = {...view,revision:5,slots:ready.slots};
+  socket.onmessage({data: JSON.stringify(replay)});
+  assert.equal(elements.rematch.hidden,true);
+  assert.equal(elements.profile.disabled,false);
+  assert.equal(elements.placement.disabled,false);
+  assert.equal(elements.battle.hidden,true);
+  assert.equal(elements.turn.textContent,'Place your fleet for the new round.');
+
   for (const data of ['invalid','null','{}',JSON.stringify({...view,ships:[null]})]) socket.onmessage({data});
-  assert.equal(elements.phase.textContent,'finished');
+  assert.equal(elements.phase.textContent,'placement');
 
   socket.close();
   assert.equal(elements.phase.textContent,'offline');
@@ -90,5 +106,5 @@ const emptyState = (phase,myTurn=false,winner=-1) => ({type:'state',phase,myTurn
   assert.equal(reconnect,null);
   events.pageshow({persisted:true}); await flush();
   assert.equal(sockets.length,3);
-  console.log('Browser page: profile, placement, live board, fire, single-flight, malformed replies and reconnect passed');
+  console.log('Browser page: profile, placement, live board, fire, rematch, single-flight, malformed replies and reconnect passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });
