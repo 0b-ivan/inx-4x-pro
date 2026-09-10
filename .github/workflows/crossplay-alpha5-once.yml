@@ -53,6 +53,8 @@ jobs:
           bash host-tests/battleship/run.sh
           bash host-tests/ota/run.sh
           bash host-tests/release/run.sh
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev
           python3 -m pip install -q platformio
           python3 -m platformio run -e simulator_x4_pro
 
