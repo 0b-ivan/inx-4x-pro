@@ -74,16 +74,25 @@ void BattleshipLocalPlayActivity::onEnter() {
         const bool accepted = activity.browserPlayer_.apply(activity.browserGame_, command);
         view = activity.browserPlayer_.view();
         if (!accepted) return false;
+
         if (command.kind == bshipweb::CommandKind::Rematch) {
-          activity.stage_ = Stage::BrowserWaiting;
           activity.selectedX4Ship_ = -1;
           activity.x4AimCell_ = -1;
           activity.seenLastShot_ = 0;
+          activity.x4Ready_ = false;
           activity.x4Status_[0] = '\0';
           activity.x4Report_[0] = '\0';
-        } else if (view.ready && activity.stage_ == Stage::BrowserWaiting) {
           activity.startX4Placement();
+        } else if (command.kind == bshipweb::CommandKind::Profile && activity.stage_ == Stage::BrowserWaiting) {
+          activity.startX4Placement();
+        } else if (view.ready && activity.stage_ == Stage::X4Placement) {
+          if (activity.x4Ready_)
+            activity.startMatchIfReady();
+          else
+            std::snprintf(activity.x4Status_, sizeof(activity.x4Status_), "%s READY - SET YOUR FLEET",
+                          activity.browserPlayer_.name());
         }
+
         if (command.kind == bshipweb::CommandKind::Fire) {
           activity.reportLastShot(true);
           activity.seenLastShot_ = activity.browserGame_.lastShot;
@@ -96,7 +105,14 @@ void BattleshipLocalPlayActivity::onEnter() {
       [](void* context) {
         auto& activity = *static_cast<BattleshipLocalPlayActivity*>(context);
         RenderLock lock(activity);
-        if (!activity.browserPlayer_.view().ready) activity.browserPlayer_.reset();
+        if (!activity.browserPlayer_.view().ready) {
+          activity.browserPlayer_.reset();
+          if (activity.stage_ == Stage::X4Placement) {
+            activity.stage_ = Stage::BrowserWaiting;
+            activity.x4Ready_ = false;
+            activity.selectedX4Ship_ = -1;
+          }
+        }
         activity.requestUpdate();
       });
   requestUpdate();
@@ -204,6 +220,7 @@ void BattleshipLocalPlayActivity::enterBrowserWaiting() {
   selectedX4Ship_ = -1;
   x4AimCell_ = -1;
   seenLastShot_ = 0;
+  x4Ready_ = false;
   x4Status_[0] = '\0';
   x4Report_[0] = '\0';
   browser_.publish(bshipweb::browserSnapshot(browserGame_, false));
@@ -216,21 +233,34 @@ void BattleshipLocalPlayActivity::enterBrowserWaiting() {
 void BattleshipLocalPlayActivity::startX4Placement() {
   bship::randomFleet(x4Fleet_, seed_);
   selectedX4Ship_ = -1;
-  std::snprintf(x4Status_, sizeof(x4Status_), "BROWSER READY - SET YOUR FLEET");
+  x4Ready_ = false;
+  std::snprintf(x4Status_, sizeof(x4Status_), "SET YOUR FLEET");
   stage_ = Stage::X4Placement;
   browser_.publish(bshipweb::browserSnapshot(browserGame_, browser_.clientSeen()));
   requestUpdate();
 }
 
 void BattleshipLocalPlayActivity::commitX4Fleet() {
-  if (stage_ != Stage::X4Placement) return;
+  if (stage_ != Stage::X4Placement || x4Ready_) return;
+  x4Ready_ = true;
+  selectedX4Ship_ = -1;
+  if (browserPlayer_.view().ready) {
+    startMatchIfReady();
+    return;
+  }
+  std::snprintf(x4Status_, sizeof(x4Status_), "WAITING FOR %s", browserPlayer_.name());
+  requestUpdate();
+}
+
+void BattleshipLocalPlayActivity::startMatchIfReady() {
+  if (stage_ != Stage::X4Placement || !x4Ready_ || !browserPlayer_.view().ready) return;
   if (!bship::place(browserGame_, 0, x4Fleet_)) {
-    LOG_ERR("BSHIPWEB", "X4 fleet was refused after browser placement");
+    LOG_ERR("BSHIPWEB", "X4 fleet was refused after both players became ready");
+    x4Ready_ = false;
     std::snprintf(x4Status_, sizeof(x4Status_), "FLEET COULD NOT BE SET");
     requestUpdate();
     return;
   }
-  selectedX4Ship_ = -1;
   x4AimCell_ = -1;
   x4Report_[0] = '\0';
   std::snprintf(x4Status_, sizeof(x4Status_), "BROWSER MOVE");
@@ -299,6 +329,7 @@ int BattleshipLocalPlayActivity::x4PlaceRosterRowAt(const int x, const int y) co
 }
 
 void BattleshipLocalPlayActivity::shuffleX4Fleet() {
+  if (x4Ready_) return;
   bship::randomFleet(x4Fleet_, seed_);
   selectedX4Ship_ = -1;
   std::snprintf(x4Status_, sizeof(x4Status_), "TAP A SHIP TO MOVE IT");
@@ -306,13 +337,14 @@ void BattleshipLocalPlayActivity::shuffleX4Fleet() {
 }
 
 void BattleshipLocalPlayActivity::selectX4Ship(const int shipIndex) {
+  if (x4Ready_) return;
   selectedX4Ship_ = shipIndex;
   std::snprintf(x4Status_, sizeof(x4Status_), "TAP A CELL, OR THE SHIP TO TURN");
   requestUpdate();
 }
 
 void BattleshipLocalPlayActivity::rotateX4Ship() {
-  if (selectedX4Ship_ < 0) return;
+  if (x4Ready_ || selectedX4Ship_ < 0) return;
   const bship::Ship current = x4Fleet_.ships[selectedX4Ship_];
   bship::Ship candidate = current;
   candidate.horizontal = static_cast<uint8_t>(current.horizontal != 0 ? 0 : 1);
@@ -338,7 +370,7 @@ void BattleshipLocalPlayActivity::rotateX4Ship() {
 }
 
 void BattleshipLocalPlayActivity::moveX4Ship(const int cell) {
-  if (selectedX4Ship_ < 0) return;
+  if (x4Ready_ || selectedX4Ship_ < 0) return;
   bship::Ship candidate = x4Fleet_.ships[selectedX4Ship_];
   candidate.bow = static_cast<uint8_t>(cell);
   if (!bship::canPlace(x4Fleet_, selectedX4Ship_, candidate)) {
@@ -352,6 +384,7 @@ void BattleshipLocalPlayActivity::moveX4Ship(const int cell) {
 }
 
 void BattleshipLocalPlayActivity::handleX4PlaceTap(const int cell) {
+  if (x4Ready_) return;
   const int ship = bship::shipAt(x4Fleet_, cell);
   if (ship >= 0) {
     if (ship == selectedX4Ship_)
@@ -405,9 +438,9 @@ void BattleshipLocalPlayActivity::reportLastShot(const bool browserShot) {
   const bool hit = bship::lastShotHit(browserGame_);
   if (browserShot) {
     if (sank >= 0)
-      std::snprintf(x4Report_, sizeof(x4Report_), "BROWSER SANK YOUR %s", bship::shipName(sank));
+      std::snprintf(x4Report_, sizeof(x4Report_), "%s SANK YOUR %s", browserPlayer_.name(), bship::shipName(sank));
     else
-      std::snprintf(x4Report_, sizeof(x4Report_), hit ? "BROWSER HIT YOU AT %s" : "BROWSER MISSED AT %s", where);
+      std::snprintf(x4Report_, sizeof(x4Report_), hit ? "%s HIT YOU AT %s" : "%s MISSED AT %s", browserPlayer_.name(), where);
   } else {
     if (sank >= 0)
       std::snprintf(x4Report_, sizeof(x4Report_), "YOU SANK THEIR %s", bship::shipName(sank));
@@ -415,9 +448,9 @@ void BattleshipLocalPlayActivity::reportLastShot(const bool browserShot) {
       std::snprintf(x4Report_, sizeof(x4Report_), hit ? "%s: HIT" : "%s: MISS", where);
   }
   if (bship::over(browserGame_))
-    std::snprintf(x4Status_, sizeof(x4Status_), bship::winner(browserGame_) == 0 ? "YOU WIN" : "BROWSER WINS");
+    std::snprintf(x4Status_, sizeof(x4Status_), bship::winner(browserGame_) == 0 ? "YOU WIN" : "%s WINS", browserPlayer_.name());
   else
-    std::snprintf(x4Status_, sizeof(x4Status_), browserGame_.turn == 0 ? "YOUR MOVE" : "BROWSER MOVE");
+    std::snprintf(x4Status_, sizeof(x4Status_), browserGame_.turn == 0 ? "YOUR MOVE" : "%s MOVE", browserPlayer_.name());
 }
 
 void BattleshipLocalPlayActivity::routeChoiceInput() {
@@ -435,6 +468,7 @@ void BattleshipLocalPlayActivity::routeChoiceInput() {
 }
 
 void BattleshipLocalPlayActivity::routeX4PlacementInput() {
+  if (x4Ready_) return;
   int tapX = 0, tapY = 0;
   if (!mappedInput.wasScreenTapped(tapX, tapY)) return;
   if (interactionsReady_) {
@@ -613,12 +647,12 @@ void BattleshipLocalPlayActivity::drawX4Placement() {
   toybox::Screen screen(frame);
   bshipui::PlaceModel model;
   model.status = x4Status_;
-  model.canEdit = true;
+  model.canEdit = !x4Ready_;
   const fui::Rect slot = bshipui::buildPlaceChrome(screen, model);
   x4BodySlot_ = Rect{slot.x, slot.y, slot.width, slot.height};
   drawX4PlaceGrid();
   drawX4PlaceRoster();
-  interactionsReady_ = true;
+  interactionsReady_ = !x4Ready_;
   toybox::reportOverflow(interactions_, "Battleship browser X4 placement");
   renderer.displayBuffer();
 }
@@ -685,13 +719,13 @@ void BattleshipLocalPlayActivity::drawPlaying() {
   bshipui::BoardModel model;
   model.report = x4Report_;
   if (bship::over(browserGame_))
-    model.status = bship::winner(browserGame_) == 0 ? "YOU WIN" : "BROWSER WINS";
+    model.status = bship::winner(browserGame_) == 0 ? "YOU WIN" : "THEY WIN";
   else if (browserGame_.turn != 0)
-    model.status = "BROWSER MOVE";
+    model.status = browserPlayer_.name();
   else if (x4AimCell_ < 0)
     model.status = "TAP A TARGET";
   else
-    model.status = "FIRE";
+    model.status = "TAP AGAIN TO FIRE";
   model.canFire = browserGame_.turn == 0 && x4AimCell_ >= 0 && !bship::over(browserGame_);
   model.gameOver = bship::over(browserGame_);
   model.theirName = browserPlayer_.name();
