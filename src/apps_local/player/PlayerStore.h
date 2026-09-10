@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include "GameStats.h"
@@ -46,6 +47,11 @@ class PlayerStore {
 
   StoreResult getGameStats(const PlayerId& playerId, GameId game, GameStats& out) const;
   StoreResult saveGameStats(const GameStats& value);
+
+  // Saves a whole match's participant updates as one transaction. Either every
+  // GameStats row lands or none does, so a failed second write cannot award XP
+  // to only one side of a match.
+  StoreResult saveGameStatsBatch(const GameStats* values, size_t count);
 
  private:
   StoreResult initializeSchema();

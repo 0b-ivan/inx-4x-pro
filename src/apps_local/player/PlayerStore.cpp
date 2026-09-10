@@ -46,6 +46,13 @@ constexpr char kSchemaV1[] =
     "PRAGMA user_version = 1;"
     "COMMIT;";
 
+constexpr char kUpsertGameStatsSql[] =
+    "INSERT INTO game_stats(player_id, game, wins, losses, draws, current_streak, best_streak, xp) "
+    "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) "
+    "ON CONFLICT(player_id, game) DO UPDATE SET "
+    "wins=excluded.wins, losses=excluded.losses, draws=excluded.draws, "
+    "current_streak=excluded.current_streak, best_streak=excluded.best_streak, xp=excluded.xp;";
+
 bool validName(const char* name) {
   if (name == nullptr || name[0] == '\0') return false;
   size_t length = 0;
@@ -90,6 +97,17 @@ bool readPlayer(sqlite3_stmt* statement, Player& out) {
 
 StoreResult prepare(sqlite3* db, const char* sql, sqlite3_stmt** statement) {
   return sqlite3_prepare_v2(db, sql, -1, statement, nullptr) == SQLITE_OK ? StoreResult::Ok : StoreResult::SqlError;
+}
+
+bool bindGameStats(sqlite3_stmt* statement, const GameStats& value) {
+  return bindId(statement, 1, value.playerId) == SQLITE_OK &&
+         sqlite3_bind_int(statement, 2, static_cast<int>(value.game)) == SQLITE_OK &&
+         sqlite3_bind_int64(statement, 3, value.wins) == SQLITE_OK &&
+         sqlite3_bind_int64(statement, 4, value.losses) == SQLITE_OK &&
+         sqlite3_bind_int64(statement, 5, value.draws) == SQLITE_OK &&
+         sqlite3_bind_int64(statement, 6, value.currentStreak) == SQLITE_OK &&
+         sqlite3_bind_int64(statement, 7, value.bestStreak) == SQLITE_OK &&
+         sqlite3_bind_int64(statement, 8, value.xp) == SQLITE_OK;
 }
 
 }  // namespace
@@ -324,42 +342,48 @@ StoreResult PlayerStore::getGameStats(const PlayerId& playerId, GameId game, Gam
   return result;
 }
 
-StoreResult PlayerStore::saveGameStats(const GameStats& value) {
+StoreResult PlayerStore::saveGameStats(const GameStats& value) { return saveGameStatsBatch(&value, 1); }
+
+StoreResult PlayerStore::saveGameStatsBatch(const GameStats* values, const size_t count) {
   if (db_ == nullptr) return StoreResult::NotOpen;
-  if (value.playerId.empty() || value.game == GameId::Unknown) return StoreResult::InvalidArgument;
+  if (values == nullptr || count == 0) return StoreResult::InvalidArgument;
 
-  bool exists = false;
-  StoreResult result = playerExists(value.playerId, exists);
-  if (result != StoreResult::Ok) return result;
-  if (!exists) return StoreResult::NotFound;
-
-  constexpr char sql[] =
-      "INSERT INTO game_stats(player_id, game, wins, losses, draws, current_streak, best_streak, xp) "
-      "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) "
-      "ON CONFLICT(player_id, game) DO UPDATE SET "
-      "wins=excluded.wins, losses=excluded.losses, draws=excluded.draws, "
-      "current_streak=excluded.current_streak, best_streak=excluded.best_streak, xp=excluded.xp;";
-  sqlite3_stmt* statement = nullptr;
-  result = prepare(db_, sql, &statement);
-  if (result != StoreResult::Ok) return result;
-
-  const bool bound =
-      bindId(statement, 1, value.playerId) == SQLITE_OK &&
-      sqlite3_bind_int(statement, 2, static_cast<int>(value.game)) == SQLITE_OK &&
-      sqlite3_bind_int64(statement, 3, value.wins) == SQLITE_OK &&
-      sqlite3_bind_int64(statement, 4, value.losses) == SQLITE_OK &&
-      sqlite3_bind_int64(statement, 5, value.draws) == SQLITE_OK &&
-      sqlite3_bind_int64(statement, 6, value.currentStreak) == SQLITE_OK &&
-      sqlite3_bind_int64(statement, 7, value.bestStreak) == SQLITE_OK &&
-      sqlite3_bind_int64(statement, 8, value.xp) == SQLITE_OK;
-  if (!bound) {
-    sqlite3_finalize(statement);
-    return StoreResult::SqlError;
+  // Validate every participant before opening the transaction. With the single
+  // PlayerService writer this also keeps a missing player from partially
+  // changing the other side's stats.
+  for (size_t i = 0; i < count; ++i) {
+    if (values[i].playerId.empty() || values[i].game == GameId::Unknown) return StoreResult::InvalidArgument;
+    bool exists = false;
+    const StoreResult result = playerExists(values[i].playerId, exists);
+    if (result != StoreResult::Ok) return result;
+    if (!exists) return StoreResult::NotFound;
   }
 
-  result = sqlite3_step(statement) == SQLITE_DONE ? StoreResult::Ok : StoreResult::SqlError;
+  if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) != SQLITE_OK) return StoreResult::SqlError;
+
+  sqlite3_stmt* statement = nullptr;
+  StoreResult result = prepare(db_, kUpsertGameStatsSql, &statement);
+  if (result != StoreResult::Ok) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return result;
+  }
+
+  for (size_t i = 0; i < count; ++i) {
+    sqlite3_reset(statement);
+    sqlite3_clear_bindings(statement);
+    if (!bindGameStats(statement, values[i]) || sqlite3_step(statement) != SQLITE_DONE) {
+      sqlite3_finalize(statement);
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      return StoreResult::SqlError;
+    }
+  }
   sqlite3_finalize(statement);
-  return result;
+
+  if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return StoreResult::SqlError;
+  }
+  return StoreResult::Ok;
 }
 
 }  // namespace player

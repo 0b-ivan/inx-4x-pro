@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds and runs the shared player tests. The domain model and progression
-# logic stay freestanding; the store suite links host SQLite so the same
-# persistence code can be exercised without a device.
+# logic stay freestanding; the store/service suites link host SQLite so the
+# same persistence code can be exercised without a device.
 #
 #   host-tests/player/run.sh
 set -e
@@ -29,3 +29,9 @@ mkdir -p "$BUILD_DIR"
   ../../src/apps_local/player/PlayerName.cpp ../../src/apps_local/player/PlayerStore.cpp \
   test_store.cpp -lsqlite3 -o "$BUILD_DIR/test_store"
 "$BUILD_DIR/test_store"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 \
+  ../../src/apps_local/player/PlayerName.cpp ../../src/apps_local/player/PlayerStore.cpp \
+  ../../src/apps_local/player/PlayerService.cpp test_service.cpp \
+  -lsqlite3 -o "$BUILD_DIR/test_service"
+"$BUILD_DIR/test_service"
