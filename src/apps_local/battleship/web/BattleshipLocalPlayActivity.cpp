@@ -263,7 +263,7 @@ void BattleshipLocalPlayActivity::startMatchIfReady() {
   }
   x4AimCell_ = -1;
   x4Report_[0] = '\0';
-  std::snprintf(x4Status_, sizeof(x4Status_), "BROWSER MOVE");
+  std::snprintf(x4Status_, sizeof(x4Status_), "WAITING FOR %s", browserPlayer_.name());
   stage_ = Stage::Playing;
   browser_.publish(bshipweb::browserSnapshot(browserGame_, browser_.clientSeen()));
   requestUpdate();
@@ -449,8 +449,10 @@ void BattleshipLocalPlayActivity::reportLastShot(const bool browserShot) {
   }
   if (bship::over(browserGame_))
     std::snprintf(x4Status_, sizeof(x4Status_), bship::winner(browserGame_) == 0 ? "YOU WIN" : "%s WINS", browserPlayer_.name());
+  else if (browserGame_.turn == 0)
+    std::snprintf(x4Status_, sizeof(x4Status_), "YOUR MOVE");
   else
-    std::snprintf(x4Status_, sizeof(x4Status_), browserGame_.turn == 0 ? "YOUR MOVE" : "%s MOVE", browserPlayer_.name());
+    std::snprintf(x4Status_, sizeof(x4Status_), "WAITING FOR %s", browserPlayer_.name());
 }
 
 void BattleshipLocalPlayActivity::routeChoiceInput() {
@@ -718,11 +720,13 @@ void BattleshipLocalPlayActivity::drawPlaying() {
   toybox::Screen screen(frame);
   bshipui::BoardModel model;
   model.report = x4Report_;
+  char waiting[48] = {};
   if (bship::over(browserGame_))
     model.status = bship::winner(browserGame_) == 0 ? "YOU WIN" : "THEY WIN";
-  else if (browserGame_.turn != 0)
-    model.status = browserPlayer_.name();
-  else if (x4AimCell_ < 0)
+  else if (browserGame_.turn != 0) {
+    std::snprintf(waiting, sizeof(waiting), "WAITING FOR %s", browserPlayer_.name());
+    model.status = waiting;
+  } else if (x4AimCell_ < 0)
     model.status = "TAP A TARGET";
   else
     model.status = "TAP AGAIN TO FIRE";
