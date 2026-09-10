@@ -37,6 +37,11 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   assert.match(html,/filter:brightness\(0\) invert\(1\)/);
   assert.match(html,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(html,/side-panel\.active/);
+  assert.ok(html.includes('touch-action:manipulation'));
+  assert.ok(html.includes('body:has(main.in-battle)'));
+  assert.ok(html.includes("window.addEventListener('contextmenu'"));
+  assert.ok(html.includes("window.addEventListener('touchmove'"));
+  assert.ok(html.includes("window.addEventListener('wheel'"));
   assert.match(html,/sunk-segment/);
   assert.match(html,/ship-sunk-flash/);
   assert.match(html,/d\.type==='peer'/);

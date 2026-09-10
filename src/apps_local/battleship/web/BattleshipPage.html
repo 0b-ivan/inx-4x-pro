@@ -8,6 +8,9 @@
       :root { color-scheme: light dark; --bg:#f4f1e8; --ink:#111; --panel:#fffdf7; --muted:#6b6b66; --line:#111; --ship:#111; }
       @media (prefers-color-scheme:dark) { :root { --bg:#171714; --ink:#f4f1e8; --panel:#23231f; --muted:#aaa79d; --line:#f4f1e8; --ship:#c9c7be; } }
       * { box-sizing:border-box; }
+      html { touch-action:manipulation; }
+      html:has(main.in-battle),body:has(main.in-battle) { height:100%; overflow:hidden; overscroll-behavior:none; }
+      main.in-battle { -webkit-touch-callout:none; }
       body { margin:0; min-height:100vh; background:var(--bg); color:var(--ink); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; display:grid; place-items:start center; padding:24px; }
       main { width:min(100%,680px); background:var(--panel); border:3px solid var(--line); padding:22px; box-shadow:8px 8px 0 var(--line); }
       header { border-bottom:3px solid var(--line); padding-bottom:14px; margin-bottom:18px; }
@@ -170,6 +173,10 @@
       /*__BATTLESHIP_AVATAR_SVGS__*/
       const byId=id=>document.getElementById(id);
       const shell=byId('app'),status=byId('status'),phase=byId('phase'),turn=byId('turn'),profile=byId('profile'),placement=byId('placement'),feedback=byId('feedback'),battle=byId('battle'),rematch=byId('rematch'),surrender=byId('surrender'),hud=byId('hud'),setupState=byId('setupState'),youPanel=byId('youPanel'),enemyPanel=byId('enemyPanel'),eventBanner=byId('eventBanner');
+      window.addEventListener('contextmenu',event=>event.preventDefault());
+      const lockBattleScroll=event=>{if(shell.className.split(/\s+/).includes('in-battle'))event.preventDefault();};
+      window.addEventListener('touchmove',lockBattleScroll,{passive:false});
+      window.addEventListener('wheel',lockBattleScroll,{passive:false});
       const slots=['hair','eyes','mouth'].map(byId), storageKey='crossplay-battleship-resume-v1';
       const words=[['BALD','TUFTY','SLICK','WAVY','CURLY','SPIKY','PUNK','MOP','BUN','BRAIDS','PONY','BOB','LONG','AFRO'],['GRIM','SAD','SLY','SQUINT','SLEEPY','BLINK','GLAD','WINK','BEADY','WIDE','CROSS','BUSHY','SPECS','SHADES'],['GRIN','TEETH','SMIRK','GLUM','POUT','FROWN','GASP','TONGUE','FANGS','SCRUFF','TASH','GOATEE','MUTTON','BEARD']];
       for(let si=0;si<slots.length;si++)for(let i=0;i<14;i++){const o=document.createElement('option');o.value=i;o.textContent=words[si][i];slots[si].appendChild(o);}
