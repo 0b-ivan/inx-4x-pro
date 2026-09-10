@@ -12,6 +12,13 @@ bool BrowserPlayer::apply(bship::Game& game, const Command& c) {
   constexpr int side = 1;
   if (c.revision != view_.revision || view_.revision == std::numeric_limits<uint32_t>::max()) return false;
 
+  if (c.kind == CommandKind::Resume) {
+    // Transport verifies the resume capability. Application state only accepts
+    // reconnects once the browser fleet has been committed, so an unfinished
+    // placement can never be resurrected after disconnect.
+    return view_.profile && view_.ready && game.side[side].placed;
+  }
+
   if (c.kind == CommandKind::Rematch) {
     if (!view_.profile || !view_.ready || !bship::over(game)) return false;
     bship::reset(game);
