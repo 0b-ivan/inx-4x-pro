@@ -155,6 +155,12 @@ void Server::publish(const BrowserSnapshot& snapshot) {
   if (size) ws_.broadcastTXT(message, size);
 }
 
+void Server::publishPlacement(const PlacementView& view) {
+  if (!running_ || owner_ < 0) return;
+  const size_t n = serializePlacement(view, true, reply_, sizeof(reply_));
+  if (n) ws_.sendTXT(static_cast<uint8_t>(owner_), reply_, n);
+}
+
 void Server::rotateToken() {
   for (int i = 0; i < 4; ++i) snprintf(token_ + i * 8, 9, "%08lx", static_cast<unsigned long>(esp_random()));
 }
@@ -300,6 +306,7 @@ void Server::stop() {
 
 void Server::loop() {}
 void Server::publish(const BrowserSnapshot& snapshot) { snapshot_ = snapshot; }
+void Server::publishPlacement(const PlacementView&) {}
 
 }  // namespace bshipweb
 
