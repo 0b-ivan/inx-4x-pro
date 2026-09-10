@@ -18,7 +18,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Guard release version
+      - name: Guard and prepare release version
         run: |
           set -euo pipefail
           if git ls-remote --exit-code --tags origin refs/tags/v1.14.2 >/dev/null 2>&1; then
@@ -45,17 +45,20 @@ jobs:
               raise SystemExit('release-note markers not found')
           before, rest = text.split(start, 1)
           _, after = rest.split(end, 1)
-          notes = '''            ### What is new in 1.14.2
-
-            - The Battleship browser now shows the X4 Pro player's real device-wide player name instead of the generic `X4 PRO` label.
-            - Sinking a ship now produces a short match announcement; the affected ship flashes several times and then remains dark without hit crosses.
-            - The same sunk-ship presentation is used for both fleets while hidden opponent ship positions and orientation remain private.
-            - Fixed the X4 Pro result perspective so losing your own fleet shows `YOU LOSE` and defeating the browser fleet shows `YOU WIN`.
-            - Added an explicit X4 Pro `SURRENDER` action with a second confirmation tap.
-            - Added an explicit X4 Pro `PLAY AGAIN` action after the match; rematches keep the existing browser seat/session instead of forcing a reconnect.
-            - Kept the three-part turn HUD, active-player inversion, hit feedback, two-tap firing and secure resume behavior from v1.14.1.
-
-'''
+          indent = '            '
+          lines = [
+              '### What is new in 1.14.2',
+              '',
+              '- The Battleship browser now shows the X4 Pro player\'s real device-wide player name instead of the generic `X4 PRO` label.',
+              '- Sinking a ship now produces a short match announcement; the affected ship flashes several times and then remains dark without hit crosses.',
+              '- The same sunk-ship presentation is used for both fleets while hidden opponent ship positions and orientation remain private.',
+              '- Fixed the X4 Pro result perspective so losing your own fleet shows `YOU LOSE` and defeating the browser fleet shows `YOU WIN`.',
+              '- Added an explicit X4 Pro `SURRENDER` action with a second confirmation tap.',
+              '- Added an explicit X4 Pro `PLAY AGAIN` action after the match; rematches keep the existing browser seat/session instead of forcing a reconnect.',
+              '- Kept the three-part turn HUD, active-player inversion, hit feedback, two-tap firing and secure resume behavior from v1.14.1.',
+              '',
+          ]
+          notes = '\n'.join(indent + line if line else '' for line in lines) + '\n'
           wf.write_text(before + notes + end + after)
           PY
 
