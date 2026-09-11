@@ -1,0 +1,28 @@
+name: Rebase player system
+
+on:
+  push:
+    branches:
+      - automation/rebase-player-system-20260911
+
+permissions:
+  contents: write
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/player-system
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rebase onto current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main feature/player-system
+          git rebase origin/main
+          git push --force-with-lease origin HEAD:feature/player-system
