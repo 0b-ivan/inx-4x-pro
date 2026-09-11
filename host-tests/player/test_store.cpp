@@ -1,8 +1,8 @@
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <string>
 
-#include <sqlite3.h>
 #include <unistd.h>
 
 #include "../../src/apps_local/player/PlayerStore.h"
@@ -41,12 +41,13 @@ player::Player makePlayer(uint8_t idSeed, const char* name, uint8_t hair, uint8_
 }
 
 std::string tempDatabase(const char* suffix) {
-  return std::string("/tmp/inx-player-store-") + std::to_string(static_cast<long long>(getpid())) + "-" + suffix + ".db";
+  return std::string("/tmp/inx-player-store-") + std::to_string(static_cast<long long>(getpid())) + "-" + suffix + ".dat";
 }
 
 void removeDatabase(const std::string& path) {
   std::remove(path.c_str());
-  std::remove((path + "-journal").c_str());
+  std::remove((path + ".tmp").c_str());
+  std::remove((path + ".bak").c_str());
 }
 
 void testSchemaAndPlayers() {
@@ -163,15 +164,48 @@ void testFutureSchemaIsRejected() {
   const std::string path = tempDatabase("future");
   removeDatabase(path);
 
-  sqlite3* db = nullptr;
-  CHECK(sqlite3_open(path.c_str(), &db) == SQLITE_OK);
-  CHECK(sqlite3_exec(db, "PRAGMA user_version = 2;", nullptr, nullptr, nullptr) == SQLITE_OK);
-  sqlite3_close(db);
+  // Minimal valid binary-store header with a future version and empty payload.
+  const std::array<unsigned char, 16> header = {
+      'X','4','P','L',
+      2,0,  // version
+      0,0,  // count
+      0,0,0,0,  // payload size
+      0xc5,0x9d,0x1c,0x81  // FNV-1a checksum of empty payload (2166136261)
+  };
+  FILE* file = std::fopen(path.c_str(), "wb");
+  CHECK(file != nullptr);
+  if (file != nullptr) {
+    CHECK(std::fwrite(header.data(), 1, header.size(), file) == header.size());
+    std::fclose(file);
+  }
 
   player::PlayerStore store;
   CHECK(store.open(path.c_str()) == player::StoreResult::UnsupportedSchema);
   CHECK(!store.isOpen());
 
+  removeDatabase(path);
+}
+
+void testCorruptChecksumIsRejected() {
+  const std::string path = tempDatabase("corrupt");
+  removeDatabase(path);
+
+  player::PlayerStore store;
+  CHECK(store.open(path.c_str()) == player::StoreResult::Ok);
+  CHECK(store.createPlayer(makePlayer(9, "ALPHA", 1, 1, 1)) == player::StoreResult::Ok);
+  store.close();
+
+  FILE* file = std::fopen(path.c_str(), "r+b");
+  CHECK(file != nullptr);
+  if (file != nullptr) {
+    CHECK(std::fseek(file, 12, SEEK_SET) == 0);
+    const unsigned char bad = 0;
+    CHECK(std::fwrite(&bad, 1, 1, file) == 1);
+    std::fclose(file);
+  }
+
+  CHECK(store.open(path.c_str()) == player::StoreResult::SqlError);
+  CHECK(!store.isOpen());
   removeDatabase(path);
 }
 
@@ -181,6 +215,7 @@ int main() {
   testSchemaAndPlayers();
   testGameStats();
   testFutureSchemaIsRejected();
+  testCorruptChecksumIsRejected();
 
   std::printf("player store: %d checks, %d failed\n", checksRun, checksFailed);
   return checksFailed == 0 ? 0 : 1;
