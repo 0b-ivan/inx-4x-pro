@@ -13,8 +13,12 @@
 namespace player {
 namespace {
 
-constexpr char kDatabasePath[] = "/.crosspoint/player.db";
-constexpr char kPlayerDirectory[] = "/.crosspoint";
+// Keep the player database in a normal, explicit SD-card directory. The first
+// implementation used a hidden /.crosspoint path and relied on a mkdir call at
+// runtime. A dedicated /crossplay directory is easier to inspect on the card
+// and avoids treating a failed hidden-directory setup as normal guest mode.
+constexpr char kDatabasePath[] = "/crossplay/player.db";
+constexpr char kPlayerDirectory[] = "/crossplay";
 
 bool runtimeRandomFill(void*, uint8_t* output, const size_t size) {
   if (output == nullptr) return false;
@@ -44,19 +48,24 @@ bool PlayerRuntime::begin() {
 #else
   if (!Storage.ready()) {
     status_ = RuntimeStatus::StorageUnavailable;
+    LOG_ERR("PLAYER_DB", "SD storage is not ready");
     return false;
   }
+
+  // Create the directory through HalStorage's normal SD-card helper before
+  // SQLite starts opening the main DB, journals or temporary files.
+  if (!Storage.exists(kPlayerDirectory) && !Storage.ensureDirectoryExists(kPlayerDirectory)) {
+    status_ = RuntimeStatus::StorageUnavailable;
+    LOG_ERR("PLAYER_DB", "could not create player directory path=%s", kPlayerDirectory);
+    return false;
+  }
+
   if (!registerPlayerSqliteVfs()) {
     status_ = RuntimeStatus::VfsError;
+    LOG_ERR("PLAYER_DB", "could not register SD-backed SQLite VFS");
     return false;
   }
-  // main.cpp normally creates /.crosspoint at mount time. Keep begin()
-  // independently safe without treating "already exists" as an error on an
-  // SdFat implementation whose mkdir() return convention may differ.
-  if (!Storage.exists(kPlayerDirectory) && !Storage.mkdir(kPlayerDirectory)) {
-    status_ = RuntimeStatus::StorageUnavailable;
-    return false;
-  }
+
   const StoreResult openResult = store_.open(kDatabasePath);
 #endif
 
@@ -66,6 +75,9 @@ bool PlayerRuntime::begin() {
     LOG_ERR("PLAYER_DB", "PlayerStore open/schema failed result=%u path=%s",
             static_cast<unsigned int>(openResult), kDatabasePath);
 #endif
+    // Games remain playable as a RAM guest if the database itself is corrupt or
+    // unavailable, but callers can distinguish that state through
+    // persistenceReady(). Login/registration never pretend persistence works.
     if (ensureGuest() == PlayerServiceResult::Ok) {
       status_ = RuntimeStatus::GuestOnly;
       return true;
@@ -81,6 +93,9 @@ bool PlayerRuntime::begin() {
   }
 
   status_ = RuntimeStatus::Ready;
+#if !defined(SIMULATOR)
+  LOG_INF("PLAYER_DB", "player database ready path=%s", kDatabasePath);
+#endif
   return true;
 }
 
