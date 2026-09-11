@@ -1,4 +1,4 @@
-name: Rebase player system
+name: Wire Battleship player progression
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  rebase:
+  implement:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -17,12 +17,317 @@ jobs:
           ref: feature/player-system
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Rebase onto current main
+
+      - name: Add local outcome API and Battleship integration
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              found = text.count(old)
+              if found < count:
+                  raise SystemExit(f"{path}: expected at least {count} occurrence(s), found {found}")
+              text = text.replace(old, new, count)
+              p.write_text(text)
+
+          # A local match (computer, browser client, or remote device) must not
+          # need a fake second PlayerId merely to advance the local profile.
+          replace(
+              "src/apps_local/player/PlayerService.h",
+              '''  // `guests` is the small set of RAM-only guest sessions participating in the
+  // current match. Resolution is a linear scan over that tiny set, not a hash
+  // map. Any participant not present there is treated as a persistent player.
+  PlayerServiceResult matchFinished(const MatchFinishedEvent& event, GuestSession* guests,
+                                    size_t guestCount);
+''',
+              '''  // Record one authoritative local result. This is the path for games whose
+  // opponent is not another profile in this database (computer, browser client
+  // or a player represented on another X4). No synthetic opponent PlayerId is
+  // created merely to make progression work.
+  PlayerServiceResult recordOutcome(const PlayerId& playerId, GameId game, MatchOutcome outcome,
+                                    GuestSession* guest = nullptr);
+
+  // `guests` is the small set of RAM-only guest sessions participating in the
+  // current match. Resolution is a linear scan over that tiny set, not a hash
+  // map. Any participant not present there is treated as a persistent player.
+  PlayerServiceResult matchFinished(const MatchFinishedEvent& event, GuestSession* guests,
+                                    size_t guestCount);
+''')
+
+          replace(
+              "src/apps_local/player/PlayerService.cpp",
+              '''bool validResult(const MatchResult result) {
+  return result == MatchResult::Player1Win || result == MatchResult::Player2Win || result == MatchResult::Draw;
+}
+''',
+              '''bool validResult(const MatchResult result) {
+  return result == MatchResult::Player1Win || result == MatchResult::Player2Win || result == MatchResult::Draw;
+}
+
+bool validOutcome(const MatchOutcome outcome) {
+  return outcome == MatchOutcome::Win || outcome == MatchOutcome::Loss || outcome == MatchOutcome::Draw;
+}
+''')
+
+          replace(
+              "src/apps_local/player/PlayerService.cpp",
+              '''PlayerServiceResult PlayerService::matchFinished(const MatchFinishedEvent& event, GuestSession* guests,
+                                                 const size_t guestCount) {
+''',
+              '''PlayerServiceResult PlayerService::recordOutcome(const PlayerId& playerId, const GameId game,
+                                                 const MatchOutcome outcome, GuestSession* guest) {
+  if (!validGame(game) || !validOutcome(outcome) || playerId.empty()) {
+    return PlayerServiceResult::InvalidArgument;
+  }
+
+  if (guest != nullptr) {
+    if (!guest->active() || guest->id != playerId) return PlayerServiceResult::InvalidArgument;
+    GuestGameStats* current = guest->statsFor(game);
+    if (current == nullptr) return PlayerServiceResult::InvalidArgument;
+
+    GuestGameStats next = *current;
+    applyOutcome(next, outcome, xpForMatch(game, outcome));
+    *current = next;
+    guest->completedMatches = saturatingAdd16(guest->completedMatches, 1U);
+    return PlayerServiceResult::Ok;
+  }
+
+  GameStats stats{};
+  const PlayerServiceResult loaded = loadPersistentStats(store_, playerId, game, stats);
+  if (loaded != PlayerServiceResult::Ok) return loaded;
+
+  applyOutcome(stats, outcome, xpForMatch(game, outcome));
+  const StoreResult saved = store_.saveGameStats(stats);
+  if (saved == StoreResult::NotFound) return PlayerServiceResult::PlayerNotFound;
+  if (saved != StoreResult::Ok) return PlayerServiceResult::StorageError;
+  return PlayerServiceResult::Ok;
+}
+
+PlayerServiceResult PlayerService::matchFinished(const MatchFinishedEvent& event, GuestSession* guests,
+                                                 const size_t guestCount) {
+''')
+
+          replace(
+              "src/apps_local/player/PlayerRuntime.h",
+              '''  StoreResult listPlayers(Player* out, size_t capacity, size_t& count) const;
+
+  PlayerId currentPlayerId() const;
+''',
+              '''  // Progress the currently selected local identity. Lazily starts the runtime
+  // so a first game can create/use a guest without visiting the Players screen.
+  PlayerServiceResult recordCurrentMatch(GameId game, MatchOutcome outcome);
+
+  StoreResult listPlayers(Player* out, size_t capacity, size_t& count) const;
+
+  PlayerId currentPlayerId() const;
+''')
+
+          replace(
+              "src/apps_local/player/PlayerRuntime.cpp",
+              '''StoreResult PlayerRuntime::listPlayers(Player* out, const size_t capacity, size_t& count) const {
+''',
+              '''PlayerServiceResult PlayerRuntime::recordCurrentMatch(const GameId game, const MatchOutcome outcome) {
+  if (!ready() && !begin()) return PlayerServiceResult::StorageError;
+
+  const PlayerId playerId = currentPlayerId();
+  if (playerId.empty()) return PlayerServiceResult::PlayerNotFound;
+  if (hasActivePlayer_) return service_.recordOutcome(playerId, game, outcome, nullptr);
+  return service_.recordOutcome(playerId, game, outcome, &guest_);
+}
+
+StoreResult PlayerRuntime::listPlayers(Player* out, const size_t capacity, size_t& count) const {
+''')
+
+          replace(
+              "src/apps_local/battleship/BattleshipActivity.cpp",
+              '''#include "../Shelf.h"
+#include "../ui/Toybox.h"
+''',
+              '''#include "../Shelf.h"
+#include "../player/PlayerRuntime.h"
+#include "../ui/Toybox.h"
+''')
+
+          replace(
+              "src/apps_local/battleship/BattleshipActivity.cpp",
+              '''void BattleshipActivity::beginPlacement() {
+  bship::reset(game);
+  mySide = 0;
+  fleetCommitted = false;
+  selectedShip = -1;
+  aimCell = -1;
+  computerThinking = false;
+''',
+              '''void BattleshipActivity::beginPlacement() {
+  bship::reset(game);
+  mySide = 0;
+  fleetCommitted = false;
+  selectedShip = -1;
+  aimCell = -1;
+  computerThinking = false;
+  gameResultHandled = false;
+''')
+
+          replace(
+              "src/apps_local/battleship/BattleshipActivity.cpp",
+              '''void BattleshipActivity::onMatchStart(const bool goesFirst) {
+  // Side 0 is whoever holds the first turn, because the rules let a side place
+''',
+              '''void BattleshipActivity::onMatchStart(const bool goesFirst) {
+  gameResultHandled = false;
+  // Side 0 is whoever holds the first turn, because the rules let a side place
+''')
+
+          replace(
+              "src/apps_local/battleship/BattleshipActivity.cpp",
+              '''void BattleshipActivity::finishGame() {
+  ++played;
+  const bool mine = bship::winner(game) == mySide;
+  if (mine) {
+    ++won;
+    ++streak;
+  } else {
+    streak = 0;
+  }
+  // The result replaces the last shot's narration. Both are worth saying and
+  // only one of them is worth saying twice.
+  const int loser = mine ? opponentSide() : mySide;
+  std::snprintf(report, sizeof(report), mine ? "YOU WIN IN %d SHOTS" : "THEY WIN IN %d SHOTS",
+                bship::shotsTaken(game.side[loser]));
+  saveStats();
+  saveGame();
+  hasSavedGame = false;
+}
+''',
+              '''void BattleshipActivity::finishGame() {
+  // A terminal state can arrive through more than one transport path. Finalize
+  // it once so legacy counters and shared progression cannot be double-booked.
+  if (gameResultHandled) return;
+  gameResultHandled = true;
+
+  ++played;
+  const bool mine = bship::winner(game) == mySide;
+  if (mine) {
+    ++won;
+    ++streak;
+  } else {
+    streak = 0;
+  }
+
+  // Only the local identity is authoritative here. A computer/browser/remote
+  // opponent is not invented as a persistent local profile merely to award XP.
+  const player::PlayerServiceResult progression = player::runtime().recordCurrentMatch(
+      player::GameId::Battleship, mine ? player::MatchOutcome::Win : player::MatchOutcome::Loss);
+  if (progression != player::PlayerServiceResult::Ok) {
+    LOG_ERR("BSHIP", "player progression failed: %d", static_cast<int>(progression));
+  }
+
+  // The result replaces the last shot's narration. Both are worth saying and
+  // only one of them is worth saying twice.
+  const int loser = mine ? opponentSide() : mySide;
+  std::snprintf(report, sizeof(report), mine ? "YOU WIN IN %d SHOTS" : "THEY WIN IN %d SHOTS",
+                bship::shotsTaken(game.side[loser]));
+  saveStats();
+  saveGame();
+  hasSavedGame = false;
+}
+''')
+
+          replace(
+              "src/apps_local/battleship/BattleshipActivity.h",
+              '''  bool computerThinking = false;
+  // What just happened, in the player's words. One line, and it is the only
+''',
+              '''  bool computerThinking = false;
+  // Guards every terminal path (solo, Link and browser) from booking the same
+  // result twice when the finished state is observed again.
+  bool gameResultHandled = false;
+  // What just happened, in the player's words. One line, and it is the only
+''')
+
+          test = Path("host-tests/player/test_service.cpp")
+          text = test.read_text()
+          marker = '''void testNoPartialUpdateForUnknownPlayer() {
+'''
+          if marker not in text:
+              raise SystemExit("test_service.cpp insertion marker missing")
+          addition = '''void testSingleLocalOutcome() {
+  const std::string path = tempDatabase("single-outcome");
+  removeDatabase(path);
+
+  player::PlayerStore store;
+  CHECK(store.open(path.c_str()) == player::StoreResult::Ok);
+  RandomState random{};
+  player::PlayerService service(store, deterministicRandom, &random);
+
+  player::GuestSession guest{};
+  CHECK(service.createGuest(guest) == player::PlayerServiceResult::Ok);
+  CHECK(service.recordOutcome(guest.id, player::GameId::Battleship, player::MatchOutcome::Win, &guest) ==
+        player::PlayerServiceResult::Ok);
+  const player::GuestGameStats* guestStats = guest.statsFor(player::GameId::Battleship);
+  CHECK(guestStats != nullptr);
+  CHECK(guestStats->wins == 1);
+  CHECK(guestStats->xp == 50);
+  CHECK(guestStats->currentStreak == 1);
+  CHECK(guest.completedMatches == 1);
+
+  CHECK(service.recordOutcome(guest.id, player::GameId::Battleship, player::MatchOutcome::Loss, &guest) ==
+        player::PlayerServiceResult::Ok);
+  CHECK(guestStats->losses == 1);
+  CHECK(guestStats->xp == 65);
+  CHECK(guestStats->currentStreak == 0);
+  CHECK(guest.completedMatches == 2);
+
+  const player::Player ivan = makePlayer(70, "IVAN");
+  CHECK(store.createPlayer(ivan) == player::StoreResult::Ok);
+  CHECK(service.recordOutcome(ivan.id, player::GameId::Chess, player::MatchOutcome::Win) ==
+        player::PlayerServiceResult::Ok);
+
+  player::GameStats stats{};
+  CHECK(store.getGameStats(ivan.id, player::GameId::Chess, stats) == player::StoreResult::Ok);
+  CHECK(stats.wins == 1);
+  CHECK(stats.xp == 70);
+  CHECK(stats.currentStreak == 1);
+
+  player::PlayerId empty{};
+  CHECK(service.recordOutcome(empty, player::GameId::Battleship, player::MatchOutcome::Win) ==
+        player::PlayerServiceResult::InvalidArgument);
+  CHECK(service.recordOutcome(ivan.id, player::GameId::Unknown, player::MatchOutcome::Win) ==
+        player::PlayerServiceResult::InvalidArgument);
+  CHECK(service.recordOutcome(ivan.id, player::GameId::Battleship, player::MatchOutcome::Win, &guest) ==
+        player::PlayerServiceResult::InvalidArgument);
+
+  store.close();
+  removeDatabase(path);
+}
+
+'''
+          text = text.replace(marker, addition + marker, 1)
+          old_main = '''  testPersistentAndMixedMatches();
+  testNoPartialUpdateForUnknownPlayer();
+'''
+          new_main = '''  testPersistentAndMixedMatches();
+  testSingleLocalOutcome();
+  testNoPartialUpdateForUnknownPlayer();
+'''
+          if old_main not in text:
+              raise SystemExit("test_service.cpp main marker missing")
+          test.write_text(text.replace(old_main, new_main, 1))
+          PY
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main feature/player-system
-          git rebase origin/main
-          git push --force-with-lease origin HEAD:feature/player-system
+          git add src/apps_local/player/PlayerService.h \
+                  src/apps_local/player/PlayerService.cpp \
+                  src/apps_local/player/PlayerRuntime.h \
+                  src/apps_local/player/PlayerRuntime.cpp \
+                  src/apps_local/battleship/BattleshipActivity.h \
+                  src/apps_local/battleship/BattleshipActivity.cpp \
+                  host-tests/player/test_service.cpp
+          git diff --cached --check
+          git commit -m "feat(battleship): record shared player progression"
+          git push origin HEAD:feature/player-system
