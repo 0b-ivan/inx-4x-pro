@@ -6,6 +6,7 @@
 #include <random>
 #else
 #include <HalStorage.h>
+#include <Logging.h>
 #include <esp_system.h>
 #endif
 
@@ -61,6 +62,14 @@ bool PlayerRuntime::begin() {
 
   if (openResult != StoreResult::Ok) {
     store_.close();
+#if !defined(SIMULATOR)
+    LOG_ERR("PLAYER_DB", "PlayerStore open/schema failed result=%u path=%s",
+            static_cast<unsigned int>(openResult), kDatabasePath);
+#endif
+    if (ensureGuest() == PlayerServiceResult::Ok) {
+      status_ = RuntimeStatus::GuestOnly;
+      return true;
+    }
     status_ = RuntimeStatus::DatabaseError;
     return false;
   }
@@ -93,7 +102,7 @@ AuthResult PlayerRuntime::login(const PlayerId& id, const char* pin) {
 }
 
 PlayerServiceResult PlayerRuntime::registerGuest(const char* name, const char* pin, const uint64_t createdAt) {
-  if (!ready()) return PlayerServiceResult::StorageError;
+  if (!persistenceReady()) return PlayerServiceResult::StorageError;
   if (ensureGuest() != PlayerServiceResult::Ok) return PlayerServiceResult::RandomUnavailable;
 
   Player player{};
@@ -125,6 +134,10 @@ StoreResult PlayerRuntime::listPlayers(Player* out, const size_t capacity, size_
   if (!ready()) {
     count = 0;
     return StoreResult::NotOpen;
+  }
+  if (!persistenceReady()) {
+    count = 0;
+    return StoreResult::Ok;
   }
   return store_.listPlayers(out, capacity, count);
 }

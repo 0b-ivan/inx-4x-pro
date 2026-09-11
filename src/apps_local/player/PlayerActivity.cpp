@@ -138,7 +138,9 @@ void PlayerActivity::onEnter() {
   Activity::onEnter();
   toybox::ensureFonts(renderer);
   if (!player::runtime().begin()) {
-    setMessage("PLAYER DATABASE COULD NOT OPEN");
+    setMessage("PLAYER RUNTIME COULD NOT START");
+  } else if (!player::runtime().persistenceReady()) {
+    setMessage("STORAGE OFFLINE - GUEST ONLY");
   }
   refreshPlayers();
   requestUpdate();
@@ -382,7 +384,8 @@ void PlayerActivity::render(RenderLock&&) {
     model.guestSelected = guestSelected;
     model.profileAvailable = active != nullptr || guestAvailable;
     model.guestCompletedMatches = guestAvailable ? player::runtime().guest().completedMatches : 0;
-    model.canRegisterGuest = guestAvailable && guestSelected && model.guestCompletedMatches > 0;
+    model.canRegisterGuest = player::runtime().persistenceReady() && guestAvailable && guestSelected &&
+                             model.guestCompletedMatches > 0;
     playerhubui::buildPlayerHub(screen, model);
   }
 

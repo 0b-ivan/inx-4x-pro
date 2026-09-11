@@ -15,6 +15,7 @@ enum class RuntimeStatus : uint8_t {
   StorageUnavailable,
   VfsError,
   DatabaseError,
+  GuestOnly,
   GuestError,
 };
 
@@ -29,7 +30,8 @@ class PlayerRuntime {
   static PlayerRuntime& instance();
 
   bool begin();
-  bool ready() const { return status_ == RuntimeStatus::Ready; }
+  bool ready() const { return status_ == RuntimeStatus::Ready || status_ == RuntimeStatus::GuestOnly; }
+  bool persistenceReady() const { return status_ == RuntimeStatus::Ready; }
   RuntimeStatus status() const { return status_; }
 
   PlayerStore& store() { return store_; }

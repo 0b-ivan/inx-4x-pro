@@ -12,6 +12,7 @@ bool registerPlayerSqliteVfs() { return true; }
 
 #include <Arduino.h>
 #include <HalStorage.h>
+#include <Logging.h>
 #include <esp_system.h>
 #include <sqlite3.h>
 
@@ -64,11 +65,15 @@ int fileWrite(sqlite3_file* raw, const void* buffer, int amount, sqlite3_int64 o
                                                                                              : SQLITE_IOERR_WRITE;
 }
 
-// The SQLite library previously used by this firmware also leaves truncate as
-// a no-op on ESP32. Journals may retain tail bytes, but SQLite tracks the valid
-// journal/database length itself. Keeping the same behavior avoids reaching
-// through HalStorage into SdFat internals just for truncate().
-int fileTruncate(sqlite3_file*, sqlite3_int64) { return SQLITE_OK; }
+int fileTruncate(sqlite3_file* raw, sqlite3_int64 size) {
+  if (size < 0) return SQLITE_IOERR_TRUNCATE;
+  PlayerSqliteFile* file = asFile(raw);
+  if (!file->file.truncate(static_cast<uint64_t>(size))) {
+    LOG_ERR("PLAYER_DB", "truncate failed path=%s size=%lld", file->path, static_cast<long long>(size));
+    return SQLITE_IOERR_TRUNCATE;
+  }
+  return SQLITE_OK;
+}
 
 int fileSync(sqlite3_file* raw, int) {
   asFile(raw)->file.flush();
@@ -143,6 +148,8 @@ int vfsOpen(sqlite3_vfs*, const char* name, sqlite3_file* raw, int flags, int* o
 
   file->file = Storage.open(file->path, openFlags);
   if (!file->file) {
+    LOG_ERR("PLAYER_DB", "open failed path=%s sqlite_flags=0x%x sd_flags=0x%x", file->path, flags,
+            static_cast<unsigned int>(openFlags));
     file->~PlayerSqliteFile();
     return SQLITE_CANTOPEN;
   }
@@ -156,7 +163,9 @@ int vfsOpen(sqlite3_vfs*, const char* name, sqlite3_file* raw, int flags, int* o
 int vfsDelete(sqlite3_vfs*, const char* path, int) {
   if (path == nullptr) return SQLITE_IOERR_DELETE;
   if (!Storage.exists(path)) return SQLITE_OK;
-  return Storage.remove(path) ? SQLITE_OK : SQLITE_IOERR_DELETE;
+  if (Storage.remove(path)) return SQLITE_OK;
+  LOG_ERR("PLAYER_DB", "delete failed path=%s", path);
+  return SQLITE_IOERR_DELETE;
 }
 
 int vfsAccess(sqlite3_vfs*, const char* path, int, int* result) {
