@@ -303,4 +303,16 @@ Reply stepGuestCallsign(const int slot) {
   return snapshot(true, "CALLSIGN UPDATED", 200);
 }
 
+std::string displayName() {
+  player::PlayerRuntime& runtime = player::runtime();
+  if (!runtime.ready()) runtime.begin();
+  if (const player::Player* active = runtime.activePlayer()) return active->name;
+  if (runtime.ready() && runtime.guest().active()) {
+    char callsign[player::kMaxNameLength + 1]{};
+    player::compose(callsign, sizeof(callsign), runtime.guest().callsign);
+    if (callsign[0] != '\0') return callsign;
+  }
+  return "X4 PRO";
+}
+
 }  // namespace playerweb
