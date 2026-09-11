@@ -34,8 +34,7 @@ mkdir -p "$BUILD_DIR"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 \
   ../../src/apps_local/player/PlayerName.cpp ../../src/apps_local/player/PlayerStore.cpp \
-  ../../src/apps_local/player/PlayerStoreDirectory.cpp test_directory.cpp \
-  -o "$BUILD_DIR/test_directory"
+  test_directory.cpp -o "$BUILD_DIR/test_directory"
 "$BUILD_DIR/test_directory"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 \
