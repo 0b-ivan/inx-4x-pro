@@ -1,5 +1,6 @@
 #include "PlayerProfileScreen.h"
 
+#include <algorithm>
 #include <cstdio>
 
 #include "PlayerAvatar.h"
@@ -57,8 +58,10 @@ void radarPoint(const int cx, const int cy, const int radius, const int axis, co
 void drawRadar(const GfxRenderer& renderer, toybox::Screen& screen, const fui::Rect& box,
                const player::StyleProfile& style) {
   const int cx = box.x + box.width / 2;
-  const int cy = box.y + box.height / 2 + 5;
-  const int radius = 88;
+  const int cy = box.y + box.height / 2;
+  // Keep labels and polygon inside the actual slot. The old fixed radius of 88
+  // pushed labels into neighbouring sections on the 480x800 panel.
+  const int radius = std::max(36, std::min(62, std::min(box.width / 4, box.height / 3)));
 
   static constexpr int kGridLevels[4] = {25, 50, 75, 100};
   for (const int level : kGridLevels) {
@@ -99,8 +102,7 @@ void drawRadar(const GfxRenderer& renderer, toybox::Screen& screen, const fui::R
   for (int axis = 0; axis < 6; ++axis) {
     const int next = (axis + 1) % 6;
     drawLine(renderer, pointsX[axis], pointsY[axis], pointsX[next], pointsY[next]);
-    drawLine(renderer, pointsX[axis] + 1, pointsY[axis], pointsX[next] + 1, pointsY[next]);
-    renderer.fillRect(pointsX[axis] - 2, pointsY[axis] - 2, 5, 5, true);
+    renderer.fillRect(pointsX[axis] - 1, pointsY[axis] - 1, 3, 3, true);
   }
 
   fui::TextStyle label;
@@ -108,17 +110,25 @@ void drawRadar(const GfxRenderer& renderer, toybox::Screen& screen, const fui::R
   label.align = fui::TextAlign::Center;
   label.color = fui::Color::Black;
 
-  screen.target().text(fui::makeRect(static_cast<int16_t>(cx - 58), static_cast<int16_t>(cy - radius - 28), 116, 22),
+  constexpr int16_t kLabelH = 18;
+  constexpr int16_t kSideW = 92;
+  screen.target().text(fui::makeRect(static_cast<int16_t>(cx - 55), static_cast<int16_t>(cy - radius - 24), 110,
+                                     kLabelH),
                        "STRATEGY", label);
-  screen.target().text(fui::makeRect(static_cast<int16_t>(cx + 72), static_cast<int16_t>(cy - 62), 104, 22),
+  screen.target().text(fui::makeRect(static_cast<int16_t>(cx + radius + 8), static_cast<int16_t>(cy - 48), kSideW,
+                                     kLabelH),
                        "TACTICS", label);
-  screen.target().text(fui::makeRect(static_cast<int16_t>(cx + 72), static_cast<int16_t>(cy + 43), 104, 22),
+  screen.target().text(fui::makeRect(static_cast<int16_t>(cx + radius + 8), static_cast<int16_t>(cy + 30), kSideW,
+                                     kLabelH),
                        "PRECISION", label);
-  screen.target().text(fui::makeRect(static_cast<int16_t>(cx - 50), static_cast<int16_t>(cy + radius + 5), 100, 22),
+  screen.target().text(fui::makeRect(static_cast<int16_t>(cx - 45), static_cast<int16_t>(cy + radius + 5), 90,
+                                     kLabelH),
                        "RISK", label);
-  screen.target().text(fui::makeRect(static_cast<int16_t>(cx - 176), static_cast<int16_t>(cy + 43), 110, 22),
+  screen.target().text(fui::makeRect(static_cast<int16_t>(cx - radius - kSideW - 8), static_cast<int16_t>(cy + 30),
+                                     kSideW, kLabelH),
                        "ENDURANCE", label);
-  screen.target().text(fui::makeRect(static_cast<int16_t>(cx - 176), static_cast<int16_t>(cy - 62), 110, 22),
+  screen.target().text(fui::makeRect(static_cast<int16_t>(cx - radius - kSideW - 8), static_cast<int16_t>(cy - 48),
+                                     kSideW, kLabelH),
                        "VERSATILITY", label);
 }
 
@@ -133,16 +143,6 @@ void buildPlayerProfile(toybox::Screen& screen, const Model& model, const GfxRen
   toybox::headerRule(screen);
   screen.insetContent(fui::Insets{toybox::kGutter * 3, toybox::kMargin, toybox::kMargin, toybox::kMargin});
 
-  const fui::Rect identity = screen.takeTop(96, toybox::kGutter);
-  screen.target().stroke(identity, fui::Paint::solid(fui::Color::Black), toybox::kHairline, 10);
-
-  constexpr int16_t kFace = 56;
-  const fui::Rect face = fui::makeRect(static_cast<int16_t>(identity.x + toybox::kGutter),
-                                       static_cast<int16_t>(identity.y + (identity.height - kFace) / 2), kFace, kFace);
-  if (model.callsign != nullptr && model.callsign[0] != '\0') {
-    player::drawAvatar(screen.target(), face, model.callsign, player::AvatarSize::Row);
-  }
-
   fui::TextStyle title;
   title.font = toybox::kUiFont;
   title.align = fui::TextAlign::Left;
@@ -153,21 +153,40 @@ void buildPlayerProfile(toybox::Screen& screen, const Model& model, const GfxRen
   small.align = fui::TextAlign::Left;
   small.color = fui::Color::Black;
 
+  const fui::Rect identity = screen.takeTop(96, toybox::kGutter);
+  screen.target().stroke(identity, fui::Paint::solid(fui::Color::Black), toybox::kHairline, 10);
+
+  constexpr int16_t kFace = 52;
+  const fui::Rect face = fui::makeRect(static_cast<int16_t>(identity.x + toybox::kGutter),
+                                       static_cast<int16_t>(identity.y + (identity.height - kFace) / 2), kFace, kFace);
+  if (model.callsign != nullptr && model.callsign[0] != '\0') {
+    player::drawAvatar(screen.target(), face, model.callsign, player::AvatarSize::Row);
+  }
+
   const int16_t textX = static_cast<int16_t>(face.right() + toybox::kGutter);
   const int16_t textW = static_cast<int16_t>(identity.right() - toybox::kGutter - textX);
-  screen.target().text(fui::makeRect(textX, identity.y + 7, textW, 34), model.name, title);
-  screen.target().text(fui::makeRect(textX, identity.y + 40, textW, 23), model.callsign, small);
-  screen.target().text(fui::makeRect(textX, identity.y + 66, textW, 20), model.guest ? "GUEST PROFILE" : "SAVED PROFILE",
-                       small);
+  screen.target().text(fui::makeRect(textX, static_cast<int16_t>(identity.y + 5), textW, 30), model.name, title);
+  screen.target().text(fui::makeRect(textX, static_cast<int16_t>(identity.y + 38), textW, 20), model.callsign, small);
+  screen.target().text(fui::makeRect(textX, static_cast<int16_t>(identity.y + 64), textW, 18),
+                       model.guest ? "GUEST PROFILE" : "SAVED PROFILE", small);
 
-  const fui::Rect progression = screen.takeTop(82, toybox::kGutter);
+  // Progression uses three separate bands. Previously LEVEL/XP and class text
+  // shared font bounds and visibly collided on real hardware.
+  const fui::Rect progression = screen.takeTop(104, toybox::kGutter);
   screen.target().stroke(progression, fui::Paint::solid(fui::Color::Black), toybox::kHairline, 8);
 
   char levelLine[64]{};
-  std::snprintf(levelLine, sizeof(levelLine), "LEVEL %u   %lu XP", static_cast<unsigned>(model.progression.level),
-                static_cast<unsigned long>(model.progression.xp));
-  screen.target().text(fui::makeRect(progression.x + 10, progression.y + 8, progression.width - 20, 28), levelLine, title);
-  screen.target().text(fui::makeRect(progression.x + 10, progression.y + 38, progression.width - 20, 22),
+  std::snprintf(levelLine, sizeof(levelLine), "LEVEL %u", static_cast<unsigned>(model.progression.level));
+  screen.target().text(fui::makeRect(progression.x + 10, progression.y + 7, 150, 28), levelLine, title);
+
+  char xpLine[48]{};
+  std::snprintf(xpLine, sizeof(xpLine), "%lu XP", static_cast<unsigned long>(model.progression.xp));
+  fui::TextStyle rightSmall = small;
+  rightSmall.align = fui::TextAlign::Right;
+  screen.target().text(fui::makeRect(static_cast<int16_t>(progression.x + progression.width - 150), progression.y + 10,
+                                     140, 22),
+                       xpLine, rightSmall);
+  screen.target().text(fui::makeRect(progression.x + 10, progression.y + 42, progression.width - 20, 20),
                        className(model.progression.playerClass), small);
 
   const uint32_t levelFloor = player::ProgressionSystem::xpForLevel(model.progression.level);
@@ -175,7 +194,7 @@ void buildPlayerProfile(toybox::Screen& screen, const Model& model, const GfxRen
                                     ? player::ProgressionSystem::xpForLevel(model.progression.level + 1U)
                                     : levelFloor;
   const fui::Rect xpBar = fui::makeRect(static_cast<int16_t>(progression.x + 10),
-                                        static_cast<int16_t>(progression.y + progression.height - 14),
+                                        static_cast<int16_t>(progression.y + progression.height - 18),
                                         static_cast<int16_t>(progression.width - 20), 8);
   screen.target().stroke(xpBar, fui::Paint::solid(fui::Color::Black), 1, 0);
   if (levelCeiling > levelFloor && model.progression.xp >= levelFloor) {
@@ -187,20 +206,20 @@ void buildPlayerProfile(toybox::Screen& screen, const Model& model, const GfxRen
     renderer.fillRect(xpBar.x + 1, xpBar.y + 1, xpBar.width - 2, xpBar.height - 2, true);
   }
 
-  const fui::Rect battleship = screen.takeTop(102, toybox::kGutter);
+  const fui::Rect battleship = screen.takeTop(124, toybox::kGutter);
   screen.target().stroke(battleship, fui::Paint::solid(fui::Color::Black), toybox::kHairline, 8);
-  screen.target().text(fui::makeRect(battleship.x + 10, battleship.y + 7, battleship.width - 20, 26), "BATTLESHIP", title);
+  screen.target().text(fui::makeRect(battleship.x + 10, battleship.y + 6, battleship.width - 20, 28), "BATTLESHIP", title);
 
   const char* rank = model.battleshipRank;
   if (rank == nullptr || rank[0] == '\0') rank = "NO RANK YET";
-  screen.target().text(fui::makeRect(battleship.x + 10, battleship.y + 34, battleship.width - 20, 22), rank, small);
+  screen.target().text(fui::makeRect(battleship.x + 10, battleship.y + 38, battleship.width - 20, 20), rank, small);
 
   char record[96]{};
-  std::snprintf(record, sizeof(record), "%lu W   %lu L   %lu D   BEST STREAK %lu",
+  std::snprintf(record, sizeof(record), "%lu W   %lu L   %lu D   BEST %lu",
                 static_cast<unsigned long>(model.battleship.wins), static_cast<unsigned long>(model.battleship.losses),
                 static_cast<unsigned long>(model.battleship.draws),
                 static_cast<unsigned long>(model.battleship.bestStreak));
-  screen.target().text(fui::makeRect(battleship.x + 10, battleship.y + 59, battleship.width - 20, 22), record, small);
+  screen.target().text(fui::makeRect(battleship.x + 10, battleship.y + 68, battleship.width - 20, 20), record, small);
 
   char nextRank[64]{};
   if (model.nextBattleshipRankWins > 0) {
@@ -209,14 +228,15 @@ void buildPlayerProfile(toybox::Screen& screen, const Model& model, const GfxRen
   } else {
     std::snprintf(nextRank, sizeof(nextRank), "MAX BATTLESHIP RANK");
   }
-  screen.target().text(fui::makeRect(battleship.x + 10, battleship.y + 80, battleship.width - 20, 18), nextRank, small);
+  screen.target().text(fui::makeRect(battleship.x + 10, battleship.y + 96, battleship.width - 20, 18), nextRank, small);
 
-  const fui::Rect radar = screen.takeTop(300, 0);
+  fui::Rect radar = screen.body();
+  if (radar.height < 190) return;
   fui::TextStyle radarTitle = title;
   radarTitle.align = fui::TextAlign::Center;
-  screen.target().text(fui::makeRect(radar.x, radar.y, radar.width, 28), "PLAY STYLE", radarTitle);
-  const fui::Rect radarPlot = fui::makeRect(radar.x, static_cast<int16_t>(radar.y + 31), radar.width,
-                                            static_cast<int16_t>(radar.height - 31));
+  screen.target().text(fui::makeRect(radar.x, radar.y, radar.width, 26), "PLAY STYLE", radarTitle);
+  const fui::Rect radarPlot = fui::makeRect(radar.x, static_cast<int16_t>(radar.y + 30), radar.width,
+                                            static_cast<int16_t>(radar.height - 30));
   drawRadar(renderer, screen, radarPlot, model.progression.style);
 }
 
