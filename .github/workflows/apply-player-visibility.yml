@@ -12,32 +12,30 @@ jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout helper
-        uses: actions/checkout@v6
-        with:
-          ref: automation/player-visibility-4
-          path: helper
-
       - name: Checkout feature branch
         uses: actions/checkout@v6
         with:
           ref: feature/player-system
           fetch-depth: 0
-          path: repo
 
-      - name: Apply patch
+      - name: Update Battleship UI assertion
         run: |
-          cd repo
-          python3 ../helper/.github/scripts/apply_player_visibility.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('host-tests/ui/test_ui.cpp')
+          text = path.read_text()
+          old = '''  saved.played = 12;\n  saved.won = 7;\n  saved.streak = 3;'''
+          new = '''  saved.playerName = "IVAN";\n  saved.playerLevel = 4;\n  saved.playerRank = "OBERMAAT";\n  saved.played = 12;\n  saved.won = 7;\n  saved.losses = 4;\n  saved.draws = 1;\n  saved.streak = 3;'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          old_check = '''  // The record is one line, not three rows.\n  CHECK(out.target.drew("12 PLAYED   7 WON   STREAK 3"));'''
+          new_check = '''  // Shared player identity/progression is visible on the game front door.\n  CHECK(out.target.drew("IVAN   LV 4   OBERMAAT"));\n  CHECK(out.target.drew("7 W   4 L   1 D   STREAK 3"));'''
+          assert old_check in text
+          path.write_text(text.replace(old_check, new_check, 1))
+          PY
 
-      - name: Commit feature fix
-        run: |
-          cd repo
           git config user.name "Ob-Ivan"
           git config user.email "55740240+0b-ivan@users.noreply.github.com"
-          git add src/apps_local/battleship/BattleshipActivity.cpp \
-                  src/apps_local/battleship/BattleshipScreens.cpp \
-                  src/apps_local/battleship/BattleshipScreens.h \
-                  src/apps_local/Shelf.cpp
-          git commit -m "fix(player): surface profiles in Battleship"
+          git add host-tests/ui/test_ui.cpp
+          git commit -m "test(player): cover Battleship profile visibility"
           git push origin HEAD:feature/player-system
