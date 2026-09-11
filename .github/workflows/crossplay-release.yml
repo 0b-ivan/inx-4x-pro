@@ -116,15 +116,13 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.14.2
+            ### What is new in 1.14.3
 
-            - The Battleship browser now shows the X4 Pro player's real device-wide player name instead of the generic `X4 PRO` label.
-            - Sinking a ship now produces a short match announcement; the affected ship flashes several times and then remains dark without hit crosses.
-            - The same sunk-ship presentation is used for both fleets while hidden opponent ship positions and orientation remain private.
-            - Fixed the X4 Pro result perspective so losing your own fleet shows `YOU LOSE` and defeating the browser fleet shows `YOU WIN`.
-            - Added an explicit X4 Pro `SURRENDER` action with a second confirmation tap.
-            - Added an explicit X4 Pro `PLAY AGAIN` action after the match; rematches keep the existing browser seat/session instead of forcing a reconnect.
-            - Kept the three-part turn HUD, active-player inversion, hit feedback, two-tap firing and secure resume behavior from v1.14.1.
+            - Battleship browser double-tap zoom is disabled so taps stay focused on the game board.
+            - Touch scrolling and mouse-wheel scrolling are locked while the active match screen is open.
+            - Browser context menu / right click is disabled on the Battleship page.
+            - iOS long-press callouts are suppressed during the match.
+            - Setup and fleet placement remain scrollable, and Battleship's own two-tap target/fire interaction is unchanged.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
