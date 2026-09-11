@@ -12,16 +12,27 @@ jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout helper
+        uses: actions/checkout@v6
+        with:
+          ref: automation/player-visibility-4
+          path: helper
+
+      - name: Checkout feature branch
+        uses: actions/checkout@v6
         with:
           ref: feature/player-system
           fetch-depth: 0
+          path: repo
 
       - name: Apply patch
-        run: python3 .github/scripts/apply_player_visibility.py
+        run: |
+          cd repo
+          python3 ../helper/.github/scripts/apply_player_visibility.py
 
       - name: Commit feature fix
         run: |
+          cd repo
           git config user.name "Ob-Ivan"
           git config user.email "55740240+0b-ivan@users.noreply.github.com"
           git add src/apps_local/battleship/BattleshipActivity.cpp \
