@@ -95,3 +95,5 @@ replace(
 marker = Path(".tmp-player-fix-marker")
 if marker.exists():
     marker.unlink()
+
+# trigger helper workflow
