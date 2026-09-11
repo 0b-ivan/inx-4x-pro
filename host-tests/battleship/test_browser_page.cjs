@@ -17,7 +17,8 @@ function element() {
 }
 const ids = [
   'app','status','phase','turn','profile','placement','feedback','hair','eyes','mouth','ship','grid','save','randomize','ready','battle','target','own','surrender','rematch','avatar','playerName','hudName','hud','setupState','hudTurn','ownSummary','enemySummary','enemyName','youPanel','enemyPanel','eventBanner','resultBanner',
-  'devicePlayer','devicePlayerName','deviceCallsign','devicePlayerMode','deviceMetrics','deviceRadar','savedPlayer','useGuestPlayer','playerPin','loginPlayer','guestCallsignActions','registerName','registerPin','registerPlayer','playerMessage'
+  'devicePlayer','devicePlayerName','deviceCallsign','devicePlayerMode','deviceMetrics','deviceRadar','savedPlayer','useGuestPlayer','playerPin','loginPlayer','guestCallsignActions','registerName','registerPin','registerPlayer','playerMessage',
+  'playerLogin','deviceProfileToggle','deviceProfileDetails','guestRegistration'
 ];
 const elements = Object.fromEntries(ids.map(id => [id,element()]));
 elements.app.classList = { contains: name => elements.app.className.split(/\s+/).includes(name) };
@@ -65,7 +66,8 @@ vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], {
   setTimeout:(fn,ms)=>{if(ms===2000){reconnect=fn;return 1;}if(ms>=1000){delayed.push(fn);return 2;}fn();return 3;},
   clearTimeout:()=>{reconnect=null;},
   setInterval:()=>1,
-  encodeURIComponent
+  encodeURIComponent,
+  URLSearchParams
 });
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incoming='A'.repeat(18))=>({type:'s',phase,myTurn,w:winner,b:board,i:incoming,s:sunk});
@@ -82,8 +84,12 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   assert.match(html,/ship-sunk-flash/);
   assert.match(html,/d\.type==='peer'/);
   assert.match(html,/d\.type==='f'/);
+  assert.match(html,/id="deviceProfileToggle"/);
+  assert.match(html,/id="playerLogin"/);
   await flush();
   assert.equal(elements.devicePlayerName.textContent,'SPIKY WINK BEARD');
+  assert.equal(elements.deviceProfileToggle.hidden,true);
+  assert.equal(elements.deviceProfileDetails.hidden,true);
   const socket=sockets[0];socket.onopen();
   socket.onmessage({data:JSON.stringify({type:'peer',name:'SPIKY WINK BEARD'})});
   assert.equal(elements.enemyName.textContent,'SPIKY WINK BEARD');
@@ -189,5 +195,5 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   events.pagehide();assert.equal(reconnect,null);
   events.pageshow({persisted:true});await flush();
   assert.equal(sockets.length,3);
-  console.log('Browser page: player profile controls, peer identity, sunk announcements/visuals, active-turn inversion, fleet damage boxes, two-tap fire, surrender, secure resume and rematch passed');
+  console.log('Browser page: compact player login/profile, peer identity, sunk announcements/visuals, active-turn inversion, fleet damage boxes, two-tap fire, surrender, secure resume and rematch passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
