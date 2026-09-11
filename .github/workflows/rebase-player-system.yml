@@ -33,7 +33,9 @@ jobs:
                   src/apps_local/player/PlayerRuntime.cpp \
                   src/apps_local/battleship/BattleshipActivity.h \
                   src/apps_local/battleship/BattleshipActivity.cpp \
+                  src/apps_local/battleship/web/BattleshipLocalPlayActivity.h \
+                  src/apps_local/battleship/web/BattleshipLocalPlayActivity.cpp \
                   host-tests/player/test_service.cpp
           git diff --cached --check
-          git commit -m "feat(battleship): record shared player progression"
+          git commit -m "feat(battleship): record browser player progression"
           git push origin HEAD:feature/player-system
