@@ -14,6 +14,10 @@ SRC=../../src/apps_local/battleship
 "$BUILD_DIR/test_battleship"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 $SRC/BattleshipCore.cpp \
+  test_surrender.cpp -o "$BUILD_DIR/test_surrender"
+"$BUILD_DIR/test_surrender"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 $SRC/BattleshipCore.cpp \
   $SRC/web/BrowserSnapshot.cpp test_browser_snapshot.cpp -o "$BUILD_DIR/test_browser_snapshot"
 "$BUILD_DIR/test_browser_snapshot"
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 $SRC/BattleshipCore.cpp \
