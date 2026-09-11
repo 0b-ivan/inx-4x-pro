@@ -18,4 +18,9 @@ Reply login(const char* playerIdHex, const char* pin);
 Reply registerGuest(const char* name, const char* pin);
 Reply stepGuestCallsign(int slot);
 
+// Visible identity used by game transports. Registered profiles expose their
+// chosen player name; guests expose the generated callsign instead of a generic
+// "X4 PRO" label.
+std::string displayName();
+
 }  // namespace playerweb
