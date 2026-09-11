@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 #define PROGMEM
 #define LOG_DBG(...) ((void)0)
