@@ -336,7 +336,7 @@
       let pxTokenValue = '';
       const pxLabels = ['STRATEGY','TACTICS','PRECISION','RISK','ENDURANCE','VERSATILITY'];
       async function pxToken() {
-        if (pxTokenValue) return pxTokenValue;
+        if (token) { pxTokenValue = token; return token; }
         const response = await fetch('/battleship/session', {cache:'no-store'});
         pxTokenValue = (await response.text()).trim();
         return pxTokenValue;

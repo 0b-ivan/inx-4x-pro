@@ -3,6 +3,7 @@
 #include <array>
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 
 #include "../leaderboard/RankSystem.h"
@@ -95,7 +96,7 @@ int nibble(const char value) {
 }
 
 bool parseId(const char* text, player::PlayerId& out) {
-  if (text == nullptr) return false;
+  if (text == nullptr || std::strlen(text) != player::PlayerId::kSize * 2U) return false;
   for (size_t i = 0; i < player::PlayerId::kSize; ++i) {
     const int high = nibble(text[i * 2U]);
     const int low = nibble(text[i * 2U + 1U]);
