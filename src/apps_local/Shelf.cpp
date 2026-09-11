@@ -70,6 +70,7 @@ constexpr shelf::Item kGames[] = {
     {"WAVELENGTH", &icon_wavelength_32, &WavelengthActivity::create},
 };
 constexpr shelf::Item kApps[] = {
+    {"PLAYER", &icon_study_32, &PlayerActivity::create},
     {"STUDY", &icon_study_32, &StudyActivity::create},
     {"HACKER NEWS", &icon_hackernews_32, &HackerNewsActivity::create},
     {"XKCD", &icon_xkcd_32, &XkcdActivity::create},
