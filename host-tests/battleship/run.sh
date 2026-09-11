@@ -30,6 +30,6 @@ constexpr size_t BattleshipPageHtmlCompressedSize=0;
 HEADER
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -Wno-narrowing -O2 -Istubs -I"$BUILD_DIR" \
   $SRC/BattleshipCore.cpp $SRC/web/BrowserSnapshot.cpp $SRC/web/BrowserCommands.cpp $SRC/web/BattleshipBrowserServer.cpp \
-  test_browser_server.cpp -o "$BUILD_DIR/test_browser_server"
+  stubs/PlayerWebApiStub.cpp test_browser_server.cpp -o "$BUILD_DIR/test_browser_server"
 "$BUILD_DIR/test_browser_server"
 node test_browser_page.cjs
