@@ -33,8 +33,8 @@ enum class StartRow : uint8_t { Continue, NewGame, PlayNearby, Count };
 
 struct StartModel {
   // Shared player identity/progression shown directly on the Battleship front
-  // door. These values come from PlayerRuntime; Battleship no longer presents
-  // its legacy local counters as if they were the global profile.
+  // door. These values come from PlayerRuntime and make the global profile
+  // visible before the first match starts.
   const char* playerName = "GUEST";
   const char* playerRank = "";
   uint16_t playerLevel = 1;
