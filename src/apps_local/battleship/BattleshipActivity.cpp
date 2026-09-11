@@ -9,6 +9,7 @@
 #include <cstring>
 
 #include "../Shelf.h"
+#include "../player/PlayerRuntime.h"
 #include "../ui/Toybox.h"
 #include "../ui/ToyboxFonts.h"
 #include "../ui/ToyboxSeed.h"
@@ -526,6 +527,7 @@ void BattleshipActivity::beginPlacement() {
   selectedShip = -1;
   aimCell = -1;
   computerThinking = false;
+  gameResultHandled = false;
   bship::randomFleet(myFleet, seed);
   std::snprintf(report, sizeof(report), "TAP A SHIP TO MOVE IT");
   view = View::Place;
@@ -853,6 +855,11 @@ void BattleshipActivity::playComputerShot() {
 }
 
 void BattleshipActivity::finishGame() {
+  // A terminal state can arrive through more than one transport path. Finalize
+  // it once so legacy counters and shared progression cannot be double-booked.
+  if (gameResultHandled) return;
+  gameResultHandled = true;
+
   ++played;
   const bool mine = bship::winner(game) == mySide;
   if (mine) {
@@ -861,6 +868,15 @@ void BattleshipActivity::finishGame() {
   } else {
     streak = 0;
   }
+
+  // Only the local identity is authoritative here. A computer/browser/remote
+  // opponent is not invented as a persistent local profile merely to award XP.
+  const player::PlayerServiceResult progression = player::runtime().recordCurrentMatch(
+      player::GameId::Battleship, mine ? player::MatchOutcome::Win : player::MatchOutcome::Loss);
+  if (progression != player::PlayerServiceResult::Ok) {
+    LOG_ERR("BSHIP", "player progression failed: %d", static_cast<int>(progression));
+  }
+
   // The result replaces the last shot's narration. Both are worth saying and
   // only one of them is worth saying twice.
   const int loser = mine ? opponentSide() : mySide;
@@ -943,6 +959,7 @@ const char* BattleshipActivity::linkHeadline() const {
 }
 
 void BattleshipActivity::onMatchStart(const bool goesFirst) {
+  gameResultHandled = false;
   // Side 0 is whoever holds the first turn, because the rules let a side place
   // its fleet only on its own turn. Both devices compute the same answer from
   // the same coin toss, so there is nothing to agree on and nothing to show.

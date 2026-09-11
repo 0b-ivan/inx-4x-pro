@@ -199,6 +199,9 @@ class BattleshipActivity final : public linkplay::LinkActivity {
   // The computer owes a shot. Deferred by one loop pass so the repaint showing
   // your own shot lands before it thinks, exactly as the chess engine is.
   bool computerThinking = false;
+  // Guards every terminal path (solo, Link and browser) from booking the same
+  // result twice when the finished state is observed again.
+  bool gameResultHandled = false;
   // What just happened, in the player's words. One line, and it is the only
   // narration this game has. It doubles as the instruction line while you are
   // setting up, because both answer the same question: what now.
