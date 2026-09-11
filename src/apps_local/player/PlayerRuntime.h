@@ -21,7 +21,8 @@ enum class RuntimeStatus : uint8_t {
 
 // Device-wide player state. One store/service pair owns persistence and one
 // local identity is active at a time. The guest is fixed-size RAM state; no
-// map or heap-backed player cache is needed.
+// map or heap-backed player cache is needed. GuestOnly deliberately keeps games
+// usable when persistent SD/SQLite storage is unavailable.
 class PlayerRuntime {
  public:
   static constexpr size_t kPlayerListCapacity = 8;
