@@ -1,58 +1,61 @@
 #include "PlayerStore.h"
 
 #include <array>
+#include <cctype>
+#include <cstdio>
 #include <cstring>
 
-#include <sqlite3.h>
+#if defined(ARDUINO)
+#include <HalStorage.h>
+#endif
 
 namespace player {
 namespace {
 
-constexpr char kSchemaV1[] =
-    "BEGIN IMMEDIATE;"
-    "CREATE TABLE players ("
-    "id BLOB PRIMARY KEY NOT NULL CHECK(length(id) = 16),"
-    "name TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK(length(name) BETWEEN 1 AND 20),"
-    "pin_hash BLOB,"
-    "pin_salt BLOB,"
-    "callsign_hair INTEGER NOT NULL CHECK(callsign_hair BETWEEN 0 AND 255),"
-    "callsign_eyes INTEGER NOT NULL CHECK(callsign_eyes BETWEEN 0 AND 255),"
-    "callsign_mouth INTEGER NOT NULL CHECK(callsign_mouth BETWEEN 0 AND 255),"
-    "created_at INTEGER NOT NULL CHECK(created_at >= 0)"
-    ");"
-    "CREATE TABLE game_stats ("
-    "player_id BLOB NOT NULL CHECK(length(player_id) = 16),"
-    "game INTEGER NOT NULL CHECK(game > 0),"
-    "wins INTEGER NOT NULL DEFAULT 0 CHECK(wins >= 0),"
-    "losses INTEGER NOT NULL DEFAULT 0 CHECK(losses >= 0),"
-    "draws INTEGER NOT NULL DEFAULT 0 CHECK(draws >= 0),"
-    "current_streak INTEGER NOT NULL DEFAULT 0 CHECK(current_streak >= 0),"
-    "best_streak INTEGER NOT NULL DEFAULT 0 CHECK(best_streak >= 0),"
-    "xp INTEGER NOT NULL DEFAULT 0 CHECK(xp >= 0),"
-    "PRIMARY KEY(player_id, game),"
-    "FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE"
-    ");"
-    "CREATE TABLE matches ("
-    "id BLOB PRIMARY KEY NOT NULL CHECK(length(id) = 16),"
-    "game INTEGER NOT NULL CHECK(game > 0),"
-    "player1 BLOB CHECK(player1 IS NULL OR length(player1) = 16),"
-    "player2 BLOB CHECK(player2 IS NULL OR length(player2) = 16),"
-    "winner BLOB CHECK(winner IS NULL OR length(winner) = 16),"
-    "result INTEGER NOT NULL,"
-    "ended_at INTEGER NOT NULL CHECK(ended_at >= 0),"
-    "FOREIGN KEY(player1) REFERENCES players(id) ON DELETE SET NULL,"
-    "FOREIGN KEY(player2) REFERENCES players(id) ON DELETE SET NULL,"
-    "FOREIGN KEY(winner) REFERENCES players(id) ON DELETE SET NULL"
-    ");"
-    "PRAGMA user_version = 1;"
-    "COMMIT;";
+constexpr uint8_t kMagic[4] = {'X', '4', 'P', 'L'};
+constexpr size_t kHeaderSize = 16;
+constexpr size_t kRecordSize = 323;
+constexpr size_t kMaxFileSize = kHeaderSize + PlayerStore::kMaxPlayers * kRecordSize;
 
-constexpr char kUpsertGameStatsSql[] =
-    "INSERT INTO game_stats(player_id, game, wins, losses, draws, current_streak, best_streak, xp) "
-    "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) "
-    "ON CONFLICT(player_id, game) DO UPDATE SET "
-    "wins=excluded.wins, losses=excluded.losses, draws=excluded.draws, "
-    "current_streak=excluded.current_streak, best_streak=excluded.best_streak, xp=excluded.xp;";
+uint32_t checksum(const uint8_t* data, const size_t size) {
+  uint32_t hash = 2166136261u;
+  for (size_t i = 0; i < size; ++i) {
+    hash ^= data[i];
+    hash *= 16777619u;
+  }
+  return hash;
+}
+
+void put16(uint8_t*& out, const uint16_t value) {
+  *out++ = static_cast<uint8_t>(value & 0xffu);
+  *out++ = static_cast<uint8_t>((value >> 8u) & 0xffu);
+}
+
+void put32(uint8_t*& out, const uint32_t value) {
+  for (int shift = 0; shift < 32; shift += 8) *out++ = static_cast<uint8_t>((value >> shift) & 0xffu);
+}
+
+void put64(uint8_t*& out, const uint64_t value) {
+  for (int shift = 0; shift < 64; shift += 8) *out++ = static_cast<uint8_t>((value >> shift) & 0xffu);
+}
+
+uint16_t get16(const uint8_t*& in) {
+  const uint16_t value = static_cast<uint16_t>(in[0]) | static_cast<uint16_t>(in[1] << 8u);
+  in += 2;
+  return value;
+}
+
+uint32_t get32(const uint8_t*& in) {
+  uint32_t value = 0;
+  for (int shift = 0; shift < 32; shift += 8) value |= static_cast<uint32_t>(*in++) << shift;
+  return value;
+}
+
+uint64_t get64(const uint8_t*& in) {
+  uint64_t value = 0;
+  for (int shift = 0; shift < 64; shift += 8) value |= static_cast<uint64_t>(*in++) << shift;
+  return value;
+}
 
 bool validName(const char* name) {
   if (name == nullptr || name[0] == '\0') return false;
@@ -62,72 +65,105 @@ bool validName(const char* name) {
 }
 
 bool validPlayer(const Player& value) {
-  return !value.id.empty() && validName(value.name) && value.callsign.known() &&
-         value.createdAt <= static_cast<uint64_t>(INT64_MAX);
+  return !value.id.empty() && validName(value.name) && value.callsign.known();
 }
 
-int bindId(sqlite3_stmt* statement, int index, const PlayerId& id) {
-  return sqlite3_bind_blob(statement, index, id.bytes.data(), static_cast<int>(id.bytes.size()), SQLITE_STATIC);
-}
-
-bool readId(sqlite3_stmt* statement, int column, PlayerId& out) {
-  const void* data = sqlite3_column_blob(statement, column);
-  const int size = sqlite3_column_bytes(statement, column);
-  if (data == nullptr || size != static_cast<int>(PlayerId::kSize)) return false;
-  std::memcpy(out.bytes.data(), data, PlayerId::kSize);
-  return true;
-}
-
-bool readPlayer(sqlite3_stmt* statement, Player& out) {
-  Player value{};
-  if (!readId(statement, 0, value.id)) return false;
-
-  const unsigned char* text = sqlite3_column_text(statement, 1);
-  const int nameBytes = sqlite3_column_bytes(statement, 1);
-  if (text == nullptr || nameBytes <= 0 || nameBytes > static_cast<int>(kMaxPlayerNameLength)) return false;
-  std::memcpy(value.name, text, static_cast<size_t>(nameBytes));
-  value.name[nameBytes] = '\0';
-
-  for (int slot = 0; slot < kSlotCount; ++slot) {
-    const int word = sqlite3_column_int(statement, 2 + slot);
-    if (word < 0 || word > 255) return false;
-    value.callsign.word[slot] = static_cast<uint8_t>(word);
+bool equalNoCase(const char* left, const char* right) {
+  if (left == nullptr || right == nullptr) return false;
+  while (*left != '\0' && *right != '\0') {
+    const unsigned char a = static_cast<unsigned char>(*left++);
+    const unsigned char b = static_cast<unsigned char>(*right++);
+    if (std::tolower(a) != std::tolower(b)) return false;
   }
+  return *left == *right;
+}
 
-  const sqlite3_int64 createdAt = sqlite3_column_int64(statement, 5);
-  if (createdAt < 0) return false;
-  value.createdAt = static_cast<uint64_t>(createdAt);
-  out = value;
+int gameIndex(const GameId game) {
+  const int value = static_cast<int>(game);
+  return value >= 1 && value <= static_cast<int>(PlayerStore::kGameCount) ? value - 1 : -1;
+}
+
+bool fileExists(const char* path) {
+#if defined(ARDUINO)
+  return Storage.exists(path);
+#else
+  FILE* file = std::fopen(path, "rb");
+  if (file == nullptr) return false;
+  std::fclose(file);
   return true;
+#endif
 }
 
-StoreResult prepare(sqlite3* db, const char* sql, sqlite3_stmt** statement) {
-  return sqlite3_prepare_v2(db, sql, -1, statement, nullptr) == SQLITE_OK ? StoreResult::Ok : StoreResult::SqlError;
+bool readWhole(const char* path, uint8_t* data, const size_t capacity, size_t& size) {
+  size = 0;
+#if defined(ARDUINO)
+  HalFile file;
+  if (!Storage.openFileForRead("PLAYER_STORE", path, file)) return false;
+  const uint64_t length = file.fileSize64();
+  if (length > capacity) {
+    file.close();
+    return false;
+  }
+  while (size < static_cast<size_t>(length)) {
+    const int got = file.read(data + size, static_cast<size_t>(length) - size);
+    if (got <= 0) {
+      file.close();
+      return false;
+    }
+    size += static_cast<size_t>(got);
+  }
+  file.close();
+  return true;
+#else
+  FILE* file = std::fopen(path, "rb");
+  if (file == nullptr) return false;
+  if (std::fseek(file, 0, SEEK_END) != 0) {
+    std::fclose(file);
+    return false;
+  }
+  const long length = std::ftell(file);
+  if (length < 0 || static_cast<size_t>(length) > capacity || std::fseek(file, 0, SEEK_SET) != 0) {
+    std::fclose(file);
+    return false;
+  }
+  size = std::fread(data, 1, static_cast<size_t>(length), file);
+  const bool ok = size == static_cast<size_t>(length) && std::ferror(file) == 0;
+  std::fclose(file);
+  return ok;
+#endif
 }
 
-bool bindGameStats(sqlite3_stmt* statement, const GameStats& value) {
-  return bindId(statement, 1, value.playerId) == SQLITE_OK &&
-         sqlite3_bind_int(statement, 2, static_cast<int>(value.game)) == SQLITE_OK &&
-         sqlite3_bind_int64(statement, 3, value.wins) == SQLITE_OK &&
-         sqlite3_bind_int64(statement, 4, value.losses) == SQLITE_OK &&
-         sqlite3_bind_int64(statement, 5, value.draws) == SQLITE_OK &&
-         sqlite3_bind_int64(statement, 6, value.currentStreak) == SQLITE_OK &&
-         sqlite3_bind_int64(statement, 7, value.bestStreak) == SQLITE_OK &&
-         sqlite3_bind_int64(statement, 8, value.xp) == SQLITE_OK;
+bool writeWhole(const char* path, const uint8_t* data, const size_t size) {
+#if defined(ARDUINO)
+  HalFile file;
+  if (!Storage.openFileForWrite("PLAYER_STORE", path, file)) return false;
+  const bool ok = file.write(data, size) == size;
+  file.flush();
+  file.close();
+  return ok;
+#else
+  FILE* file = std::fopen(path, "wb");
+  if (file == nullptr) return false;
+  const bool ok = std::fwrite(data, 1, size, file) == size && std::fflush(file) == 0;
+  std::fclose(file);
+  return ok;
+#endif
 }
 
-bool bindCredential(sqlite3_stmt* statement, int hashIndex, int saltIndex, const PinCredential& credential) {
-  std::array<uint8_t, kPinCredentialBlobSize> blob{};
-  blob[0] = static_cast<uint8_t>(credential.version);
-  std::memcpy(blob.data() + 1, credential.hash.data(), credential.hash.size());
-  return sqlite3_bind_blob(statement, hashIndex, blob.data(), static_cast<int>(blob.size()), SQLITE_TRANSIENT) == SQLITE_OK &&
-         sqlite3_bind_blob(statement, saltIndex, credential.salt.data(), static_cast<int>(credential.salt.size()),
-                           SQLITE_TRANSIENT) == SQLITE_OK;
+bool removeFile(const char* path) {
+#if defined(ARDUINO)
+  return !Storage.exists(path) || Storage.remove(path);
+#else
+  return std::remove(path) == 0 || !fileExists(path);
+#endif
 }
 
-StoreResult rollback(sqlite3* db, StoreResult result) {
-  sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
-  return result;
+bool renameFile(const char* from, const char* to) {
+#if defined(ARDUINO)
+  return Storage.rename(from, to);
+#else
+  return std::rename(from, to) == 0;
+#endif
 }
 
 }  // namespace
@@ -137,376 +173,318 @@ PlayerStore::~PlayerStore() { close(); }
 StoreResult PlayerStore::open(const char* path) {
   if (path == nullptr || path[0] == '\0') return StoreResult::InvalidArgument;
   close();
+  if (std::strlen(path) >= path_.size()) return StoreResult::InvalidArgument;
+  std::snprintf(path_.data(), path_.size(), "%s", path);
+  memoryOnly_ = std::strcmp(path, ":memory:") == 0;
+  open_ = true;
+  schemaVersion_ = kSchemaVersion;
+  if (memoryOnly_ || !fileExists(path_.data())) return StoreResult::Ok;
 
-  if (sqlite3_open(path, &db_) != SQLITE_OK) {
-    close();
+  const StoreResult result = load();
+  if (result != StoreResult::Ok) close();
+  return result;
+}
+
+void PlayerStore::close() {
+  players_ = {};
+  playerCount_ = 0;
+  path_.fill('\0');
+  memoryOnly_ = false;
+  open_ = false;
+  schemaVersion_ = 0;
+}
+
+int PlayerStore::findIndex(const PlayerId& id) const {
+  for (size_t i = 0; i < playerCount_; ++i) {
+    if (players_[i].player.id == id) return static_cast<int>(i);
+  }
+  return -1;
+}
+
+int PlayerStore::findNameIndex(const char* name) const {
+  for (size_t i = 0; i < playerCount_; ++i) {
+    if (equalNoCase(players_[i].player.name, name)) return static_cast<int>(i);
+  }
+  return -1;
+}
+
+StoreResult PlayerStore::load() {
+  std::array<uint8_t, kMaxFileSize> bytes{};
+  size_t size = 0;
+  if (!readWhole(path_.data(), bytes.data(), bytes.size(), size)) return StoreResult::SqlError;
+  if (size < kHeaderSize || std::memcmp(bytes.data(), kMagic, sizeof(kMagic)) != 0) return StoreResult::SqlError;
+
+  const uint8_t* header = bytes.data() + 4;
+  const uint16_t version = get16(header);
+  const uint16_t count = get16(header);
+  const uint32_t payloadSize = get32(header);
+  const uint32_t expectedChecksum = get32(header);
+  if (version != kSchemaVersion) return StoreResult::UnsupportedSchema;
+  if (count > kMaxPlayers || payloadSize != static_cast<uint32_t>(count) * kRecordSize ||
+      size != kHeaderSize + payloadSize) {
     return StoreResult::SqlError;
   }
+  const uint8_t* payload = bytes.data() + kHeaderSize;
+  if (checksum(payload, payloadSize) != expectedChecksum) return StoreResult::SqlError;
 
-  sqlite3_extended_result_codes(db_, 1);
-  sqlite3_busy_timeout(db_, 2000);
-  if (sqlite3_exec(db_, "PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr) != SQLITE_OK) {
-    close();
-    return StoreResult::SqlError;
-  }
+  std::array<StoredPlayer, kMaxPlayers> loaded{};
+  const uint8_t* in = payload;
+  for (size_t i = 0; i < count; ++i) {
+    StoredPlayer& record = loaded[i];
+    std::memcpy(record.player.id.bytes.data(), in, PlayerId::kSize);
+    in += PlayerId::kSize;
+    std::memcpy(record.player.name, in, kMaxPlayerNameLength + 1);
+    in += kMaxPlayerNameLength + 1;
+    for (int slot = 0; slot < kSlotCount; ++slot) record.player.callsign.word[slot] = *in++;
+    record.player.createdAt = get64(in);
+    record.hasCredential = *in++ != 0;
+    record.credential.version = static_cast<PinKdfVersion>(*in++);
+    std::memcpy(record.credential.salt.data(), in, record.credential.salt.size());
+    in += record.credential.salt.size();
+    std::memcpy(record.credential.hash.data(), in, record.credential.hash.size());
+    in += record.credential.hash.size();
 
-  int version = 0;
-  StoreResult result = readSchemaVersion(version);
-  if (result != StoreResult::Ok) {
-    close();
-    return result;
-  }
-  if (version > kSchemaVersion) {
-    close();
-    return StoreResult::UnsupportedSchema;
-  }
-  if (version == 0) {
-    result = initializeSchema();
-    if (result != StoreResult::Ok) {
-      close();
-      return result;
+    if (!validPlayer(record.player) || (record.hasCredential && !record.credential.supported())) return StoreResult::SqlError;
+    for (size_t game = 0; game < kGameCount; ++game) {
+      record.hasStats[game] = *in++ != 0;
+      GameStats& stats = record.stats[game];
+      stats.playerId = record.player.id;
+      stats.game = static_cast<GameId>(game + 1);
+      stats.wins = get32(in);
+      stats.losses = get32(in);
+      stats.draws = get32(in);
+      stats.currentStreak = get32(in);
+      stats.bestStreak = get32(in);
+      stats.xp = get32(in);
     }
-    version = kSchemaVersion;
-  }
-  if (version != kSchemaVersion) {
-    close();
-    return StoreResult::UnsupportedSchema;
+    for (size_t previous = 0; previous < i; ++previous) {
+      if (loaded[previous].player.id == record.player.id ||
+          equalNoCase(loaded[previous].player.name, record.player.name)) {
+        return StoreResult::SqlError;
+      }
+    }
   }
 
+  players_ = loaded;
+  playerCount_ = count;
   schemaVersion_ = version;
   return StoreResult::Ok;
 }
 
-void PlayerStore::close() {
-  if (db_ != nullptr) sqlite3_close(db_);
-  db_ = nullptr;
-  schemaVersion_ = 0;
-}
+StoreResult PlayerStore::persist() {
+  if (!open_) return StoreResult::NotOpen;
+  if (memoryOnly_) return StoreResult::Ok;
 
-StoreResult PlayerStore::initializeSchema() {
-  if (db_ == nullptr) return StoreResult::NotOpen;
-  char* error = nullptr;
-  const int result = sqlite3_exec(db_, kSchemaV1, nullptr, nullptr, &error);
-  if (error != nullptr) sqlite3_free(error);
-  if (result == SQLITE_OK) return StoreResult::Ok;
-  sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-  return StoreResult::SqlError;
-}
-
-StoreResult PlayerStore::readSchemaVersion(int& version) const {
-  if (db_ == nullptr) return StoreResult::NotOpen;
-  sqlite3_stmt* statement = nullptr;
-  StoreResult result = prepare(db_, "PRAGMA user_version;", &statement);
-  if (result != StoreResult::Ok) return result;
-
-  const int step = sqlite3_step(statement);
-  if (step == SQLITE_ROW) {
-    version = sqlite3_column_int(statement, 0);
-    result = StoreResult::Ok;
-  } else {
-    result = StoreResult::SqlError;
+  std::array<uint8_t, kMaxFileSize> bytes{};
+  uint8_t* payload = bytes.data() + kHeaderSize;
+  uint8_t* out = payload;
+  for (size_t i = 0; i < playerCount_; ++i) {
+    const StoredPlayer& record = players_[i];
+    std::memcpy(out, record.player.id.bytes.data(), PlayerId::kSize);
+    out += PlayerId::kSize;
+    std::memcpy(out, record.player.name, kMaxPlayerNameLength + 1);
+    out += kMaxPlayerNameLength + 1;
+    for (int slot = 0; slot < kSlotCount; ++slot) *out++ = record.player.callsign.word[slot];
+    put64(out, record.player.createdAt);
+    *out++ = record.hasCredential ? 1 : 0;
+    *out++ = static_cast<uint8_t>(record.credential.version);
+    std::memcpy(out, record.credential.salt.data(), record.credential.salt.size());
+    out += record.credential.salt.size();
+    std::memcpy(out, record.credential.hash.data(), record.credential.hash.size());
+    out += record.credential.hash.size();
+    for (size_t game = 0; game < kGameCount; ++game) {
+      *out++ = record.hasStats[game] ? 1 : 0;
+      const GameStats& stats = record.stats[game];
+      put32(out, stats.wins);
+      put32(out, stats.losses);
+      put32(out, stats.draws);
+      put32(out, stats.currentStreak);
+      put32(out, stats.bestStreak);
+      put32(out, stats.xp);
+    }
   }
-  sqlite3_finalize(statement);
-  return result;
-}
 
-StoreResult PlayerStore::createPlayer(const Player& value) {
-  if (db_ == nullptr) return StoreResult::NotOpen;
-  if (!validPlayer(value)) return StoreResult::InvalidArgument;
+  const uint32_t payloadSize = static_cast<uint32_t>(out - payload);
+  uint8_t* header = bytes.data();
+  std::memcpy(header, kMagic, sizeof(kMagic));
+  header += sizeof(kMagic);
+  put16(header, kSchemaVersion);
+  put16(header, static_cast<uint16_t>(playerCount_));
+  put32(header, payloadSize);
+  put32(header, checksum(payload, payloadSize));
 
-  constexpr char sql[] =
-      "INSERT INTO players(id, name, callsign_hair, callsign_eyes, callsign_mouth, created_at) "
-      "VALUES(?1, ?2, ?3, ?4, ?5, ?6);";
-  sqlite3_stmt* statement = nullptr;
-  StoreResult result = prepare(db_, sql, &statement);
-  if (result != StoreResult::Ok) return result;
-
-  if (bindId(statement, 1, value.id) != SQLITE_OK ||
-      sqlite3_bind_text(statement, 2, value.name, -1, SQLITE_STATIC) != SQLITE_OK ||
-      sqlite3_bind_int(statement, 3, value.callsign.word[SlotHair]) != SQLITE_OK ||
-      sqlite3_bind_int(statement, 4, value.callsign.word[SlotEyes]) != SQLITE_OK ||
-      sqlite3_bind_int(statement, 5, value.callsign.word[SlotMouth]) != SQLITE_OK ||
-      sqlite3_bind_int64(statement, 6, static_cast<sqlite3_int64>(value.createdAt)) != SQLITE_OK) {
-    sqlite3_finalize(statement);
+  char temp[144]{};
+  char backup[144]{};
+  std::snprintf(temp, sizeof(temp), "%s.tmp", path_.data());
+  std::snprintf(backup, sizeof(backup), "%s.bak", path_.data());
+  removeFile(temp);
+  removeFile(backup);
+  if (!writeWhole(temp, bytes.data(), kHeaderSize + payloadSize)) {
+    removeFile(temp);
     return StoreResult::SqlError;
   }
 
-  const int step = sqlite3_step(statement);
-  if (step == SQLITE_DONE) {
-    result = StoreResult::Ok;
-  } else if (sqlite3_extended_errcode(db_) == SQLITE_CONSTRAINT_UNIQUE) {
-    result = StoreResult::NameTaken;
-  } else {
-    result = StoreResult::SqlError;
+  const bool hadOriginal = fileExists(path_.data());
+  if (hadOriginal && !renameFile(path_.data(), backup)) {
+    removeFile(temp);
+    return StoreResult::SqlError;
   }
-  sqlite3_finalize(statement);
+  if (!renameFile(temp, path_.data())) {
+    if (hadOriginal) renameFile(backup, path_.data());
+    removeFile(temp);
+    return StoreResult::SqlError;
+  }
+  if (hadOriginal) removeFile(backup);
+  return StoreResult::Ok;
+}
+
+StoreResult PlayerStore::createPlayer(const Player& value) {
+  if (!open_) return StoreResult::NotOpen;
+  if (!validPlayer(value)) return StoreResult::InvalidArgument;
+  if (findNameIndex(value.name) >= 0) return StoreResult::NameTaken;
+  if (findIndex(value.id) >= 0 || playerCount_ >= kMaxPlayers) return StoreResult::SqlError;
+
+  const auto backup = players_;
+  const size_t backupCount = playerCount_;
+  players_[playerCount_].player = value;
+  ++playerCount_;
+  const StoreResult result = persist();
+  if (result != StoreResult::Ok) {
+    players_ = backup;
+    playerCount_ = backupCount;
+  }
   return result;
 }
 
 StoreResult PlayerStore::createRegisteredPlayer(const Player& value, const PinCredential& credential,
                                                 const GameStats* stats, const size_t statsCount) {
-  if (db_ == nullptr) return StoreResult::NotOpen;
+  if (!open_) return StoreResult::NotOpen;
   if (!validPlayer(value) || !credential.supported() || (statsCount > 0 && stats == nullptr)) {
     return StoreResult::InvalidArgument;
   }
+  if (findNameIndex(value.name) >= 0) return StoreResult::NameTaken;
+  if (findIndex(value.id) >= 0 || playerCount_ >= kMaxPlayers) return StoreResult::SqlError;
+
+  StoredPlayer record{};
+  record.player = value;
+  record.hasCredential = true;
+  record.credential = credential;
   for (size_t i = 0; i < statsCount; ++i) {
-    if (stats[i].playerId != value.id || stats[i].game == GameId::Unknown) return StoreResult::InvalidArgument;
+    const int index = gameIndex(stats[i].game);
+    if (stats[i].playerId != value.id || index < 0) return StoreResult::InvalidArgument;
+    record.stats[index] = stats[i];
+    record.hasStats[index] = true;
   }
 
-  if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) != SQLITE_OK) return StoreResult::SqlError;
-
-  constexpr char sql[] =
-      "INSERT INTO players(id, name, pin_hash, pin_salt, callsign_hair, callsign_eyes, callsign_mouth, created_at) "
-      "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);";
-  sqlite3_stmt* statement = nullptr;
-  StoreResult result = prepare(db_, sql, &statement);
-  if (result != StoreResult::Ok) return rollback(db_, result);
-
-  const bool bound =
-      bindId(statement, 1, value.id) == SQLITE_OK &&
-      sqlite3_bind_text(statement, 2, value.name, -1, SQLITE_STATIC) == SQLITE_OK &&
-      bindCredential(statement, 3, 4, credential) &&
-      sqlite3_bind_int(statement, 5, value.callsign.word[SlotHair]) == SQLITE_OK &&
-      sqlite3_bind_int(statement, 6, value.callsign.word[SlotEyes]) == SQLITE_OK &&
-      sqlite3_bind_int(statement, 7, value.callsign.word[SlotMouth]) == SQLITE_OK &&
-      sqlite3_bind_int64(statement, 8, static_cast<sqlite3_int64>(value.createdAt)) == SQLITE_OK;
-  if (!bound) {
-    sqlite3_finalize(statement);
-    return rollback(db_, StoreResult::SqlError);
+  const auto backup = players_;
+  const size_t backupCount = playerCount_;
+  players_[playerCount_++] = record;
+  const StoreResult result = persist();
+  if (result != StoreResult::Ok) {
+    players_ = backup;
+    playerCount_ = backupCount;
   }
-
-  const int insertStep = sqlite3_step(statement);
-  const int insertError = sqlite3_extended_errcode(db_);
-  sqlite3_finalize(statement);
-  if (insertStep != SQLITE_DONE) {
-    return rollback(db_, insertError == SQLITE_CONSTRAINT_UNIQUE ? StoreResult::NameTaken : StoreResult::SqlError);
-  }
-
-  if (statsCount > 0) {
-    result = prepare(db_, kUpsertGameStatsSql, &statement);
-    if (result != StoreResult::Ok) return rollback(db_, result);
-
-    for (size_t i = 0; i < statsCount; ++i) {
-      sqlite3_reset(statement);
-      sqlite3_clear_bindings(statement);
-      if (!bindGameStats(statement, stats[i]) || sqlite3_step(statement) != SQLITE_DONE) {
-        sqlite3_finalize(statement);
-        return rollback(db_, StoreResult::SqlError);
-      }
-    }
-    sqlite3_finalize(statement);
-  }
-
-  if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK) {
-    return rollback(db_, StoreResult::SqlError);
-  }
-  return StoreResult::Ok;
+  return result;
 }
 
 StoreResult PlayerStore::getPlayer(const PlayerId& id, Player& out) const {
-  if (db_ == nullptr) return StoreResult::NotOpen;
+  if (!open_) return StoreResult::NotOpen;
   if (id.empty()) return StoreResult::InvalidArgument;
-
-  constexpr char sql[] =
-      "SELECT id, name, callsign_hair, callsign_eyes, callsign_mouth, created_at "
-      "FROM players WHERE id = ?1;";
-  sqlite3_stmt* statement = nullptr;
-  StoreResult result = prepare(db_, sql, &statement);
-  if (result != StoreResult::Ok) return result;
-  if (bindId(statement, 1, id) != SQLITE_OK) {
-    sqlite3_finalize(statement);
-    return StoreResult::SqlError;
-  }
-
-  const int step = sqlite3_step(statement);
-  if (step == SQLITE_ROW) {
-    result = readPlayer(statement, out) ? StoreResult::Ok : StoreResult::SqlError;
-  } else if (step == SQLITE_DONE) {
-    result = StoreResult::NotFound;
-  } else {
-    result = StoreResult::SqlError;
-  }
-  sqlite3_finalize(statement);
-  return result;
+  const int index = findIndex(id);
+  if (index < 0) return StoreResult::NotFound;
+  out = players_[index].player;
+  return StoreResult::Ok;
 }
 
 StoreResult PlayerStore::findPlayerByName(const char* name, Player& out) const {
-  if (db_ == nullptr) return StoreResult::NotOpen;
+  if (!open_) return StoreResult::NotOpen;
   if (!validName(name)) return StoreResult::InvalidArgument;
-
-  constexpr char sql[] =
-      "SELECT id, name, callsign_hair, callsign_eyes, callsign_mouth, created_at "
-      "FROM players WHERE name = ?1 COLLATE NOCASE;";
-  sqlite3_stmt* statement = nullptr;
-  StoreResult result = prepare(db_, sql, &statement);
-  if (result != StoreResult::Ok) return result;
-  if (sqlite3_bind_text(statement, 1, name, -1, SQLITE_STATIC) != SQLITE_OK) {
-    sqlite3_finalize(statement);
-    return StoreResult::SqlError;
-  }
-
-  const int step = sqlite3_step(statement);
-  if (step == SQLITE_ROW) {
-    result = readPlayer(statement, out) ? StoreResult::Ok : StoreResult::SqlError;
-  } else if (step == SQLITE_DONE) {
-    result = StoreResult::NotFound;
-  } else {
-    result = StoreResult::SqlError;
-  }
-  sqlite3_finalize(statement);
-  return result;
+  const int index = findNameIndex(name);
+  if (index < 0) return StoreResult::NotFound;
+  out = players_[index].player;
+  return StoreResult::Ok;
 }
 
 StoreResult PlayerStore::getPinCredential(const PlayerId& id, PinCredential& out) const {
-  if (db_ == nullptr) return StoreResult::NotOpen;
+  if (!open_) return StoreResult::NotOpen;
   if (id.empty()) return StoreResult::InvalidArgument;
-
-  sqlite3_stmt* statement = nullptr;
-  StoreResult result = prepare(db_, "SELECT pin_hash, pin_salt FROM players WHERE id = ?1;", &statement);
-  if (result != StoreResult::Ok) return result;
-  if (bindId(statement, 1, id) != SQLITE_OK) {
-    sqlite3_finalize(statement);
-    return StoreResult::SqlError;
-  }
-
-  const int step = sqlite3_step(statement);
-  if (step == SQLITE_DONE) {
-    sqlite3_finalize(statement);
-    return StoreResult::NotFound;
-  }
-  if (step != SQLITE_ROW) {
-    sqlite3_finalize(statement);
-    return StoreResult::SqlError;
-  }
-
-  const void* hashBlob = sqlite3_column_blob(statement, 0);
-  const int hashBytes = sqlite3_column_bytes(statement, 0);
-  const void* saltBlob = sqlite3_column_blob(statement, 1);
-  const int saltBytes = sqlite3_column_bytes(statement, 1);
-  if (hashBlob == nullptr || saltBlob == nullptr) {
-    sqlite3_finalize(statement);
-    return StoreResult::CredentialMissing;
-  }
-  if (hashBytes != static_cast<int>(kPinCredentialBlobSize) || saltBytes != static_cast<int>(kPinSaltSize)) {
-    sqlite3_finalize(statement);
-    return StoreResult::CredentialMissing;
-  }
-
-  const auto* hashBytesPtr = static_cast<const uint8_t*>(hashBlob);
-  PinCredential credential{};
-  credential.version = static_cast<PinKdfVersion>(hashBytesPtr[0]);
-  if (!credential.supported()) {
-    sqlite3_finalize(statement);
-    return StoreResult::CredentialMissing;
-  }
-  std::memcpy(credential.hash.data(), hashBytesPtr + 1, credential.hash.size());
-  std::memcpy(credential.salt.data(), saltBlob, credential.salt.size());
-  sqlite3_finalize(statement);
-  out = credential;
+  const int index = findIndex(id);
+  if (index < 0) return StoreResult::NotFound;
+  if (!players_[index].hasCredential) return StoreResult::CredentialMissing;
+  out = players_[index].credential;
   return StoreResult::Ok;
 }
 
-StoreResult PlayerStore::playerExists(const PlayerId& id, bool& exists) const {
-  if (db_ == nullptr) return StoreResult::NotOpen;
-  if (id.empty()) return StoreResult::InvalidArgument;
+StoreResult PlayerStore::listPlayers(Player* out, const size_t capacity, size_t& count) const {
+  count = 0;
+  if (!open_) return StoreResult::NotOpen;
+  if (capacity > 0 && out == nullptr) return StoreResult::InvalidArgument;
 
-  sqlite3_stmt* statement = nullptr;
-  StoreResult result = prepare(db_, "SELECT 1 FROM players WHERE id = ?1 LIMIT 1;", &statement);
-  if (result != StoreResult::Ok) return result;
-  if (bindId(statement, 1, id) != SQLITE_OK) {
-    sqlite3_finalize(statement);
-    return StoreResult::SqlError;
+  std::array<size_t, kMaxPlayers> order{};
+  for (size_t i = 0; i < playerCount_; ++i) order[i] = i;
+  for (size_t i = 1; i < playerCount_; ++i) {
+    const size_t current = order[i];
+    size_t j = i;
+    while (j > 0) {
+      const char* left = players_[order[j - 1]].player.name;
+      const char* right = players_[current].player.name;
+      int cmp = 0;
+      for (size_t at = 0;; ++at) {
+        const unsigned char a = static_cast<unsigned char>(left[at]);
+        const unsigned char b = static_cast<unsigned char>(right[at]);
+        const int lowerA = std::tolower(a);
+        const int lowerB = std::tolower(b);
+        if (lowerA != lowerB) { cmp = lowerA < lowerB ? -1 : 1; break; }
+        if (a == 0 || b == 0) break;
+      }
+      if (cmp <= 0) break;
+      order[j] = order[j - 1];
+      --j;
+    }
+    order[j] = current;
   }
 
-  const int step = sqlite3_step(statement);
-  if (step == SQLITE_ROW) {
-    exists = true;
-    result = StoreResult::Ok;
-  } else if (step == SQLITE_DONE) {
-    exists = false;
-    result = StoreResult::Ok;
-  } else {
-    result = StoreResult::SqlError;
-  }
-  sqlite3_finalize(statement);
-  return result;
+  const size_t outputCount = playerCount_ < capacity ? playerCount_ : capacity;
+  for (size_t i = 0; i < outputCount; ++i) out[i] = players_[order[i]].player;
+  count = outputCount;
+  return StoreResult::Ok;
 }
 
-StoreResult PlayerStore::getGameStats(const PlayerId& playerId, GameId game, GameStats& out) const {
-  if (db_ == nullptr) return StoreResult::NotOpen;
-  if (playerId.empty() || game == GameId::Unknown) return StoreResult::InvalidArgument;
-
-  constexpr char sql[] =
-      "SELECT wins, losses, draws, current_streak, best_streak, xp "
-      "FROM game_stats WHERE player_id = ?1 AND game = ?2;";
-  sqlite3_stmt* statement = nullptr;
-  StoreResult result = prepare(db_, sql, &statement);
-  if (result != StoreResult::Ok) return result;
-  if (bindId(statement, 1, playerId) != SQLITE_OK ||
-      sqlite3_bind_int(statement, 2, static_cast<int>(game)) != SQLITE_OK) {
-    sqlite3_finalize(statement);
-    return StoreResult::SqlError;
-  }
-
-  const int step = sqlite3_step(statement);
-  if (step == SQLITE_ROW) {
-    GameStats value{};
-    value.playerId = playerId;
-    value.game = game;
-    value.wins = static_cast<uint32_t>(sqlite3_column_int64(statement, 0));
-    value.losses = static_cast<uint32_t>(sqlite3_column_int64(statement, 1));
-    value.draws = static_cast<uint32_t>(sqlite3_column_int64(statement, 2));
-    value.currentStreak = static_cast<uint32_t>(sqlite3_column_int64(statement, 3));
-    value.bestStreak = static_cast<uint32_t>(sqlite3_column_int64(statement, 4));
-    value.xp = static_cast<uint32_t>(sqlite3_column_int64(statement, 5));
-    out = value;
-    result = StoreResult::Ok;
-  } else if (step == SQLITE_DONE) {
-    result = StoreResult::NotFound;
-  } else {
-    result = StoreResult::SqlError;
-  }
-  sqlite3_finalize(statement);
-  return result;
+StoreResult PlayerStore::getGameStats(const PlayerId& playerId, const GameId game, GameStats& out) const {
+  if (!open_) return StoreResult::NotOpen;
+  const int player = findIndex(playerId);
+  const int slot = gameIndex(game);
+  if (player < 0) return StoreResult::NotFound;
+  if (slot < 0) return StoreResult::InvalidArgument;
+  if (!players_[player].hasStats[slot]) return StoreResult::NotFound;
+  out = players_[player].stats[slot];
+  return StoreResult::Ok;
 }
 
-StoreResult PlayerStore::saveGameStats(const GameStats& value) { return saveGameStatsBatch(&value, 1); }
+StoreResult PlayerStore::saveGameStats(const GameStats& value) {
+  return saveGameStatsBatch(&value, 1);
+}
 
 StoreResult PlayerStore::saveGameStatsBatch(const GameStats* values, const size_t count) {
-  if (db_ == nullptr) return StoreResult::NotOpen;
-  if (values == nullptr || count == 0) return StoreResult::InvalidArgument;
-
-  // Validate every participant before opening the transaction. With the single
-  // PlayerService writer this also keeps a missing player from partially
-  // changing the other side's stats.
-  for (size_t i = 0; i < count; ++i) {
-    if (values[i].playerId.empty() || values[i].game == GameId::Unknown) return StoreResult::InvalidArgument;
-    bool exists = false;
-    const StoreResult result = playerExists(values[i].playerId, exists);
-    if (result != StoreResult::Ok) return result;
-    if (!exists) return StoreResult::NotFound;
-  }
-
-  if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) != SQLITE_OK) return StoreResult::SqlError;
-
-  sqlite3_stmt* statement = nullptr;
-  StoreResult result = prepare(db_, kUpsertGameStatsSql, &statement);
-  if (result != StoreResult::Ok) return rollback(db_, result);
+  if (!open_) return StoreResult::NotOpen;
+  if (count > 0 && values == nullptr) return StoreResult::InvalidArgument;
+  if (count == 0) return StoreResult::Ok;
 
   for (size_t i = 0; i < count; ++i) {
-    sqlite3_reset(statement);
-    sqlite3_clear_bindings(statement);
-    if (!bindGameStats(statement, values[i]) || sqlite3_step(statement) != SQLITE_DONE) {
-      sqlite3_finalize(statement);
-      return rollback(db_, StoreResult::SqlError);
-    }
+    if (values[i].playerId.empty() || gameIndex(values[i].game) < 0) return StoreResult::InvalidArgument;
+    if (!playerExists(values[i].playerId)) return StoreResult::NotFound;
   }
-  sqlite3_finalize(statement);
 
-  if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK) {
-    return rollback(db_, StoreResult::SqlError);
+  const auto backup = players_;
+  for (size_t i = 0; i < count; ++i) {
+    const int player = findIndex(values[i].playerId);
+    const int slot = gameIndex(values[i].game);
+    players_[player].stats[slot] = values[i];
+    players_[player].hasStats[slot] = true;
   }
-  return StoreResult::Ok;
+  const StoreResult result = persist();
+  if (result != StoreResult::Ok) players_ = backup;
+  return result;
 }
 
 }  // namespace player
