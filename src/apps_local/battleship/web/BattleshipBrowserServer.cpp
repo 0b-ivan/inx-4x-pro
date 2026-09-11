@@ -290,8 +290,9 @@ void Server::configureRoutes() {
 
     if (reply.status == 200) {
       opponentName_ = playerweb::displayName();
-      const size_t n = serializePeerName(opponentName_, reply_, sizeof(reply_));
-      if (n != 0) ws_.broadcastTXT(reply_, n);
+      char peerMessage[96]{};
+      const size_t n = serializePeerName(opponentName_, peerMessage, sizeof(peerMessage));
+      if (n != 0) ws_.broadcastTXT(peerMessage, n);
     }
     sendPlayerReply(http_, reply);
   });
