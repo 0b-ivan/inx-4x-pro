@@ -32,11 +32,20 @@ enum : fui::ActionId {
 enum class StartRow : uint8_t { Continue, NewGame, PlayNearby, Count };
 
 struct StartModel {
+  // Shared player identity/progression shown directly on the Battleship front
+  // door. These values come from PlayerRuntime; Battleship no longer presents
+  // its legacy local counters as if they were the global profile.
+  const char* playerName = "GUEST";
+  const char* playerRank = "";
+  uint16_t playerLevel = 1;
+
   // No game to continue means no CONTINUE row, rather than one that does
   // nothing.
   bool hasSavedGame = false;
   int played = 0;
   int won = 0;
+  int losses = 0;
+  int draws = 0;
   int streak = 0;
   int selected = 0;
 };

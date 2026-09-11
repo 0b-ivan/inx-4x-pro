@@ -5,10 +5,13 @@
 #include <Memory.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstring>
 
 #include "../Shelf.h"
+#include "../leaderboard/RankSystem.h"
+#include "../player/PlayerProgression.h"
 #include "../player/PlayerRuntime.h"
 #include "../ui/Toybox.h"
 #include "../ui/ToyboxFonts.h"
@@ -48,6 +51,10 @@ std::unique_ptr<Activity> BattleshipActivity::create(GfxRenderer& renderer, Mapp
 void BattleshipActivity::onEnter() {
   Activity::onEnter();
   toybox::ensureFonts(renderer);
+  // Make the device-wide identity available before the Battleship front door
+  // is drawn. recordCurrentMatch() also initializes lazily, but that is too late
+  // for a player name/rank that must be visible before the first shot.
+  (void)player::runtime().begin();
   // Mixed from the clock, so two games in a row are not the same game. The
   // fleet you are given is the first thing you see, and a deterministic one
   // would be noticed by the second session.
@@ -385,10 +392,38 @@ void BattleshipActivity::drawMiniGrid(const Rect& slot) const {
 bshipui::StartModel BattleshipActivity::startModel() const {
   bshipui::StartModel model;
   model.hasSavedGame = hasSavedGame;
+  model.selected = startIndex;
+
+  // Keep the legacy counters only as a fallback if player storage is genuinely
+  // unavailable. In normal operation the shared PlayerRuntime is the one source
+  // of truth for what this screen shows.
   model.played = played;
   model.won = won;
   model.streak = streak;
-  model.selected = startIndex;
+
+  if (!player::runtime().ready()) return model;
+
+  const player::Player* active = player::runtime().activePlayer();
+  model.playerName = active == nullptr ? "GUEST" : active->name;
+
+  std::array<player::GameStats, player::PlayerRuntime::kGameCount> stats{};
+  size_t count = 0;
+  if (player::runtime().currentStats(stats.data(), stats.size(), count) != player::StoreResult::Ok) return model;
+
+  const player::ProgressionSnapshot progression = player::ProgressionSystem::summarize(stats.data(), count);
+  model.playerLevel = progression.level;
+
+  for (size_t i = 0; i < count; ++i) {
+    if (stats[i].game != player::GameId::Battleship) continue;
+    model.won = static_cast<int>(stats[i].wins);
+    model.losses = static_cast<int>(stats[i].losses);
+    model.draws = static_cast<int>(stats[i].draws);
+    model.played = model.won + model.losses + model.draws;
+    model.streak = static_cast<int>(stats[i].currentStreak);
+    model.playerRank = leaderboard::RankSystem::forWins(stats[i].wins).name;
+    break;
+  }
+
   return model;
 }
 
