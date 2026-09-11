@@ -1,0 +1,157 @@
+name: Player system alpha release
+
+on:
+  push:
+    branches:
+      - "release/1.15.1-alpha"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  VERSION: 1.15.1-alpha
+  TAG: v1.15.1-alpha
+  PIO_CORE_URL: https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Prepare immutable release commit
+        run: |
+          set -euo pipefail
+          CURRENT="$(awk '/^\[crossplay\]/{f=1;next} /^\[/{f=0} f && /^version *=/{print $3; exit}' platformio.ini)"
+          if [ "$CURRENT" != "$VERSION" ]; then
+            sed -i -E "/^\[crossplay\]$/,/^\[/ s/^version = .*/version = ${VERSION}/" platformio.ini
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add platformio.ini
+            git commit -m "chore(release): prepare ${TAG}"
+            git push origin HEAD:"${GITHUB_REF_NAME}"
+          fi
+          echo "RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          grep -A1 '^\[crossplay\]$' platformio.ini
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Install PlatformIO Core and tooling
+        run: |
+          uv pip install --system -U "$PIO_CORE_URL" esptool
+          uv pip install --system -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-alpha-${{ runner.os }}-${{ hashFiles('platformio.ini', 'platformio.sim.ini') }}
+
+      - name: Build X4 Pro release firmware
+        run: |
+          set -euo pipefail
+          STACK_CACHE="$RUNNER_TEMP/pio-alpha-stack-cache"
+          rm -rf "$STACK_CACHE" .pio/build/gh_release_x4pro
+          mkdir -p "$STACK_CACHE"
+          PLATFORMIO_BUILD_CACHE_DIR="$STACK_CACHE" \
+          PLATFORMIO_BUILD_FLAGS="-fstack-usage -fcallgraph-info=su" \
+            python3 -m platformio run -e gh_release_x4pro
+
+      - name: Stack fits its task
+        run: python3 scripts_local/stack_budget.py --build-dir .pio/build/gh_release_x4pro
+
+      - name: Package X4 Pro artefacts
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          python -m esptool --chip esp32s3 merge-bin --format raw \
+            -o "dist/crossplay-${TAG}-x4pro-full.bin" \
+            -fm keep -fs keep -ff keep \
+            0x0     .pio/build/gh_release_x4pro/bootloader.bin \
+            0x8000  .pio/build/gh_release_x4pro/partitions.bin \
+            0x10000 .pio/build/gh_release_x4pro/firmware.bin
+          cp .pio/build/gh_release_x4pro/firmware.bin dist/firmware.bin
+          cp .pio/build/gh_release_x4pro/firmware.elf "dist/crossplay-${TAG}-x4pro.elf"
+
+      - name: Validate merged image
+        run: |
+          set -euo pipefail
+          full="dist/crossplay-${TAG}-x4pro-full.bin"
+          check() {
+            got=$(dd if="$full" bs=1 skip=$1 count=2 2>/dev/null | xxd -p)
+            test "$got" = "$2" || { echo "bad image signature at $1: expected $2, got $got" >&2; exit 1; }
+          }
+          check 0 e903
+          check 32768 aa50
+          check 65536 e907
+
+      - name: Write release notes
+        run: |
+          cat > RELEASE_NOTES.md <<'EOF'
+          CrossPlay **1.15.1-alpha** for **Xteink X4 Pro**.
+
+          This is a **pre-release for testing the new shared player system**. It is not the next stable release.
+
+          ### What is new in 1.15.1-alpha
+
+          - Added shared player profiles for PLAY NEARBY games instead of game-local identities.
+          - Added a persistent 128-bit player ID, globally unique player name, generated avatar and callsign.
+          - Added guest play with registration after the first completed match; the first win/loss/draw is preserved when the guest becomes a saved player.
+          - Added local 4-digit PIN login using salted PBKDF2-HMAC-SHA256 credentials and a RAM-only failed-attempt lockout.
+          - Added SQLite-backed player, credential, match and per-game statistics persistence on the X4 Pro.
+          - Added global XP, levels, player classes and a six-axis play-style radar derived from stored statistics rather than persisted as duplicate state.
+          - Added per-game rank calculation. Battleship ranks progress from **Maat** up to **Herr der sieben Meere** based on wins.
+          - Added a player profile screen with avatar/callsign, XP/level, class, radar, Battleship W/L/D, best streak and rank progress.
+          - Battleship solo, X4-to-X4 and browser multiplayer now feed the same authoritative shared progression path.
+          - Browser clients remain untrusted presentation/input clients; authoritative match results and persistent progression stay on the X4 Pro.
+
+          ### Still intentionally unfinished in this alpha
+
+          - Achievements
+          - Chess Elo and Chess progression integration
+          - Cross-game leaderboard
+
+          ### Install
+
+          - OTA app image: `firmware.bin`
+          - USB full image: `crossplay-v1.15.1-alpha-x4pro-full.bin`
+
+          Please treat this build as a test release and report profile persistence, PIN/login, registration and Battleship progression issues.
+          EOF
+
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin --tags
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "$TAG" "$RELEASE_SHA"
+            git push origin "$TAG"
+          fi
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$TAG already published; refusing to overwrite it."
+            exit 0
+          fi
+
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_SHA" \
+            --title "$TAG" \
+            --prerelease \
+            --notes-file RELEASE_NOTES.md
