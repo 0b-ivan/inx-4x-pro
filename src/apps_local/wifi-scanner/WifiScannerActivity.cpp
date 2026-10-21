@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <climits>
+#include <string>
 
+#include "FreeInkUICore.h"
 #include "MappedInputManager.h"
 #include "apps_local/Shelf.h"
 #include "components/UITheme.h"
@@ -36,7 +38,7 @@ const char* WifiScannerActivity::qualityLabel(int32_t rssi) {
   return "Weak";
 }
 
-const char* WifiScannerActivity::encryptionString(uint8_t type) {
+const char* WifiScannerActivity::encryptionString(uint8_t type) const {
   switch (type) {
     case WIFI_AUTH_OPEN: return "Open";
     case WIFI_AUTH_WEP: return "WEP";
@@ -49,7 +51,7 @@ const char* WifiScannerActivity::encryptionString(uint8_t type) {
   }
 }
 
-const char* WifiScannerActivity::signalBars(int32_t rssi) {
+const char* WifiScannerActivity::signalBars(int32_t rssi) const {
   if (rssi >= -50) return "||||";
   if (rssi >= -60) return "|||.";
   if (rssi >= -70) return "||..";
@@ -61,8 +63,9 @@ const char* WifiScannerActivity::signalBars(int32_t rssi) {
 
 void WifiScannerActivity::onEnter() {
   Activity::onEnter();
-  state = State::Scanning;
-  channelViewMode = ChannelViewMode::Spectrum;
+  state = SCANNING;
+  viewMode = LIST_VIEW;
+  channelViewMode = VIEW_SPECTRUM;
   networks.clear();
   selectorIndex = 0;
   sortBySignal = true;
@@ -82,17 +85,18 @@ void WifiScannerActivity::onExit() {
 // ---- Scan -------------------------------------------------------------------
 
 void WifiScannerActivity::startScan() {
-  state = State::Scanning;
+  state = SCANNING;
   networks.clear();
   selectorIndex = 0;
   WiFi.scanDelete();
-  WiFi.scanNetworks(true);  // async
+  WiFi.scanNetworks(true);
 }
 
 void WifiScannerActivity::processScanResults() {
   int16_t result = WiFi.scanComplete();
   if (result == WIFI_SCAN_RUNNING) return;
 
+  networks.clear();
   if (result > 0) {
     networks.reserve(static_cast<size_t>(result));
     for (int i = 0; i < result; i++) {
@@ -103,7 +107,7 @@ void WifiScannerActivity::processScanResults() {
       net.channel = WiFi.channel(i);
       net.encType = WiFi.encryptionType(i);
 
-      const uint8_t* bssid = WiFi.BSSID(i);
+      uint8_t* bssid = WiFi.BSSID(i);
       char buf[20];
       snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
                bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
@@ -115,7 +119,7 @@ void WifiScannerActivity::processScanResults() {
     analyzeChannels();
   }
   WiFi.scanDelete();
-  state = State::List;
+  state = LIST;
   requestUpdate();
 }
 
@@ -155,10 +159,10 @@ void WifiScannerActivity::doMeasurement() {
 
   int n = WiFi.scanNetworks(false, true, false, 300, ch);
 
-  int32_t found = INT32_MIN;
+  int32_t found = -200;
   if (n > 0) {
     for (int i = 0; i < n; i++) {
-      const uint8_t* bssidBytes = WiFi.BSSID(i);
+      uint8_t* bssidBytes = WiFi.BSSID(i);
       if (!bssidBytes) continue;
       char bssidStr[20];
       snprintf(bssidStr, sizeof(bssidStr), "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -172,7 +176,7 @@ void WifiScannerActivity::doMeasurement() {
   }
   WiFi.scanDelete();
 
-  if (found == INT32_MIN) {
+  if (found == -200) {
     requestUpdate();
     return;
   }
@@ -191,8 +195,8 @@ void WifiScannerActivity::doMeasurement() {
   }
 
   rssiHistory[rssiHistoryIndex] = found;
-  rssiHistoryIndex = (rssiHistoryIndex + 1) % kRssiHistorySize;
-  if (rssiHistoryCount < kRssiHistorySize) rssiHistoryCount++;
+  rssiHistoryIndex = (rssiHistoryIndex + 1) % RSSI_HISTORY_SIZE;
+  if (rssiHistoryCount < RSSI_HISTORY_SIZE) rssiHistoryCount++;
 
   requestUpdate();
 }
@@ -201,9 +205,11 @@ void WifiScannerActivity::doMeasurement() {
 
 void WifiScannerActivity::analyzeChannels() {
   for (int ch = 1; ch <= 13; ch++) {
-    channelData[ch] = {};
+    channelData[ch].apCount = 0;
     channelData[ch].strongestRssi = -100;
     channelData[ch].avgRssi = -100;
+    channelData[ch].rssiSum = 0;
+    channelData[ch].interferenceScore = 0;
   }
 
   for (const auto& net : networks) {
@@ -224,14 +230,14 @@ void WifiScannerActivity::analyzeChannels() {
   for (const auto& net : networks) {
     int apCh = static_cast<int>(net.channel);
     if (apCh < 1 || apCh > 13) continue;
-    int weight = 100 + net.rssi;
-    if (weight < 1) weight = 1;
-    for (int t = 1; t <= 13; t++) {
-      int dist = apCh - t;
+    int signalWeight = 100 + net.rssi;
+    if (signalWeight < 1) signalWeight = 1;
+    for (int target = 1; target <= 13; target++) {
+      int dist = apCh - target;
       if (dist < 0) dist = -dist;
       if (dist > 2) continue;
-      int overlap = (dist == 0) ? 100 : (dist == 1 ? 70 : 30);
-      channelData[t].interferenceScore += weight * overlap / 100;
+      int overlapPct = (dist == 0) ? 100 : (dist == 1 ? 70 : 30);
+      channelData[target].interferenceScore += signalWeight * overlapPct / 100;
     }
   }
 
@@ -239,11 +245,11 @@ void WifiScannerActivity::analyzeChannels() {
 }
 
 int WifiScannerActivity::findBestChannel() const {
-  static constexpr int kPreferred[] = {1, 6, 11};
-  int bestScore = INT_MAX;
+  static const int preferred[] = {1, 6, 11};
+  int bestScore = INT32_MAX;
   int bestCh = 1;
 
-  for (int p : kPreferred) {
+  for (int p : preferred) {
     if (channelData[p].interferenceScore < bestScore) {
       bestScore = channelData[p].interferenceScore;
       bestCh = p;
@@ -261,9 +267,7 @@ int WifiScannerActivity::findBestChannel() const {
 // ---- Loop -------------------------------------------------------------------
 
 void WifiScannerActivity::loop() {
-  mappedInput.update();
-
-  if (state == State::Scanning) {
+  if (state == SCANNING) {
     processScanResults();
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       shelf::leave(renderer, mappedInput);
@@ -271,93 +275,112 @@ void WifiScannerActivity::loop() {
     return;
   }
 
-  if (state == State::Detail) {
+  if (state == DETAIL) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      state = State::List;
-      requestUpdate();
-    }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      // Enter signal meter for selected AP
-      targetIndex = selectorIndex;
-      sampleCount = 0;
-      rssiSum = 0;
-      rssiHistoryIndex = 0;
-      rssiHistoryCount = 0;
-      lastMeasureTime = 0;
-      state = State::SignalMeter;
+      state = LIST;
       requestUpdate();
     }
     return;
   }
 
-  if (state == State::SignalMeter) {
+  // ---- SIGNAL_VIEW ----
+  if (viewMode == SIGNAL_VIEW) {
     unsigned long now = millis();
-    if (now - lastMeasureTime >= kMeasureIntervalMs) {
+    if (now - lastMeasureTime >= MEASURE_INTERVAL_MS) {
       lastMeasureTime = now;
       doMeasurement();
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      state = State::Detail;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      // Long-press cycled us in; short press exits signal back to list
+      viewMode = LIST_VIEW;
       requestUpdate();
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      shelf::leave(renderer, mappedInput);
     }
     return;
   }
 
-  if (state == State::ChannelView) {
+  // ---- CHANNEL_VIEW ----
+  if (viewMode == CHANNEL_VIEW) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      state = State::List;
-      requestUpdate();
+      shelf::leave(renderer, mappedInput);
+      return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      // Toggle spectrum/table
-      channelViewMode = (channelViewMode == ChannelViewMode::Spectrum)
-                            ? ChannelViewMode::Table
-                            : ChannelViewMode::Spectrum;
-      requestUpdate();
-    }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
       startScan();
-      state = State::Scanning;
+      viewMode = LIST_VIEW;
+      requestUpdate();
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+      channelViewMode = (channelViewMode == VIEW_SPECTRUM) ? VIEW_TABLE : VIEW_SPECTRUM;
       requestUpdate();
     }
     return;
   }
 
-  // ---- List state ---------------------------------------------------------
-  buttonNavigator.update(mappedInput, static_cast<int>(networks.size()));
+  // ---- LIST_VIEW ----
+  const int count = static_cast<int>(networks.size());
 
-  if (buttonNavigator.moved()) {
-    selectorIndex = buttonNavigator.index();
-    requestUpdate();
-  }
+  buttonNavigator.onNext([this, count] {
+    if (count > 0) {
+      selectorIndex = ButtonNavigator::nextIndex(selectorIndex, count);
+      requestUpdate();
+    }
+  });
+
+  buttonNavigator.onPrevious([this, count] {
+    if (count > 0) {
+      selectorIndex = ButtonNavigator::previousIndex(selectorIndex, count);
+      requestUpdate();
+    }
+  });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (!networks.empty()) {
-      state = State::Detail;
+    if (mappedInput.getHeldTime() >= 500) {
+      // Long press: cycle view modes
+      if (viewMode == LIST_VIEW) {
+        if (!networks.empty()) {
+          targetIndex = selectorIndex;
+          currentRssi = -100;
+          minRssi = 0;
+          maxRssi = -100;
+          avgRssi = -100;
+          sampleCount = 0;
+          rssiSum = 0;
+          rssiHistoryIndex = 0;
+          rssiHistoryCount = 0;
+          lastMeasureTime = 0;
+          viewMode = SIGNAL_VIEW;
+          requestUpdate();
+        }
+      } else if (viewMode == SIGNAL_VIEW) {
+        channelViewMode = VIEW_SPECTRUM;
+        viewMode = CHANNEL_VIEW;
+        requestUpdate();
+      } else {
+        viewMode = LIST_VIEW;
+        requestUpdate();
+      }
+    } else if (!networks.empty()) {
+      detailIndex = selectorIndex;
+      state = DETAIL;
       requestUpdate();
     }
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    // Sort toggle
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
+      mappedInput.wasReleased(MappedInputManager::Button::Right)) {
     sortBySignal = !sortBySignal;
     sortNetworks();
-    selectorIndex = 0;
     requestUpdate();
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    // Channel view
-    state = State::ChannelView;
-    requestUpdate();
-  }
-
-  if (mappedInput.wasReleased(MappedInputManager::Button::Up) &&
-      mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    // Rescan
+  if (mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
     startScan();
     requestUpdate();
-    return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -365,242 +388,423 @@ void WifiScannerActivity::loop() {
   }
 }
 
-// ---- Render -----------------------------------------------------------------
+// ---- Signal view render -----------------------------------------------------
 
-void WifiScannerActivity::render(RenderLock&&) {
-  auto& r = renderer;
-  r.clearFrameBuffer();
+void WifiScannerActivity::renderSignalView() {
+  const auto& metrics = GUI.getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
 
-  switch (state) {
-    case State::Scanning: {
-      GUI.drawMainMenuHeader(r, "WIFI SCANNER");
-      int cx = r.getScreenWidth() / 2;
-      int cy = r.getScreenHeight() / 2;
-      r.drawText(FONT_UI_MEDIUM, cx, cy - 12, "Scanning...", true);
-      break;
-    }
-    case State::List:
-      renderList(r);
-      break;
-    case State::Detail:
-      renderDetail(r);
-      break;
-    case State::SignalMeter:
-      renderSignalMeter(r);
-      break;
-    case State::ChannelView:
-      if (channelViewMode == ChannelViewMode::Spectrum) {
-        renderChannelSpectrum(r);
-      } else {
-        renderChannelTable(r);
+  if (targetIndex < 0 || targetIndex >= static_cast<int>(networks.size())) return;
+
+  const Network& target = networks[targetIndex];
+
+  char headerSub[32];
+  snprintf(headerSub, sizeof(headerSub), "Ch %d | Signal Meter",
+           static_cast<int>(target.channel));
+  GUI.drawHeader(renderer,
+                 Rect{0, static_cast<int16_t>(metrics.topPadding),
+                      static_cast<int16_t>(pageWidth),
+                      static_cast<int16_t>(metrics.headerHeight)},
+                 target.ssid.c_str(), headerSub);
+
+  int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + 10;
+  const int leftPad = metrics.contentSidePadding;
+  const int rightPad = metrics.contentSidePadding;
+
+  char rssiText[16];
+  snprintf(rssiText, sizeof(rssiText), "%d dBm", static_cast<int>(currentRssi));
+  renderer.drawCenteredText(UI_12_FONT_ID, y, rssiText, true);
+  y += renderer.getTextHeight(UI_12_FONT_ID) + 6;
+
+  renderer.drawCenteredText(UI_10_FONT_ID, y, qualityLabel(currentRssi));
+  y += renderer.getTextHeight(UI_10_FONT_ID) + 12;
+
+  const int barMaxWidth = pageWidth - leftPad - rightPad;
+  const int barHeight = 28;
+  const int filledWidth =
+      static_cast<int>(rssiToFraction(currentRssi) * static_cast<float>(barMaxWidth));
+  renderer.drawRect(leftPad, y, barMaxWidth, barHeight, true);
+  if (filledWidth > 2) {
+    renderer.fillRect(leftPad + 1, y + 1, filledWidth - 2, barHeight - 2, true);
+  }
+  y += barHeight + 12;
+
+  char statsText[48];
+  if (sampleCount > 0) {
+    snprintf(statsText, sizeof(statsText), "Min: %d  Avg: %d  Max: %d",
+             static_cast<int>(minRssi), static_cast<int>(avgRssi), static_cast<int>(maxRssi));
+  } else {
+    snprintf(statsText, sizeof(statsText), "Waiting for samples...");
+  }
+  renderer.drawCenteredText(UI_10_FONT_ID, y, statsText);
+  y += renderer.getTextHeight(UI_10_FONT_ID) + 16;
+
+  // Line graph (matching biscuit)
+  if (rssiHistoryCount >= 2) {
+    const int graphLeft = leftPad;
+    const int graphWidth = pageWidth - leftPad - rightPad;
+    const int graphBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - 4;
+    const int graphTop = y;
+    const int graphHeight = graphBottom - graphTop;
+
+    if (graphHeight > 10) {
+      renderer.drawRect(graphLeft, graphTop, graphWidth, graphHeight, true);
+
+      int prevX = -1, prevY = -1;
+      for (int i = 0; i < rssiHistoryCount; i++) {
+        int slot;
+        if (rssiHistoryCount < RSSI_HISTORY_SIZE) {
+          slot = i;
+        } else {
+          slot = (rssiHistoryIndex + i) % RSSI_HISTORY_SIZE;
+        }
+        const float frac = rssiToFraction(rssiHistory[slot]);
+        const int px = graphLeft + 1 + (i * (graphWidth - 2)) / (rssiHistoryCount - 1);
+        const int py =
+            graphTop + 1 + static_cast<int>((1.0f - frac) * static_cast<float>(graphHeight - 2));
+
+        if (prevX >= 0) renderer.drawLine(prevX, prevY, px, py, true);
+        prevX = px;
+        prevY = py;
       }
-      break;
+    }
   }
 
-  r.flushFrameBuffer();
+  const auto labels = mappedInput.mapLabels("Back", "List View", "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
-void WifiScannerActivity::renderList(GfxRenderer& r) {
-  GUI.drawMainMenuHeader(r, "WIFI SCANNER");
+// ---- Channel spectrum render ------------------------------------------------
 
-  int w = r.getScreenWidth();
-  int h = r.getScreenHeight();
-  int headerH = GUI.headerHeight();
-  int footerH = GUI.footerHeight();
-  int rowH = GUI.listRowHeight();
-  int y = headerH;
-  int visibleRows = (h - headerH - footerH) / rowH;
+void WifiScannerActivity::renderChannelSpectrum() {
+  const auto& metrics = GUI.getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
 
-  if (networks.empty()) {
-    r.drawText(FONT_UI_MEDIUM, w / 2, h / 2, "No networks found", true);
-    GUI.drawMainMenuFooter(r, "RESCAN", sortBySignal ? "A-Z" : "RSSI", "CH");
+  char subtitle[40];
+  snprintf(subtitle, sizeof(subtitle), "%d APs  Best: Ch %d",
+           static_cast<int>(networks.size()), recommendedChannel);
+  GUI.drawHeader(renderer,
+                 Rect{0, static_cast<int16_t>(metrics.topPadding),
+                      static_cast<int16_t>(pageWidth),
+                      static_cast<int16_t>(metrics.headerHeight)},
+                 "Channel Analyzer", subtitle);
+
+  const int headerBottom = metrics.topPadding + metrics.headerHeight;
+
+  const int graphX = 30;
+  const int graphY = headerBottom + 20;
+  const int graphW = pageWidth - 50;
+  const int graphH = 250;
+
+  renderer.drawLine(graphX, graphY + graphH, graphX + graphW, graphY + graphH, true);
+  renderer.drawLine(graphX, graphY, graphX, graphY + graphH, true);
+
+  renderer.drawText(SMALL_FONT_ID, 0, graphY, "-30");
+  renderer.drawText(SMALL_FONT_ID, 0,
+                    graphY + graphH / 2 - renderer.getTextHeight(SMALL_FONT_ID) / 2, "-65");
+  renderer.drawText(SMALL_FONT_ID, 0,
+                    graphY + graphH - renderer.getTextHeight(SMALL_FONT_ID), "-100");
+
+  const int chSpacing = graphW / 13;
+  auto chToX = [&](int ch) -> int {
+    return graphX + (ch - 1) * chSpacing + chSpacing / 2;
+  };
+
+  // Dotted vertical grid
+  for (int ch = 1; ch <= 13; ch++) {
+    int cx = chToX(ch);
+    for (int py = graphY; py < graphY + graphH; py += 4) {
+      renderer.drawPixel(cx, py, true);
+    }
+  }
+
+  // Recommended channel highlight box
+  {
+    int rcx = chToX(recommendedChannel);
+    renderer.drawRect(rcx - chSpacing / 2, graphY, chSpacing, graphH, true);
+  }
+
+  // X-axis channel labels
+  const int labelY = graphY + graphH + 3;
+  for (int ch = 1; ch <= 13; ch++) {
+    char label[4];
+    snprintf(label, sizeof(label), "%d", ch);
+    int tw = renderer.getTextWidth(SMALL_FONT_ID, label);
+    renderer.drawText(SMALL_FONT_ID, chToX(ch) - tw / 2, labelY, label);
+  }
+
+  // Bell curves per AP (2.4 GHz channel overlap model)
+  for (const auto& net : networks) {
+    int apCh = static_cast<int>(net.channel);
+    if (apCh < 1 || apCh > 13) continue;
+
+    int32_t rssiClamped = net.rssi;
+    if (rssiClamped > -30) rssiClamped = -30;
+    if (rssiClamped < -100) rssiClamped = -100;
+
+    int peakH = (rssiClamped + 100) * graphH / 70;
+    int centerX = chToX(apCh);
+    int halfSpread = 2 * chSpacing;
+
+    int prevPx = -1, prevPy = -1;
+    for (int dx = -halfSpread; dx <= halfSpread; dx++) {
+      int px = centerX + dx;
+      if (px < graphX || px > graphX + graphW) { prevPx = -1; continue; }
+
+      float normDist = static_cast<float>(dx < 0 ? -dx : dx) /
+                       static_cast<float>(chSpacing);
+      float factor;
+      if (normDist <= 0.5f) {
+        factor = 1.0f;
+      } else if (normDist <= 1.5f) {
+        factor = 0.7f;
+      } else {
+        factor = 0.7f * (2.0f - normDist) / 0.5f;
+        if (factor < 0.0f) factor = 0.0f;
+      }
+
+      int h = static_cast<int>(peakH * factor);
+      int py = graphY + graphH - h;
+
+      if (prevPx != -1) renderer.drawLine(prevPx, prevPy, px, py, true);
+      prevPx = px;
+      prevPy = py;
+    }
+  }
+
+  // Interference bar chart below spectrum
+  const int barY = graphY + graphH + 25;
+  const int barMaxH = 40;
+  const int barW = chSpacing;
+
+  int maxInterference = 1;
+  for (int ch = 1; ch <= 13; ch++) {
+    if (channelData[ch].interferenceScore > maxInterference)
+      maxInterference = channelData[ch].interferenceScore;
+  }
+
+  for (int ch = 1; ch <= 13; ch++) {
+    int cx = chToX(ch);
+    int bx = cx - barW / 2 + 1;
+    int bw = barW - 2;
+    int bh = (channelData[ch].interferenceScore * barMaxH) / maxInterference;
+    if (bh < 1 && channelData[ch].interferenceScore > 0) bh = 1;
+    if (bh > 0) renderer.fillRect(bx, barY + barMaxH - bh, bw, bh, true);
+    if (ch == recommendedChannel) {
+      renderer.drawRect(bx - 1, barY, bw + 2, barMaxH, true);
+    }
+  }
+
+  const int recY = barY + barMaxH + 10;
+  char recBuf[40];
+  snprintf(recBuf, sizeof(recBuf), "Recommended: Channel %d", recommendedChannel);
+  renderer.drawCenteredText(UI_10_FONT_ID, recY, recBuf, true);
+
+  // Bounds check: if chart overflows, skip the bottom row
+  if (recY + renderer.getTextHeight(UI_10_FONT_ID) <
+      pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing) {
+    const auto labels = mappedInput.mapLabels("Back", "Rescan", "Table", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
+}
+
+// ---- Channel table render ---------------------------------------------------
+
+void WifiScannerActivity::renderChannelTable() {
+  const auto& metrics = GUI.getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+
+  GUI.drawHeader(renderer,
+                 Rect{0, static_cast<int16_t>(metrics.topPadding),
+                      static_cast<int16_t>(pageWidth),
+                      static_cast<int16_t>(metrics.headerHeight)},
+                 "Channel Analyzer", "Table View");
+
+  const int headerBottom = metrics.topPadding + metrics.headerHeight;
+  const int pad = metrics.contentSidePadding;
+
+  const int colCh = pad;
+  const int colAps = colCh + 42;
+  const int colBest = colAps + 44;
+  const int colAvg = colBest + 58;
+  const int colBar = colAvg + 54;
+  const int barMaxW = pageWidth - colBar - pad;
+
+  const int rowH = renderer.getTextHeight(SMALL_FONT_ID) + 6;
+  int y = headerBottom + 8;
+
+  renderer.drawText(SMALL_FONT_ID, colCh, y, "Ch", true);
+  renderer.drawText(SMALL_FONT_ID, colAps, y, "APs", true);
+  renderer.drawText(SMALL_FONT_ID, colBest, y, "Best", true);
+  renderer.drawText(SMALL_FONT_ID, colAvg, y, "Avg", true);
+  renderer.drawText(SMALL_FONT_ID, colBar, y, "Interf", true);
+  y += rowH + 2;
+  renderer.drawLine(pad, y, pageWidth - pad, y, true);
+  y += 4;
+
+  int maxInterference = 1;
+  for (int ch = 1; ch <= 13; ch++) {
+    if (channelData[ch].interferenceScore > maxInterference)
+      maxInterference = channelData[ch].interferenceScore;
+  }
+
+  const int hintsTop = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
+
+  for (int ch = 1; ch <= 13; ch++) {
+    if (y + rowH > hintsTop) break;
+
+    const ChannelInfo& info = channelData[ch];
+    const bool isRec = (ch == recommendedChannel);
+
+    char chBuf[6];
+    snprintf(chBuf, sizeof(chBuf), isRec ? ">%d" : "%d", ch);
+    renderer.drawText(SMALL_FONT_ID, colCh, y, chBuf, true);
+
+    char apsBuf[8];
+    snprintf(apsBuf, sizeof(apsBuf), "%d", info.apCount);
+    renderer.drawText(SMALL_FONT_ID, colAps, y, apsBuf);
+
+    char bestBuf[8];
+    if (info.apCount > 0) snprintf(bestBuf, sizeof(bestBuf), "%d", info.strongestRssi);
+    else bestBuf[0] = '-', bestBuf[1] = '\0';
+    renderer.drawText(SMALL_FONT_ID, colBest, y, bestBuf);
+
+    char avgBuf[8];
+    if (info.apCount > 0) snprintf(avgBuf, sizeof(avgBuf), "%d", info.avgRssi);
+    else avgBuf[0] = '-', avgBuf[1] = '\0';
+    renderer.drawText(SMALL_FONT_ID, colAvg, y, avgBuf);
+
+    int bw = (info.interferenceScore * barMaxW) / maxInterference;
+    if (bw < 1 && info.interferenceScore > 0) bw = 1;
+    const int bh = rowH - 4;
+    if (bw > 0) renderer.fillRect(colBar, y + 2, bw, bh, true);
+    if (isRec) renderer.drawRect(colBar - 1, y + 1, barMaxW + 2, bh + 2, true);
+
+    y += rowH;
+  }
+
+  const auto labels = mappedInput.mapLabels("Back", "Rescan", "Spectrum", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
+// ---- render -----------------------------------------------------------------
+
+void WifiScannerActivity::render(RenderLock&&) {
+  const auto& metrics = GUI.getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+
+  renderer.clearScreen();
+
+  if (state == SCANNING) {
+    GUI.drawHeader(renderer,
+                   Rect{0, static_cast<int16_t>(metrics.topPadding),
+                        static_cast<int16_t>(pageWidth),
+                        static_cast<int16_t>(metrics.headerHeight)},
+                   "WiFi Scanner");
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Scanning...");
+    renderer.displayBuffer();
     return;
   }
 
-  int scroll = std::max(0, selectorIndex - visibleRows + 1);
+  if (state == DETAIL && detailIndex < static_cast<int>(networks.size())) {
+    const auto& net = networks[detailIndex];
+    GUI.drawHeader(renderer,
+                   Rect{0, static_cast<int16_t>(metrics.topPadding),
+                        static_cast<int16_t>(pageWidth),
+                        static_cast<int16_t>(metrics.headerHeight)},
+                   net.ssid.c_str());
 
-  for (int i = 0; i < visibleRows; i++) {
-    int idx = scroll + i;
-    if (idx >= static_cast<int>(networks.size())) break;
+    const int leftPad = metrics.contentSidePadding;
+    int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + 20;
+    const int lineH = 45;
 
-    bool selected = (idx == selectorIndex);
-    int rowY = y + i * rowH;
-
-    if (selected) {
-      r.fillRect(0, rowY, w, rowH, false);
-    }
-
-    const auto& net = networks[idx];
-
-    // SSID — left column
-    char ssid[33];
-    snprintf(ssid, sizeof(ssid), "%s", net.ssid.c_str());
-    r.drawText(FONT_UI_SMALL, 8, rowY + 2, ssid, selected);
-
-    // Signal bars + dBm — right column
-    char info[24];
-    snprintf(info, sizeof(info), "%s %d", signalBars(net.rssi), net.rssi);
-    r.drawText(FONT_UI_SMALL, w - 90, rowY + 2, info, selected);
-  }
-
-  char footer[32];
-  snprintf(footer, sizeof(footer), "%zu AP  CH%d best", networks.size(), recommendedChannel);
-  GUI.drawMainMenuFooter(r, footer, sortBySignal ? "A-Z" : "RSSI", "CH");
-}
-
-void WifiScannerActivity::renderDetail(GfxRenderer& r) {
-  if (selectorIndex >= static_cast<int>(networks.size())) return;
-  const auto& net = networks[selectorIndex];
-
-  GUI.drawMainMenuHeader(r, "AP DETAIL");
-
-  int x = 16;
-  int y = GUI.headerHeight() + 8;
-  int lineH = 22;
-
-  char buf[64];
-
-  snprintf(buf, sizeof(buf), "SSID:  %s", net.ssid.c_str());
-  r.drawText(FONT_UI_MEDIUM, x, y, buf, false);
-  y += lineH;
-
-  snprintf(buf, sizeof(buf), "BSSID: %s", net.bssid.c_str());
-  r.drawText(FONT_UI_SMALL, x, y, buf, false);
-  y += lineH;
-
-  snprintf(buf, sizeof(buf), "RSSI:  %d dBm  (%s)", net.rssi, qualityLabel(net.rssi));
-  r.drawText(FONT_UI_MEDIUM, x, y, buf, false);
-  y += lineH;
-
-  snprintf(buf, sizeof(buf), "CH:    %u", net.channel);
-  r.drawText(FONT_UI_MEDIUM, x, y, buf, false);
-  y += lineH;
-
-  snprintf(buf, sizeof(buf), "ENC:   %s", encryptionString(net.encType));
-  r.drawText(FONT_UI_MEDIUM, x, y, buf, false);
-  y += lineH + 4;
-
-  // Signal bar
-  int barW = r.getScreenWidth() - 32;
-  int barH = 14;
-  float frac = rssiToFraction(net.rssi);
-  r.drawRect(x, y, barW, barH, false);
-  r.fillRect(x, y, static_cast<int>(frac * barW), barH, false);
-
-  GUI.drawMainMenuFooter(r, "BACK", "SIGNAL METER", "");
-}
-
-void WifiScannerActivity::renderSignalMeter(GfxRenderer& r) {
-  if (targetIndex < 0 || targetIndex >= static_cast<int>(networks.size())) return;
-  const auto& net = networks[targetIndex];
-
-  GUI.drawMainMenuHeader(r, "SIGNAL METER");
-
-  int w = r.getScreenWidth();
-  int x = 16;
-  int y = GUI.headerHeight() + 8;
-  int lineH = 22;
-
-  char buf[48];
-  snprintf(buf, sizeof(buf), "%s", net.ssid.c_str());
-  r.drawText(FONT_UI_MEDIUM, x, y, buf, false);
-  y += lineH;
-
-  if (sampleCount > 0) {
-    snprintf(buf, sizeof(buf), "Now: %d dBm  %s", currentRssi, qualityLabel(currentRssi));
-    r.drawText(FONT_UI_MEDIUM, x, y, buf, false);
+    renderer.drawText(SMALL_FONT_ID, leftPad, y, "SSID", true);
+    y += 22;
+    renderer.drawText(UI_10_FONT_ID, leftPad, y, net.ssid.c_str());
     y += lineH;
 
-    snprintf(buf, sizeof(buf), "Min/Avg/Max: %d / %d / %d", minRssi, avgRssi, maxRssi);
-    r.drawText(FONT_UI_SMALL, x, y, buf, false);
-    y += lineH + 4;
+    renderer.drawText(SMALL_FONT_ID, leftPad, y, "BSSID", true);
+    y += 22;
+    renderer.drawText(UI_10_FONT_ID, leftPad, y, net.bssid.c_str());
+    y += lineH;
 
-    // History graph
-    int graphW = w - 32;
-    int graphH = 60;
-    r.drawRect(x, y, graphW, graphH, false);
+    char rssiStr[24];
+    snprintf(rssiStr, sizeof(rssiStr), "%d dBm  %s", net.rssi, signalBars(net.rssi));
+    renderer.drawText(SMALL_FONT_ID, leftPad, y, "Signal", true);
+    y += 22;
+    renderer.drawText(UI_10_FONT_ID, leftPad, y, rssiStr);
+    y += lineH;
 
-    if (rssiHistoryCount > 1) {
-      int colW = graphW / kRssiHistorySize;
-      if (colW < 1) colW = 1;
-      for (int i = 0; i < rssiHistoryCount; i++) {
-        int hi = (rssiHistoryIndex - rssiHistoryCount + i + kRssiHistorySize) % kRssiHistorySize;
-        float frac = rssiToFraction(rssiHistory[hi]);
-        int barH = static_cast<int>(frac * (graphH - 2));
-        int bx = x + 1 + i * colW;
-        int by = y + graphH - 1 - barH;
-        r.fillRect(bx, by, colW, barH, false);
-      }
-    }
+    char chStr[8];
+    snprintf(chStr, sizeof(chStr), "%u", net.channel);
+    renderer.drawText(SMALL_FONT_ID, leftPad, y, "Channel", true);
+    y += 22;
+    renderer.drawText(UI_10_FONT_ID, leftPad, y, chStr);
+    y += lineH;
+
+    renderer.drawText(SMALL_FONT_ID, leftPad, y, "Encryption", true);
+    y += 22;
+    renderer.drawText(UI_10_FONT_ID, leftPad, y, encryptionString(net.encType));
+
+    const auto labels = mappedInput.mapLabels("Back", "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+    return;
+  }
+
+  if (viewMode == SIGNAL_VIEW) {
+    renderSignalView();
+    renderer.displayBuffer();
+    return;
+  }
+
+  if (viewMode == CHANNEL_VIEW) {
+    if (channelViewMode == VIEW_SPECTRUM) renderChannelSpectrum();
+    else renderChannelTable();
+    renderer.displayBuffer();
+    return;
+  }
+
+  // LIST_VIEW
+  char subtitle[48];
+  snprintf(subtitle, sizeof(subtitle), "%d found | %s",
+           static_cast<int>(networks.size()), sortBySignal ? "By Signal" : "By Name");
+  GUI.drawHeader(renderer,
+                 Rect{0, static_cast<int16_t>(metrics.topPadding),
+                      static_cast<int16_t>(pageWidth),
+                      static_cast<int16_t>(metrics.headerHeight)},
+                 "WiFi Scanner", subtitle);
+
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight =
+      pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+
+  if (networks.empty()) {
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "No networks found");
   } else {
-    r.drawText(FONT_UI_MEDIUM, x, y, "Measuring...", false);
+    GUI.drawList(
+        renderer, Rect{0, static_cast<int16_t>(contentTop),
+                       static_cast<int16_t>(pageWidth),
+                       static_cast<int16_t>(contentHeight)},
+        static_cast<int>(networks.size()), selectorIndex,
+        [this](int index) -> std::string {
+          return networks[index].ssid;
+        },
+        [this](int index) -> std::string {
+          const auto& net = networks[index];
+          return std::string(signalBars(net.rssi)) + " " + std::to_string(net.rssi) +
+                 "dBm  Ch" + std::to_string(net.channel) + "  " +
+                 encryptionString(net.encType);
+        });
   }
 
-  GUI.drawMainMenuFooter(r, "BACK", "", "");
-}
+  const auto labels = mappedInput.mapLabels("Back", "Select", "Sort", "");
+  GUI.drawButtonHints(renderer, labels.btn1, "Hold: Views", labels.btn3, labels.btn4);
+  GUI.drawSideButtonHints(renderer, "^", "v");
 
-void WifiScannerActivity::renderChannelSpectrum(GfxRenderer& r) {
-  GUI.drawMainMenuHeader(r, "CHANNEL VIEW");
-
-  int w = r.getScreenWidth();
-  int h = r.getScreenHeight();
-  int headerH = GUI.headerHeight();
-  int footerH = GUI.footerHeight();
-  int graphH = h - headerH - footerH - 28;
-  int graphY = headerH + 4;
-  int colW = (w - 16) / 13;
-
-  int maxAp = 1;
-  for (int ch = 1; ch <= 13; ch++) {
-    if (channelData[ch].apCount > maxAp) maxAp = channelData[ch].apCount;
-  }
-
-  for (int ch = 1; ch <= 13; ch++) {
-    int bx = 8 + (ch - 1) * colW;
-    int barH = (channelData[ch].apCount * (graphH - 2)) / maxAp;
-    int by = graphY + graphH - barH;
-
-    if (ch == recommendedChannel) {
-      r.fillRect(bx, graphY, colW - 2, graphH, false);
-    } else {
-      r.drawRect(bx, graphY, colW - 2, graphH, false);
-      if (barH > 0) r.fillRect(bx + 1, by, colW - 3, barH, false);
-    }
-
-    // Channel number label
-    char lbl[4];
-    snprintf(lbl, sizeof(lbl), "%d", ch);
-    r.drawText(FONT_UI_SMALL, bx + 2, graphY + graphH + 2, lbl, ch == recommendedChannel);
-  }
-
-  char footer[48];
-  snprintf(footer, sizeof(footer), "Best: CH%d", recommendedChannel);
-  GUI.drawMainMenuFooter(r, "BACK", footer, "TABLE");
-}
-
-void WifiScannerActivity::renderChannelTable(GfxRenderer& r) {
-  GUI.drawMainMenuHeader(r, "CHANNEL TABLE");
-
-  int x = 8;
-  int y = GUI.headerHeight() + 4;
-  int lineH = 18;
-  int w = r.getScreenWidth();
-
-  r.drawText(FONT_UI_SMALL, x, y, "CH  APs  Strongest  Interference", false);
-  y += lineH;
-  r.drawLine(x, y, w - x, y, false);
-  y += 4;
-
-  for (int ch = 1; ch <= 13; ch++) {
-    if (channelData[ch].apCount == 0) continue;
-    bool best = (ch == recommendedChannel);
-    char row[48];
-    snprintf(row, sizeof(row), "%2d  %3d  %4d dBm  %d",
-             ch, channelData[ch].apCount, channelData[ch].strongestRssi,
-             channelData[ch].interferenceScore);
-    r.drawText(FONT_UI_SMALL, x, y, row, best);
-    y += lineH;
-  }
-
-  GUI.drawMainMenuFooter(r, "BACK", "", "SPECTRUM");
+  renderer.displayBuffer();
 }

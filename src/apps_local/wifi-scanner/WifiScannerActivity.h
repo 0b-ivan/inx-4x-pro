@@ -10,7 +10,7 @@
 
 class WifiScannerActivity final : public Activity {
  public:
-  WifiScannerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+  explicit WifiScannerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("WifiScanner", renderer, mappedInput) {}
 
   static std::unique_ptr<Activity> create(GfxRenderer& renderer, MappedInputManager& mappedInput);
@@ -22,8 +22,9 @@ class WifiScannerActivity final : public Activity {
   bool preventAutoSleep() override { return true; }
 
  private:
-  enum class State : uint8_t { Scanning, List, Detail, SignalMeter, ChannelView };
-  enum class ChannelViewMode : uint8_t { Spectrum, Table };
+  enum State { SCANNING, LIST, DETAIL };
+  enum ViewMode { LIST_VIEW, SIGNAL_VIEW, CHANNEL_VIEW };
+  enum ChannelViewMode { VIEW_SPECTRUM, VIEW_TABLE };
 
   struct Network {
     std::string ssid;
@@ -41,12 +42,14 @@ class WifiScannerActivity final : public Activity {
     int interferenceScore = 0;
   };
 
-  State state = State::Scanning;
-  ChannelViewMode channelViewMode = ChannelViewMode::Spectrum;
+  State state = SCANNING;
+  ViewMode viewMode = LIST_VIEW;
+  ChannelViewMode channelViewMode = VIEW_SPECTRUM;
 
   std::vector<Network> networks;
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
+  int detailIndex = 0;
   bool sortBySignal = true;
 
   // Signal meter
@@ -57,15 +60,15 @@ class WifiScannerActivity final : public Activity {
   int32_t avgRssi = -100;
   int sampleCount = 0;
   int64_t rssiSum = 0;
-  static constexpr int kRssiHistorySize = 40;
-  int32_t rssiHistory[kRssiHistorySize] = {};
+  static constexpr int RSSI_HISTORY_SIZE = 40;
+  int32_t rssiHistory[RSSI_HISTORY_SIZE] = {};
   int rssiHistoryIndex = 0;
   int rssiHistoryCount = 0;
   unsigned long lastMeasureTime = 0;
-  static constexpr unsigned long kMeasureIntervalMs = 500;
+  static constexpr unsigned long MEASURE_INTERVAL_MS = 500;
 
   // Channel analyser
-  ChannelInfo channelData[14] = {};  // indices 1–13
+  ChannelInfo channelData[14] = {};
   int recommendedChannel = 1;
 
   void startScan();
@@ -79,12 +82,10 @@ class WifiScannerActivity final : public Activity {
 
   static float rssiToFraction(int32_t rssi);
   static const char* qualityLabel(int32_t rssi);
-  static const char* encryptionString(uint8_t type);
-  static const char* signalBars(int32_t rssi);
+  const char* encryptionString(uint8_t type) const;
+  const char* signalBars(int32_t rssi) const;
 
-  void renderList(GfxRenderer& r);
-  void renderDetail(GfxRenderer& r);
-  void renderSignalMeter(GfxRenderer& r);
-  void renderChannelSpectrum(GfxRenderer& r);
-  void renderChannelTable(GfxRenderer& r);
+  void renderSignalView();
+  void renderChannelSpectrum();
+  void renderChannelTable();
 };
