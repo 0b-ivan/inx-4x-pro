@@ -1,8 +1,8 @@
 #include "Shelf.h"
 
 #include <HalStorage.h>
-#include <Logging.h>
 #include <I18n.h>
+#include <Logging.h>
 #include <strings.h>
 
 #include <cstdio>
@@ -10,6 +10,7 @@
 #include <string>
 
 #include "../activities/ActivityManager.h"
+#include "../activities/settings/RssFeedListActivity.h"
 #include "ShelfFolderActivity.h"
 #include "ShelfState.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
@@ -28,7 +29,6 @@
 #include "minesweeper/MinesweeperActivity.h"
 #include "murdle/MurdleActivity.h"
 #include "player/PlayerActivity.h"
-#include "../activities/settings/RssFeedListActivity.h"
 #include "seasalt/SeaSaltActivity.h"
 #include "solitaire/SolitaireActivity.h"
 #include "study/StudyActivity.h"
@@ -39,6 +39,7 @@
 #include "trivia/TriviaActivity.h"
 #include "ui/ToyboxIcons.h"
 #include "wavelength/WavelengthActivity.h"
+#include "wifi-scanner/WifiScannerActivity.h"
 #include "xkcd/XkcdActivity.h"
 #include "yahtzee/YahtzeeActivity.h"
 
@@ -71,6 +72,7 @@ constexpr shelf::Item kGames[] = {
 };
 constexpr shelf::Item kApps[] = {
     {"PLAYER", &icon_study_32, &PlayerActivity::create},
+    {"WIFI SCANNER", &icon_study_32, &WifiScannerActivity::create},
     {"STUDY", &icon_study_32, &StudyActivity::create},
     {"HACKER NEWS", &icon_hackernews_32, &HackerNewsActivity::create},
     {"XKCD", &icon_xkcd_32, &XkcdActivity::create},

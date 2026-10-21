@@ -143,6 +143,12 @@ jobs:
             - Without a deck the app offers the download instead of drawing
               blank cards.
 
+            **WiFi Scanner (Apps > WIFI SCANNER)**
+
+            - Passive 2.4 GHz access-point scanner: SSID, BSSID, RSSI, channel
+              and encryption, with a per-AP signal meter and a channel analyser.
+              It only listens; it never transmits.
+
             **Other fixes**
 
             - RSS Reader: Back goes one level up instead of jumping to Home.
