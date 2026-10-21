@@ -3,12 +3,27 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = fs.readFileSync('../../src/apps_local/battleship/web/BattleshipPage.html', 'utf8');
 function element() {
-  const node = {textContent:'', value:'0', disabled:true, className:'', hidden:false, children:[], _innerHTML:'', appendChild(child) { this.children.push(child); }, setAttribute() {}};
+  const node = {
+    textContent:'', value:'0', disabled:true, className:'', hidden:false, children:[], _innerHTML:'', dataset:{},
+    appendChild(child) { this.children.push(child); },
+    replaceChildren(...children) { this.children = children; },
+    addEventListener(name, fn) { this[`on${name}`] = fn; },
+    setAttribute() {},
+    classList: { contains() { return false; } }
+  };
   Object.defineProperty(node,'innerHTML',{get(){return this._innerHTML;},set(value){this._innerHTML=value;this.children=[];}});
+  Object.defineProperty(node,'options',{get(){return this.children;}});
   return node;
 }
-const ids = ['app','status','phase','turn','profile','placement','feedback','hair','eyes','mouth','ship','grid','save','randomize','ready','battle','target','own','surrender','rematch','avatar','playerName','hudName','hud','setupState','hudTurn','ownSummary','enemySummary','enemyName','youPanel','enemyPanel','eventBanner','resultBanner'];
+const ids = [
+  'app','status','phase','turn','profile','placement','feedback','hair','eyes','mouth','ship','grid','save','randomize','ready','battle','target','own','surrender','rematch','avatar','playerName','hudName','hud','setupState','hudTurn','ownSummary','enemySummary','enemyName','youPanel','enemyPanel','eventBanner','resultBanner',
+  'devicePlayer','devicePlayerName','deviceCallsign','devicePlayerMode','deviceMetrics','deviceRadar','savedPlayer','useGuestPlayer','playerPin','loginPlayer','guestCallsignActions','registerName','registerPin','registerPlayer','playerMessage',
+  'playerLogin','deviceProfileToggle','deviceProfileDetails','guestRegistration'
+];
 const elements = Object.fromEntries(ids.map(id => [id,element()]));
+elements.app.classList = { contains: name => elements.app.className.split(/\s+/).includes(name) };
+const guestButtons=[element(),element(),element()];
+guestButtons.forEach((button,index)=>button.dataset.slot=String(index));
 const cols=[element(),element()],rows=[element(),element()];
 const sockets = [], events = {}, sent = [], store = new Map(), delayed=[];
 let reconnect, now=1000;
@@ -22,14 +37,37 @@ const token = '0123456789abcdef0123456789abcdef';
 const resume = 'fedcba9876543210fedcba9876543210';
 const sessionStorage = { getItem:key=>store.has(key)?store.get(key):null, setItem:(key,value)=>store.set(key,value), removeItem:key=>store.delete(key) };
 const avatarSvg={base:'<svg></svg>',hair:{BALD:'<svg></svg>'},eyes:{GRIM:'<svg></svg>',SHADES:'<svg></svg>'},mouth:{GRIN:'<svg></svg>'}};
+const playerState = {
+  ok:true,
+  persistence:true,
+  current:{name:'SPIKY WINK BEARD',callsign:'SPIKY WINK BEARD',registered:false,canRegister:false},
+  profile:{xp:0,level:1,playerClass:'ALL-ROUNDER',radar:[0,0,0,0,0,0],battleship:{rank:'NO RANK',wins:0,losses:0,draws:0,bestStreak:0}},
+  players:[]
+};
 vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], {
   avatarSvg,
-  document: {getElementById:id=>elements[id], createElement:element, querySelectorAll:q=>q==='.col-labels'?cols:rows},
-  fetch: async (path,options) => { assert.equal(path,'/battleship/session'); assert.equal(options.cache,'no-store'); return {ok:true,text:async()=>token}; },
+  document: {
+    getElementById:id=>elements[id],
+    createElement:element,
+    querySelectorAll:q=>q==='.col-labels'?cols:q==='#guestCallsignActions button'?guestButtons:rows
+  },
+  fetch: async (path,options={}) => {
+    if(path==='/battleship/session') {
+      assert.equal(options.cache,'no-store');
+      return {ok:true,text:async()=>token};
+    }
+    if(path.startsWith('/player/state?token=')) return {ok:true,json:async()=>playerState};
+    if(path==='/player/action') return {ok:true,json:async()=>playerState};
+    throw new Error(`unexpected fetch ${path}`);
+  },
   location:{hostname:'crossplay.local'}, WebSocket:Socket, sessionStorage,
   window:{addEventListener:(name,fn)=>events[name]=fn}, Uint8Array,
   Date:{now:()=>now},
-  setTimeout:(fn,ms)=>{if(ms===2000){reconnect=fn;return 1;}if(ms>=1000){delayed.push(fn);return 2;}fn();return 3;}, clearTimeout:()=>{reconnect=null;}
+  setTimeout:(fn,ms)=>{if(ms===2000){reconnect=fn;return 1;}if(ms>=1000){delayed.push(fn);return 2;}fn();return 3;},
+  clearTimeout:()=>{reconnect=null;},
+  setInterval:()=>1,
+  encodeURIComponent,
+  URLSearchParams
 });
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incoming='A'.repeat(18))=>({type:'s',phase,myTurn,w:winner,b:board,i:incoming,s:sunk});
@@ -46,7 +84,12 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   assert.match(html,/ship-sunk-flash/);
   assert.match(html,/d\.type==='peer'/);
   assert.match(html,/d\.type==='f'/);
+  assert.match(html,/id="deviceProfileToggle"/);
+  assert.match(html,/id="playerLogin"/);
   await flush();
+  assert.equal(elements.devicePlayerName.textContent,'SPIKY WINK BEARD');
+  assert.equal(elements.deviceProfileToggle.hidden,true);
+  assert.equal(elements.deviceProfileDetails.hidden,true);
   const socket=sockets[0];socket.onopen();
   socket.onmessage({data:JSON.stringify({type:'peer',name:'SPIKY WINK BEARD'})});
   assert.equal(elements.enemyName.textContent,'SPIKY WINK BEARD');
@@ -73,7 +116,6 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   const randomized={...view,revision:2,ships:[[0,1],[10,1],[20,1],[30,1],[40,1]]};
   socket.onmessage({data:JSON.stringify(randomized)});
 
-  // First tap selects an existing ship; a second quick tap rotates it.
   now=2000;elements.grid.children[0].onclick();
   assert.equal(sent.length,2);
   now=2200;elements.grid.children[0].onclick();
@@ -100,7 +142,6 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   assert.equal(elements.ownSummary.children.length,5);
   assert.equal(elements.enemySummary.children.length,5);
 
-  // A target is only armed on the first tap and fired on the second tap.
   elements.target.children[12].onclick();
   assert.equal(sent.length,4);
   assert.match(elements.target.children[12].className,/selected-target/);
@@ -114,7 +155,6 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   assert.match(elements.enemyPanel.className,/active/);
   assert.equal(elements.hudTurn.textContent,'SPIKY WINK BEARD TURN');
 
-  // Sunk ships flash, announce the event, then remain as dark segments without X marks.
   socket.onmessage({data:JSON.stringify(emptyState('playing',false,-1,1,'AAAAAw'+ 'A'.repeat(28)))});
   socket.onmessage({data:JSON.stringify({type:'f',h:[5,0,0,0,0]})});
   assert.equal(elements.eventBanner.textContent,'YOU SANK SPIKY WINK BEARD: CARRIER');
@@ -132,7 +172,6 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   resumed.onmessage({data:JSON.stringify(emptyState('playing',true))});
   resumed.onmessage({data:JSON.stringify({type:'f',h:[1,0,0,0,0]})});
 
-  // Surrender also needs an explicit second confirmation tap.
   elements.surrender.onclick();
   assert.equal(sent.length,6);
   assert.equal(elements.surrender.textContent,'CONFIRM SURRENDER');
@@ -156,5 +195,5 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   events.pagehide();assert.equal(reconnect,null);
   events.pageshow({persisted:true});await flush();
   assert.equal(sockets.length,3);
-  console.log('Browser page: peer identity, sunk announcements/visuals, active-turn inversion, fleet damage boxes, two-tap fire, surrender, secure resume and rematch passed');
+  console.log('Browser page: compact player login/profile, peer identity, sunk announcements/visuals, active-turn inversion, fleet damage boxes, two-tap fire, surrender, secure resume and rematch passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

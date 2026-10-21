@@ -5,10 +5,14 @@
 #include <Memory.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstring>
 
 #include "../Shelf.h"
+#include "../leaderboard/RankSystem.h"
+#include "../player/PlayerProgression.h"
+#include "../player/PlayerRuntime.h"
 #include "../ui/Toybox.h"
 #include "../ui/ToyboxFonts.h"
 #include "../ui/ToyboxSeed.h"
@@ -47,6 +51,10 @@ std::unique_ptr<Activity> BattleshipActivity::create(GfxRenderer& renderer, Mapp
 void BattleshipActivity::onEnter() {
   Activity::onEnter();
   toybox::ensureFonts(renderer);
+  // Make the device-wide identity available before the Battleship front door
+  // is drawn. recordCurrentMatch() also initializes lazily, but that is too late
+  // for a player name/rank that must be visible before the first shot.
+  (void)player::runtime().begin();
   // Mixed from the clock, so two games in a row are not the same game. The
   // fleet you are given is the first thing you see, and a deterministic one
   // would be noticed by the second session.
@@ -384,10 +392,38 @@ void BattleshipActivity::drawMiniGrid(const Rect& slot) const {
 bshipui::StartModel BattleshipActivity::startModel() const {
   bshipui::StartModel model;
   model.hasSavedGame = hasSavedGame;
+  model.selected = startIndex;
+
+  // Keep the legacy counters only as a fallback if player storage is genuinely
+  // unavailable. In normal operation the shared PlayerRuntime is the one source
+  // of truth for what this screen shows.
   model.played = played;
   model.won = won;
   model.streak = streak;
-  model.selected = startIndex;
+
+  if (!player::runtime().ready()) return model;
+
+  const player::Player* active = player::runtime().activePlayer();
+  model.playerName = active == nullptr ? "GUEST" : active->name;
+
+  std::array<player::GameStats, player::PlayerRuntime::kGameCount> stats{};
+  size_t count = 0;
+  if (player::runtime().currentStats(stats.data(), stats.size(), count) != player::StoreResult::Ok) return model;
+
+  const player::ProgressionSnapshot progression = player::ProgressionSystem::summarize(stats.data(), count);
+  model.playerLevel = progression.level;
+
+  for (size_t i = 0; i < count; ++i) {
+    if (stats[i].game != player::GameId::Battleship) continue;
+    model.won = static_cast<int>(stats[i].wins);
+    model.losses = static_cast<int>(stats[i].losses);
+    model.draws = static_cast<int>(stats[i].draws);
+    model.played = model.won + model.losses + model.draws;
+    model.streak = static_cast<int>(stats[i].currentStreak);
+    model.playerRank = leaderboard::RankSystem::forWins(stats[i].wins).name;
+    break;
+  }
+
   return model;
 }
 
@@ -526,6 +562,7 @@ void BattleshipActivity::beginPlacement() {
   selectedShip = -1;
   aimCell = -1;
   computerThinking = false;
+  gameResultHandled = false;
   bship::randomFleet(myFleet, seed);
   std::snprintf(report, sizeof(report), "TAP A SHIP TO MOVE IT");
   view = View::Place;
@@ -853,6 +890,11 @@ void BattleshipActivity::playComputerShot() {
 }
 
 void BattleshipActivity::finishGame() {
+  // A terminal state can arrive through more than one transport path. Finalize
+  // it once so legacy counters and shared progression cannot be double-booked.
+  if (gameResultHandled) return;
+  gameResultHandled = true;
+
   ++played;
   const bool mine = bship::winner(game) == mySide;
   if (mine) {
@@ -861,6 +903,15 @@ void BattleshipActivity::finishGame() {
   } else {
     streak = 0;
   }
+
+  // Only the local identity is authoritative here. A computer/browser/remote
+  // opponent is not invented as a persistent local profile merely to award XP.
+  const player::PlayerServiceResult progression = player::runtime().recordCurrentMatch(
+      player::GameId::Battleship, mine ? player::MatchOutcome::Win : player::MatchOutcome::Loss);
+  if (progression != player::PlayerServiceResult::Ok) {
+    LOG_ERR("BSHIP", "player progression failed: %d", static_cast<int>(progression));
+  }
+
   // The result replaces the last shot's narration. Both are worth saying and
   // only one of them is worth saying twice.
   const int loser = mine ? opponentSide() : mySide;
@@ -943,6 +994,7 @@ const char* BattleshipActivity::linkHeadline() const {
 }
 
 void BattleshipActivity::onMatchStart(const bool goesFirst) {
+  gameResultHandled = false;
   // Side 0 is whoever holds the first turn, because the rules let a side place
   // its fleet only on its own turn. Both devices compute the same answer from
   // the same coin toss, so there is nothing to agree on and nothing to show.

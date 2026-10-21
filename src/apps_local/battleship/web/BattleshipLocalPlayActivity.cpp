@@ -15,6 +15,7 @@
 #include "../../../fontIds.h"
 #include "../../../util/QrUtils.h"
 #include "../../player/PlayerAvatar.h"
+#include "../../player/PlayerRuntime.h"
 #include "../../ui/Toybox.h"
 #include "../../ui/ToyboxFonts.h"
 #include "../../ui/ToyboxSeed.h"
@@ -104,6 +105,7 @@ void BattleshipLocalPlayActivity::onEnter() {
           activity.x4AimCell_ = -1;
           std::snprintf(activity.x4Report_, sizeof(activity.x4Report_), "%s SURRENDERED", activity.browserPlayer_.name());
         }
+        activity.recordMatchIfFinished();
         activity.browser_.publish(bshipweb::browserSnapshot(activity.browserGame_, activity.browser_.clientSeen()));
         activity.requestUpdate();
         return true;
@@ -272,6 +274,7 @@ void BattleshipLocalPlayActivity::startMatchIfReady() {
   }
   x4AimCell_ = -1;
   x4SurrenderArmed_ = false;
+  resultRecorded_ = false;
   x4Report_[0] = '\0';
   std::snprintf(x4Status_, sizeof(x4Status_), "WAITING FOR %s", browserPlayer_.name());
   stage_ = Stage::Playing;
@@ -441,6 +444,7 @@ void BattleshipLocalPlayActivity::fireX4Shot() {
   reportLastShot(false);
   seenLastShot_ = browserGame_.lastShot;
   x4AimCell_ = -1;
+  recordMatchIfFinished();
   browser_.publish(bshipweb::browserSnapshot(browserGame_, browser_.clientSeen()));
   requestUpdate();
 }
@@ -464,6 +468,7 @@ void BattleshipLocalPlayActivity::surrenderX4() {
   x4SurrenderArmed_ = false;
   x4AimCell_ = -1;
   std::snprintf(x4Report_, sizeof(x4Report_), "YOU SURRENDERED");
+  recordMatchIfFinished();
   browser_.publish(bshipweb::browserSnapshot(browserGame_, browser_.clientSeen()));
   requestUpdate();
 }
@@ -519,6 +524,18 @@ void BattleshipLocalPlayActivity::reportLastShot(const bool browserShot) {
     std::snprintf(x4Status_, sizeof(x4Status_), "YOUR MOVE");
   else
     std::snprintf(x4Status_, sizeof(x4Status_), "WAITING FOR %s", browserPlayer_.name());
+}
+
+void BattleshipLocalPlayActivity::recordMatchIfFinished() {
+  if (resultRecorded_ || stage_ != Stage::Playing || !bship::over(browserGame_)) return;
+  resultRecorded_ = true;
+
+  const bool x4Won = bship::winner(browserGame_) == 0;
+  const player::PlayerServiceResult progression = player::runtime().recordCurrentMatch(
+      player::GameId::Battleship, x4Won ? player::MatchOutcome::Win : player::MatchOutcome::Loss);
+  if (progression != player::PlayerServiceResult::Ok) {
+    LOG_ERR("BSHIPWEB", "player progression failed: %d", static_cast<int>(progression));
+  }
 }
 
 void BattleshipLocalPlayActivity::routeChoiceInput() {

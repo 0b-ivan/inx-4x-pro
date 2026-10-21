@@ -13,9 +13,6 @@ bool BrowserPlayer::apply(bship::Game& game, const Command& c) {
   if (c.revision != view_.revision || view_.revision == std::numeric_limits<uint32_t>::max()) return false;
 
   if (c.kind == CommandKind::Resume) {
-    // Transport verifies the resume capability. Application state only accepts
-    // reconnects once the browser fleet has been committed, so an unfinished
-    // placement can never be resurrected after disconnect.
     return view_.profile && view_.ready && game.side[side].placed;
   }
 
@@ -33,13 +30,7 @@ bool BrowserPlayer::apply(bship::Game& game, const Command& c) {
   }
 
   if (c.kind == CommandKind::Surrender) {
-    if (!view_.ready || !bship::bothPlaced(game) || bship::over(game)) return false;
-    for (int ship = 0; ship < bship::kShipCount; ++ship) {
-      for (int cell = 0; cell < bship::kShipLength[ship]; ++cell) {
-        bship::markShot(game.side[side], bship::shipCell(game.side[side].fleet.ships[ship], cell));
-      }
-    }
-    game.lastShot = 0;
+    if (!view_.ready || !bship::surrender(game, side)) return false;
     ++view_.revision;
     return true;
   }
