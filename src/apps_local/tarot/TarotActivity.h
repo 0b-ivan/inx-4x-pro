@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+
 #include "../../activities/Activity.h"
 #include "TarotAssets.h"
 #include "TarotDeck.h"
@@ -11,12 +12,16 @@ class TarotActivity final : public Activity {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+
  private:
   void drawNext();
+  void startDownload();
   void drawTextCard();
+  void drawBottomPanel(const char* title, const char* body, int maxLines);
   TarotDeck deck_;
   TarotAssets assets_;
   int card_ = -1;
   bool showMeaning_ = false;
   bool history_ = false;
+  bool awaitRelease_ = false;
 };

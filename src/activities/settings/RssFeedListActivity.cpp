@@ -26,7 +26,7 @@ void RssFeedListActivity::onEnter() {
 void RssFeedListActivity::onExit() { Activity::onExit(); }
 
 void RssFeedListActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (pickerMode) {
       shelf::leave(renderer, mappedInput);
     } else {
@@ -35,7 +35,7 @@ void RssFeedListActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     handleSelection();
     return;
   }
@@ -52,8 +52,9 @@ void RssFeedListActivity::loop() {
     const int pageStart = (selectedIndex / pageItems) * pageItems;
 
     int touchedRow = -1;
-    const auto rowTouch = mappedInput.rowTouch(touchedRow, contentTop, rowStep, std::min(pageItems, itemCount - pageStart),
-                                               0, renderer.getScreenWidth(), rowHeight);
+    const auto rowTouch =
+        mappedInput.rowTouch(touchedRow, contentTop, rowStep, std::min(pageItems, itemCount - pageStart), 0,
+                             renderer.getScreenWidth(), rowHeight);
     if (rowTouch != MappedInputManager::RowTouch::None && touchedRow >= 0) {
       const int touchedIndex = pageStart + touchedRow;
       if (touchedIndex < itemCount) {

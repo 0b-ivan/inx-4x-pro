@@ -241,6 +241,60 @@ patch(
     marker="IDLE_POWER_SAVING_MS",
 )
 
+# WiFi Scanner reads per-result scan fields and the full auth-mode enum that
+# Arduino-ESP32 exposes on the device. The simulator's WiFi.h ships a two-value
+# auth enum and no scan-indexed channel()/BSSID(), so the passive scanner builds
+# on hardware and NOT here. Mirror the device surface with fake-but-plausible
+# values so the scanner's layout can be exercised in the simulator.
+patch(
+    src / "WiFi.h",
+    "enum wifi_auth_mode_t { WIFI_AUTH_OPEN = 0, WIFI_AUTH_WPA2_PSK = 3 };",
+    "enum wifi_auth_mode_t {\n"
+    "  WIFI_AUTH_OPEN = 0,\n"
+    "  WIFI_AUTH_WEP = 1,\n"
+    "  WIFI_AUTH_WPA_PSK = 2,\n"
+    "  WIFI_AUTH_WPA2_PSK = 3,\n"
+    "  WIFI_AUTH_WPA_WPA2_PSK = 4,\n"
+    "  WIFI_AUTH_WPA2_ENTERPRISE = 5,\n"
+    "  WIFI_AUTH_WPA3_PSK = 6,\n"
+    "  WIFI_AUTH_WPA2_WPA3_PSK = 7\n"
+    "};",
+    "WiFi wifi_auth_mode_t (full enum)",
+    marker="WIFI_AUTH_WPA3_PSK",
+)
+
+patch(
+    src / "WiFi.h",
+    "  int32_t channel() { return currentStatus == WL_CONNECTED ? 1 : 0; }",
+    "  int32_t channel(int i) {\n"
+    "    const auto &networks = configuredNetworks();\n"
+    "    return i >= 0 && i < static_cast<int>(networks.size())\n"
+    "               ? 1 + (i * 5) % 11\n"
+    "               : 0;\n"
+    "  }\n"
+    "  int32_t channel() { return currentStatus == WL_CONNECTED ? 1 : 0; }",
+    "WiFi channel(int) scan-result overload",
+    marker="channel(int i)",
+)
+
+patch(
+    src / "WiFi.h",
+    "  uint8_t *BSSID(uint8_t *bssid = nullptr) {",
+    "  uint8_t *BSSID(int i) {\n"
+    "    static uint8_t scanBssid[6];\n"
+    "    scanBssid[0] = 0xDE;\n"
+    "    scanBssid[1] = 0xAD;\n"
+    "    scanBssid[2] = 0xBE;\n"
+    "    scanBssid[3] = 0xEF;\n"
+    "    scanBssid[4] = 0x00;\n"
+    "    scanBssid[5] = static_cast<uint8_t>(i);\n"
+    "    return scanBssid;\n"
+    "  }\n"
+    "  uint8_t *BSSID(uint8_t *bssid = nullptr) {",
+    "WiFi BSSID(int) scan-result overload",
+    marker="BSSID(int i)",
+)
+
 
 # -- the seam, checked rather than remembered -------------------------------
 #

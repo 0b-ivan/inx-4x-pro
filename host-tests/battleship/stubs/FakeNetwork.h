@@ -1,17 +1,30 @@
 #pragma once
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 #define PROGMEM
 #define LOG_DBG(...) ((void)0)
 #define LOG_INF(...) ((void)0)
 #define LOG_ERR(...) ((void)0)
-constexpr int WIFI_AP = 1, WIFI_STA = 2, WIFI_OFF = 0, WL_CONNECTED = 3, HTTP_GET = 0;
+constexpr int WIFI_AP = 1, WIFI_STA = 2, WIFI_OFF = 0, WL_CONNECTED = 3, HTTP_GET = 0, HTTP_POST = 1;
 inline void delay(int) {}
 inline uint32_t clockMs = 0;
 inline uint32_t millis() { return clockMs; }
+
+struct String {
+  std::string value;
+  String() = default;
+  String(const char* text) : value(text ? text : "") {}
+  String(std::string text) : value(std::move(text)) {}
+  const char* c_str() const { return value.c_str(); }
+  int toInt() const { return std::atoi(value.c_str()); }
+  bool operator==(const char* rhs) const { return value == (rhs ? rhs : ""); }
+};
+
 struct IPAddress {
   std::string toString() const { return "192.168.4.1"; }
 };
@@ -43,7 +56,9 @@ inline FakeMdns MDNS;
 struct WebServer {
   inline static WebServer* instance = nullptr;
   std::map<std::string, std::function<void()>> routes;
+  std::map<std::string, String> args;
   std::string response;
+  int requestMethod = HTTP_GET;
   explicit WebServer(int) { instance = this; }
   template <class F>
   void on(const char* path, int, F fn) {
@@ -57,7 +72,12 @@ struct WebServer {
   void sendHeader(const char*, const char*) {}
   void send_P(int, const char*, const char*, size_t) {}
   void send(int, const char*, const char* text) { response = text; }
-  int method() { return HTTP_GET; }
+  bool hasArg(const char* name) const { return name != nullptr && args.find(name) != args.end(); }
+  String arg(const char* name) const {
+    const auto it = name == nullptr ? args.end() : args.find(name);
+    return it == args.end() ? String{} : it->second;
+  }
+  int method() { return requestMethod; }
 };
 enum WStype_t { WStype_CONNECTED, WStype_DISCONNECTED, WStype_TEXT, WStype_BIN, WStype_FRAGMENT_TEXT_START };
 struct WebSocketsServer {
