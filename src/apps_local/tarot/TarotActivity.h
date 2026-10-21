@@ -17,6 +17,7 @@ class TarotActivity final : public Activity {
   void drawNext();
   void startDownload();
   void drawTextCard();
+  void drawBottomPanel(const char* text, int maxLines);
   TarotDeck deck_;
   TarotAssets assets_;
   int card_ = -1;
