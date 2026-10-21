@@ -25,6 +25,25 @@
 #include "insider/InsiderActivity.h"
 #include "instapaper/InstapaperActivity.h"
 #include "jaipur/JaipurActivity.h"
+#include "wifi-scanner/WifiScannerActivity.h"
+#include "probe-sniffer/ProbeSnifferActivity.h"
+#include "crowd-density/CrowdDensityActivity.h"
+#include "deauth-detector/DeauthDetectorActivity.h"
+#include "packet-monitor/PacketMonitorActivity.h"
+#include "network-monitor/NetworkMonitorActivity.h"
+#include "network-change/NetworkChangeActivity.h"
+#include "device-fingerprinter/DeviceFingerprinterActivity.h"
+#include "ap-history-logger/ApHistoryLoggerActivity.h"
+#include "wardriving/WardrivingActivity.h"
+#include "wifi-heatmap/WifiHeatMapActivity.h"
+#include "signal-triangulation/SignalTriangulationActivity.h"
+#include "vendor-oui/VendorOuiActivity.h"
+#include "wifi-creds/WifiCredsActivity.h"
+#include "tracker-detector/TrackerDetectorActivity.h"
+#include "perimeter-watch/PerimeterWatchActivity.h"
+#include "credential-viewer/CredentialViewerActivity.h"
+#include "barcode/BarcodeActivity.h"
+#include "key-copier/KeyCopierActivity.h"
 #include "knucklebones/KnucklebonesActivity.h"
 #include "minesweeper/MinesweeperActivity.h"
 #include "murdle/MurdleActivity.h"
@@ -80,6 +99,25 @@ constexpr shelf::Item kApps[] = {
     {"AUTHENTICATOR", &icon_study_32, &TotpActivity::create},
     {"GET BOOKS", &icon_getbooks_32, &OpdsBookBrowserActivity::create},
     {"INSTAPAPER", &icon_instapaper_32, &InstapaperActivity::create},
+    {"WIFI SCANNER", &icon_study_32, &WifiScannerActivity::create},
+    {"PROBE SNIFFER", &icon_nearby_32, &ProbeSnifferActivity::create},
+    {"CROWD DENSITY", &icon_nearby_32, &CrowdDensityActivity::create},
+    {"DEAUTH DETECTOR", &icon_minesweeper_32, &DeauthDetectorActivity::create},
+    {"PACKET MONITOR", &icon_study_32, &PacketMonitorActivity::create},
+    {"NETWORK MONITOR", &icon_study_32, &NetworkMonitorActivity::create},
+    {"NET CHANGE", &icon_study_32, &NetworkChangeActivity::create},
+    {"DEV FINGERPRINT", &icon_nearby_32, &DeviceFingerprinterActivity::create},
+    {"AP HISTORY", &icon_study_32, &ApHistoryLoggerActivity::create},
+    {"WARDRIVING", &icon_study_32, &WardrivingActivity::create},
+    {"WIFI HEATMAP", &icon_study_32, &WifiHeatMapActivity::create},
+    {"TRIANGULATION", &icon_study_32, &SignalTriangulationActivity::create},
+    {"VENDOR OUI", &icon_study_32, &VendorOuiActivity::create},
+    {"WIFI CREDS QR", &icon_study_32, &WifiCredsActivity::create},
+    {"TRACKER DETECT", &icon_minesweeper_32, &TrackerDetectorActivity::create},
+    {"PERIMETER WATCH", &icon_minesweeper_32, &PerimeterWatchActivity::create},
+    {"CRED VIEWER", &icon_study_32, &CredentialViewerActivity::create},
+    {"BARCODE GEN", &icon_study_32, &BarcodeActivity::create},
+    {"KEY COPIER", &icon_study_32, &KeyCopierActivity::create},
 };
 
 // The two rows Home grows, in reading order. Titles are Title Case because
