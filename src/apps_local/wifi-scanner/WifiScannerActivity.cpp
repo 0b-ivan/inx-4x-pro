@@ -8,6 +8,7 @@
 #include <climits>
 #include <string>
 
+#include "DevMode.h"
 #include "FreeInkUICore.h"
 #include "MappedInputManager.h"
 #include "apps_local/Shelf.h"
@@ -77,6 +78,9 @@ void WifiScannerActivity::onEnter() {
   selectorIndex = 0;
   sortBySignal = true;
   targetIndex = -1;
+  // Scanning walks off the AP channel for seconds at a time, so yield Developer
+  // Mode's radio for the lifetime of the scanner rather than fight it mid-flash.
+  devmode::pause();
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   startScan();
@@ -86,6 +90,7 @@ void WifiScannerActivity::onEnter() {
 void WifiScannerActivity::onExit() {
   WiFi.scanDelete();
   WiFi.mode(WIFI_MODE_NULL);
+  devmode::resume();
   Activity::onExit();
 }
 
