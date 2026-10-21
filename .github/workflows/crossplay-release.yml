@@ -116,16 +116,46 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.14.3
+            ### What is new in 1.15.0
 
-            - Battleship browser double-tap zoom is disabled so taps stay focused on the game board.
-            - Touch scrolling and mouse-wheel scrolling are locked while the active match screen is open.
-            - Browser context menu / right click is disabled on the Battleship page.
-            - iOS long-press callouts are suppressed during the match.
-            - Setup and fleet placement remain scrollable, and Battleship's own two-tap target/fire interaction is unchanged.
+            The first stable 1.15 build. It brings the Player system out of the
+            1.15.x alphas and folds in the Tarot, RSS and German fixes.
+
+            **Player system (Apps > PLAYER)**
+
+            - Shared profiles on the device: callsign, XP, level, class and a
+              play-style radar, with per-game progression.
+            - Saved-player selection, PIN login and a guest fallback that keeps
+              working when persistent storage is unavailable.
+            - Battleship feeds the profile (rank, W/L/D, streak), and profile
+              changes are locked while a match is live so progress lands on the
+              right player.
+            - Identity, PIN hashes and XP stay authoritative on the X4; the
+              browser view only reads them.
+
+            **Tarot**
+
+            - The deck downloads again (the old link 404'd on fresh installs).
+            - Cards are drawn upright, in the app and on the sleep screen.
+            - Meanings and hints wrap onto a panel instead of running off the
+              edge, and the card's name shows above its meaning.
+            - German card names and meanings, verified against Rider-Waite.
+            - Without a deck the app offers the download instead of drawing
+              blank cards.
+
+            **Other fixes**
+
+            - RSS Reader: Back goes one level up instead of jumping to Home.
+            - German: counters like the Authenticator's `0 / 16` no longer read
+              `0 PUNKTE`; STUDY reads LERNEN.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
+
+            ### Still in progress
+
+            - Player SQLite persistence wants a smoke test on real hardware;
+              achievements, Chess Elo and a cross-game leaderboard are unfinished.
 
             ### Install
 
