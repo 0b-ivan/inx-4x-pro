@@ -24,21 +24,28 @@ constexpr int kPanelMargin = 20;
 constexpr int kPanelPad = 12;
 }  // namespace
 
-// Draws wrapped text on an opaque panel anchored to the bottom of the screen,
-// so it stays legible over a card image instead of running off its edges.
-void TarotActivity::drawBottomPanel(const char* text, const int maxLines) {
+// Draws an optional bold title and wrapped body on an opaque panel anchored to
+// the bottom of the screen, so prose stays legible over a card image instead of
+// running off its edges. A null title draws body only (hints).
+void TarotActivity::drawBottomPanel(const char* title, const char* body, const int maxLines) {
   const int w = renderer.getScreenWidth(), h = renderer.getScreenHeight();
   const int textWidth = w - 2 * kPanelMargin - 2 * kPanelPad;
-  const std::vector<std::string> lines = renderer.wrappedText(kProseFontId, text, textWidth, maxLines);
-  if (lines.empty()) return;
+  const std::vector<std::string> lines = renderer.wrappedText(kProseFontId, body, textWidth, maxLines);
+  const bool hasTitle = title != nullptr && title[0] != '\0';
+  if (lines.empty() && !hasTitle) return;
 
   const int lineHeight = renderer.getLineHeight(kProseFontId);
-  const int panelHeight = static_cast<int>(lines.size()) * lineHeight + 2 * kPanelPad;
+  const int titleHeight = hasTitle ? lineHeight + 6 : 0;
+  const int panelHeight = titleHeight + static_cast<int>(lines.size()) * lineHeight + 2 * kPanelPad;
   const int panelY = h - panelHeight - kPanelMargin;
   renderer.fillRect(kPanelMargin, panelY, w - 2 * kPanelMargin, panelHeight, false);
   renderer.drawRect(kPanelMargin, panelY, w - 2 * kPanelMargin, panelHeight, true);
 
   int y = panelY + kPanelPad;
+  if (hasTitle) {
+    renderer.drawCenteredText(kProseFontId, y, title, true, EpdFontFamily::BOLD);
+    y += titleHeight;
+  }
   for (const std::string& line : lines) {
     renderer.drawCenteredText(kProseFontId, y, line.c_str(), true);
     y += lineHeight;
@@ -151,18 +158,19 @@ void TarotActivity::drawTextCard() {
     renderer.drawRect(0, 0, w, h, true);
     renderer.drawCenteredText(toybox::kDisplayFontId, h / 2 - 48, tr(STR_TAROT), true);
     if (TarotAssets::installed())
-      drawBottomPanel(tr(STR_TAROT_DRAW_HINT), 2);
+      drawBottomPanel(nullptr, tr(STR_TAROT_DRAW_HINT), 2);
     else
-      drawBottomPanel(tr(STR_TAROT_NEEDS_DOWNLOAD), 3);
+      drawBottomPanel(nullptr, tr(STR_TAROT_NEEDS_DOWNLOAD), 3);
     return;
   }
 
   const TarotMeaning meaning = assets_.meaning(card_);
   if (TarotAssets::installed() && tarot::drawCard(renderer, card_, 0, 0, w, h)) {
     if (showMeaning_)
-      drawBottomPanel(tarotMeaningLocalized(card_, meaning.meaning.c_str()), 5);
+      drawBottomPanel(tarotNameLocalized(card_, meaning.name.c_str()),
+                      tarotMeaningLocalized(card_, meaning.meaning.c_str()), 4);
     else
-      drawBottomPanel(tr(STR_TAROT_CONTROL_HINT), 2);
+      drawBottomPanel(nullptr, tr(STR_TAROT_CONTROL_HINT), 2);
     return;
   }
 
@@ -172,11 +180,13 @@ void TarotActivity::drawTextCard() {
   char title[32];
   std::snprintf(title, sizeof(title), tr(STR_TAROT_CARD_FORMAT), card_ + 1);
   renderer.drawCenteredText(toybox::kUiFontId, 108, title, true);
-  renderer.drawCenteredText(toybox::kDisplayFontId, h / 2 - 45, meaning.name.c_str(), true);
+  renderer.drawCenteredText(kProseFontId, h / 2 - 45, tarotNameLocalized(card_, meaning.name.c_str()), true,
+                            EpdFontFamily::BOLD);
   if (showMeaning_)
-    drawBottomPanel(tarotMeaningLocalized(card_, meaning.meaning.c_str()), 5);
+    drawBottomPanel(tarotNameLocalized(card_, meaning.name.c_str()),
+                    tarotMeaningLocalized(card_, meaning.meaning.c_str()), 4);
   else
-    drawBottomPanel(tr(STR_TAROT_CONTROL_HINT), 2);
+    drawBottomPanel(nullptr, tr(STR_TAROT_CONTROL_HINT), 2);
 }
 
 void TarotActivity::render(RenderLock&&) {
@@ -189,7 +199,8 @@ void TarotActivity::render(RenderLock&&) {
     for (size_t i = 0; i < history.size() && i < 12; ++i, y += lineHeight) {
       const TarotMeaning meaning = assets_.meaning(history[i]);
       char line[64];
-      std::snprintf(line, sizeof(line), "%2u.  %s", static_cast<unsigned>(i + 1), meaning.name.c_str());
+      std::snprintf(line, sizeof(line), "%2u.  %s", static_cast<unsigned>(i + 1),
+                    tarotNameLocalized(history[i], meaning.name.c_str()));
       renderer.drawText(kProseFontId, kPanelMargin + 12, y, line, true);
     }
     renderer.drawCenteredText(kProseFontId, renderer.getScreenHeight() - 48, tr(STR_TAROT_RETURN_HINT), true);
