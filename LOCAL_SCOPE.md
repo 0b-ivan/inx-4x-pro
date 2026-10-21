@@ -22,6 +22,8 @@ instead of a phone**. Twenty-one apps are here now: seventeen games, a
 spaced-repetition trainer, a Hacker News reader, an xkcd viewer and a
 catalog browser.
 
+Active wireless tools (deauth, beacon flood, evil-twin) are in scope.
+
 ## The one rule that keeps this sustainable
 
 Upstream moves fast and we want its work. Every change we make is measured by
