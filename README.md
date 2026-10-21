@@ -65,6 +65,24 @@ restyled to match the design language the apps use.
 | **Get Books**    | Browse any OPDS catalog and download straight to the card, no computer.      |
 | **Instapaper**   | Your read-later queue, synced both ways: reading position and archiving.     |
 | **Wifi Scanner** | Passive 2.4 GHz survey: AP list, signal history graph, channel spectrum.     |
+| **Probe Sniffer** | Capture 802.11 probe requests; log MAC, SSID, RSSI, count to CSV. |
+| **Crowd Density** | Estimate crowd size via unique MAC counts with 30-min history graph. |
+| **Deauth Detector** | Monitor for deauth/disassoc frame bursts; alert on spike threshold. |
+| **Packet Monitor** | Count WiFi frames per channel; PCAP and EAPOL capture to SD card. |
+| **Network Monitor** | Frame-anomaly detection and rogue-AP scan with SSID grouping. |
+| **Net Change** | Snapshot the local RF environment and diff against a saved baseline. |
+| **Dev Fingerprint** | Heuristic OS fingerprinting from probe-request patterns. |
+| **AP History** | Periodic AP scan logger; records unique BSSIDs over time to CSV. |
+| **Wardriving** | Continuous WiFi scan logger; exports SSID/BSSID/channel/enc to CSV. |
+| **Wifi Heatmap** | Time-stamped AP readings for post-session signal-strength mapping. |
+| **Triangulation** | Three-point RSSI readings for rough direction-finding of a target AP. |
+| **Vendor OUI** | Resolve OUI prefix to vendor name from a local lookup file. |
+| **Wifi Creds QR** | Generate a WiFi QR code (WPA/WEP/Open) for display or scanning. |
+| **Tracker Detect** | BLE scan for AirTag, Tile, SmartTag and other tracking devices. |
+| **Perimeter Watch** | Baseline the local MAC environment and alert on new devices. |
+| **Cred Viewer** | View and manage sniffed network credentials saved on SD card. |
+| **Barcode Gen** | Generate CODE128, CODE39 and EAN-13 barcodes for display. |
+| **Key Copier** | Edit and save mechanical key cut depths for Kwikset, Schlage, Yale. |
 
 Nine of them play over **PLAY NEARBY**: Chess, Checkers, Connect Four,
 Yahtzee, Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle. Put two
