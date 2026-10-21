@@ -61,6 +61,7 @@ restyled to match the design language the apps use.
 | **Hacker News**  | The front page in a reading serif, articles kept on the card.                |
 | **RSS Reader**   | Follow RSS feeds directly on the device.                                    |
 | **Authenticator**| Store multiple TOTP accounts and generate codes offline.                    |
+| **WiFi Scanner** | Passive 2.4 GHz survey: AP list, signal meter and channel analyser.          |
 | **xkcd**         | The archive, packed for the card and drawn one to one.                       |
 | **Get Books**    | Browse any OPDS catalog and download straight to the card, no computer.      |
 | **Instapaper**   | Your read-later queue, synced both ways: reading position and archiving.     |
