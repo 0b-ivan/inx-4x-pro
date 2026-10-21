@@ -17,8 +17,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -28,6 +28,7 @@
 #include "activities/reader/ReaderUtils.h"
 #include "apps_local/branding/TaroCrossPointStandby.h"
 #include "apps_local/tarot/TarotAssets.h"
+#include "apps_local/tarot/TarotCardRenderer.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
@@ -565,24 +566,12 @@ void SleepActivity::renderTarotSleepScreen() const {
     return;
   }
 
-  const size_t card = static_cast<size_t>(esp_random()) % kCardCount;
-  const std::string path = TarotAssets::cardPath(static_cast<int>(card));
-  HalFile file;
-  if (!Storage.openFileForRead("SLP", path.c_str(), file)) {
-    LOG_ERR("SLP", "Failed to open tarot card %u", static_cast<unsigned>(card));
-    renderDefaultSleepScreen();
-    return;
-  }
-
-  Bitmap bitmap(file, true);
-  if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-    LOG_ERR("SLP", "Invalid tarot card %u", static_cast<unsigned>(card));
-    renderDefaultSleepScreen();
-    return;
-  }
-
+  const int card = static_cast<int>(static_cast<size_t>(esp_random()) % kCardCount);
   renderer.clearScreen();
-  renderer.drawBitmap(bitmap, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), 0, 0, true, true);
+  if (!tarot::drawCard(renderer, card, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight())) {
+    renderDefaultSleepScreen();
+    return;
+  }
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
