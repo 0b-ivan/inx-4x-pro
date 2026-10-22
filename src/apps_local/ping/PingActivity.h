@@ -12,8 +12,6 @@ class PingActivity final : public Activity {
  public:
   explicit PingActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("Ping", renderer, mappedInput) {}
-
-
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<PingActivity>(r, m);
   }

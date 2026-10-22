@@ -7,8 +7,6 @@ class VehicleFinderActivity final : public Activity {
  public:
   explicit VehicleFinderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("VehicleFinder", renderer, mappedInput) {}
-
-
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<VehicleFinderActivity>(r, m);
   }

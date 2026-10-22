@@ -12,8 +12,6 @@ class HostScannerActivity final : public Activity {
  public:
   explicit HostScannerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("HostScanner", renderer, mappedInput) {}
-
-
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<HostScannerActivity>(r, m);
   }

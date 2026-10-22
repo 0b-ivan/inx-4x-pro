@@ -14,8 +14,6 @@ class WifiConnectActivity final : public Activity {
  public:
   explicit WifiConnectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("WifiConnect", renderer, mappedInput) {}
-
-
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<WifiConnectActivity>(r, m);
   }

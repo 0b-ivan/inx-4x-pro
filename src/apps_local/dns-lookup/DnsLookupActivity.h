@@ -10,8 +10,6 @@ class DnsLookupActivity final : public Activity {
  public:
   explicit DnsLookupActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("DnsLookup", renderer, mappedInput) {}
-
-
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<DnsLookupActivity>(r, m);
   }

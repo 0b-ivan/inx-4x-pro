@@ -10,8 +10,6 @@ class MdnsBrowserActivity final : public Activity {
  public:
   explicit MdnsBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("MdnsBrowser", renderer, mappedInput) {}
-
-
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<MdnsBrowserActivity>(r, m);
   }

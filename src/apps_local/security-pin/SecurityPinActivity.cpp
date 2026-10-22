@@ -11,9 +11,9 @@
 
 #include "MappedInputManager.h"
 #include "../quick-wipe/QuickWipeActivity.h"
+#include "util/DuressManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/DuressManager.h"
 
 // ---------------------------------------------------------------------------
 // Helpers
