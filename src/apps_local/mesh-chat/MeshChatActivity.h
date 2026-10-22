@@ -1,13 +1,13 @@
 #pragma once
+// Initialize ESP32 FreeRTOS via Arduino.h before any IDF headers.
+// Including portmacro.h directly first breaks the dual-core ESP32-S3 port.
+#include <Arduino.h>
 #include <memory>
 #include <Memory.h>
 #include <cstdint>
 #include <esp_now.h>
 #include <string>
 #include <vector>
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/portmacro.h>
 
 #include "../../activities/Activity.h"
 #include "../../util/ButtonNavigator.h"
