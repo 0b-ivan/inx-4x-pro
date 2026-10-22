@@ -1,4 +1,5 @@
 #include "BleSpamActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <BLEAdvertising.h>
@@ -30,6 +31,7 @@ const char* BleSpamActivity::advTypeName(AdvType type) {
 // ---- lifecycle ----
 
 void BleSpamActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = DISCLAIMER;
   advType = RANDOM_ALL;
@@ -48,6 +50,7 @@ void BleSpamActivity::onExit() {
     if (adv) adv->stop();
     RADIO.shutdown();
   }
+  devmode::resume();
   Activity::onExit();
 }
 

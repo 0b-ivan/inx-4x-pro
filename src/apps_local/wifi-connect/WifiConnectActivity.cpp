@@ -1,4 +1,5 @@
 #include "WifiConnectActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <GfxRenderer.h>
@@ -18,6 +19,7 @@
 #include "fontIds.h"
 
 void WifiConnectActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   RADIO.ensureWifi();
   {
@@ -32,6 +34,7 @@ void WifiConnectActivity::onEnter() {
 }
 
 void WifiConnectActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   WiFi.scanDelete();
   // Keep WiFi connected on exit - do NOT disconnect

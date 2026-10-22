@@ -1,4 +1,5 @@
 #include "NetworkChangeActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -16,6 +17,7 @@
 // ---------------------------------------------------------------------------
 
 void NetworkChangeActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = MENU;
   menuIndex = 0;
@@ -27,6 +29,7 @@ void NetworkChangeActivity::onEnter() {
 }
 
 void NetworkChangeActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   RADIO.shutdown();
 }

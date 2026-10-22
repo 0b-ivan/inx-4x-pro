@@ -1,4 +1,5 @@
 #include "BleProximityActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <BLEAdvertisedDevice.h>
@@ -28,6 +29,7 @@ class BleProximityCallback : public BLEAdvertisedDeviceCallbacks {
 };
 
 void BleProximityActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   devices.clear();
   selectorIndex = 0;
@@ -38,6 +40,7 @@ void BleProximityActivity::onEnter() {
 }
 
 void BleProximityActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   if (scanInitialized) {
     BLEScan* scan = BLEDevice::getScan();

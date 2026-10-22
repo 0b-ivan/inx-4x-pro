@@ -1,4 +1,5 @@
 #include "BleBeaconActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <BLEDevice.h>
@@ -33,6 +34,7 @@ static const uint32_t GOOGLE_MODEL_IDS[] = {
 static constexpr int GOOGLE_MODEL_COUNT = 4;
 
 void BleBeaconActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   RADIO.ensureBle();
 
@@ -49,6 +51,7 @@ void BleBeaconActivity::onEnter() {
 }
 
 void BleBeaconActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   stopSpam();
   RADIO.shutdown();

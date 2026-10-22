@@ -1,4 +1,5 @@
 #include "BeaconTestActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -16,6 +17,7 @@
 #include "../util/RadioManager.h"
 
 void BeaconTestActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   RADIO.ensureWifi();
 
@@ -32,6 +34,7 @@ void BeaconTestActivity::onEnter() {
 }
 
 void BeaconTestActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   stopAP();
   RADIO.shutdown();

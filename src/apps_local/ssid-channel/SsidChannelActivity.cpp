@@ -1,4 +1,5 @@
 #include "SsidChannelActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <WiFi.h>
@@ -82,6 +83,7 @@ std::string SsidChannelActivity::base64Decode(const std::string& input) {
 // ---------------------------------------------------------------------------
 
 void SsidChannelActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = MODE_SELECT;
   modeIndex = 0;
@@ -101,6 +103,7 @@ void SsidChannelActivity::onExit() {
     WiFi.scanDelete();
     RADIO.shutdown();
   }
+  devmode::resume();
   Activity::onExit();
 }
 

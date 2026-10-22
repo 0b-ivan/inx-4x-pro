@@ -1,4 +1,5 @@
 #include "WardrivingActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -15,6 +16,7 @@
 #include "../radio/RadioManager.h"
 
 void WardrivingActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   RADIO.ensureWifi();
   WiFi.disconnect();
@@ -28,6 +30,7 @@ void WardrivingActivity::onEnter() {
 }
 
 void WardrivingActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   stopLogging();
   RADIO.shutdown();

@@ -1,4 +1,5 @@
 #include "BleKeyboardActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <BLEDevice.h>
@@ -65,6 +66,7 @@ class BleKeyboardActivity::ServerCallbacks : public BLEServerCallbacks {
 };
 
 void BleKeyboardActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   RADIO.ensureBle();
 
@@ -89,6 +91,7 @@ void BleKeyboardActivity::onEnter() {
 }
 
 void BleKeyboardActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   stopAdvertising();
   RADIO.shutdown();

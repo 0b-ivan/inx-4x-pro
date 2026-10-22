@@ -1,4 +1,5 @@
 #include "NetworkMonitorActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -99,6 +100,7 @@ void NetworkMonitorActivity::onFrame(const uint8_t* payload, uint16_t len, int r
 // ---------------------------------------------------------------------------
 
 void NetworkMonitorActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
 
   monitorMode   = FRAME_DETECTION;
@@ -134,6 +136,7 @@ void NetworkMonitorActivity::onEnter() {
 }
 
 void NetworkMonitorActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   if (monitorMode == FRAME_DETECTION) {
     stopMonitoring();

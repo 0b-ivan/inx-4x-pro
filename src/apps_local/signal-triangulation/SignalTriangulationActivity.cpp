@@ -1,4 +1,5 @@
 #include "SignalTriangulationActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <Logging.h>
@@ -12,6 +13,7 @@
 // ---- onEnter / onExit -------------------------------------------------------
 
 void SignalTriangulationActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = SELECT_AP;
   apCount = 0;
@@ -31,6 +33,7 @@ void SignalTriangulationActivity::onEnter() {
 }
 
 void SignalTriangulationActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   WiFi.scanDelete();
   RADIO.shutdown();

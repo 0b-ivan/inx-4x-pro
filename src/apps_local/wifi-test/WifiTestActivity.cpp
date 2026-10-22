@@ -1,4 +1,5 @@
 #include "WifiTestActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <I18n.h>
@@ -26,6 +27,7 @@ static uint8_t deauthFrame[26] = {
 };
 
 void WifiTestActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   RADIO.ensureWifi();
   state = SCANNING;
@@ -50,6 +52,7 @@ void WifiTestActivity::onEnter() {
 }
 
 void WifiTestActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   esp_wifi_set_promiscuous(false);
   WiFi.mode(WIFI_OFF);

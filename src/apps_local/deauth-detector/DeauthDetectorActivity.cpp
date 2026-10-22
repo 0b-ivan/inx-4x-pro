@@ -1,4 +1,5 @@
 #include "DeauthDetectorActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <WiFi.h>
@@ -59,6 +60,7 @@ void DeauthDetectorActivity::onPacket(const uint8_t* data, uint16_t len, int rss
 // Lifecycle
 // ---------------------------------------------------------------------------
 void DeauthDetectorActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state           = IDLE;
   deauthCount     = 0;
@@ -78,6 +80,7 @@ void DeauthDetectorActivity::onEnter() {
 }
 
 void DeauthDetectorActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   if (state != IDLE) stopMonitor();
 }

@@ -1,4 +1,5 @@
 #include "BulletinBoardActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <GfxRenderer.h>
@@ -49,6 +50,7 @@ constexpr int BulletinBoardActivity::TIMER_OPTIONS[];
 // ---------------------------------------------------------------------------
 
 void BulletinBoardActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = CONFIG;
   configIndex = 0;
@@ -61,6 +63,7 @@ void BulletinBoardActivity::onEnter() {
 }
 
 void BulletinBoardActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   if (state == ACTIVE) {
     stopBoard();
