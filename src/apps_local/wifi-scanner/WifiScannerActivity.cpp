@@ -283,7 +283,8 @@ void WifiScannerActivity::loop() {
   }
 
   if (state == DETAIL) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    int tx = 0, ty = 0;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(tx, ty)) {
       state = LIST;
       requestUpdate();
     }
@@ -297,8 +298,9 @@ void WifiScannerActivity::loop() {
       lastMeasureTime = now;
       doMeasurement();
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      // Long-press cycled us in; short press exits signal back to list
+    int stx = 0, sty = 0;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(stx, sty)) {
+      // Long-press cycled us in; a short press or a tap exits back to the list.
       viewMode = LIST_VIEW;
       requestUpdate();
     }
@@ -312,6 +314,12 @@ void WifiScannerActivity::loop() {
   if (viewMode == CHANNEL_VIEW) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       shelf::leave(renderer, mappedInput);
+      return;
+    }
+    int ctx = 0, cty = 0;
+    if (mappedInput.wasScreenTapped(ctx, cty)) {
+      viewMode = LIST_VIEW;
+      requestUpdate();
       return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -388,6 +396,33 @@ void WifiScannerActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
     startScan();
     requestUpdate();
+  }
+
+  // Touch: tap a network row to select it and open its details, using the same
+  // row geometry the themed list draws with.
+  if (!networks.empty()) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentHeight =
+        renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+    const int rowHeight = GUI.getMenuRowHeight(renderer);
+    const int rowStep = rowHeight + metrics.menuSpacing;
+    const int pageItems = std::max(1, contentHeight / std::max(1, rowStep));
+    const int pageStart = (selectorIndex / pageItems) * pageItems;
+    int touchedRow = -1;
+    const auto rowTouch = mappedInput.rowTouch(touchedRow, contentTop, rowStep, std::min(pageItems, count - pageStart),
+                                               0, renderer.getScreenWidth(), rowHeight);
+    if (rowTouch != MappedInputManager::RowTouch::None && touchedRow >= 0) {
+      const int index = pageStart + touchedRow;
+      if (index < count) {
+        selectorIndex = index;
+        if (rowTouch == MappedInputManager::RowTouch::Tap) {
+          detailIndex = index;
+          state = DETAIL;
+        }
+        requestUpdate();
+      }
+    }
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
