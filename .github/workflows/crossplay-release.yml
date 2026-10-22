@@ -116,6 +116,48 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.0
+
+            62 apps ported from [biscuit](https://github.com/yattsu/biscuit)
+            across five batches, plus simulator and build-system work to keep
+            all of them building and testable without hardware.
+
+            **Passive WiFi / RF recon (Batch A)**
+
+            Probe Sniffer, Crowd Density, Deauth Detector, Packet Monitor,
+            Network Monitor, Net Change, Device Fingerprinter, AP History
+            Logger, Wardriving, WiFi Heatmap, Signal Triangulation, Vendor OUI,
+            WiFi Creds QR, Tracker Detector, Perimeter Watch, Credential
+            Viewer, Barcode Generator, Key Copier.
+
+            **Active wireless tools (Batch B)**
+
+            Beacon Flood, AP Cloner, BLE Spam, Captive Portal, WiFi Deauth,
+            Fire, SSID Channel, AirTag Spoof, BLE Beacon, BLE Keyboard,
+            USB HID, Dead Drop, Mesh Chat, Bulletin Board.
+
+            **BLE and network utilities (Batch C)**
+
+            BLE Scanner, BLE Proximity, BLE Contact Exchange, DNS Lookup,
+            Host Scanner, HTTP Client, mDNS Browser, Ping, WiFi Connect,
+            Vehicle Finder.
+
+            **Offline utilities (Batch D)**
+
+            Calculator, Cipher Tools, Clock, Countdown, Device Info,
+            Morse Code, OTP Generator, Password Manager, QR Generator,
+            SD File Browser, Unit Converter.
+
+            **Security utilities (Batch E)**
+
+            Steganography, SD Encryption, Security PIN, Quick Wipe,
+            Screen Decoy, QR TOTP, USB Mass Storage.
+
+            All hardware-only apps (Batches A–C) are excluded from the
+            simulator build via `#if !defined(SIMULATOR)` and require the
+            X4 Pro's ESP32-S3 WiFi/BLE stack. Batches D and E run fully
+            in the simulator.
+
             ### What is new in 1.15.1
 
             A polish release on top of 1.15.0: the Tarot app, the WiFi Scanner
