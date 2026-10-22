@@ -1,5 +1,7 @@
 #pragma once
 #include <stdint.h>
+#include <cstddef>
+#include <cstring>
 
 #include <random>
 
@@ -19,4 +21,18 @@ inline uint32_t esp_random() {
   static std::mt19937 gen(rd());
   static std::uniform_int_distribution<uint32_t> dist(0, UINT32_MAX);
   return dist(gen);
+}
+
+// ESP-IDF's bulk RNG API is also used by the SD wipe utility.
+// In native simulation, use the host-only RNG above; this is not a
+// substitute for the hardware RNG on a production device.
+inline void esp_fill_random(void* buffer, size_t length) {
+  auto* bytes = static_cast<uint8_t*>(buffer);
+  while (length > 0) {
+    const uint32_t value = esp_random();
+    const size_t count = length < sizeof(value) ? length : sizeof(value);
+    std::memcpy(bytes, &value, count);
+    bytes += count;
+    length -= count;
+  }
 }
