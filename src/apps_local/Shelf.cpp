@@ -43,6 +43,34 @@
 #include "credential-viewer/CredentialViewerActivity.h"
 #include "barcode/BarcodeActivity.h"
 #include "key-copier/KeyCopierActivity.h"
+#include "beacon-test/BeaconTestActivity.h"
+#include "ap-cloner/ApClonerActivity.h"
+#include "ble-spam/BleSpamActivity.h"
+#include "captive-portal/CaptivePortalActivity.h"
+#include "wifi-test/WifiTestActivity.h"
+#include "fire/FireActivity.h"
+#include "ssid-channel/SsidChannelActivity.h"
+#include "airtag-test/AirTagTestActivity.h"
+#include "ble-beacon/BleBeaconActivity.h"
+#include "ble-keyboard/BleKeyboardActivity.h"
+#include "usb-hid/UsbHidActivity.h"
+#include "dead-drop/DeadDropActivity.h"
+#include "mesh-chat/MeshChatActivity.h"
+#include "bulletin-board/BulletinBoardActivity.h"
+#include "beacon-test/BeaconTestActivity.h"
+#include "ap-cloner/ApClonerActivity.h"
+#include "ble-spam/BleSpamActivity.h"
+#include "captive-portal/CaptivePortalActivity.h"
+#include "wifi-test/WifiTestActivity.h"
+#include "fire/FireActivity.h"
+#include "ssid-channel/SsidChannelActivity.h"
+#include "airtag-test/AirTagTestActivity.h"
+#include "ble-beacon/BleBeaconActivity.h"
+#include "ble-keyboard/BleKeyboardActivity.h"
+#include "usb-hid/UsbHidActivity.h"
+#include "dead-drop/DeadDropActivity.h"
+#include "mesh-chat/MeshChatActivity.h"
+#include "bulletin-board/BulletinBoardActivity.h"
 #include "knucklebones/KnucklebonesActivity.h"
 #include "minesweeper/MinesweeperActivity.h"
 #include "murdle/MurdleActivity.h"
@@ -115,6 +143,20 @@ constexpr shelf::Item kApps[] = {
     {"CRED VIEWER", &icon_study_32, &CredentialViewerActivity::create},
     {"BARCODE GEN", &icon_study_32, &BarcodeActivity::create},
     {"KEY COPIER", &icon_study_32, &KeyCopierActivity::create},
+    {"BEACON FLOOD", &icon_minesweeper_32, &BeaconTestActivity::create},
+    {"AP CLONER", &icon_minesweeper_32, &ApClonerActivity::create},
+    {"BLE SPAM", &icon_nearby_32, &BleSpamActivity::create},
+    {"CAPTIVE PORTAL", &icon_minesweeper_32, &CaptivePortalActivity::create},
+    {"WIFI DEAUTH", &icon_minesweeper_32, &WifiTestActivity::create},
+    {"FIRE", &icon_minesweeper_32, &FireActivity::create},
+    {"SSID CHANNEL", &icon_study_32, &SsidChannelActivity::create},
+    {"AIRTAG SPOOF", &icon_nearby_32, &AirTagTestActivity::create},
+    {"BLE BEACON", &icon_nearby_32, &BleBeaconActivity::create},
+    {"BLE KEYBOARD", &icon_nearby_32, &BleKeyboardActivity::create},
+    {"USB HID", &icon_study_32, &UsbHidActivity::create},
+    {"DEAD DROP", &icon_study_32, &DeadDropActivity::create},
+    {"MESH CHAT", &icon_study_32, &MeshChatActivity::create},
+    {"BULLETIN BOARD", &icon_study_32, &BulletinBoardActivity::create},
 };
 
 // The two rows Home grows, in reading order. Titles are Title Case because
