@@ -373,7 +373,7 @@ void SecurityPinActivity::handleSettingsMenu() {
     int touchRow = -1;
     const auto rt = mappedInput.rowTouch(touchRow,
                                          m.topPadding + m.headerHeight,
-                                         m.listRowHeight, MENU_ITEMS);
+                                         GUI.getListRowStep(false), MENU_ITEMS, 0, renderer.getScreenWidth(), m.listRowHeight);
     if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < MENU_ITEMS) {
       menuIndex = touchRow;
       if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;

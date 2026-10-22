@@ -116,6 +116,15 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.2
+
+            Touch fix: the three apps missing touch in 1.16.1 (Clock,
+            Device Info, OTP Generator) now respond to touch. All list
+            apps now use the correct theme-aware row step and proper
+            pagination so tapping any row on any page selects the right
+            item. RoundedRaff users are no longer affected by the 6px
+            gap mismatch.
+
             ### What is new in 1.16.1
 
             Touch input for all 17 biscuit apps. Every app in

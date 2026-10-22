@@ -44,6 +44,15 @@ void OtpGeneratorActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     generatePage();
     requestUpdate();
+    return;
+  }
+
+  {
+    int tx_, ty_;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      generatePage();
+      requestUpdate();
+    }
   }
 }
 

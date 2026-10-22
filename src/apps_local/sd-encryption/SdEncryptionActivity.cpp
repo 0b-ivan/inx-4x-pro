@@ -588,7 +588,7 @@ void SdEncryptionActivity::loop() {
       int touchRow = -1;
       const auto rt = mappedInput.rowTouch(touchRow,
                                            m.topPadding + m.headerHeight,
-                                           m.listWithSubtitleRowHeight, MENU_ITEMS);
+                                           GUI.getListRowStep(true), MENU_ITEMS, 0, renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
       if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < MENU_ITEMS) {
         menuIndex = touchRow;
         if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;

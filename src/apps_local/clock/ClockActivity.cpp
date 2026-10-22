@@ -169,6 +169,13 @@ void ClockActivity::loop() {
           requestUpdate();
         }
       }
+      {
+        int tx_, ty_;
+        if (mappedInput.wasScreenTapped(tx_, ty_)) {
+          shelf::leave(renderer, mappedInput);
+          return;
+        }
+      }
       break;
     }
 
@@ -178,6 +185,43 @@ void ClockActivity::loop() {
         if (now - lastDisplayMs >= DISPLAY_INTERVAL) {
           lastDisplayMs = now;
           requestUpdate();
+        }
+      }
+
+      {
+        int tx_ = 0, ty_ = 0;
+        if (mappedInput.wasScreenTapped(tx_, ty_)) {
+          const int half = renderer.getScreenWidth() / 2;
+          if (tx_ < half) {
+            // left half = Back/Stop
+            if (swState == SW_RUNNING) {
+              swPausedElapsed = swElapsedMs;
+              swState = SW_STOPPED;
+              requestUpdate();
+            } else {
+              shelf::leave(renderer, mappedInput);
+            }
+            return;
+          } else {
+            // right half = Confirm (Start/Lap/Restart)
+            if (swState == SW_IDLE) {
+              swStartMs = now;
+              swPausedElapsed = 0;
+              swState = SW_RUNNING;
+            } else if (swState == SW_RUNNING) {
+              if (static_cast<int>(swLaps.size()) < MAX_LAPS) {
+                swLaps.push_back(swElapsedMs);
+              }
+            } else {
+              swStartMs = now;
+              swPausedElapsed = 0;
+              swElapsedMs = 0;
+              swLaps.clear();
+              swState = SW_RUNNING;
+            }
+            requestUpdate();
+            return;
+          }
         }
       }
 
@@ -245,6 +289,26 @@ void ClockActivity::loop() {
         if (now - lastDisplayMs >= POM_DISPLAY_INTERVAL) {
           lastDisplayMs = now;
           requestUpdate();
+        }
+      }
+
+      {
+        int tx_ = 0, ty_ = 0;
+        if (mappedInput.wasScreenTapped(tx_, ty_)) {
+          const int half = renderer.getScreenWidth() / 2;
+          if (tx_ < half) {
+            if (pomState == POM_IDLE) { shelf::leave(renderer, mappedInput); }
+            else { pomResetToIdle(); }
+            return;
+          } else {
+            if (pomState == POM_IDLE) { pomStartWork(); }
+            else {
+              pomPaused = !pomPaused;
+              if (!pomPaused) pomLastTickMs = millis();
+              requestUpdate();
+            }
+            return;
+          }
         }
       }
 

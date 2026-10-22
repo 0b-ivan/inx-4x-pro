@@ -91,7 +91,7 @@ void MorseCodeActivity::loop() {
       int touchRow = -1;
       const auto rt = mappedInput.rowTouch(touchRow,
                                            m.topPadding + m.headerHeight + m.verticalSpacing,
-                                           m.listRowHeight, 3);
+                                           GUI.getListRowStep(false), 3, 0, renderer.getScreenWidth(), m.listRowHeight);
       if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < 3) {
         modeIndex = touchRow;
         if (rt == MappedInputManager::RowTouch::Tap) confirmMode = true;

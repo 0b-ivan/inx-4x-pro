@@ -108,8 +108,8 @@ void ScreenDecoyActivity::loop() {
       const auto& m = UITheme::getInstance().getMetrics();
       int touchRow = -1;
       const auto rt = mappedInput.rowTouch(touchRow, m.topPadding + m.headerHeight,
-                                           m.listWithSubtitleRowHeight,
-                                           static_cast<int>(DECOY_COUNT));
+                                           GUI.getListRowStep(true),
+                                           static_cast<int>(DECOY_COUNT), 0, renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
       if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 &&
           touchRow < static_cast<int>(DECOY_COUNT)) {
         selectedType = static_cast<DecoyType>(touchRow);

@@ -113,13 +113,20 @@ void QrTotpActivity::loop() {
     if (accountCount > 0) {
       const auto& m = UITheme::getInstance().getMetrics();
       int touchRow = -1;
-      const auto rt = mappedInput.rowTouch(touchRow,
-                                           m.topPadding + m.headerHeight,
-                                           m.listRowHeight, accountCount);
-      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < accountCount) {
-        selectedIndex = touchRow;
-        if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
-        requestUpdate();
+      const int rowStep = GUI.getListRowStep(false);
+      const int listTop = m.topPadding + m.headerHeight;
+      const int listH = renderer.getScreenHeight() - listTop - m.buttonHintsHeight;
+      const int pageItems = std::max(1, listH / rowStep);
+      const int pageStart = (selectedIndex / pageItems) * pageItems;
+      const int pageCount = std::min(pageItems, accountCount - pageStart);
+      const auto rt = mappedInput.rowTouch(touchRow, listTop, rowStep, pageCount, 0, renderer.getScreenWidth(), m.listRowHeight);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < pageCount) {
+        const int actualIdx = pageStart + touchRow;
+        if (actualIdx < accountCount) {
+          selectedIndex = actualIdx;
+          if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
+          requestUpdate();
+        }
       }
     }
     if (confirmAction && accountCount > 0) {

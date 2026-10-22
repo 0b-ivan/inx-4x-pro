@@ -38,6 +38,19 @@ void DeviceInfoActivity::loop() {
     shelf::leave(renderer, mappedInput);
     return;
   }
+
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      const int half = renderer.getScreenHeight() / 2;
+      if (ty_ < half) {
+        if (scrollOffset > 0) { scrollOffset--; requestUpdate(); }
+      } else {
+        scrollOffset++;
+        requestUpdate();
+      }
+    }
+  }
 }
 
 void DeviceInfoActivity::render(RenderLock&&) {

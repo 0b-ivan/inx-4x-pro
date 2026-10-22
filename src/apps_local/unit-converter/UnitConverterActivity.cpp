@@ -128,13 +128,20 @@ void UnitConverterActivity::loop() {
       const auto& m = UITheme::getInstance().getMetrics();
       int touchRow = -1;
       const int catCount = static_cast<int>(getCategories().size());
-      const auto rt = mappedInput.rowTouch(touchRow,
-                                           m.topPadding + m.headerHeight + m.verticalSpacing,
-                                           m.listRowHeight, catCount);
-      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < catCount) {
-        categoryIndex = touchRow;
-        if (rt == MappedInputManager::RowTouch::Tap) confirmCat = true;
-        requestUpdate();
+      const int rowStep = GUI.getListRowStep(false);
+      const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+      const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+      const int pageItems = std::max(1, contentH / rowStep);
+      const int pageStart = (categoryIndex / pageItems) * pageItems;
+      const int pageCount = std::min(pageItems, catCount - pageStart);
+      const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0, renderer.getScreenWidth(), m.listRowHeight);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < pageCount) {
+        const int actualIdx = pageStart + touchRow;
+        if (actualIdx < catCount) {
+          categoryIndex = actualIdx;
+          if (rt == MappedInputManager::RowTouch::Tap) confirmCat = true;
+          requestUpdate();
+        }
       }
     }
     if (confirmCat) {
@@ -165,13 +172,20 @@ void UnitConverterActivity::loop() {
       const auto& m = UITheme::getInstance().getMetrics();
       int touchRow = -1;
       const int unitCount = static_cast<int>(cat.units.size());
-      const auto rt = mappedInput.rowTouch(touchRow,
-                                           m.topPadding + m.headerHeight + m.verticalSpacing,
-                                           m.listRowHeight, unitCount);
-      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < unitCount) {
-        unitIndex = touchRow;
-        if (rt == MappedInputManager::RowTouch::Tap) confirmUnit = true;
-        requestUpdate();
+      const int rowStep = GUI.getListRowStep(false);
+      const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+      const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+      const int pageItems = std::max(1, contentH / rowStep);
+      const int pageStart = (unitIndex / pageItems) * pageItems;
+      const int pageCount = std::min(pageItems, unitCount - pageStart);
+      const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0, renderer.getScreenWidth(), m.listRowHeight);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < pageCount) {
+        const int actualIdx = pageStart + touchRow;
+        if (actualIdx < unitCount) {
+          unitIndex = actualIdx;
+          if (rt == MappedInputManager::RowTouch::Tap) confirmUnit = true;
+          requestUpdate();
+        }
       }
     }
     if (confirmUnit) {

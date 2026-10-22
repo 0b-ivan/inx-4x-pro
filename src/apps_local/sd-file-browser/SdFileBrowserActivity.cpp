@@ -196,13 +196,20 @@ void SdFileBrowserActivity::loop() {
     if (count > 0) {
       const auto& m = UITheme::getInstance().getMetrics();
       int touchRow = -1;
-      const auto rt = mappedInput.rowTouch(touchRow,
-                                           m.topPadding + m.headerHeight + m.verticalSpacing,
-                                           m.listWithSubtitleRowHeight, count);
-      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < count) {
-        selectorIndex = touchRow;
-        if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
-        requestUpdate();
+      const int rowStep = GUI.getListRowStep(true);
+      const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+      const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+      const int pageItems = std::max(1, contentH / rowStep);
+      const int pageStart = (selectorIndex / pageItems) * pageItems;
+      const int pageCount = std::min(pageItems, count - pageStart);
+      const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0, renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < pageCount) {
+        const int actualIdx = pageStart + touchRow;
+        if (actualIdx < count) {
+          selectorIndex = actualIdx;
+          if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
+          requestUpdate();
+        }
       }
     }
     if (confirmAction) {

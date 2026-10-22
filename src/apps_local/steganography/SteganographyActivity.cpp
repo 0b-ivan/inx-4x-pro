@@ -184,7 +184,7 @@ void SteganographyActivity::loop() {
       int touchRow = -1;
       const auto rt = mappedInput.rowTouch(touchRow,
                                            m.topPadding + m.headerHeight + m.verticalSpacing,
-                                           m.listWithSubtitleRowHeight, 2);
+                                           GUI.getListRowStep(true), 2, 0, renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
       if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < 2) {
         mode = (touchRow == 0) ? EMBED : EXTRACT;
         if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
@@ -215,13 +215,20 @@ void SteganographyActivity::loop() {
     if (fileCount > 0) {
       const auto& m = UITheme::getInstance().getMetrics();
       int touchRow = -1;
-      const auto rt = mappedInput.rowTouch(touchRow,
-                                           m.topPadding + m.headerHeight + m.verticalSpacing,
-                                           m.listWithSubtitleRowHeight, fileCount);
-      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < fileCount) {
-        fileIndex = touchRow;
-        if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
-        requestUpdate();
+      const int rowStep2 = GUI.getListRowStep(true);
+      const int listTop2 = m.topPadding + m.headerHeight + m.verticalSpacing;
+      const int listH2 = renderer.getScreenHeight() - listTop2 - m.buttonHintsHeight - m.verticalSpacing;
+      const int pageItems2 = std::max(1, listH2 / rowStep2);
+      const int pageStart2 = (fileIndex / pageItems2) * pageItems2;
+      const int pageCount2 = std::min(pageItems2, fileCount - pageStart2);
+      const auto rt = mappedInput.rowTouch(touchRow, listTop2, rowStep2, pageCount2, 0, renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < pageCount2) {
+        const int actualIdx2 = pageStart2 + touchRow;
+        if (actualIdx2 < fileCount) {
+          fileIndex = actualIdx2;
+          if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
+          requestUpdate();
+        }
       }
     }
     if (confirmAction && fileCount > 0) {

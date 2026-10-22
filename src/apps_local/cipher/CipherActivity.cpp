@@ -149,8 +149,9 @@ void CipherActivity::loop() {
     {
       const auto& m = UITheme::getInstance().getMetrics();
       int touchRow = -1;
+      const int rowStep = GUI.getListRowStep(false);
       const auto rt = mappedInput.rowTouch(touchRow, m.topPadding + m.headerHeight,
-                                           m.listRowHeight, CIPHER_COUNT);
+                                           rowStep, CIPHER_COUNT, 0, renderer.getScreenWidth(), m.listRowHeight);
       if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < CIPHER_COUNT) {
         cipherIndex = touchRow;
         if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
