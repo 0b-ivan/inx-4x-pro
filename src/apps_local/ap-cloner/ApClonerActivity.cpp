@@ -166,6 +166,29 @@ void ApClonerActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       shelf::leave(renderer, mappedInput);
     }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2 && !aps.empty()) { startClone(selectorIndex); return; }
+        if (count > 0) {
+          int touchRow = -1;
+          const auto& m = UITheme::getInstance().getMetrics();
+          const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+          const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+          const int rowStep = GUI.getListRowStep(true);
+          const int pageItems = std::max(1, contentH / rowStep);
+          const int pageStart = (selectorIndex / pageItems) * pageItems;
+          const int pageCount = std::min(pageItems, count - pageStart);
+          const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
+                                                renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+          if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+            selectorIndex = pageStart + touchRow; requestUpdate();
+          }
+        }
+      }
+    }
     return;
   }
 
@@ -178,10 +201,15 @@ void ApClonerActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    stopClone();
-    state = SELECT_AP;
-    startScan();
-    requestUpdate();
+    stopClone(); state = SELECT_AP; startScan(); requestUpdate();
+  }
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) {
+        stopClone(); state = SELECT_AP; startScan(); requestUpdate();
+      }
+    }
   }
 }
 

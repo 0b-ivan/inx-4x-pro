@@ -109,6 +109,14 @@ void PerimeterWatchActivity::loop() {
       lastScanMs = millis();
       requestUpdate();
     }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2) { RADIO.ensureWifi(); doBaselineScan(); state = WATCHING; watchStartMs = millis(); lastScanMs = millis(); requestUpdate(); }
+      }
+    }
     return;
   }
 
@@ -118,6 +126,12 @@ void PerimeterWatchActivity::loop() {
       reportIndex = 0;
       requestUpdate();
       return;
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = REPORT; reportIndex = 0; requestUpdate(); return; }
+      }
     }
     if (millis() - lastScanMs >= SCAN_INTERVAL_MS) {
       doWatchScan();
@@ -131,6 +145,14 @@ void PerimeterWatchActivity::loop() {
     exportCsv();
     requestUpdate();
     return;
+  }
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+      if (btn == 2) { exportCsv(); requestUpdate(); return; }
+    }
   }
   const int count = static_cast<int>(intrusions.size());
   buttonNavigator.onNext([this, count] {

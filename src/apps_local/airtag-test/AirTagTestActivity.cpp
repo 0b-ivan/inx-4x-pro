@@ -135,6 +135,25 @@ void AirTagTestActivity::loop() {
       modeIndex = ButtonNavigator::previousIndex(modeIndex, MODE_COUNT);
       requestUpdate();
     });
+
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2) { startSpoofing(static_cast<MacMode>(modeIndex)); return; }
+        int touchRow = -1;
+        const auto& m = UITheme::getInstance().getMetrics();
+        const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+        const int rowStep = GUI.getListRowStep(false);
+        const int pageCount = MODE_COUNT;
+        const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
+                                              renderer.getScreenWidth(), m.listRowHeight);
+        if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+          modeIndex = touchRow; requestUpdate();
+        }
+      }
+    }
     return;
   }
 
@@ -143,6 +162,12 @@ void AirTagTestActivity::loop() {
     stopSpoofing();
     requestUpdate();
     return;
+  }
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopSpoofing(); requestUpdate(); return; }
+    }
   }
 
   unsigned long now = millis();

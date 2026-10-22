@@ -218,6 +218,27 @@ void SsidChannelActivity::loop() {
       shelf::leave(renderer, mappedInput);
       return;
     }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2) {
+          if (modeIndex == 0) {
+            state = SEND_COMPOSE;
+            startActivityForResult(
+                std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "Enter Message", "", 21),
+                [this](const ActivityResult& result) {
+                  if (!result.isCancelled) {
+                    outMessage = std::get<KeyboardResult>(result.data).text;
+                    if (!outMessage.empty()) { startSending(); } else { state = MODE_SELECT; requestUpdate(); }
+                  } else { state = MODE_SELECT; requestUpdate(); }
+                });
+          } else { startReceiving(); }
+          return;
+        }
+      }
+    }
     return;
   }
 
@@ -235,7 +256,6 @@ void SsidChannelActivity::loop() {
       requestUpdate();
       return;
     }
-    // Refresh countdown every second
     static unsigned long lastSendRefresh = 0;
     if (millis() - lastSendRefresh >= 1000) {
       lastSendRefresh = millis();
@@ -243,16 +263,19 @@ void SsidChannelActivity::loop() {
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      stopSending();
-      state = MODE_SELECT;
-      requestUpdate();
+      stopSending(); state = MODE_SELECT; requestUpdate();
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopSending(); state = MODE_SELECT; requestUpdate(); }
+      }
     }
     return;
   }
 
   // ---- RECEIVING ----
   if (state == RECEIVING) {
-    // Auto-scan every SCAN_INTERVAL_MS
     unsigned long now = millis();
     if (!scanning && (lastScan == 0 || now - lastScan >= SCAN_INTERVAL_MS)) {
       doScan();
@@ -272,11 +295,13 @@ void SsidChannelActivity::loop() {
     });
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      WiFi.scanDelete();
-      RADIO.shutdown();
-      state = MODE_SELECT;
-      requestUpdate();
-      return;
+      WiFi.scanDelete(); RADIO.shutdown(); state = MODE_SELECT; requestUpdate(); return;
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { WiFi.scanDelete(); RADIO.shutdown(); state = MODE_SELECT; requestUpdate(); return; }
+      }
     }
     return;
   }

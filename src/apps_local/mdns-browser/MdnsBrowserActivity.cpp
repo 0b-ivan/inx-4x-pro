@@ -223,16 +223,33 @@ void MdnsBrowserActivity::loop() {
       });
 
       if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-        if (selectorIndex == 0) {
-          startDiscoveryAll();
-        } else {
-          startDiscovery(selectorIndex - 1);
-        }
+        if (selectorIndex == 0) startDiscoveryAll(); else startDiscovery(selectorIndex - 1);
         return;
       }
       if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
         shelf::leave(renderer, mappedInput);
         return;
+      }
+      {
+        int tx_ = 0, ty_ = 0;
+        if (mappedInput.wasScreenTapped(tx_, ty_)) {
+          const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+          if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+          if (btn == 2) { if (selectorIndex == 0) startDiscoveryAll(); else startDiscovery(selectorIndex - 1); return; }
+          int touchRow = -1;
+          const auto& m = UITheme::getInstance().getMetrics();
+          const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+          const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+          const int rowStep = GUI.getListRowStep(false);
+          const int pageItems = std::max(1, contentH / rowStep);
+          const int pageStart = (selectorIndex / pageItems) * pageItems;
+          const int pageCount = std::min(pageItems, count - pageStart);
+          const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
+                                                renderer.getScreenWidth(), m.listRowHeight);
+          if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+            selectorIndex = pageStart + touchRow; requestUpdate();
+          }
+        }
       }
       break;
     }
@@ -243,6 +260,12 @@ void MdnsBrowserActivity::loop() {
         state = SERVICE_SELECT;
         selectorIndex = 0;
         requestUpdate();
+      }
+      {
+        int tx_ = 0, ty_ = 0;
+        if (mappedInput.wasScreenTapped(tx_, ty_)) {
+          if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = SERVICE_SELECT; selectorIndex = 0; requestUpdate(); }
+        }
       }
       break;
 
@@ -278,6 +301,29 @@ void MdnsBrowserActivity::loop() {
         selectorIndex = 0;
         requestUpdate();
       }
+      {
+        int tx_ = 0, ty_ = 0;
+        if (mappedInput.wasScreenTapped(tx_, ty_)) {
+          const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+          if (btn == 1) { state = SERVICE_SELECT; selectorIndex = 0; requestUpdate(); break; }
+          if (btn == 2 && !results.empty()) { detailIndex = selectorIndex; state = DETAIL; requestUpdate(); break; }
+          if (count > 0) {
+            int touchRow = -1;
+            const auto& m = UITheme::getInstance().getMetrics();
+            const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+            const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+            const int rowStep = GUI.getListRowStep(false);
+            const int pageItems = std::max(1, contentH / rowStep);
+            const int pageStart = (selectorIndex / pageItems) * pageItems;
+            const int pageCount = std::min(pageItems, count - pageStart);
+            const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
+                                                  renderer.getScreenWidth(), m.listRowHeight);
+            if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+              selectorIndex = pageStart + touchRow; requestUpdate();
+            }
+          }
+        }
+      }
       break;
     }
 
@@ -285,6 +331,12 @@ void MdnsBrowserActivity::loop() {
       if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
         state = RESULTS;
         requestUpdate();
+      }
+      {
+        int tx_ = 0, ty_ = 0;
+        if (mappedInput.wasScreenTapped(tx_, ty_)) {
+          if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = RESULTS; requestUpdate(); }
+        }
       }
       break;
   }

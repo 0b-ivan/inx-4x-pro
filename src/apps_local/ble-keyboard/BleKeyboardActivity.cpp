@@ -382,24 +382,59 @@ void BleKeyboardActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && !scriptFiles.empty()) {
       selectedScript = scriptFiles[selectedIndex];
       { RenderLock lock(*this); loadScriptContent(selectedScript); }
-      state = PREVIEW;
-      requestUpdate();
-      return;
+      state = PREVIEW; requestUpdate(); return;
     }
     int listSize = static_cast<int>(scriptFiles.size());
     buttonNavigator.onNext([this, listSize] { selectedIndex = ButtonNavigator::nextIndex(selectedIndex, listSize); requestUpdate(); });
     buttonNavigator.onPrevious([this, listSize] { selectedIndex = ButtonNavigator::previousIndex(selectedIndex, listSize); requestUpdate(); });
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2 && !scriptFiles.empty()) {
+          selectedScript = scriptFiles[selectedIndex];
+          { RenderLock lock(*this); loadScriptContent(selectedScript); }
+          state = PREVIEW; requestUpdate(); return;
+        }
+        if (!scriptFiles.empty()) {
+          int touchRow = -1;
+          const auto& m = UITheme::getInstance().getMetrics();
+          const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+          const int rowStep = GUI.getListRowStep(false);
+          const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, listSize, 0,
+                                                renderer.getScreenWidth(), m.listRowHeight);
+          if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < listSize) {
+            selectedIndex = touchRow; requestUpdate();
+          }
+        }
+      }
+    }
     return;
   }
 
   if (state == PREVIEW) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) { state = SELECT_SCRIPT; requestUpdate(); return; }
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) { state = ADVERTISING; startAdvertising(); requestUpdate(); return; }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { state = SELECT_SCRIPT; requestUpdate(); return; }
+        if (btn == 2) { state = ADVERTISING; startAdvertising(); requestUpdate(); return; }
+      }
+    }
     return;
   }
 
   if (state == ADVERTISING) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) { stopAdvertising(); state = SELECT_SCRIPT; requestUpdate(); return; }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopAdvertising(); state = SELECT_SCRIPT; requestUpdate(); return; }
+      }
+    }
     return;
   }
 
@@ -407,6 +442,14 @@ void BleKeyboardActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) { stopAdvertising(); state = SELECT_SCRIPT; requestUpdate(); return; }
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       state = EXECUTING; currentLine = 0; repeatCount = 0; delayUntil = 0; lastCommand.clear(); requestUpdate(); return;
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { stopAdvertising(); state = SELECT_SCRIPT; requestUpdate(); return; }
+        if (btn == 2) { state = EXECUTING; currentLine = 0; repeatCount = 0; delayUntil = 0; lastCommand.clear(); requestUpdate(); return; }
+      }
     }
     return;
   }
@@ -422,6 +465,13 @@ void BleKeyboardActivity::loop() {
   if (state == DONE) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       stopAdvertising(); state = SELECT_SCRIPT; requestUpdate(); return;
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1 || btn == 2) { stopAdvertising(); state = SELECT_SCRIPT; requestUpdate(); return; }
+      }
     }
   }
 }

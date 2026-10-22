@@ -180,24 +180,26 @@ void BulletinBoardActivity::loop() {
     }
 
     buttonNavigator.onNext([this] {
-      configIndex = ButtonNavigator::nextIndex(configIndex, 2);
-      requestUpdate();
+      configIndex = ButtonNavigator::nextIndex(configIndex, 2); requestUpdate();
     });
     buttonNavigator.onPrevious([this] {
-      configIndex = ButtonNavigator::previousIndex(configIndex, 2);
-      requestUpdate();
+      configIndex = ButtonNavigator::previousIndex(configIndex, 2); requestUpdate();
     });
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (configIndex == 0) {
-        // Cycle timer option
-        timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT);
-        timerMinutes = TIMER_OPTIONS[timerIndex];
-        requestUpdate();
-      } else {
-        // Start board
-        startBoard();
-        requestUpdate();
+      if (configIndex == 0) { timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT); timerMinutes = TIMER_OPTIONS[timerIndex]; requestUpdate(); }
+      else { startBoard(); requestUpdate(); }
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2) {
+          if (configIndex == 0) { timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT); timerMinutes = TIMER_OPTIONS[timerIndex]; requestUpdate(); }
+          else { startBoard(); requestUpdate(); }
+          return;
+        }
       }
     }
     return;
@@ -206,24 +208,21 @@ void BulletinBoardActivity::loop() {
   if (state == ACTIVE) {
     if (server) server->handleClient();
 
-    // Check timer expiry
     unsigned long elapsed = millis() - startTime;
     if (elapsed >= static_cast<unsigned long>(timerMinutes) * 60000UL) {
-      stopBoard();
-      state = DONE;
-      requestUpdate();
-      return;
+      stopBoard(); state = DONE; requestUpdate(); return;
     }
 
-    // Back button — stop early
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      stopBoard();
-      state = DONE;
-      requestUpdate();
-      return;
+      stopBoard(); state = DONE; requestUpdate(); return;
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopBoard(); state = DONE; requestUpdate(); return; }
+      }
     }
 
-    // Periodic display refresh every 2 seconds
     static unsigned long lastUpdate = 0;
     if (millis() - lastUpdate >= 2000) {
       lastUpdate = millis();
@@ -236,6 +235,10 @@ void BulletinBoardActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       shelf::leave(renderer, mappedInput);
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) { shelf::leave(renderer, mappedInput); }
     }
     return;
   }

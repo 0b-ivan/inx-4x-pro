@@ -265,6 +265,15 @@ void PacketMonitorActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     shelf::leave(renderer, mappedInput);
   }
+
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+      if (btn == 2) { autoHop = !autoHop; requestUpdate(); }
+    }
+  }
 }
 
 void PacketMonitorActivity::render(RenderLock&&) {

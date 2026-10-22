@@ -246,23 +246,38 @@ void BleBeaconActivity::loop() {
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (modeIndex == STOP) {
-        shelf::leave(renderer, mappedInput);
-        return;
-      }
+      if (modeIndex == STOP) { shelf::leave(renderer, mappedInput); return; }
       startSpam(static_cast<SpamMode>(modeIndex));
       return;
     }
 
     buttonNavigator.onNext([this] {
-      modeIndex = ButtonNavigator::nextIndex(modeIndex, MODE_COUNT);
-      requestUpdate();
+      modeIndex = ButtonNavigator::nextIndex(modeIndex, MODE_COUNT); requestUpdate();
+    });
+    buttonNavigator.onPrevious([this] {
+      modeIndex = ButtonNavigator::previousIndex(modeIndex, MODE_COUNT); requestUpdate();
     });
 
-    buttonNavigator.onPrevious([this] {
-      modeIndex = ButtonNavigator::previousIndex(modeIndex, MODE_COUNT);
-      requestUpdate();
-    });
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2) {
+          if (modeIndex == STOP) { shelf::leave(renderer, mappedInput); return; }
+          startSpam(static_cast<SpamMode>(modeIndex)); return;
+        }
+        int touchRow = -1;
+        const auto& m = UITheme::getInstance().getMetrics();
+        const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+        const int rowStep = GUI.getListRowStep(false);
+        const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, MODE_COUNT, 0,
+                                              renderer.getScreenWidth(), m.listRowHeight);
+        if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < MODE_COUNT) {
+          modeIndex = touchRow; requestUpdate();
+        }
+      }
+    }
     return;
   }
 
@@ -271,6 +286,12 @@ void BleBeaconActivity::loop() {
     stopSpam();
     requestUpdate();
     return;
+  }
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopSpam(); requestUpdate(); return; }
+    }
   }
 
   unsigned long now = millis();

@@ -126,11 +126,16 @@ void DeauthDetectorActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       shelf::leave(renderer, mappedInput);
     }
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+      if (btn == 2) { startMonitor(); requestUpdate(); return; }
+    }
     return;
   }
 
   if (state == ALERT_SPIKE) {
-    // Any button dismisses the alert and returns to monitoring
     if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
         mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Up) ||
@@ -138,6 +143,8 @@ void DeauthDetectorActivity::loop() {
       state = MONITORING;
       requestUpdate();
     }
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) { state = MONITORING; requestUpdate(); }
     return;
   }
 
@@ -203,6 +210,35 @@ void DeauthDetectorActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     stopMonitor();
     shelf::leave(renderer, mappedInput);
+  }
+
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      if (btn == 1) { stopMonitor(); shelf::leave(renderer, mappedInput); return; }
+      if (btn == 2) { autoHop = !autoHop; requestUpdate(); return; }
+      portENTER_CRITICAL(&statsMux);
+      const int cnt = eventLogCount;
+      const int head = eventLogHead;
+      portEXIT_CRITICAL(&statsMux);
+      if (cnt > 0) {
+        int touchRow = -1;
+        const auto& m = UITheme::getInstance().getMetrics();
+        const int headerH = m.topPadding + m.headerHeight + m.verticalSpacing + 6 +
+                            renderer.getTextHeight(UI_10_FONT_ID) + 8 + 6;
+        const int rowStep = GUI.getListRowStep(true);
+        const int contentH = renderer.getScreenHeight() - m.buttonHintsHeight - headerH;
+        const int pageItems = std::max(1, contentH / rowStep);
+        const int pageStart = (selectorIndex / pageItems) * pageItems;
+        const int pageCount = std::min(pageItems, cnt - pageStart);
+        const auto rt = mappedInput.rowTouch(touchRow, headerH, rowStep, pageCount, 0,
+                                              renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+        if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+          selectorIndex = pageStart + touchRow; requestUpdate();
+        }
+      }
+    }
   }
 }
 

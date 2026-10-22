@@ -159,6 +159,23 @@ void VendorOuiActivity::loop() {
       if (menuIndex == 0) startKeyboardEntry();
       else startWifiScan();
     }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2) { if (menuIndex == 0) startKeyboardEntry(); else startWifiScan(); return; }
+        int touchRow = -1;
+        const auto& m = UITheme::getInstance().getMetrics();
+        const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+        const int rowStep = GUI.getListRowStep(false);
+        const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, MENU_COUNT, 0,
+                                              renderer.getScreenWidth(), m.listRowHeight);
+        if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < MENU_COUNT) {
+          menuIndex = touchRow; requestUpdate();
+        }
+      }
+    }
     return;
   }
 
@@ -188,6 +205,39 @@ void VendorOuiActivity::loop() {
         requestUpdate();
       }
     }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { state = MENU; requestUpdate(); return; }
+        if (btn == 2 && !scanResults.empty()) {
+          const auto& ap = scanResults[scanIndex];
+          char macBuf[20];
+          formatMac(ap.bssid, macBuf, sizeof(macBuf));
+          displayMac = macBuf;
+          lookupOui(ap.bssid);
+          lookupDone = true;
+          state = RESULT;
+          requestUpdate();
+          return;
+        }
+        if (count > 0) {
+          int touchRow = -1;
+          const auto& m = UITheme::getInstance().getMetrics();
+          const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+          const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+          const int rowStep = GUI.getListRowStep(false);
+          const int pageItems = std::max(1, contentH / rowStep);
+          const int pageStart = (scanIndex / pageItems) * pageItems;
+          const int pageCount = std::min(pageItems, count - pageStart);
+          const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
+                                                renderer.getScreenWidth(), m.listRowHeight);
+          if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+            scanIndex = pageStart + touchRow; requestUpdate();
+          }
+        }
+      }
+    }
     return;
   }
 
@@ -196,6 +246,12 @@ void VendorOuiActivity::loop() {
     state = MENU;
     lookupDone = false;
     requestUpdate();
+  }
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = MENU; lookupDone = false; requestUpdate(); }
+    }
   }
 }
 

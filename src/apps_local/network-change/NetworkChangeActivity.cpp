@@ -234,6 +234,28 @@ void NetworkChangeActivity::loop() {
       state = MENU;
       requestUpdate();
     }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { state = MENU; requestUpdate(); return; }
+        if (total > 0) {
+          int touchRow = -1;
+          const auto& m = UITheme::getInstance().getMetrics();
+          const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+          const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+          const int rowStep = GUI.getListRowStep(true);
+          const int pageItems = std::max(1, contentH / rowStep);
+          const int pageStart = (resultIndex / pageItems) * pageItems;
+          const int pageCount = std::min(pageItems, total - pageStart);
+          const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
+                                                renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+          if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+            resultIndex = pageStart + touchRow; requestUpdate();
+          }
+        }
+      }
+    }
     return;
   }
 
@@ -249,22 +271,43 @@ void NetworkChangeActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     switch (menuIndex) {
-      case 0:
-        state = TAKING_SNAPSHOT;
-        requestUpdate();
-        break;
-      case 1:
-        state = COMPARING;
-        requestUpdate();
-        break;
-      case 2:
-        shelf::leave(renderer, mappedInput);
-        break;
+      case 0: state = TAKING_SNAPSHOT; requestUpdate(); break;
+      case 1: state = COMPARING; requestUpdate(); break;
+      case 2: shelf::leave(renderer, mappedInput); break;
     }
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     shelf::leave(renderer, mappedInput);
+  }
+
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+      if (btn == 2) {
+        switch (menuIndex) {
+          case 0: state = TAKING_SNAPSHOT; requestUpdate(); break;
+          case 1: state = COMPARING; requestUpdate(); break;
+          case 2: shelf::leave(renderer, mappedInput); break;
+        }
+        return;
+      }
+      int touchRow = -1;
+      const auto& m = UITheme::getInstance().getMetrics();
+      const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+      const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+      const int rowStep = GUI.getListRowStep(false);
+      const int pageItems = std::max(1, contentH / rowStep);
+      const int pageStart = (menuIndex / pageItems) * pageItems;
+      const int pageCount = std::min(pageItems, MENU_COUNT - pageStart);
+      const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
+                                            renderer.getScreenWidth(), m.listRowHeight);
+      if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+        menuIndex = pageStart + touchRow; requestUpdate();
+      }
+    }
   }
 }
 

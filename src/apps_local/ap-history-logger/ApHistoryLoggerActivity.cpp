@@ -100,22 +100,28 @@ void ApHistoryLoggerActivity::loop() {
       requestUpdate();
     });
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      state = LOGGING;
-      logStartMs = millis();
-      lastScanMs = 0;  // force immediate first scan
-      scanCount = 0;
-      fileSize = 0;
-      seenBssids.clear();
-      requestUpdate();
+      state = LOGGING; logStartMs = millis(); lastScanMs = 0;
+      scanCount = 0; fileSize = 0; seenBssids.clear(); requestUpdate();
+    }
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+      if (btn == 2) {
+        state = LOGGING; logStartMs = millis(); lastScanMs = 0;
+        scanCount = 0; fileSize = 0; seenBssids.clear(); requestUpdate();
+      }
     }
     return;
   }
 
   if (state == LOGGING) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      state = STATS;
-      requestUpdate();
-      return;
+      state = STATS; requestUpdate(); return;
+    }
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = STATS; requestUpdate(); return; }
     }
     unsigned long interval = INTERVALS[intervalIndex];
     if (lastScanMs == 0 || millis() - lastScanMs >= interval) {
@@ -127,9 +133,15 @@ void ApHistoryLoggerActivity::loop() {
   // STATS
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) { shelf::leave(renderer, mappedInput); return; }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    // Restart
-    state = CONFIG;
-    requestUpdate();
+    state = CONFIG; requestUpdate();
+  }
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+      if (btn == 2) { state = CONFIG; requestUpdate(); }
+    }
   }
 }
 

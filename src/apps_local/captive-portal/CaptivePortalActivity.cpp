@@ -167,11 +167,21 @@ void CaptivePortalActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       stopPortal(); state = STOPPED; requestUpdate();
     }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopPortal(); state = STOPPED; requestUpdate(); }
+      }
+    }
     return;
   }
 
   if (state == STOPPED) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) shelf::leave(renderer, mappedInput);
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) { shelf::leave(renderer, mappedInput); }
+    }
     return;
   }
 
@@ -196,6 +206,42 @@ void CaptivePortalActivity::loop() {
       }
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) shelf::leave(renderer, mappedInput);
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2 && !templates.empty()) {
+          selectedTemplate = templates[selectorIndex];
+          state = ENTER_SSID;
+          startActivityForResult(
+              std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "AP Name", "Free WiFi", 32),
+              [this](const ActivityResult& result) {
+                if (result.isCancelled) { state = SELECT_TEMPLATE; requestUpdate(); return; }
+                apSsid = std::get<KeyboardResult>(result.data).text;
+                if (apSsid.empty()) apSsid = "Free WiFi";
+                startPortal();
+                requestUpdate();
+              });
+          return;
+        }
+        if (count > 0) {
+          int touchRow = -1;
+          const auto& m = UITheme::getInstance().getMetrics();
+          const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+          const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+          const int rowStep = GUI.getListRowStep(false);
+          const int pageItems = std::max(1, contentH / rowStep);
+          const int pageStart = (selectorIndex / pageItems) * pageItems;
+          const int pageCount = std::min(pageItems, count - pageStart);
+          const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
+                                                renderer.getScreenWidth(), m.listRowHeight);
+          if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+            selectorIndex = pageStart + touchRow; requestUpdate();
+          }
+        }
+      }
+    }
     return;
   }
 }

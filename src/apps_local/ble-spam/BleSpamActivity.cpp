@@ -210,8 +210,15 @@ void BleSpamActivity::loop() {
       return;
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      state = MENU;
-      requestUpdate();
+      state = MENU; requestUpdate();
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2) { state = MENU; requestUpdate(); }
+      }
     }
     return;
   }
@@ -222,16 +229,30 @@ void BleSpamActivity::loop() {
       return;
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-      menuIndex = ButtonNavigator::previousIndex(menuIndex, ADV_TYPE_COUNT);
-      requestUpdate();
+      menuIndex = ButtonNavigator::previousIndex(menuIndex, ADV_TYPE_COUNT); requestUpdate();
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-      menuIndex = ButtonNavigator::nextIndex(menuIndex, ADV_TYPE_COUNT);
-      requestUpdate();
+      menuIndex = ButtonNavigator::nextIndex(menuIndex, ADV_TYPE_COUNT); requestUpdate();
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      advType = static_cast<AdvType>(menuIndex);
-      startBroadcasting();
+      advType = static_cast<AdvType>(menuIndex); startBroadcasting();
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2) { advType = static_cast<AdvType>(menuIndex); startBroadcasting(); return; }
+        int touchRow = -1;
+        const auto& m = UITheme::getInstance().getMetrics();
+        const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+        const int rowStep = GUI.getListRowStep(false);
+        const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, ADV_TYPE_COUNT, 0,
+                                              renderer.getScreenWidth(), m.listRowHeight);
+        if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < ADV_TYPE_COUNT) {
+          menuIndex = touchRow; requestUpdate();
+        }
+      }
     }
     return;
   }
@@ -249,6 +270,12 @@ void BleSpamActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       stopBroadcasting();
       return;
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopBroadcasting(); return; }
+      }
     }
   }
 }

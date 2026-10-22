@@ -209,26 +209,34 @@ void BleContactExchangeActivity::loop() {
     }
 
     buttonNavigator.onNext([this] {
-      idleMenuIndex = ButtonNavigator::nextIndex(idleMenuIndex, 2);
-      requestUpdate();
+      idleMenuIndex = ButtonNavigator::nextIndex(idleMenuIndex, 2); requestUpdate();
     });
     buttonNavigator.onPrevious([this] {
-      idleMenuIndex = ButtonNavigator::previousIndex(idleMenuIndex, 2);
-      requestUpdate();
+      idleMenuIndex = ButtonNavigator::previousIndex(idleMenuIndex, 2); requestUpdate();
     });
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (idleMenuIndex == 0) {
-        // Edit info
-        editName();
-      } else {
-        // Start exchange — require at least a name
-        if (myName[0] == '\0') {
-          // Redirect to edit first
-          editName();
-        } else {
-          startExchange();
-          requestUpdate();
+      if (idleMenuIndex == 0) { editName(); }
+      else { if (myName[0] == '\0') { editName(); } else { startExchange(); requestUpdate(); } }
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2) {
+          if (idleMenuIndex == 0) { editName(); }
+          else { if (myName[0] == '\0') { editName(); } else { startExchange(); requestUpdate(); } }
+          return;
+        }
+        int touchRow = -1;
+        const auto& m = UITheme::getInstance().getMetrics();
+        const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+        const int rowStep = GUI.getListRowStep(false);
+        const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, 2, 0,
+                                              renderer.getScreenWidth(), m.listRowHeight);
+        if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < 2) {
+          idleMenuIndex = touchRow; requestUpdate();
         }
       }
     }
@@ -238,58 +246,61 @@ void BleContactExchangeActivity::loop() {
   if (state == EXCHANGING) {
     unsigned long now = millis();
 
-    // Poll scan results every second
     if (now - lastScanMs >= SCAN_INTERVAL_MS) {
       lastScanMs = now;
       pollScanResults();
     }
 
-    // Timeout or Back → end exchange
     if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
         (now - exchangeStart >= EXCHANGE_DURATION_MS)) {
       stopExchange();
-      if (!received.empty()) {
-        contactIndex = 0;
-        state = RECEIVED;
-      } else {
-        state = IDLE;
-      }
+      if (!received.empty()) { contactIndex = 0; state = RECEIVED; } else { state = IDLE; }
       requestUpdate();
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) {
+          stopExchange();
+          if (!received.empty()) { contactIndex = 0; state = RECEIVED; } else { state = IDLE; }
+          requestUpdate();
+        }
+      }
     }
     return;
   }
 
   if (state == RECEIVED) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      state = IDLE;
-      idleMenuIndex = 0;
-      requestUpdate();
-      return;
+      state = IDLE; idleMenuIndex = 0; requestUpdate(); return;
     }
 
     buttonNavigator.onNext([this] {
-      contactIndex = ButtonNavigator::nextIndex(contactIndex,
-                                                static_cast<int>(received.size()));
-      requestUpdate();
+      contactIndex = ButtonNavigator::nextIndex(contactIndex, static_cast<int>(received.size())); requestUpdate();
     });
     buttonNavigator.onPrevious([this] {
-      contactIndex = ButtonNavigator::previousIndex(contactIndex,
-                                                    static_cast<int>(received.size()));
-      requestUpdate();
+      contactIndex = ButtonNavigator::previousIndex(contactIndex, static_cast<int>(received.size())); requestUpdate();
     });
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (!received.empty()) {
         saveContact(received[contactIndex]);
-        // Remove saved contact from list so user can save others
         received.erase(received.begin() + contactIndex);
-        if (received.empty()) {
-          state = IDLE;
-          idleMenuIndex = 0;
-        } else {
-          contactIndex = 0;
-        }
+        if (received.empty()) { state = IDLE; idleMenuIndex = 0; } else { contactIndex = 0; }
         requestUpdate();
+      }
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { state = IDLE; idleMenuIndex = 0; requestUpdate(); return; }
+        if (btn == 2 && !received.empty()) {
+          saveContact(received[contactIndex]);
+          received.erase(received.begin() + contactIndex);
+          if (received.empty()) { state = IDLE; idleMenuIndex = 0; } else { contactIndex = 0; }
+          requestUpdate();
+        }
       }
     }
     return;

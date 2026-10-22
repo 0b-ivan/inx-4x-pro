@@ -137,15 +137,11 @@ void SignalTriangulationActivity::loop() {
   // Always handle Back
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (state == TAKE_READINGS || state == RESULT) {
-      // Return to AP selection
       state = SELECT_AP;
       scanning = false;
       WiFi.scanDelete();
       currentReading = 0;
-      for (int i = 0; i < 3; i++) {
-        readings[i].taken = false;
-        readings[i].rssi = 0;
-      }
+      for (int i = 0; i < 3; i++) { readings[i].taken = false; readings[i].rssi = 0; }
       requestUpdate();
     } else {
       shelf::leave(renderer, mappedInput);
@@ -162,16 +158,10 @@ void SignalTriangulationActivity::loop() {
     const int count = apCount;
 
     buttonNavigator.onNext([this, count] {
-      if (count > 0) {
-        apIndex = ButtonNavigator::nextIndex(apIndex, count);
-        requestUpdate();
-      }
+      if (count > 0) { apIndex = ButtonNavigator::nextIndex(apIndex, count); requestUpdate(); }
     });
     buttonNavigator.onPrevious([this, count] {
-      if (count > 0) {
-        apIndex = ButtonNavigator::previousIndex(apIndex, count);
-        requestUpdate();
-      }
+      if (count > 0) { apIndex = ButtonNavigator::previousIndex(apIndex, count); requestUpdate(); }
     });
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -181,19 +171,47 @@ void SignalTriangulationActivity::loop() {
         memcpy(targetSsid, selected.ssid, sizeof(targetSsid));
         state = TAKE_READINGS;
         currentReading = 0;
-        for (int i = 0; i < 3; i++) {
-          readings[i].taken = false;
-          readings[i].rssi = 0;
-        }
+        for (int i = 0; i < 3; i++) { readings[i].taken = false; readings[i].rssi = 0; }
         scanning = false;
         requestUpdate();
       }
     }
 
-    // PageForward: rescan
     if (mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
-      startInitialScan();
-      requestUpdate();
+      startInitialScan(); requestUpdate();
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2 && apCount > 0) {
+          const VisibleAp& sel = apList[apIndex];
+          memcpy(targetBssid, sel.bssid, sizeof(targetBssid));
+          memcpy(targetSsid, sel.ssid, sizeof(targetSsid));
+          state = TAKE_READINGS;
+          currentReading = 0;
+          for (int i = 0; i < 3; i++) { readings[i].taken = false; readings[i].rssi = 0; }
+          scanning = false;
+          requestUpdate();
+          return;
+        }
+        if (count > 0) {
+          int touchRow = -1;
+          const auto& m = UITheme::getInstance().getMetrics();
+          const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+          const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+          const int rowStep = GUI.getListRowStep(false);
+          const int pageItems = std::max(1, contentH / rowStep);
+          const int pageStart = (apIndex / pageItems) * pageItems;
+          const int pageCount = std::min(pageItems, count - pageStart);
+          const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
+                                                renderer.getScreenWidth(), m.listRowHeight);
+          if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+            apIndex = pageStart + touchRow; requestUpdate();
+          }
+        }
+      }
     }
     return;
   }
@@ -205,15 +223,34 @@ void SignalTriangulationActivity::loop() {
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (currentReading < 3 && !scanning) {
-        startReadingScan();
-        requestUpdate();
+      if (currentReading < 3 && !scanning) { startReadingScan(); requestUpdate(); }
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) {
+          state = SELECT_AP; scanning = false; WiFi.scanDelete(); currentReading = 0;
+          for (int i = 0; i < 3; i++) { readings[i].taken = false; readings[i].rssi = 0; }
+          requestUpdate(); return;
+        }
+        if (btn == 2 && currentReading < 3 && !scanning) { startReadingScan(); requestUpdate(); }
       }
     }
     return;
   }
 
   // RESULT state — Back already handled above, nothing else to do
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) {
+        state = SELECT_AP; scanning = false; WiFi.scanDelete(); currentReading = 0;
+        for (int i = 0; i < 3; i++) { readings[i].taken = false; readings[i].rssi = 0; }
+        requestUpdate();
+      }
+    }
+  }
 }
 
 // ---- render -----------------------------------------------------------------

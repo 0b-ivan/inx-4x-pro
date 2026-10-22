@@ -71,8 +71,16 @@ void DnsLookupActivity::loop() {
       shelf::leave(renderer, mappedInput);
       return;
     }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      // Allow new lookup
+    bool doNewLookup = mappedInput.wasPressed(MappedInputManager::Button::Confirm);
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2) { doNewLookup = true; }
+      }
+    }
+    if (doNewLookup) {
       state = TEXT_INPUT;
       startActivityForResult(
           std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_DNS_LOOKUP), hostname, 253),

@@ -313,6 +313,24 @@ void MeshChatActivity::loop() {
       if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
         shelf::leave(renderer, mappedInput);
       }
+      {
+        int tx_ = 0, ty_ = 0;
+        if (mappedInput.wasScreenTapped(tx_, ty_)) {
+          const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+          if (btn == 1) { shelf::leave(renderer, mappedInput); }
+          if (btn == 2) {
+            startActivityForResult(
+                std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "Message", "", 199),
+                [this](const ActivityResult& result) {
+                  if (!result.isCancelled) {
+                    const auto& text = std::get<KeyboardResult>(result.data).text;
+                    if (!text.empty()) sendMessage(text.c_str());
+                  }
+                  requestUpdate();
+                });
+          }
+        }
+      }
       break;
     }
 
@@ -324,23 +342,25 @@ void MeshChatActivity::loop() {
       }
       if (peerCount > 0) {
         buttonNavigator.onNext([this, peerCount] {
-          peerSelectorIndex = ButtonNavigator::nextIndex(peerSelectorIndex, peerCount);
-          requestUpdate();
+          peerSelectorIndex = ButtonNavigator::nextIndex(peerSelectorIndex, peerCount); requestUpdate();
         });
         buttonNavigator.onPrevious([this, peerCount] {
-          peerSelectorIndex = ButtonNavigator::previousIndex(peerSelectorIndex, peerCount);
-          requestUpdate();
+          peerSelectorIndex = ButtonNavigator::previousIndex(peerSelectorIndex, peerCount); requestUpdate();
         });
       }
 
       if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-        state = CHAT_VIEW;
-        requestUpdate();
+        state = CHAT_VIEW; requestUpdate();
       }
 
       if (mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
-        relayMode = !relayMode;
-        requestUpdate();
+        relayMode = !relayMode; requestUpdate();
+      }
+      {
+        int tx_ = 0, ty_ = 0;
+        if (mappedInput.wasScreenTapped(tx_, ty_)) {
+          if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = CHAT_VIEW; requestUpdate(); }
+        }
       }
       break;
     }

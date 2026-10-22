@@ -275,24 +275,26 @@ void DeadDropActivity::loop() {
     }
 
     buttonNavigator.onNext([this] {
-      configIndex = ButtonNavigator::nextIndex(configIndex, 2);
-      requestUpdate();
+      configIndex = ButtonNavigator::nextIndex(configIndex, 2); requestUpdate();
     });
     buttonNavigator.onPrevious([this] {
-      configIndex = ButtonNavigator::previousIndex(configIndex, 2);
-      requestUpdate();
+      configIndex = ButtonNavigator::previousIndex(configIndex, 2); requestUpdate();
     });
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (configIndex == 0) {
-        // Cycle timer option
-        timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT);
-        timerMinutes = TIMER_OPTIONS[timerIndex];
-        requestUpdate();
-      } else {
-        // Start drop
-        startDrop();
-        requestUpdate();
+      if (configIndex == 0) { timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT); timerMinutes = TIMER_OPTIONS[timerIndex]; requestUpdate(); }
+      else { startDrop(); requestUpdate(); }
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2) {
+          if (configIndex == 0) { timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT); timerMinutes = TIMER_OPTIONS[timerIndex]; requestUpdate(); }
+          else { startDrop(); requestUpdate(); }
+          return;
+        }
       }
     }
     return;
@@ -302,24 +304,21 @@ void DeadDropActivity::loop() {
     if (server) server->handleClient();
     connectedClients = WiFi.softAPgetStationNum();
 
-    // Check timer expiry
     unsigned long elapsed = millis() - startTime;
     if (elapsed >= static_cast<unsigned long>(timerMinutes) * 60000UL) {
-      stopDrop();
-      state = DONE;
-      requestUpdate();
-      return;
+      stopDrop(); state = DONE; requestUpdate(); return;
     }
 
-    // Back button — stop early
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      stopDrop();
-      state = DONE;
-      requestUpdate();
-      return;
+      stopDrop(); state = DONE; requestUpdate(); return;
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopDrop(); state = DONE; requestUpdate(); return; }
+      }
     }
 
-    // Periodic display refresh every 2 seconds
     static unsigned long lastUpdate = 0;
     if (millis() - lastUpdate >= 2000) {
       lastUpdate = millis();
@@ -332,6 +331,10 @@ void DeadDropActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       shelf::leave(renderer, mappedInput);
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) { shelf::leave(renderer, mappedInput); }
     }
     return;
   }

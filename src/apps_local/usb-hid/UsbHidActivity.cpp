@@ -538,32 +538,42 @@ void UsbHidActivity::executeNextLine() {
 
 void UsbHidActivity::loop() {
   if (state == FILE_SELECT) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      shelf::leave(renderer, mappedInput);
-      return;
-    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) { shelf::leave(renderer, mappedInput); return; }
 
     const int count = static_cast<int>(duckyFiles.size());
 
     if (count > 0) {
-      buttonNavigator.onNext([this, count] {
-        fileIndex = ButtonNavigator::nextIndex(fileIndex, count);
-        requestUpdate();
-      });
-      buttonNavigator.onPrevious([this, count] {
-        fileIndex = ButtonNavigator::previousIndex(fileIndex, count);
-        requestUpdate();
-      });
+      buttonNavigator.onNext([this, count] { fileIndex = ButtonNavigator::nextIndex(fileIndex, count); requestUpdate(); });
+      buttonNavigator.onPrevious([this, count] { fileIndex = ButtonNavigator::previousIndex(fileIndex, count); requestUpdate(); });
 
       if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
         if (fileIndex < count) {
-          if (parseScript(duckyFiles[fileIndex].name)) {
-            previewScroll = 0;
-            state = PREVIEW;
-          } else {
-            state = ERROR;
-          }
+          state = parseScript(duckyFiles[fileIndex].name) ? PREVIEW : ERROR;
+          if (state == PREVIEW) previewScroll = 0;
           requestUpdate();
+        }
+      }
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2 && count > 0 && fileIndex < count) {
+          state = parseScript(duckyFiles[fileIndex].name) ? PREVIEW : ERROR;
+          if (state == PREVIEW) previewScroll = 0;
+          requestUpdate(); return;
+        }
+        if (count > 0) {
+          int touchRow = -1;
+          const auto& m = UITheme::getInstance().getMetrics();
+          const int listTop2 = m.topPadding + m.headerHeight + m.verticalSpacing;
+          const int rowStep = GUI.getListRowStep(true);
+          const auto rt = mappedInput.rowTouch(touchRow, listTop2, rowStep, count, 0,
+                                                renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+          if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < count) {
+            fileIndex = touchRow; requestUpdate();
+          }
         }
       }
     }
@@ -571,60 +581,58 @@ void UsbHidActivity::loop() {
   }
 
   if (state == PREVIEW) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      state = FILE_SELECT;
-      requestUpdate();
-      return;
-    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) { state = FILE_SELECT; requestUpdate(); return; }
     if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
       if (previewScroll > 0) { previewScroll--; requestUpdate(); }
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-      int maxScroll = static_cast<int>(previewLines.size()) - 1;
-      if (maxScroll < 0) maxScroll = 0;
+      int maxScroll = std::max(0, static_cast<int>(previewLines.size()) - 1);
       if (previewScroll < maxScroll) { previewScroll++; requestUpdate(); }
     }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      state = CONFIRM_RUN;
-      requestUpdate();
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) { state = CONFIRM_RUN; requestUpdate(); }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { state = FILE_SELECT; requestUpdate(); return; }
+        if (btn == 2) { state = CONFIRM_RUN; requestUpdate(); return; }
+      }
     }
     return;
   }
 
   if (state == CONFIRM_RUN) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      state = PREVIEW;
-      requestUpdate();
-      return;
-    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) { state = PREVIEW; requestUpdate(); return; }
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      initUsbHid();
-      totalKeystrokes = 0;
-      currentLine = 0;
-      waiting = false;
-      runStartTime = millis();
-      state = RUNNING;
-      requestUpdate();
+      initUsbHid(); totalKeystrokes = 0; currentLine = 0; waiting = false; runStartTime = millis(); state = RUNNING; requestUpdate();
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { state = PREVIEW; requestUpdate(); return; }
+        if (btn == 2) { initUsbHid(); totalKeystrokes = 0; currentLine = 0; waiting = false; runStartTime = millis(); state = RUNNING; requestUpdate(); return; }
+      }
     }
     return;
   }
 
   if (state == RUNNING) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      releaseAllKeys();
-      deinitUsbHid();
-      state = FILE_SELECT;
-      requestUpdate();
-      return;
+      releaseAllKeys(); deinitUsbHid(); state = FILE_SELECT; requestUpdate(); return;
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { releaseAllKeys(); deinitUsbHid(); state = FILE_SELECT; requestUpdate(); return; }
+      }
     }
 
     if (waiting) {
       if (millis() - lineStartTime >= static_cast<unsigned long>(script[currentLine].value)) {
-        waiting = false;
-        currentLine++;
-        requestUpdate();
+        waiting = false; currentLine++; requestUpdate();
       }
-      return; // Still waiting on DELAY
+      return;
     }
 
     executeNextLine();
@@ -632,31 +640,32 @@ void UsbHidActivity::loop() {
   }
 
   if (state == DONE) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      state = FILE_SELECT;
-      requestUpdate();
-      return;
-    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) { state = FILE_SELECT; requestUpdate(); return; }
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      // Re-run: re-parse (previewLines already populated) and restart
-      if (!duckyFiles.empty() && fileIndex < static_cast<int>(duckyFiles.size())) {
-        parseScript(duckyFiles[fileIndex].name);
+      if (!duckyFiles.empty() && fileIndex < static_cast<int>(duckyFiles.size())) parseScript(duckyFiles[fileIndex].name);
+      totalKeystrokes = 0; currentLine = 0; waiting = false; runStartTime = millis(); initUsbHid(); state = RUNNING; requestUpdate();
+    }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { state = FILE_SELECT; requestUpdate(); return; }
+        if (btn == 2) {
+          if (!duckyFiles.empty() && fileIndex < static_cast<int>(duckyFiles.size())) parseScript(duckyFiles[fileIndex].name);
+          totalKeystrokes = 0; currentLine = 0; waiting = false; runStartTime = millis(); initUsbHid(); state = RUNNING; requestUpdate(); return;
+        }
       }
-      totalKeystrokes = 0;
-      currentLine = 0;
-      waiting = false;
-      runStartTime = millis();
-      initUsbHid();
-      state = RUNNING;
-      requestUpdate();
     }
     return;
   }
 
   if (state == ERROR) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      state = FILE_SELECT;
-      requestUpdate();
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) { state = FILE_SELECT; requestUpdate(); }
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = FILE_SELECT; requestUpdate(); return; }
+      }
     }
     return;
   }

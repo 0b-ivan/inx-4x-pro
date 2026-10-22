@@ -111,6 +111,10 @@ void WifiTestActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       shelf::leave(renderer, mappedInput);
     }
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) shelf::leave(renderer, mappedInput);
+    }
     return;
   }
 
@@ -130,11 +134,51 @@ void WifiTestActivity::loop() {
       state = SELECT_TARGET;
       requestUpdate();
     }
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) {
+        esp_wifi_set_promiscuous(false);
+        state = SELECT_TARGET;
+        requestUpdate();
+      }
+    }
     return;
   }
 
   // SELECT_TARGET
   const int count = static_cast<int>(aps.size());
+
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+      if (btn == 2) {
+        if (!rawTxAvailable) { state = NOT_SUPPORTED; requestUpdate(); return; }
+        if (!aps.empty()) {
+          targetIndex = selectorIndex; packetsSent = 0;
+          startTime = millis(); lastSendTime = 0;
+          esp_wifi_set_promiscuous(true); state = DEAUTHING; requestUpdate();
+        }
+        return;
+      }
+      int touchRow = -1;
+      const auto& m = UITheme::getInstance().getMetrics();
+      const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+      const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+      const int rowStep = GUI.getListRowStep(true);
+      const int pageItems = std::max(1, contentH / rowStep);
+      const int pageStart = (selectorIndex / pageItems) * pageItems;
+      const int pageCount = std::min(pageItems, count - pageStart);
+      const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
+                                            renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+      if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+        selectorIndex = pageStart + touchRow;
+        requestUpdate();
+      }
+      return;
+    }
+  }
 
   buttonNavigator.onNext([this, count] {
     if (count > 0) {

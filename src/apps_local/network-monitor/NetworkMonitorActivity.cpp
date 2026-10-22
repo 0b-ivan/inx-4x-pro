@@ -307,6 +307,10 @@ void NetworkMonitorActivity::loop() {
       state = MONITORING;
       requestUpdate();
     }
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = MONITORING; requestUpdate(); }
+    }
     return;
   }
 
@@ -314,12 +318,18 @@ void NetworkMonitorActivity::loop() {
   if (state == ROGUE_SCANNING) {
     processRogueScanResults();
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      // Cancel rogue scan, return to frame detection mode
       WiFi.scanDelete();
       monitorMode = FRAME_DETECTION;
       state = MONITORING;
       startMonitoring();
       requestUpdate();
+    }
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) {
+        WiFi.scanDelete(); monitorMode = FRAME_DETECTION;
+        state = MONITORING; startMonitoring(); requestUpdate();
+      }
     }
     return;
   }
@@ -329,6 +339,10 @@ void NetworkMonitorActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       state = ROGUE_RESULTS;
       requestUpdate();
+    }
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = ROGUE_RESULTS; requestUpdate(); }
     }
     return;
   }
@@ -352,27 +366,42 @@ void NetworkMonitorActivity::loop() {
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (mappedInput.getHeldTime() >= 500) {
-        // Long press: switch back to frame detection mode
         WiFi.scanDelete();
-        allAps.clear();
-        ssidGroups.clear();
-        rogueScanPhase = 0;
-        roguesScanCount = 0;
-        suspiciousCount = 0;
-        monitorMode = FRAME_DETECTION;
-        state = MONITORING;
-        startMonitoring();
-        requestUpdate();
+        allAps.clear(); ssidGroups.clear();
+        rogueScanPhase = 0; roguesScanCount = 0; suspiciousCount = 0;
+        monitorMode = FRAME_DETECTION; state = MONITORING; startMonitoring(); requestUpdate();
       } else if (!ssidGroups.empty()) {
-        rogueDetailGroupIndex = rogueSelectorIndex;
-        state = ROGUE_DETAIL;
-        requestUpdate();
+        rogueDetailGroupIndex = rogueSelectorIndex; state = ROGUE_DETAIL; requestUpdate();
       }
       return;
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       shelf::leave(renderer, mappedInput);
+    }
+
+    {
+      int tx_ = 0, ty_ = 0;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+        if (btn == 2 && !ssidGroups.empty()) {
+          rogueDetailGroupIndex = rogueSelectorIndex; state = ROGUE_DETAIL; requestUpdate(); return;
+        }
+        int touchRow = -1;
+        const auto& m = UITheme::getInstance().getMetrics();
+        const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+        const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+        const int rowStep = GUI.getListRowStep(true);
+        const int pageItems = std::max(1, contentH / rowStep);
+        const int pageStart = (rogueSelectorIndex / pageItems) * pageItems;
+        const int pageCount = std::min(pageItems, count - pageStart);
+        const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
+                                              renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+        if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+          rogueSelectorIndex = pageStart + touchRow; requestUpdate();
+        }
+      }
     }
     return;
   }
@@ -468,6 +497,49 @@ void NetworkMonitorActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     shelf::leave(renderer, mappedInput);
+  }
+
+  {
+    int tx_ = 0, ty_ = 0;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+      if (btn == 2) {
+        if (mappedInput.getHeldTime() >= 500) {
+          stopMonitoring(); monitorMode = ROGUE_AP_SCAN;
+          rogueScanPhase = 0; roguesScanCount = 0; suspiciousCount = 0;
+          rogueDetailGroupIndex = -1; rogueSelectorIndex = 0;
+          RADIO.ensureWifi(); WiFi.disconnect(); startRogueScan(); requestUpdate();
+        } else {
+          portENTER_CRITICAL(&dataMux);
+          const int cnt = eventCount;
+          portEXIT_CRITICAL(&dataMux);
+          if (cnt > 0) { detailIndex = selectorIndex; state = DETAIL; requestUpdate(); }
+        }
+        return;
+      }
+      portENTER_CRITICAL(&dataMux);
+      const int cnt = eventCount;
+      portEXIT_CRITICAL(&dataMux);
+      if (cnt > 0) {
+        int touchRow = -1;
+        const auto& m = UITheme::getInstance().getMetrics();
+        // list starts after rate text + graph + stat text
+        const int listTop = m.topPadding + m.headerHeight + m.verticalSpacing + 6
+                          + renderer.getTextHeight(UI_10_FONT_ID) + 6 + 60 + 10
+                          + renderer.getTextHeight(UI_10_FONT_ID) + 8;
+        const int rowStep = GUI.getListRowStep(true);
+        const int contentH = renderer.getScreenHeight() - m.buttonHintsHeight - listTop;
+        const int pageItems = std::max(1, contentH / rowStep);
+        const int pageStart = (selectorIndex / pageItems) * pageItems;
+        const int pageCount = std::min(pageItems, cnt - pageStart);
+        const auto rt = mappedInput.rowTouch(touchRow, listTop, rowStep, pageCount, 0,
+                                              renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+        if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
+          selectorIndex = pageStart + touchRow; requestUpdate();
+        }
+      }
+    }
   }
 }
 
