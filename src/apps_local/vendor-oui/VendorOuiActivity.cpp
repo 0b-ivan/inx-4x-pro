@@ -1,4 +1,5 @@
 #include "VendorOuiActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -79,6 +80,7 @@ void VendorOuiActivity::lookupOui(const uint8_t* ouiBytes) {
 }
 
 void VendorOuiActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = MENU;
   menuIndex = 0;
@@ -95,6 +97,7 @@ void VendorOuiActivity::onExit() {
   Activity::onExit();
   WiFi.scanDelete();
   RADIO.shutdown();
+  devmode::resume();
 }
 
 void VendorOuiActivity::startKeyboardEntry() {

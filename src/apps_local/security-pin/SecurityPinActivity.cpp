@@ -5,12 +5,12 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
-#include <mbedtls/sha256.h>
+#include <mbedtls/md.h>
 
 #include <cstring>
 
 #include "MappedInputManager.h"
-#include "QuickWipeActivity.h"
+#include "../quick-wipe/QuickWipeActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/DuressManager.h"
@@ -20,7 +20,8 @@
 // ---------------------------------------------------------------------------
 
 void SecurityPinActivity::hashPin(const char* pin, uint8_t* out) {
-  mbedtls_sha256(reinterpret_cast<const unsigned char*>(pin), strlen(pin), out, 0);
+  mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
+             reinterpret_cast<const unsigned char*>(pin), strlen(pin), out);
 }
 
 bool SecurityPinActivity::checkPin(const char* pin, const uint8_t* hash) const {

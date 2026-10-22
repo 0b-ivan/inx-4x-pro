@@ -6,7 +6,7 @@
 #include <Logging.h>
 #include <esp_random.h>
 #include <mbedtls/aes.h>
-#include <mbedtls/sha256.h>
+#include <mbedtls/md.h>
 
 #include <cstring>
 
@@ -21,9 +21,9 @@
 
 void SdEncryptionActivity::deriveKey(const char* pin, uint8_t key[32]) {
   uint8_t hash[32];
-  mbedtls_sha256(reinterpret_cast<const uint8_t*>(pin), strlen(pin), hash, 0);
+  mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), reinterpret_cast<const uint8_t*>(pin), strlen(pin), hash);
   for (int i = 0; i < 1000; i++) {
-    mbedtls_sha256(hash, 32, hash, 0);
+    mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), hash, 32, hash);
   }
   memcpy(key, hash, 32);
   // Wipe intermediate from stack
@@ -36,7 +36,7 @@ void SdEncryptionActivity::computeVerifyHash(const uint8_t key[32], uint8_t out[
   uint8_t buf[14 + 32];
   memcpy(buf, TAG, 14);
   memcpy(buf + 14, key, 32);
-  mbedtls_sha256(buf, sizeof(buf), out, 0);
+  mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), buf, sizeof(buf), out);
   memset(buf, 0, sizeof(buf));
 }
 
@@ -507,7 +507,7 @@ void SdEncryptionActivity::showMessage(const char* msg, unsigned long durationMs
 // ENC-004: phase 2 — user has verified current PIN; now ask for the new one
 void SdEncryptionActivity::launchChangePinPhase2() {
   startActivityForResult(
-      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "Enter new PIN", "", 32, true),
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "Enter new PIN", "", 32, InputType::Password),
       [this](const ActivityResult& result) {
         changePinPhase2 = false;
 
@@ -590,7 +590,7 @@ void SdEncryptionActivity::loop() {
         // Phase 1: verify current PIN.
         startActivityForResult(
             std::make_unique<KeyboardEntryActivity>(
-                renderer, mappedInput, "Enter current PIN", "", 32, true),
+                renderer, mappedInput, "Enter current PIN", "", 32, InputType::Password),
             [this](const ActivityResult& result) {
               if (result.isCancelled) return;
               const auto& pin = std::get<KeyboardResult>(result.data).text;
@@ -626,7 +626,7 @@ void SdEncryptionActivity::loop() {
 
       // Encrypt (0) or Decrypt (1)
       startActivityForResult(
-          std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "Enter PIN", "", 32, true),
+          std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "Enter PIN", "", 32, InputType::Password),
           [this, captured](const ActivityResult& result) {
             if (result.isCancelled) return;
             const auto& pin = std::get<KeyboardResult>(result.data).text;
