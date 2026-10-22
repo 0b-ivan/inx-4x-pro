@@ -12,6 +12,18 @@
 #include "../../components/UITheme.h"
 #include "fontIds.h"
 
+static constexpr int HISTORY_TOP        = 5;
+static constexpr int HISTORY_AREA_H     = 96;
+static constexpr int EXPRESSION_Y       = 104;
+static constexpr int DISPLAY_TOP        = 122;
+static constexpr int DISPLAY_H          = 64;
+static constexpr int SEPARATOR_Y        = 194;
+static constexpr int KEYPAD_TOP         = 206;
+static constexpr int KEYPAD_BOTTOM      = 760;
+static constexpr int KEYPAD_MARGIN_H    = 6;
+static constexpr int KEYPAD_MARGIN_V    = 4;
+static constexpr int KEY_GAP            = 3;
+
 const char* const CalculatorActivity::KEY_LABELS[GRID_ROWS][GRID_COLS] = {
   {"C",  "+/-", "%",  "/"},
   {"7",  "8",   "9",  "x"},
@@ -76,6 +88,27 @@ void CalculatorActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     pressKey(cursorRow, cursorCol);
     changed = true;
+  }
+
+  {
+    int tx, ty;
+    if (mappedInput.wasScreenTapped(tx, ty)) {
+      if (ty >= KEYPAD_TOP && ty < KEYPAD_BOTTOM) {
+        const int pageWidth = renderer.getScreenWidth();
+        const int availW = pageWidth - 2 * KEYPAD_MARGIN_H;
+        const int availH = KEYPAD_BOTTOM - KEYPAD_TOP - 2 * KEYPAD_MARGIN_V;
+        const int keyW   = (availW - (GRID_COLS - 1) * KEY_GAP) / GRID_COLS;
+        const int keyH   = (availH - (GRID_ROWS - 1) * KEY_GAP) / GRID_ROWS;
+        int col = (tx - KEYPAD_MARGIN_H) / (keyW + KEY_GAP);
+        int row = (ty - KEYPAD_TOP - KEYPAD_MARGIN_V) / (keyH + KEY_GAP);
+        if (col >= 0 && col < GRID_COLS && row >= 0 && row < GRID_ROWS) {
+          cursorRow = row;
+          cursorCol = col;
+          pressKey(row, col);
+          changed = true;
+        }
+      }
+    }
   }
 
   if (changed) requestUpdate();
@@ -283,18 +316,6 @@ void CalculatorActivity::addHistory(const char* expr, double result) {
     history[MAX_HISTORY - 1].result = result;
   }
 }
-
-static constexpr int HISTORY_TOP        = 5;
-static constexpr int HISTORY_AREA_H     = 96;
-static constexpr int EXPRESSION_Y       = 104;
-static constexpr int DISPLAY_TOP        = 122;
-static constexpr int DISPLAY_H          = 64;
-static constexpr int SEPARATOR_Y        = 194;
-static constexpr int KEYPAD_TOP         = 206;
-static constexpr int KEYPAD_BOTTOM      = 760;
-static constexpr int KEYPAD_MARGIN_H    = 6;
-static constexpr int KEYPAD_MARGIN_V    = 4;
-static constexpr int KEY_GAP            = 3;
 
 void CalculatorActivity::render(RenderLock&&) {
   renderer.clearScreen();

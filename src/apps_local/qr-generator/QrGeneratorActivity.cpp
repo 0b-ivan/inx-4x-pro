@@ -40,7 +40,9 @@ void QrGeneratorActivity::loop() {
       shelf::leave(renderer, mappedInput);
       return;
     }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    int tx_, ty_;
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
       state = TEXT_INPUT;
       startActivityForResult(
           std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "QR Code Text", textPayload, 0),

@@ -191,7 +191,9 @@ void QuickWipeActivity::loop() {
     }
 
     const bool pressing = mappedInput.isPressed(MappedInputManager::Button::Confirm);
-    if (pressing) {
+    int hx_, hy_;
+    const bool touchHeld = mappedInput.isScreenTouchHeld(hx_, hy_);
+    if (pressing || touchHeld) {
       if (!holdingConfirm) {
         holdingConfirm = true;
         confirmStart = millis();
@@ -227,7 +229,9 @@ void QuickWipeActivity::loop() {
   }
 
   if (state == DONE) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    int tx_, ty_;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
       verifyWipe();
       return;
     }

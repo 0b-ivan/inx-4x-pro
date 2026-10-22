@@ -85,7 +85,20 @@ void MorseCodeActivity::loop() {
       modeIndex = ButtonNavigator::previousIndex(modeIndex, 3);
       requestUpdate();
     });
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    bool confirmMode = mappedInput.wasPressed(MappedInputManager::Button::Confirm);
+    {
+      const auto& m = UITheme::getInstance().getMetrics();
+      int touchRow = -1;
+      const auto rt = mappedInput.rowTouch(touchRow,
+                                           m.topPadding + m.headerHeight + m.verticalSpacing,
+                                           m.listRowHeight, 3);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < 3) {
+        modeIndex = touchRow;
+        if (rt == MappedInputManager::RowTouch::Tap) confirmMode = true;
+        requestUpdate();
+      }
+    }
+    if (confirmMode) {
       if (modeIndex == 0) {
         startActivityForResult(
             std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "Text to Morse"),
@@ -114,7 +127,9 @@ void MorseCodeActivity::loop() {
   }
 
   if (state == MORSE_ENCODE) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    int tx_, ty_;
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
       state = MODE_SELECT;
       requestUpdate();
     }
@@ -138,6 +153,17 @@ void MorseCodeActivity::loop() {
       }
       lastKeyTime = millis();
       requestUpdate();
+    }
+
+    // Touch: left half = dot, right half = dash
+    {
+      int tx, ty;
+      if (mappedInput.wasScreenTapped(tx, ty)) {
+        const int half = renderer.getScreenWidth() / 2;
+        currentMorseChar += (tx < half) ? '.' : '-';
+        lastKeyTime = millis();
+        requestUpdate();
+      }
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
@@ -167,7 +193,9 @@ void MorseCodeActivity::loop() {
   }
 
   if (state == REFERENCE) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    int tx_, ty_;
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
       state = MODE_SELECT;
       requestUpdate();
     }

@@ -109,12 +109,23 @@ void QrTotpActivity::loop() {
       selectedIndex = ButtonNavigator::nextIndex(selectedIndex, accountCount);
       requestUpdate();
     }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (accountCount > 0) {
-        state = SHOW_QR;
-        lastPeriodIndex = 0;
+    bool confirmAction = mappedInput.wasPressed(MappedInputManager::Button::Confirm);
+    if (accountCount > 0) {
+      const auto& m = UITheme::getInstance().getMetrics();
+      int touchRow = -1;
+      const auto rt = mappedInput.rowTouch(touchRow,
+                                           m.topPadding + m.headerHeight,
+                                           m.listRowHeight, accountCount);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < accountCount) {
+        selectedIndex = touchRow;
+        if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
         requestUpdate();
       }
+    }
+    if (confirmAction && accountCount > 0) {
+      state = SHOW_QR;
+      lastPeriodIndex = 0;
+      requestUpdate();
     }
     return;
   }

@@ -582,7 +582,20 @@ void SdEncryptionActivity::loop() {
       if (menuIndex < MENU_ITEMS - 1) { menuIndex++; requestUpdate(); }
       return;
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    bool confirmAction = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+    {
+      const auto& m = UITheme::getInstance().getMetrics();
+      int touchRow = -1;
+      const auto rt = mappedInput.rowTouch(touchRow,
+                                           m.topPadding + m.headerHeight,
+                                           m.listWithSubtitleRowHeight, MENU_ITEMS);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < MENU_ITEMS) {
+        menuIndex = touchRow;
+        if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
+        requestUpdate();
+      }
+    }
+    if (confirmAction) {
       const int captured = menuIndex;
 
       if (captured == 2) {
@@ -664,8 +677,10 @@ void SdEncryptionActivity::loop() {
   }
 
   if (state == DONE) {
+    int tx_, ty_;
     if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
       state = MENU;
       menuIndex = 0;
       processedFiles = 0;

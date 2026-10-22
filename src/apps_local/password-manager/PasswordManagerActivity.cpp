@@ -34,7 +34,20 @@ void PasswordManagerActivity::loop() {
     requestUpdate();
   });
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  bool confirmAction = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+  {
+    const auto& m = UITheme::getInstance().getMetrics();
+    int touchRow = -1;
+    const auto rt = mappedInput.rowTouch(touchRow,
+                                         m.topPadding + m.headerHeight + m.verticalSpacing,
+                                         m.listWithSubtitleRowHeight, itemCount);
+    if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < itemCount) {
+      selectorIndex = touchRow;
+      if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
+      requestUpdate();
+    }
+  }
+  if (confirmAction) {
     const auto& entries = PASSWORD_STORE.getEntries();
     if (selectorIndex < static_cast<int>(entries.size())) {
       startActivityForResult(

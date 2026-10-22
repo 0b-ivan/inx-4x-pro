@@ -192,7 +192,20 @@ void SdFileBrowserActivity::loop() {
       }
     });
 
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    bool confirmAction = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+    if (count > 0) {
+      const auto& m = UITheme::getInstance().getMetrics();
+      int touchRow = -1;
+      const auto rt = mappedInput.rowTouch(touchRow,
+                                           m.topPadding + m.headerHeight + m.verticalSpacing,
+                                           m.listWithSubtitleRowHeight, count);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < count) {
+        selectorIndex = touchRow;
+        if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
+        requestUpdate();
+      }
+    }
+    if (confirmAction) {
       if (selectorIndex < count) {
         const auto& e = entries[selectorIndex];
         if (e.isDir) {
@@ -278,7 +291,9 @@ void SdFileBrowserActivity::loop() {
   }
 
   if (state == CONFIRM_DELETE) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    int tx_, ty_;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
       deleteFile();
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
