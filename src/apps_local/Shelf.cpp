@@ -93,6 +93,13 @@
 #include "qr-generator/QrGeneratorActivity.h"
 #include "sd-file-browser/SdFileBrowserActivity.h"
 #include "unit-converter/UnitConverterActivity.h"
+#include "steganography/SteganographyActivity.h"
+#include "sd-encryption/SdEncryptionActivity.h"
+#include "security-pin/SecurityPinActivity.h"
+#include "quick-wipe/QuickWipeActivity.h"
+#include "screen-decoy/ScreenDecoyActivity.h"
+#include "qr-totp/QrTotpActivity.h"
+#include "usb-mass-storage/UsbMassStorageActivity.h"
 #include "knucklebones/KnucklebonesActivity.h"
 #include "minesweeper/MinesweeperActivity.h"
 #include "murdle/MurdleActivity.h"
@@ -201,7 +208,14 @@ constexpr shelf::Item kApps[] = {
     {"PASSWORD MANAGER", &icon_study_32, &PasswordManagerActivity::create},
     {"QR GENERATOR",   &icon_study_32,  &QrGeneratorActivity::create},
     {"SD FILE BROWSER", &icon_study_32, &SdFileBrowserActivity::create},
-    {"UNIT CONVERTER", &icon_study_32,  &UnitConverterActivity::create},
+    {"UNIT CONVERTER",  &icon_study_32,  &UnitConverterActivity::create},
+    {"STEGANOGRAPHY",   &icon_study_32,  &SteganographyActivity::create},
+    {"SD ENCRYPTION",   &icon_study_32,  &SdEncryptionActivity::create},
+    {"SECURITY PIN",    &icon_study_32,  &SecurityPinActivity::create},
+    {"QUICK WIPE",      &icon_study_32,  &QuickWipeActivity::create},
+    {"SCREEN DECOY",    &icon_study_32,  &ScreenDecoyActivity::create},
+    {"QR TOTP",         &icon_study_32,  &QrTotpActivity::create},
+    {"USB STORAGE",     &icon_study_32,  &UsbMassStorageActivity::create},
 };
 
 // The two rows Home grows, in reading order. Titles are Title Case because

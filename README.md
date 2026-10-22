@@ -119,6 +119,13 @@ restyled to match the design language the apps use.
 | **QR Generator** | Generate QR codes for text or URLs, displayed on screen. |
 | **SD File Browser** | Browse, view, and delete files on the SD card. |
 | **Unit Converter** | Convert between units of length, weight, temperature, data, speed. |
+| **Steganography** | Hide and extract text messages inside BMP images on SD card. |
+| **SD Encryption** | Encrypt and decrypt files on the SD card with AES-256. |
+| **Security Pin** | Set a PIN lock that activates on idle or manual lock. |
+| **Quick Wipe** | Securely delete selected files or directories from SD card. |
+| **Screen Decoy** | Display a fake idle screen to deter casual snooping. |
+| **QR TOTP** | Scan a TOTP QR code and generate offline OTP codes. |
+| **USB Storage** | Mount the SD card as a USB mass-storage device over USB. |
 
 Nine of them play over **PLAY NEARBY**: Chess, Checkers, Connect Four,
 Yahtzee, Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle. Put two
