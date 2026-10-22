@@ -312,7 +312,7 @@ void ScreenDecoyActivity::renderFakeError() const {
   renderer.drawLine(metrics.contentSidePadding, y, pageWidth - metrics.contentSidePadding, y, true);
   y += 14;
 
-  renderer.drawCenteredText(SMALL_FONT_ID, y, "Contact support at crosspoint.dev/help");
+  renderer.drawCenteredText(SMALL_FONT_ID, y, "Contact your CrossPlay administrator.");
 }
 
 // ---------------------------------------------------------------------------
