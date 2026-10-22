@@ -29,8 +29,10 @@ void PasswordGeneratorActivity::onEnter() {
 
 void PasswordGeneratorActivity::loop() {
   if (state == SAVED) {
+    int tx_, ty_;
     if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
       finish();
     }
     return;
@@ -57,7 +59,12 @@ void PasswordGeneratorActivity::loop() {
       requestUpdate();
     }
 
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    bool saveTapped = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+    {
+      int tx_, ty_;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) saveTapped = true;
+    }
+    if (saveTapped) {
       state = ENTER_SITE;
       startActivityForResult(
           std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_SITE)), "", 64),

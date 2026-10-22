@@ -178,7 +178,20 @@ void SteganographyActivity::loop() {
     buttonNavigator.onNext([this] { mode = (mode == EMBED) ? EXTRACT : EMBED; requestUpdate(); });
     buttonNavigator.onPrevious([this] { mode = (mode == EMBED) ? EXTRACT : EMBED; requestUpdate(); });
 
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    bool confirmAction = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+    {
+      const auto& m = UITheme::getInstance().getMetrics();
+      int touchRow = -1;
+      const auto rt = mappedInput.rowTouch(touchRow,
+                                           m.topPadding + m.headerHeight + m.verticalSpacing,
+                                           m.listWithSubtitleRowHeight, 2);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < 2) {
+        mode = (touchRow == 0) ? EMBED : EXTRACT;
+        if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
+        requestUpdate();
+      }
+    }
+    if (confirmAction) {
       loadFileList();
       fileIndex = 0;
       state = FILE_SELECT;
@@ -198,8 +211,21 @@ void SteganographyActivity::loop() {
       if (fileCount > 0) { fileIndex = ButtonNavigator::previousIndex(fileIndex, fileCount); requestUpdate(); }
     });
 
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (fileCount > 0) {
+    bool confirmAction = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+    if (fileCount > 0) {
+      const auto& m = UITheme::getInstance().getMetrics();
+      int touchRow = -1;
+      const auto rt = mappedInput.rowTouch(touchRow,
+                                           m.topPadding + m.headerHeight + m.verticalSpacing,
+                                           m.listWithSubtitleRowHeight, fileCount);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < fileCount) {
+        fileIndex = touchRow;
+        if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
+        requestUpdate();
+      }
+    }
+    if (confirmAction && fileCount > 0) {
+      {
         snprintf(selectedPath, sizeof(selectedPath), "/crossplay/drawings/%s", fileNames[fileIndex]);
         if (mode == EMBED) {
           startActivityForResult(
@@ -231,8 +257,11 @@ void SteganographyActivity::loop() {
   }
 
   if (state == EMBED_DONE) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      state = MODE_SELECT; requestUpdate();
+    int tx_, ty_;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
+      state = MODE_SELECT;
+      requestUpdate();
     }
     return;
   }

@@ -152,19 +152,23 @@ void CountdownActivity::loop() {
       else { seconds = (seconds == 0) ? 59 : seconds - 1; }
       requestUpdate();
     }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      unsigned long totalMs =
-          static_cast<unsigned long>(hours) * 3600000UL +
-          static_cast<unsigned long>(minutes) * 60000UL +
-          static_cast<unsigned long>(seconds) * 1000UL;
-      if (totalMs == 0) return;
-      origHours = hours;
-      origMinutes = minutes;
-      origSeconds = seconds;
-      targetTime = millis() + totalMs;
-      state = RUNNING;
-      lastDisplayMs = 0;
-      requestUpdate();
+    {
+      int tx_, ty_;
+      if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
+          mappedInput.wasScreenTapped(tx_, ty_)) {
+        unsigned long totalMs =
+            static_cast<unsigned long>(hours) * 3600000UL +
+            static_cast<unsigned long>(minutes) * 60000UL +
+            static_cast<unsigned long>(seconds) * 1000UL;
+        if (totalMs == 0) return;
+        origHours = hours;
+        origMinutes = minutes;
+        origSeconds = seconds;
+        targetTime = millis() + totalMs;
+        state = RUNNING;
+        lastDisplayMs = 0;
+        requestUpdate();
+      }
     }
     return;
   }
@@ -176,6 +180,16 @@ void CountdownActivity::loop() {
       state = PAUSED;
       requestUpdate();
       return;
+    }
+    {
+      int tx_, ty_;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) {
+        unsigned long now = millis();
+        pauseRemaining = (now >= targetTime) ? 0 : (targetTime - now);
+        state = PAUSED;
+        requestUpdate();
+        return;
+      }
     }
     if (millis() >= targetTime) {
       state = FINISHED;
@@ -191,13 +205,17 @@ void CountdownActivity::loop() {
   }
 
   if (state == PAUSED) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      targetTime = millis() + pauseRemaining;
-      pauseRemaining = 0;
-      state = RUNNING;
-      lastDisplayMs = 0;
-      requestUpdate();
-      return;
+    {
+      int tx_, ty_;
+      if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
+          mappedInput.wasScreenTapped(tx_, ty_)) {
+        targetTime = millis() + pauseRemaining;
+        pauseRemaining = 0;
+        state = RUNNING;
+        lastDisplayMs = 0;
+        requestUpdate();
+        return;
+      }
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       state = SET_TIME;
@@ -221,16 +239,20 @@ void CountdownActivity::loop() {
       requestUpdate();
       return;
     }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      unsigned long totalMs =
-          static_cast<unsigned long>(origHours) * 3600000UL +
-          static_cast<unsigned long>(origMinutes) * 60000UL +
-          static_cast<unsigned long>(origSeconds) * 1000UL;
-      targetTime = millis() + totalMs;
-      state = RUNNING;
-      lastDisplayMs = 0;
-      requestUpdate();
-      return;
+    {
+      int tx_, ty_;
+      if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
+          mappedInput.wasScreenTapped(tx_, ty_)) {
+        unsigned long totalMs =
+            static_cast<unsigned long>(origHours) * 3600000UL +
+            static_cast<unsigned long>(origMinutes) * 60000UL +
+            static_cast<unsigned long>(origSeconds) * 1000UL;
+        targetTime = millis() + totalMs;
+        state = RUNNING;
+        lastDisplayMs = 0;
+        requestUpdate();
+        return;
+      }
     }
     return;
   }

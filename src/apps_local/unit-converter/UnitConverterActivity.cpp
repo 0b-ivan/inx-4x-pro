@@ -123,7 +123,21 @@ void UnitConverterActivity::loop() {
       categoryIndex = ButtonNavigator::previousIndex(categoryIndex, getCategories().size());
       requestUpdate();
     });
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    bool confirmCat = mappedInput.wasPressed(MappedInputManager::Button::Confirm);
+    {
+      const auto& m = UITheme::getInstance().getMetrics();
+      int touchRow = -1;
+      const int catCount = static_cast<int>(getCategories().size());
+      const auto rt = mappedInput.rowTouch(touchRow,
+                                           m.topPadding + m.headerHeight + m.verticalSpacing,
+                                           m.listRowHeight, catCount);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < catCount) {
+        categoryIndex = touchRow;
+        if (rt == MappedInputManager::RowTouch::Tap) confirmCat = true;
+        requestUpdate();
+      }
+    }
+    if (confirmCat) {
       unitIndex = 0;
       state = SELECT_UNIT;
       requestUpdate();
@@ -146,7 +160,21 @@ void UnitConverterActivity::loop() {
       unitIndex = ButtonNavigator::previousIndex(unitIndex, cat.units.size());
       requestUpdate();
     });
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    bool confirmUnit = mappedInput.wasPressed(MappedInputManager::Button::Confirm);
+    {
+      const auto& m = UITheme::getInstance().getMetrics();
+      int touchRow = -1;
+      const int unitCount = static_cast<int>(cat.units.size());
+      const auto rt = mappedInput.rowTouch(touchRow,
+                                           m.topPadding + m.headerHeight + m.verticalSpacing,
+                                           m.listRowHeight, unitCount);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < unitCount) {
+        unitIndex = touchRow;
+        if (rt == MappedInputManager::RowTouch::Tap) confirmUnit = true;
+        requestUpdate();
+      }
+    }
+    if (confirmUnit) {
       valueStr = "1";
       cursorPos = 1;
       state = INPUT_VALUE;
@@ -195,7 +223,12 @@ void UnitConverterActivity::loop() {
       requestUpdate();
     }
 
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    bool convertNow = mappedInput.wasPressed(MappedInputManager::Button::Confirm);
+    {
+      int tx_, ty_;
+      if (mappedInput.wasScreenTapped(tx_, ty_)) convertNow = true;
+    }
+    if (convertNow) {
       computeConversions();
       state = RESULTS;
       requestUpdate();
@@ -204,8 +237,10 @@ void UnitConverterActivity::loop() {
   }
 
   if (state == RESULTS) {
+    int tx_, ty_;
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+        mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
       state = INPUT_VALUE;
       requestUpdate();
     }

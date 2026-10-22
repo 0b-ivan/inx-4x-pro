@@ -26,7 +26,9 @@ void PasswordDetailActivity::loop() {
   }
 
   if (state == CONFIRM_DELETE) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    int tx_, ty_;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
       PASSWORD_STORE.removeEntry(entryIndex);
       state = DELETED;
       requestUpdate();
@@ -45,6 +47,15 @@ void PasswordDetailActivity::loop() {
       showPassword = !showPassword;
     }
     requestUpdate();
+  }
+
+  // Short tap on screen toggles password visibility (mirrors short Confirm press)
+  {
+    int tx_, ty_;
+    if (mappedInput.wasScreenTapped(tx_, ty_)) {
+      showPassword = !showPassword;
+      requestUpdate();
+    }
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {

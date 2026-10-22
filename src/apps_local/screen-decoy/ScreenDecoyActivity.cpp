@@ -103,6 +103,23 @@ void ScreenDecoyActivity::loop() {
       requestUpdate();
       return;
     }
+    // Touch: tap a row to select and preview it
+    {
+      const auto& m = UITheme::getInstance().getMetrics();
+      int touchRow = -1;
+      const auto rt = mappedInput.rowTouch(touchRow, m.topPadding + m.headerHeight,
+                                           m.listWithSubtitleRowHeight,
+                                           static_cast<int>(DECOY_COUNT));
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 &&
+          touchRow < static_cast<int>(DECOY_COUNT)) {
+        selectedType = static_cast<DecoyType>(touchRow);
+        if (rt == MappedInputManager::RowTouch::Tap) {
+          previewMode = false;
+        }
+        requestUpdate();
+        return;
+      }
+    }
   } else {
     // Preview state — showing what the decoy will look like
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -110,7 +127,9 @@ void ScreenDecoyActivity::loop() {
       requestUpdate();
       return;
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    int tx_, ty_;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
       activateDecoy();
       // Does not return — device enters deep sleep
     }

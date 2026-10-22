@@ -178,6 +178,28 @@ void SecurityPinActivity::handlePinEntry() {
     return;
   }
 
+  // Touch: tap a digit box to move focus
+  {
+    int tx, ty;
+    if (mappedInput.wasScreenTapped(tx, ty)) {
+      const auto& m = UITheme::getInstance().getMetrics();
+      const int pageWidth  = renderer.getScreenWidth();
+      const int pageHeight = renderer.getScreenHeight();
+      const int headerBottom = m.topPadding + m.headerHeight;
+      const int boxY = headerBottom + (pageHeight - headerBottom - m.buttonHintsHeight - 56) / 2;
+      constexpr int BOX_SIZE = 56;
+      constexpr int BOX_GAP  = 10;
+      if (ty >= boxY && ty < boxY + BOX_SIZE) {
+        const int totalW = pinLength * BOX_SIZE + (pinLength - 1) * BOX_GAP;
+        const int startX = (pageWidth - totalW) / 2;
+        for (int i = 0; i < pinLength; i++) {
+          int bx = startX + i * (BOX_SIZE + BOX_GAP);
+          if (tx >= bx && tx < bx + BOX_SIZE) { pinPos = i; requestUpdate(); break; }
+        }
+      }
+    }
+  }
+
   // Confirm: submit PIN
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Ensure all digits have been explicitly set (non-zero char means set)
@@ -263,6 +285,28 @@ void SecurityPinActivity::handleSetPin() {
     return;
   }
 
+  // Touch: tap a digit box to move focus
+  {
+    int tx, ty;
+    if (mappedInput.wasScreenTapped(tx, ty)) {
+      const auto& m = UITheme::getInstance().getMetrics();
+      const int pageWidth  = renderer.getScreenWidth();
+      const int pageHeight = renderer.getScreenHeight();
+      const int headerBottom = m.topPadding + m.headerHeight;
+      const int boxY = headerBottom + (pageHeight - headerBottom - m.buttonHintsHeight - 56) / 2;
+      constexpr int BOX_SIZE = 56;
+      constexpr int BOX_GAP  = 10;
+      if (ty >= boxY && ty < boxY + BOX_SIZE) {
+        const int totalW = pinLength * BOX_SIZE + (pinLength - 1) * BOX_GAP;
+        const int startX = (pageWidth - totalW) / 2;
+        for (int i = 0; i < pinLength; i++) {
+          int bx = startX + i * (BOX_SIZE + BOX_GAP);
+          if (tx >= bx && tx < bx + BOX_SIZE) { pinPos = i; requestUpdate(); break; }
+        }
+      }
+    }
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     // Fill any unset positions with '0'
     for (int i = 0; i < pinLength; i++) {
@@ -323,7 +367,20 @@ void SecurityPinActivity::handleSettingsMenu() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  bool confirmAction = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+  {
+    const auto& m = UITheme::getInstance().getMetrics();
+    int touchRow = -1;
+    const auto rt = mappedInput.rowTouch(touchRow,
+                                         m.topPadding + m.headerHeight,
+                                         m.listRowHeight, MENU_ITEMS);
+    if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < MENU_ITEMS) {
+      menuIndex = touchRow;
+      if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
+      requestUpdate();
+    }
+  }
+  if (confirmAction) {
     switch (menuIndex) {
       case 0:  // Change PIN
         state = SET_PIN;

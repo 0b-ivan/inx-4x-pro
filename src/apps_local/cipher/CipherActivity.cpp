@@ -144,7 +144,20 @@ void CipherActivity::loop() {
       cipherIndex = ButtonNavigator::nextIndex(cipherIndex, CIPHER_COUNT);
       requestUpdate();
     }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    bool confirmAction = mappedInput.wasPressed(MappedInputManager::Button::Confirm);
+    // Touch: tap a row to select it; tap again (confirm) to proceed
+    {
+      const auto& m = UITheme::getInstance().getMetrics();
+      int touchRow = -1;
+      const auto rt = mappedInput.rowTouch(touchRow, m.topPadding + m.headerHeight,
+                                           m.listRowHeight, CIPHER_COUNT);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < CIPHER_COUNT) {
+        cipherIndex = touchRow;
+        if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
+        requestUpdate();
+      }
+    }
+    if (confirmAction) {
       state = INPUT_TEXT;
       startActivityForResult(
           std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "Input Text", "", 200),
@@ -173,8 +186,11 @@ void CipherActivity::loop() {
   }
 
   if (state == RESULT) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      state = SELECT_CIPHER; requestUpdate();
+    int tx_, ty_;
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
+      state = SELECT_CIPHER;
+      requestUpdate();
     }
     return;
   }

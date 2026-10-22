@@ -25,10 +25,14 @@ void UsbMassStorageActivity::loop() {
         shelf::leave(renderer, mappedInput);
         return;
       }
-      if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-        initMassStorage();
-        state = ACTIVE;
-        requestUpdate();
+      {
+        int tx_, ty_;
+        if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
+            mappedInput.wasScreenTapped(tx_, ty_)) {
+          initMassStorage();
+          state = ACTIVE;
+          requestUpdate();
+        }
       }
       break;
 
