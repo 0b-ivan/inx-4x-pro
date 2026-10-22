@@ -25,6 +25,89 @@
 #include "insider/InsiderActivity.h"
 #include "instapaper/InstapaperActivity.h"
 #include "jaipur/JaipurActivity.h"
+#include "wifi-scanner/WifiScannerActivity.h"
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
+#include "probe-sniffer/ProbeSnifferActivity.h"
+#include "crowd-density/CrowdDensityActivity.h"
+#include "deauth-detector/DeauthDetectorActivity.h"
+#include "packet-monitor/PacketMonitorActivity.h"
+#include "network-monitor/NetworkMonitorActivity.h"
+#include "network-change/NetworkChangeActivity.h"
+#include "device-fingerprinter/DeviceFingerprinterActivity.h"
+#include "ap-history-logger/ApHistoryLoggerActivity.h"
+#include "wardriving/WardrivingActivity.h"
+#include "wifi-heatmap/WifiHeatMapActivity.h"
+#include "signal-triangulation/SignalTriangulationActivity.h"
+#include "vendor-oui/VendorOuiActivity.h"
+#include "wifi-creds/WifiCredsActivity.h"
+#include "tracker-detector/TrackerDetectorActivity.h"
+#include "perimeter-watch/PerimeterWatchActivity.h"
+#include "credential-viewer/CredentialViewerActivity.h"
+#include "barcode/BarcodeActivity.h"
+#include "key-copier/KeyCopierActivity.h"
+#include "beacon-test/BeaconTestActivity.h"
+#include "ap-cloner/ApClonerActivity.h"
+#include "ble-spam/BleSpamActivity.h"
+#include "captive-portal/CaptivePortalActivity.h"
+#include "wifi-test/WifiTestActivity.h"
+#include "fire/FireActivity.h"
+#include "ssid-channel/SsidChannelActivity.h"
+#include "airtag-test/AirTagTestActivity.h"
+#include "ble-beacon/BleBeaconActivity.h"
+#include "ble-keyboard/BleKeyboardActivity.h"
+#include "usb-hid/UsbHidActivity.h"
+#include "dead-drop/DeadDropActivity.h"
+#include "mesh-chat/MeshChatActivity.h"
+#include "bulletin-board/BulletinBoardActivity.h"
+#include "beacon-test/BeaconTestActivity.h"
+#include "ap-cloner/ApClonerActivity.h"
+#include "ble-spam/BleSpamActivity.h"
+#include "captive-portal/CaptivePortalActivity.h"
+#include "wifi-test/WifiTestActivity.h"
+#include "fire/FireActivity.h"
+#include "ssid-channel/SsidChannelActivity.h"
+#include "airtag-test/AirTagTestActivity.h"
+#include "ble-beacon/BleBeaconActivity.h"
+#include "ble-keyboard/BleKeyboardActivity.h"
+#include "usb-hid/UsbHidActivity.h"
+#include "dead-drop/DeadDropActivity.h"
+#include "mesh-chat/MeshChatActivity.h"
+#include "bulletin-board/BulletinBoardActivity.h"
+#include "ble-scanner/BleScannerActivity.h"
+#include "ble-proximity/BleProximityActivity.h"
+#include "ble-contact/BleContactExchangeActivity.h"
+#include "dns-lookup/DnsLookupActivity.h"
+#include "host-scanner/HostScannerActivity.h"
+#include "http-client/HttpClientActivity.h"
+#include "mdns-browser/MdnsBrowserActivity.h"
+#include "ping/PingActivity.h"
+#include "wifi-connect/WifiConnectActivity.h"
+#include "vehicle-finder/VehicleFinderActivity.h"
+#endif  // !SIMULATOR
+#include "calculator/CalculatorActivity.h"
+#include "cipher/CipherActivity.h"
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
+#include "clock/ClockActivity.h"
+#endif  // !SIMULATOR
+#include "countdown/CountdownActivity.h"
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
+#include "device-info/DeviceInfoActivity.h"
+#endif  // !SIMULATOR
+#include "morse-code/MorseCodeActivity.h"
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
+#include "otp-generator/OtpGeneratorActivity.h"
+#endif  // !SIMULATOR
+#include "password-manager/PasswordManagerActivity.h"
+#include "qr-generator/QrGeneratorActivity.h"
+#include "sd-file-browser/SdFileBrowserActivity.h"
+#include "unit-converter/UnitConverterActivity.h"
+#include "steganography/SteganographyActivity.h"
+#include "sd-encryption/SdEncryptionActivity.h"
+#include "security-pin/SecurityPinActivity.h"
+#include "quick-wipe/QuickWipeActivity.h"
+#include "screen-decoy/ScreenDecoyActivity.h"
+#include "qr-totp/QrTotpActivity.h"
+#include "usb-mass-storage/UsbMassStorageActivity.h"
 #include "knucklebones/KnucklebonesActivity.h"
 #include "minesweeper/MinesweeperActivity.h"
 #include "murdle/MurdleActivity.h"
@@ -80,6 +163,75 @@ constexpr shelf::Item kApps[] = {
     {"AUTHENTICATOR", &icon_study_32, &TotpActivity::create},
     {"GET BOOKS", &icon_getbooks_32, &OpdsBookBrowserActivity::create},
     {"INSTAPAPER", &icon_instapaper_32, &InstapaperActivity::create},
+    {"WIFI SCANNER", &icon_study_32, &WifiScannerActivity::create},
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
+    {"PROBE SNIFFER", &icon_nearby_32, &ProbeSnifferActivity::create},
+    {"CROWD DENSITY", &icon_nearby_32, &CrowdDensityActivity::create},
+    {"DEAUTH DETECTOR", &icon_minesweeper_32, &DeauthDetectorActivity::create},
+    {"PACKET MONITOR", &icon_study_32, &PacketMonitorActivity::create},
+    {"NETWORK MONITOR", &icon_study_32, &NetworkMonitorActivity::create},
+    {"NET CHANGE", &icon_study_32, &NetworkChangeActivity::create},
+    {"DEV FINGERPRINT", &icon_nearby_32, &DeviceFingerprinterActivity::create},
+    {"AP HISTORY", &icon_study_32, &ApHistoryLoggerActivity::create},
+    {"WARDRIVING", &icon_study_32, &WardrivingActivity::create},
+    {"WIFI HEATMAP", &icon_study_32, &WifiHeatMapActivity::create},
+    {"TRIANGULATION", &icon_study_32, &SignalTriangulationActivity::create},
+    {"VENDOR OUI", &icon_study_32, &VendorOuiActivity::create},
+    {"WIFI CREDS QR", &icon_study_32, &WifiCredsActivity::create},
+    {"TRACKER DETECT", &icon_minesweeper_32, &TrackerDetectorActivity::create},
+    {"PERIMETER WATCH", &icon_minesweeper_32, &PerimeterWatchActivity::create},
+    {"CRED VIEWER", &icon_study_32, &CredentialViewerActivity::create},
+    {"BARCODE GEN", &icon_study_32, &BarcodeActivity::create},
+    {"KEY COPIER", &icon_study_32, &KeyCopierActivity::create},
+    {"BEACON FLOOD", &icon_minesweeper_32, &BeaconTestActivity::create},
+    {"AP CLONER", &icon_minesweeper_32, &ApClonerActivity::create},
+    {"BLE SPAM", &icon_nearby_32, &BleSpamActivity::create},
+    {"CAPTIVE PORTAL", &icon_minesweeper_32, &CaptivePortalActivity::create},
+    {"WIFI DEAUTH", &icon_minesweeper_32, &WifiTestActivity::create},
+    {"FIRE", &icon_minesweeper_32, &FireActivity::create},
+    {"SSID CHANNEL", &icon_study_32, &SsidChannelActivity::create},
+    {"AIRTAG SPOOF", &icon_nearby_32, &AirTagTestActivity::create},
+    {"BLE BEACON", &icon_nearby_32, &BleBeaconActivity::create},
+    {"BLE KEYBOARD", &icon_nearby_32, &BleKeyboardActivity::create},
+    {"USB HID", &icon_study_32, &UsbHidActivity::create},
+    {"DEAD DROP", &icon_study_32, &DeadDropActivity::create},
+    {"MESH CHAT", &icon_study_32, &MeshChatActivity::create},
+    {"BULLETIN BOARD", &icon_study_32, &BulletinBoardActivity::create},
+    {"BLE SCANNER",    &icon_nearby_32, &BleScannerActivity::create},
+    {"BLE PROXIMITY",  &icon_nearby_32, &BleProximityActivity::create},
+    {"BLE CONTACT",    &icon_nearby_32, &BleContactExchangeActivity::create},
+    {"DNS LOOKUP",     &icon_study_32,  &DnsLookupActivity::create},
+    {"HOST SCANNER",   &icon_study_32,  &HostScannerActivity::create},
+    {"HTTP CLIENT",    &icon_study_32,  &HttpClientActivity::create},
+    {"MDNS BROWSER",   &icon_study_32,  &MdnsBrowserActivity::create},
+    {"PING",           &icon_study_32,  &PingActivity::create},
+    {"WIFI CONNECT",   &icon_study_32,  &WifiConnectActivity::create},
+    {"VEHICLE FINDER", &icon_study_32,  &VehicleFinderActivity::create},
+#endif  // !SIMULATOR
+    {"CALCULATOR",     &icon_study_32,  &CalculatorActivity::create},
+    {"CIPHER TOOLS",   &icon_study_32,  &CipherActivity::create},
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
+    {"CLOCK",          &icon_study_32,  &ClockActivity::create},
+#endif  // !SIMULATOR
+    {"COUNTDOWN",      &icon_study_32,  &CountdownActivity::create},
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
+    {"DEVICE INFO",    &icon_study_32,  &DeviceInfoActivity::create},
+#endif  // !SIMULATOR
+    {"MORSE CODE",     &icon_study_32,  &MorseCodeActivity::create},
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
+    {"OTP GENERATOR",  &icon_study_32,  &OtpGeneratorActivity::create},
+#endif  // !SIMULATOR
+    {"PASSWORD MANAGER", &icon_study_32, &PasswordManagerActivity::create},
+    {"QR GENERATOR",   &icon_study_32,  &QrGeneratorActivity::create},
+    {"SD FILE BROWSER", &icon_study_32, &SdFileBrowserActivity::create},
+    {"UNIT CONVERTER",  &icon_study_32,  &UnitConverterActivity::create},
+    {"STEGANOGRAPHY",   &icon_study_32,  &SteganographyActivity::create},
+    {"SD ENCRYPTION",   &icon_study_32,  &SdEncryptionActivity::create},
+    {"SECURITY PIN",    &icon_study_32,  &SecurityPinActivity::create},
+    {"QUICK WIPE",      &icon_study_32,  &QuickWipeActivity::create},
+    {"SCREEN DECOY",    &icon_study_32,  &ScreenDecoyActivity::create},
+    {"QR TOTP",         &icon_study_32,  &QrTotpActivity::create},
+    {"USB STORAGE",     &icon_study_32,  &UsbMassStorageActivity::create},
 };
 
 // The two rows Home grows, in reading order. Titles are Title Case because

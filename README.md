@@ -65,6 +65,67 @@ restyled to match the design language the apps use.
 | **xkcd**         | The archive, packed for the card and drawn one to one.                       |
 | **Get Books**    | Browse any OPDS catalog and download straight to the card, no computer.      |
 | **Instapaper**   | Your read-later queue, synced both ways: reading position and archiving.     |
+| **Wifi Scanner** | Passive 2.4 GHz survey: AP list, signal history graph, channel spectrum.     |
+| **Probe Sniffer** | Capture 802.11 probe requests; log MAC, SSID, RSSI, count to CSV. |
+| **Crowd Density** | Estimate crowd size via unique MAC counts with 30-min history graph. |
+| **Deauth Detector** | Monitor for deauth/disassoc frame bursts; alert on spike threshold. |
+| **Packet Monitor** | Count WiFi frames per channel; PCAP and EAPOL capture to SD card. |
+| **Network Monitor** | Frame-anomaly detection and rogue-AP scan with SSID grouping. |
+| **Net Change** | Snapshot the local RF environment and diff against a saved baseline. |
+| **Dev Fingerprint** | Heuristic OS fingerprinting from probe-request patterns. |
+| **AP History** | Periodic AP scan logger; records unique BSSIDs over time to CSV. |
+| **Wardriving** | Continuous WiFi scan logger; exports SSID/BSSID/channel/enc to CSV. |
+| **Wifi Heatmap** | Time-stamped AP readings for post-session signal-strength mapping. |
+| **Triangulation** | Three-point RSSI readings for rough direction-finding of a target AP. |
+| **Vendor OUI** | Resolve OUI prefix to vendor name from a local lookup file. |
+| **Wifi Creds QR** | Generate a WiFi QR code (WPA/WEP/Open) for display or scanning. |
+| **Tracker Detect** | BLE scan for AirTag, Tile, SmartTag and other tracking devices. |
+| **Perimeter Watch** | Baseline the local MAC environment and alert on new devices. |
+| **Cred Viewer** | View and manage sniffed network credentials saved on SD card. |
+| **Barcode Gen** | Generate CODE128, CODE39 and EAN-13 barcodes for display. |
+| **Key Copier** | Edit and save mechanical key cut depths for Kwikset, Schlage, Yale. |
+| **Beacon Flood** | Broadcast random, custom, or themed SSIDs to flood nearby WiFi scanners. |
+| **AP Cloner** | Clone a scanned AP's SSID and channel to run an evil-twin access point. |
+| **BLE Spam** | Flood nearby devices with Apple/Android/Windows/Samsung pairing notifications. |
+| **Captive Portal** | Serve a phishing-style captive portal from a rogue AP and capture credentials. |
+| **WiFi Deauth** | Send IEEE 802.11 deauthentication frames at a selected target AP. |
+| **Fire** | Offense orchestrator: 13 WiFi/BLE attack types with target selection. |
+| **SSID Channel** | Encode short messages in SSIDs for covert proximity communication. |
+| **AirTag Spoof** | Broadcast AirTag BLE advertisements with static or rotating MAC. |
+| **BLE Beacon** | Spam Apple/Samsung/Google/Windows BLE beacon advertisements. |
+| **BLE Keyboard** | Pair as BLE HID keyboard and execute DuckyScript payloads from SD. |
+| **USB HID** | Execute DuckyScript payloads over USB HID from SD card. |
+| **Dead Drop** | Ephemeral WiFi AP + web server for anonymous file exchange. |
+| **Mesh Chat** | ESP-NOW broadcast chat between nearby devices. |
+| **Bulletin Board** | Ephemeral WiFi AP + web board for anonymous local messaging. |
+| **BLE Scanner** | Scan BLE devices and browse GATT services and characteristics. |
+| **BLE Proximity** | Track BLE devices by RSSI for proximity detection. |
+| **BLE Contact** | Exchange contact cards over BLE with nearby devices. |
+| **DNS Lookup** | Resolve hostnames to IP addresses over connected WiFi. |
+| **Host Scanner** | Scan LAN subnet for live hosts and open ports. |
+| **HTTP Client** | Send GET/POST requests and display responses. |
+| **mDNS Browser** | Discover local services via mDNS/Bonjour. |
+| **Ping** | Send ICMP pings to a host and display RTT results. |
+| **WiFi Connect** | Scan and connect to WiFi networks, save credentials. |
+| **Vehicle Finder** | Fingerprint nearby APs to locate a parked vehicle by signal match. |
+| **Calculator** | Four-function calculator with expression history. |
+| **Cipher Tools** | ROT13, Caesar, Vigenere, XOR, Atbash, Base64 encode/decode. |
+| **Clock** | NTP-synced clock with stopwatch and pomodoro timer. |
+| **Countdown** | 7-segment countdown timer with configurable duration. |
+| **Device Info** | System diagnostics: chip info, heap, uptime, WiFi MAC, IP. |
+| **Morse Code** | Encode and decode Morse code with reference chart. |
+| **OTP Generator** | Generate cryptographically random one-time passwords. |
+| **Password Manager** | Store and retrieve passwords with obfuscated SD-card storage. |
+| **QR Generator** | Generate QR codes for text or URLs, displayed on screen. |
+| **SD File Browser** | Browse, view, and delete files on the SD card. |
+| **Unit Converter** | Convert between units of length, weight, temperature, data, speed. |
+| **Steganography** | Hide and extract text messages inside BMP images on SD card. |
+| **SD Encryption** | Encrypt and decrypt files on the SD card with AES-256. |
+| **Security Pin** | Set a PIN lock that activates on idle or manual lock. |
+| **Quick Wipe** | Securely delete selected files or directories from SD card. |
+| **Screen Decoy** | Display a fake idle screen to deter casual snooping. |
+| **QR TOTP** | Scan a TOTP QR code and generate offline OTP codes. |
+| **USB Storage** | Mount the SD card as a USB mass-storage device over USB. |
 
 Nine of them play over **PLAY NEARBY**: Chess, Checkers, Connect Four,
 Yahtzee, Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle. Put two

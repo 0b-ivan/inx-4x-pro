@@ -279,6 +279,9 @@ class BaseTheme {
                      std::string title, const int paddingBottom = 0, const int textYOffset = 0,
                      const bool fillMargin = true, const bool isPageBookmarked = false,
                      const bool pageCountEstimated = false) const;
+  // Ported from biscuit_x3: animated three-dot status for radio operations.
+  virtual void drawSpinner(const GfxRenderer& renderer, int centerX, int centerY,
+                           const char* label, int frame) const;
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;
