@@ -1,4 +1,5 @@
 #include "FireActivity.h"
+#include <HalStorage.h>
 #include "DevMode.h"
 #include "../Shelf.h"
 
@@ -458,7 +459,7 @@ void FireActivity::buildAuthFrame(uint8_t* frame, const uint8_t* bssid, const ui
 
 void FireActivity::savePcapHeader(const char* path) {
     Storage.mkdir("/crossplay/loot/handshakes");
-    FsFile file;
+    HalFile file;
     if (!Storage.openFileForWrite("FIRE", path, file)) return;
 
     // Global header: magic, version 2.4, snaplen 65535, linktype 105 (802.11)
@@ -477,7 +478,7 @@ void FireActivity::savePcapHeader(const char* path) {
 
 void FireActivity::appendPcapPacket(const char* path, const uint8_t* data, uint16_t len) {
     // Open for append
-    FsFile file = Storage.open(path, O_WRITE | O_CREAT | O_APPEND);
+    HalFile file = Storage.open(path, O_WRITE | O_CREAT | O_APPEND);
     if (!file) return;
 
     uint32_t ts = (uint32_t)(esp_timer_get_time() / 1000000ULL);
@@ -548,7 +549,7 @@ void FireActivity::checkEapolFrame(const uint8_t* data, uint16_t len) {
                 snprintf(pmkidPath, sizeof(pmkidPath), "/crossplay/loot/pmkid/%s.pmkid", pmkidSafe);
                 Storage.mkdir("/crossplay/loot/pmkid");
 
-                FsFile pf;
+                HalFile pf;
                 if (Storage.openFileForWrite("FIRE", pmkidPath, pf)) {
                     // Format: PMKID*MAC_AP*MAC_STA*ESSID_HEX
                     char line[256];
