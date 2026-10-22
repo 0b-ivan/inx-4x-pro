@@ -71,6 +71,16 @@
 #include "dead-drop/DeadDropActivity.h"
 #include "mesh-chat/MeshChatActivity.h"
 #include "bulletin-board/BulletinBoardActivity.h"
+#include "ble-scanner/BleScannerActivity.h"
+#include "ble-proximity/BleProximityActivity.h"
+#include "ble-contact/BleContactExchangeActivity.h"
+#include "dns-lookup/DnsLookupActivity.h"
+#include "host-scanner/HostScannerActivity.h"
+#include "http-client/HttpClientActivity.h"
+#include "mdns-browser/MdnsBrowserActivity.h"
+#include "ping/PingActivity.h"
+#include "wifi-connect/WifiConnectActivity.h"
+#include "vehicle-finder/VehicleFinderActivity.h"
 #include "knucklebones/KnucklebonesActivity.h"
 #include "minesweeper/MinesweeperActivity.h"
 #include "murdle/MurdleActivity.h"
@@ -157,6 +167,16 @@ constexpr shelf::Item kApps[] = {
     {"DEAD DROP", &icon_study_32, &DeadDropActivity::create},
     {"MESH CHAT", &icon_study_32, &MeshChatActivity::create},
     {"BULLETIN BOARD", &icon_study_32, &BulletinBoardActivity::create},
+    {"BLE SCANNER",    &icon_nearby_32, &BleScannerActivity::create},
+    {"BLE PROXIMITY",  &icon_nearby_32, &BleProximityActivity::create},
+    {"BLE CONTACT",    &icon_nearby_32, &BleContactExchangeActivity::create},
+    {"DNS LOOKUP",     &icon_study_32,  &DnsLookupActivity::create},
+    {"HOST SCANNER",   &icon_study_32,  &HostScannerActivity::create},
+    {"HTTP CLIENT",    &icon_study_32,  &HttpClientActivity::create},
+    {"MDNS BROWSER",   &icon_study_32,  &MdnsBrowserActivity::create},
+    {"PING",           &icon_study_32,  &PingActivity::create},
+    {"WIFI CONNECT",   &icon_study_32,  &WifiConnectActivity::create},
+    {"VEHICLE FINDER", &icon_study_32,  &VehicleFinderActivity::create},
 };
 
 // The two rows Home grows, in reading order. Titles are Title Case because
