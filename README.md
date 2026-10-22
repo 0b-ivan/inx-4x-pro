@@ -98,6 +98,16 @@ restyled to match the design language the apps use.
 | **Dead Drop** | Ephemeral WiFi AP + web server for anonymous file exchange. |
 | **Mesh Chat** | ESP-NOW broadcast chat between nearby devices. |
 | **Bulletin Board** | Ephemeral WiFi AP + web board for anonymous local messaging. |
+| **BLE Scanner** | Scan BLE devices and browse GATT services and characteristics. |
+| **BLE Proximity** | Track BLE devices by RSSI for proximity detection. |
+| **BLE Contact** | Exchange contact cards over BLE with nearby devices. |
+| **DNS Lookup** | Resolve hostnames to IP addresses over connected WiFi. |
+| **Host Scanner** | Scan LAN subnet for live hosts and open ports. |
+| **HTTP Client** | Send GET/POST requests and display responses. |
+| **mDNS Browser** | Discover local services via mDNS/Bonjour. |
+| **Ping** | Send ICMP pings to a host and display RTT results. |
+| **WiFi Connect** | Scan and connect to WiFi networks, save credentials. |
+| **Vehicle Finder** | Fingerprint nearby APs to locate a parked vehicle by signal match. |
 
 Nine of them play over **PLAY NEARBY**: Chess, Checkers, Connect Four,
 Yahtzee, Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle. Put two
