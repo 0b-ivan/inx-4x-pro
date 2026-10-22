@@ -26,6 +26,7 @@
 #include "instapaper/InstapaperActivity.h"
 #include "jaipur/JaipurActivity.h"
 #include "wifi-scanner/WifiScannerActivity.h"
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
 #include "probe-sniffer/ProbeSnifferActivity.h"
 #include "crowd-density/CrowdDensityActivity.h"
 #include "deauth-detector/DeauthDetectorActivity.h"
@@ -82,13 +83,20 @@
 #include "ping/PingActivity.h"
 #include "wifi-connect/WifiConnectActivity.h"
 #include "vehicle-finder/VehicleFinderActivity.h"
+#endif  // !SIMULATOR
 #include "calculator/CalculatorActivity.h"
 #include "cipher/CipherActivity.h"
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
 #include "clock/ClockActivity.h"
+#endif  // !SIMULATOR
 #include "countdown/CountdownActivity.h"
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
 #include "device-info/DeviceInfoActivity.h"
+#endif  // !SIMULATOR
 #include "morse-code/MorseCodeActivity.h"
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
 #include "otp-generator/OtpGeneratorActivity.h"
+#endif  // !SIMULATOR
 #include "password-manager/PasswordManagerActivity.h"
 #include "qr-generator/QrGeneratorActivity.h"
 #include "sd-file-browser/SdFileBrowserActivity.h"
@@ -156,6 +164,7 @@ constexpr shelf::Item kApps[] = {
     {"GET BOOKS", &icon_getbooks_32, &OpdsBookBrowserActivity::create},
     {"INSTAPAPER", &icon_instapaper_32, &InstapaperActivity::create},
     {"WIFI SCANNER", &icon_study_32, &WifiScannerActivity::create},
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
     {"PROBE SNIFFER", &icon_nearby_32, &ProbeSnifferActivity::create},
     {"CROWD DENSITY", &icon_nearby_32, &CrowdDensityActivity::create},
     {"DEAUTH DETECTOR", &icon_minesweeper_32, &DeauthDetectorActivity::create},
@@ -198,13 +207,20 @@ constexpr shelf::Item kApps[] = {
     {"PING",           &icon_study_32,  &PingActivity::create},
     {"WIFI CONNECT",   &icon_study_32,  &WifiConnectActivity::create},
     {"VEHICLE FINDER", &icon_study_32,  &VehicleFinderActivity::create},
+#endif  // !SIMULATOR
     {"CALCULATOR",     &icon_study_32,  &CalculatorActivity::create},
     {"CIPHER TOOLS",   &icon_study_32,  &CipherActivity::create},
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
     {"CLOCK",          &icon_study_32,  &ClockActivity::create},
+#endif  // !SIMULATOR
     {"COUNTDOWN",      &icon_study_32,  &CountdownActivity::create},
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
     {"DEVICE INFO",    &icon_study_32,  &DeviceInfoActivity::create},
+#endif  // !SIMULATOR
     {"MORSE CODE",     &icon_study_32,  &MorseCodeActivity::create},
+#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
     {"OTP GENERATOR",  &icon_study_32,  &OtpGeneratorActivity::create},
+#endif  // !SIMULATOR
     {"PASSWORD MANAGER", &icon_study_32, &PasswordManagerActivity::create},
     {"QR GENERATOR",   &icon_study_32,  &QrGeneratorActivity::create},
     {"SD FILE BROWSER", &icon_study_32, &SdFileBrowserActivity::create},
