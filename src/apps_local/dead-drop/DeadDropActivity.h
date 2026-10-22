@@ -2,6 +2,7 @@
 #include <memory>
 #include <Memory.h>
 #include <WebServer.h>
+#include <HalStorage.h>
 #include <string>
 #include "../../activities/Activity.h"
 #include "../../util/ButtonNavigator.h"
@@ -41,7 +42,7 @@ class DeadDropActivity final : public Activity {
   static constexpr const char* DROP_DIR = "/crossplay/drop/";
 
   // Upload state
-  FsFile uploadFile;
+  HalFile uploadFile;
   bool uploadInProgress = false;
 
   void startDrop();

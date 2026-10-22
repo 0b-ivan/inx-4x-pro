@@ -1,16 +1,33 @@
 #pragma once
 
-// Single owner for radio transitions used by the local wireless applications.
-// Developer Mode yields the radio before the activity acquires it.
+#include <cstdint>
+
+// Ported from biscuit_x3/src/util/RadioManager.h.
+// CrossPlay's Developer Mode must yield while an app owns the radio.
 class RadioManager {
  public:
-  void ensureWifi();
-  void ensureBle();
+  enum class RadioState { OFF, WIFI, BLE };
+
+  static RadioManager& getInstance() {
+    static RadioManager instance;
+    return instance;
+  }
+
+  bool ensureWifi();
+  bool ensureBle();
   void shutdown();
 
+  RadioState getState() const { return state; }
+
+  bool isDisclaimerAcknowledged() const;
+  void setDisclaimerAcknowledged();
+
  private:
-  enum class Mode { None, Wifi, Ble };
-  Mode mode_ = Mode::None;
+  RadioManager() = default;
+  RadioState state = RadioState::OFF;
+
+  void deinitWifi();
+  void deinitBle();
 };
 
-extern RadioManager RADIO;
+#define RADIO RadioManager::getInstance()

@@ -1,18 +1,28 @@
 #pragma once
 
 #include <atomic>
+#include <cstring>
+#include <string>
 
-// Session-local duress flag, raised by the alternate PIN.
-// Consumers may query active() to switch into their duress behaviour.
-// This flag does not itself wipe files or claim that a device alert was sent.
+// Ported from biscuit_x3/src/util/DuressManager.h. CrossPlay's SD paths
+// are under /crossplay rather than /biscuit.
 class DuressManager {
  public:
-  void activate() { active_.store(true, std::memory_order_release); }
-  void deactivate() { active_.store(false, std::memory_order_release); }
-  bool active() const { return active_.load(std::memory_order_acquire); }
+  void activate() { duressActive.store(true, std::memory_order_release); }
+  void deactivate() { duressActive.store(false, std::memory_order_release); }
+  bool isActive() const { return duressActive.load(std::memory_order_acquire); }
+  bool active() const { return isActive(); }
+
+  std::string resolvePath(const char* path) const {
+    if (path == nullptr) return {};
+    if (isActive() && std::strncmp(path, "/crossplay/", 11) == 0) {
+      return std::string("/crossplay_safe/") + (path + 11);
+    }
+    return path;
+  }
 
  private:
-  std::atomic<bool> active_{false};
+  std::atomic<bool> duressActive{false};
 };
 
 extern DuressManager DURESS;
