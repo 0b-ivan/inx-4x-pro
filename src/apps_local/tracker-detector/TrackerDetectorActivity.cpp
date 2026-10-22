@@ -1,4 +1,5 @@
 #include "TrackerDetectorActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <BLEAdvertisedDevice.h>
@@ -15,6 +16,7 @@
 #include "../radio/RadioManager.h"
 
 void TrackerDetectorActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = IDLE;
   monitoring = false;
@@ -27,6 +29,7 @@ void TrackerDetectorActivity::onEnter() {
 }
 
 void TrackerDetectorActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   if (scanInitialized) {
     BLEScan* scan = BLEDevice::getScan();

@@ -961,8 +961,13 @@ void testBattleshipStartMenu() {
 
   bshipui::StartModel saved;
   saved.hasSavedGame = true;
+  saved.playerName = "IVAN";
+  saved.playerLevel = 4;
+  saved.playerRank = "OBERMAAT";
   saved.played = 12;
   saved.won = 7;
+  saved.losses = 4;
+  saved.draws = 1;
   saved.streak = 3;
   CHECK(bshipui::startRows(saved) == 3);
   CHECK(bshipui::startRowAt(saved, 0) == bshipui::StartRow::Continue);
@@ -975,8 +980,9 @@ void testBattleshipStartMenu() {
   // builder returns, in the same marks the board uses.
   CHECK(!out.target.drew("14 SHOTS, 2 SUNK"));
   CHECK(out.target.drew("PLAY NEARBY"));
-  // The record is one line, not three rows.
-  CHECK(out.target.drew("12 PLAYED   7 WON   STREAK 3"));
+  // Shared player identity/progression is visible on the game front door.
+  CHECK(out.target.drew("IVAN   LV 4   OBERMAAT"));
+  CHECK(out.target.drew("7 W   4 L   1 D   STREAK 3"));
 
   const FakeTarget::TextRun* nearby = out.target.find("PLAY NEARBY");
   CHECK(nearby != nullptr);

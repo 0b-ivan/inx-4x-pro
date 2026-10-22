@@ -1,4 +1,5 @@
 #include "ApHistoryLoggerActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -19,6 +20,7 @@ uint64_t ApHistoryLoggerActivity::bssidToU64(const uint8_t* bssid) {
 }
 
 void ApHistoryLoggerActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = CONFIG;
   intervalIndex = 0;
@@ -31,6 +33,7 @@ void ApHistoryLoggerActivity::onEnter() {
 }
 
 void ApHistoryLoggerActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   WiFi.scanDelete();
   RADIO.shutdown();

@@ -8,6 +8,7 @@
 #include <climits>
 #include <string>
 
+#include "DevMode.h"
 #include "FreeInkUICore.h"
 #include "MappedInputManager.h"
 #include "apps_local/Shelf.h"
@@ -16,8 +17,7 @@
 
 // ---- Factory ----------------------------------------------------------------
 
-std::unique_ptr<Activity> WifiScannerActivity::create(GfxRenderer& renderer,
-                                                      MappedInputManager& mappedInput) {
+std::unique_ptr<Activity> WifiScannerActivity::create(GfxRenderer& renderer, MappedInputManager& mappedInput) {
   return std::make_unique<WifiScannerActivity>(renderer, mappedInput);
 }
 
@@ -40,14 +40,22 @@ const char* WifiScannerActivity::qualityLabel(int32_t rssi) {
 
 const char* WifiScannerActivity::encryptionString(uint8_t type) const {
   switch (type) {
-    case WIFI_AUTH_OPEN: return "Open";
-    case WIFI_AUTH_WEP: return "WEP";
-    case WIFI_AUTH_WPA_PSK: return "WPA";
-    case WIFI_AUTH_WPA2_PSK: return "WPA2";
-    case WIFI_AUTH_WPA_WPA2_PSK: return "WPA/2";
-    case WIFI_AUTH_WPA3_PSK: return "WPA3";
-    case WIFI_AUTH_WPA2_WPA3_PSK: return "WPA2/3";
-    default: return "?";
+    case WIFI_AUTH_OPEN:
+      return "Open";
+    case WIFI_AUTH_WEP:
+      return "WEP";
+    case WIFI_AUTH_WPA_PSK:
+      return "WPA";
+    case WIFI_AUTH_WPA2_PSK:
+      return "WPA2";
+    case WIFI_AUTH_WPA_WPA2_PSK:
+      return "WPA/2";
+    case WIFI_AUTH_WPA3_PSK:
+      return "WPA3";
+    case WIFI_AUTH_WPA2_WPA3_PSK:
+      return "WPA2/3";
+    default:
+      return "?";
   }
 }
 
@@ -70,6 +78,9 @@ void WifiScannerActivity::onEnter() {
   selectorIndex = 0;
   sortBySignal = true;
   targetIndex = -1;
+  // Scanning walks off the AP channel for seconds at a time, so yield Developer
+  // Mode's radio for the lifetime of the scanner rather than fight it mid-flash.
+  devmode::pause();
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   startScan();
@@ -79,6 +90,7 @@ void WifiScannerActivity::onEnter() {
 void WifiScannerActivity::onExit() {
   WiFi.scanDelete();
   WiFi.mode(WIFI_MODE_NULL);
+  devmode::resume();
   Activity::onExit();
 }
 
@@ -109,8 +121,8 @@ void WifiScannerActivity::processScanResults() {
 
       uint8_t* bssid = WiFi.BSSID(i);
       char buf[20];
-      snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
-               bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
+      snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", bssid[0], bssid[1], bssid[2], bssid[3], bssid[4],
+               bssid[5]);
       net.bssid = buf;
 
       networks.push_back(std::move(net));
@@ -125,11 +137,9 @@ void WifiScannerActivity::processScanResults() {
 
 void WifiScannerActivity::sortNetworks() {
   if (sortBySignal) {
-    std::sort(networks.begin(), networks.end(),
-              [](const Network& a, const Network& b) { return a.rssi > b.rssi; });
+    std::sort(networks.begin(), networks.end(), [](const Network& a, const Network& b) { return a.rssi > b.rssi; });
   } else {
-    std::sort(networks.begin(), networks.end(),
-              [](const Network& a, const Network& b) { return a.ssid < b.ssid; });
+    std::sort(networks.begin(), networks.end(), [](const Network& a, const Network& b) { return a.ssid < b.ssid; });
   }
 }
 
@@ -141,9 +151,8 @@ void WifiScannerActivity::saveToCsv() {
 
   String csv = "SSID,BSSID,RSSI,Channel,Encryption\n";
   for (const auto& net : networks) {
-    csv += String(net.ssid.c_str()) + "," + net.bssid.c_str() + "," +
-           String(net.rssi) + "," + String(net.channel) + "," +
-           encryptionString(net.encType) + "\n";
+    csv += String(net.ssid.c_str()) + "," + net.bssid.c_str() + "," + String(net.rssi) + "," + String(net.channel) +
+           "," + encryptionString(net.encType) + "\n";
   }
   Storage.writeFile(filename, csv);
   LOG_DBG("WSCAN", "Saved %zu networks to %s", networks.size(), filename);
@@ -165,8 +174,7 @@ void WifiScannerActivity::doMeasurement() {
       uint8_t* bssidBytes = WiFi.BSSID(i);
       if (!bssidBytes) continue;
       char bssidStr[20];
-      snprintf(bssidStr, sizeof(bssidStr), "%02X:%02X:%02X:%02X:%02X:%02X",
-               bssidBytes[0], bssidBytes[1], bssidBytes[2],
+      snprintf(bssidStr, sizeof(bssidStr), "%02X:%02X:%02X:%02X:%02X:%02X", bssidBytes[0], bssidBytes[1], bssidBytes[2],
                bssidBytes[3], bssidBytes[4], bssidBytes[5]);
       if (targetBssid == bssidStr) {
         found = WiFi.RSSI(i);
@@ -222,8 +230,7 @@ void WifiScannerActivity::analyzeChannels() {
 
   for (int ch = 1; ch <= 13; ch++) {
     if (channelData[ch].apCount > 0) {
-      channelData[ch].avgRssi =
-          static_cast<int32_t>(channelData[ch].rssiSum / channelData[ch].apCount);
+      channelData[ch].avgRssi = static_cast<int32_t>(channelData[ch].rssiSum / channelData[ch].apCount);
     }
   }
 
@@ -276,7 +283,8 @@ void WifiScannerActivity::loop() {
   }
 
   if (state == DETAIL) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    int tx = 0, ty = 0;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(tx, ty)) {
       state = LIST;
       requestUpdate();
     }
@@ -290,8 +298,9 @@ void WifiScannerActivity::loop() {
       lastMeasureTime = now;
       doMeasurement();
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      // Long-press cycled us in; short press exits signal back to list
+    int stx = 0, sty = 0;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(stx, sty)) {
+      // Long-press cycled us in; a short press or a tap exits back to the list.
       viewMode = LIST_VIEW;
       requestUpdate();
     }
@@ -305,6 +314,12 @@ void WifiScannerActivity::loop() {
   if (viewMode == CHANNEL_VIEW) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       shelf::leave(renderer, mappedInput);
+      return;
+    }
+    int ctx = 0, cty = 0;
+    if (mappedInput.wasScreenTapped(ctx, cty)) {
+      viewMode = LIST_VIEW;
+      requestUpdate();
       return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -383,6 +398,33 @@ void WifiScannerActivity::loop() {
     requestUpdate();
   }
 
+  // Touch: tap a network row to select it and open its details, using the same
+  // row geometry the themed list draws with.
+  if (!networks.empty()) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentHeight =
+        renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+    const int rowHeight = GUI.getMenuRowHeight(renderer);
+    const int rowStep = rowHeight + metrics.menuSpacing;
+    const int pageItems = std::max(1, contentHeight / std::max(1, rowStep));
+    const int pageStart = (selectorIndex / pageItems) * pageItems;
+    int touchedRow = -1;
+    const auto rowTouch = mappedInput.rowTouch(touchedRow, contentTop, rowStep, std::min(pageItems, count - pageStart),
+                                               0, renderer.getScreenWidth(), rowHeight);
+    if (rowTouch != MappedInputManager::RowTouch::None && touchedRow >= 0) {
+      const int index = pageStart + touchedRow;
+      if (index < count) {
+        selectorIndex = index;
+        if (rowTouch == MappedInputManager::RowTouch::Tap) {
+          detailIndex = index;
+          state = DETAIL;
+        }
+        requestUpdate();
+      }
+    }
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     shelf::leave(renderer, mappedInput);
   }
@@ -391,7 +433,7 @@ void WifiScannerActivity::loop() {
 // ---- Signal view render -----------------------------------------------------
 
 void WifiScannerActivity::renderSignalView() {
-  const auto& metrics = GUI.getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
 
@@ -400,11 +442,9 @@ void WifiScannerActivity::renderSignalView() {
   const Network& target = networks[targetIndex];
 
   char headerSub[32];
-  snprintf(headerSub, sizeof(headerSub), "Ch %d | Signal Meter",
-           static_cast<int>(target.channel));
+  snprintf(headerSub, sizeof(headerSub), "Ch %d | Signal Meter", static_cast<int>(target.channel));
   GUI.drawHeader(renderer,
-                 Rect{0, static_cast<int16_t>(metrics.topPadding),
-                      static_cast<int16_t>(pageWidth),
+                 Rect{0, static_cast<int16_t>(metrics.topPadding), static_cast<int16_t>(pageWidth),
                       static_cast<int16_t>(metrics.headerHeight)},
                  target.ssid.c_str(), headerSub);
 
@@ -422,8 +462,7 @@ void WifiScannerActivity::renderSignalView() {
 
   const int barMaxWidth = pageWidth - leftPad - rightPad;
   const int barHeight = 28;
-  const int filledWidth =
-      static_cast<int>(rssiToFraction(currentRssi) * static_cast<float>(barMaxWidth));
+  const int filledWidth = static_cast<int>(rssiToFraction(currentRssi) * static_cast<float>(barMaxWidth));
   renderer.drawRect(leftPad, y, barMaxWidth, barHeight, true);
   if (filledWidth > 2) {
     renderer.fillRect(leftPad + 1, y + 1, filledWidth - 2, barHeight - 2, true);
@@ -432,8 +471,8 @@ void WifiScannerActivity::renderSignalView() {
 
   char statsText[48];
   if (sampleCount > 0) {
-    snprintf(statsText, sizeof(statsText), "Min: %d  Avg: %d  Max: %d",
-             static_cast<int>(minRssi), static_cast<int>(avgRssi), static_cast<int>(maxRssi));
+    snprintf(statsText, sizeof(statsText), "Min: %d  Avg: %d  Max: %d", static_cast<int>(minRssi),
+             static_cast<int>(avgRssi), static_cast<int>(maxRssi));
   } else {
     snprintf(statsText, sizeof(statsText), "Waiting for samples...");
   }
@@ -461,8 +500,7 @@ void WifiScannerActivity::renderSignalView() {
         }
         const float frac = rssiToFraction(rssiHistory[slot]);
         const int px = graphLeft + 1 + (i * (graphWidth - 2)) / (rssiHistoryCount - 1);
-        const int py =
-            graphTop + 1 + static_cast<int>((1.0f - frac) * static_cast<float>(graphHeight - 2));
+        const int py = graphTop + 1 + static_cast<int>((1.0f - frac) * static_cast<float>(graphHeight - 2));
 
         if (prevX >= 0) renderer.drawLine(prevX, prevY, px, py, true);
         prevX = px;
@@ -478,16 +516,14 @@ void WifiScannerActivity::renderSignalView() {
 // ---- Channel spectrum render ------------------------------------------------
 
 void WifiScannerActivity::renderChannelSpectrum() {
-  const auto& metrics = GUI.getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
 
   char subtitle[40];
-  snprintf(subtitle, sizeof(subtitle), "%d APs  Best: Ch %d",
-           static_cast<int>(networks.size()), recommendedChannel);
+  snprintf(subtitle, sizeof(subtitle), "%d APs  Best: Ch %d", static_cast<int>(networks.size()), recommendedChannel);
   GUI.drawHeader(renderer,
-                 Rect{0, static_cast<int16_t>(metrics.topPadding),
-                      static_cast<int16_t>(pageWidth),
+                 Rect{0, static_cast<int16_t>(metrics.topPadding), static_cast<int16_t>(pageWidth),
                       static_cast<int16_t>(metrics.headerHeight)},
                  "Channel Analyzer", subtitle);
 
@@ -502,15 +538,11 @@ void WifiScannerActivity::renderChannelSpectrum() {
   renderer.drawLine(graphX, graphY, graphX, graphY + graphH, true);
 
   renderer.drawText(SMALL_FONT_ID, 0, graphY, "-30");
-  renderer.drawText(SMALL_FONT_ID, 0,
-                    graphY + graphH / 2 - renderer.getTextHeight(SMALL_FONT_ID) / 2, "-65");
-  renderer.drawText(SMALL_FONT_ID, 0,
-                    graphY + graphH - renderer.getTextHeight(SMALL_FONT_ID), "-100");
+  renderer.drawText(SMALL_FONT_ID, 0, graphY + graphH / 2 - renderer.getTextHeight(SMALL_FONT_ID) / 2, "-65");
+  renderer.drawText(SMALL_FONT_ID, 0, graphY + graphH - renderer.getTextHeight(SMALL_FONT_ID), "-100");
 
   const int chSpacing = graphW / 13;
-  auto chToX = [&](int ch) -> int {
-    return graphX + (ch - 1) * chSpacing + chSpacing / 2;
-  };
+  auto chToX = [&](int ch) -> int { return graphX + (ch - 1) * chSpacing + chSpacing / 2; };
 
   // Dotted vertical grid
   for (int ch = 1; ch <= 13; ch++) {
@@ -551,10 +583,12 @@ void WifiScannerActivity::renderChannelSpectrum() {
     int prevPx = -1, prevPy = -1;
     for (int dx = -halfSpread; dx <= halfSpread; dx++) {
       int px = centerX + dx;
-      if (px < graphX || px > graphX + graphW) { prevPx = -1; continue; }
+      if (px < graphX || px > graphX + graphW) {
+        prevPx = -1;
+        continue;
+      }
 
-      float normDist = static_cast<float>(dx < 0 ? -dx : dx) /
-                       static_cast<float>(chSpacing);
+      float normDist = static_cast<float>(dx < 0 ? -dx : dx) / static_cast<float>(chSpacing);
       float factor;
       if (normDist <= 0.5f) {
         factor = 1.0f;
@@ -581,8 +615,7 @@ void WifiScannerActivity::renderChannelSpectrum() {
 
   int maxInterference = 1;
   for (int ch = 1; ch <= 13; ch++) {
-    if (channelData[ch].interferenceScore > maxInterference)
-      maxInterference = channelData[ch].interferenceScore;
+    if (channelData[ch].interferenceScore > maxInterference) maxInterference = channelData[ch].interferenceScore;
   }
 
   for (int ch = 1; ch <= 13; ch++) {
@@ -603,8 +636,7 @@ void WifiScannerActivity::renderChannelSpectrum() {
   renderer.drawCenteredText(UI_10_FONT_ID, recY, recBuf, true);
 
   // Bounds check: if chart overflows, skip the bottom row
-  if (recY + renderer.getTextHeight(UI_10_FONT_ID) <
-      pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing) {
+  if (recY + renderer.getTextHeight(UI_10_FONT_ID) < pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing) {
     const auto labels = mappedInput.mapLabels("Back", "Rescan", "Table", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
@@ -613,13 +645,12 @@ void WifiScannerActivity::renderChannelSpectrum() {
 // ---- Channel table render ---------------------------------------------------
 
 void WifiScannerActivity::renderChannelTable() {
-  const auto& metrics = GUI.getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
 
   GUI.drawHeader(renderer,
-                 Rect{0, static_cast<int16_t>(metrics.topPadding),
-                      static_cast<int16_t>(pageWidth),
+                 Rect{0, static_cast<int16_t>(metrics.topPadding), static_cast<int16_t>(pageWidth),
                       static_cast<int16_t>(metrics.headerHeight)},
                  "Channel Analyzer", "Table View");
 
@@ -647,8 +678,7 @@ void WifiScannerActivity::renderChannelTable() {
 
   int maxInterference = 1;
   for (int ch = 1; ch <= 13; ch++) {
-    if (channelData[ch].interferenceScore > maxInterference)
-      maxInterference = channelData[ch].interferenceScore;
+    if (channelData[ch].interferenceScore > maxInterference) maxInterference = channelData[ch].interferenceScore;
   }
 
   const int hintsTop = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
@@ -668,13 +698,17 @@ void WifiScannerActivity::renderChannelTable() {
     renderer.drawText(SMALL_FONT_ID, colAps, y, apsBuf);
 
     char bestBuf[8];
-    if (info.apCount > 0) snprintf(bestBuf, sizeof(bestBuf), "%d", info.strongestRssi);
-    else bestBuf[0] = '-', bestBuf[1] = '\0';
+    if (info.apCount > 0)
+      snprintf(bestBuf, sizeof(bestBuf), "%d", info.strongestRssi);
+    else
+      bestBuf[0] = '-', bestBuf[1] = '\0';
     renderer.drawText(SMALL_FONT_ID, colBest, y, bestBuf);
 
     char avgBuf[8];
-    if (info.apCount > 0) snprintf(avgBuf, sizeof(avgBuf), "%d", info.avgRssi);
-    else avgBuf[0] = '-', avgBuf[1] = '\0';
+    if (info.apCount > 0)
+      snprintf(avgBuf, sizeof(avgBuf), "%d", info.avgRssi);
+    else
+      avgBuf[0] = '-', avgBuf[1] = '\0';
     renderer.drawText(SMALL_FONT_ID, colAvg, y, avgBuf);
 
     int bw = (info.interferenceScore * barMaxW) / maxInterference;
@@ -693,7 +727,7 @@ void WifiScannerActivity::renderChannelTable() {
 // ---- render -----------------------------------------------------------------
 
 void WifiScannerActivity::render(RenderLock&&) {
-  const auto& metrics = GUI.getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
 
@@ -701,8 +735,7 @@ void WifiScannerActivity::render(RenderLock&&) {
 
   if (state == SCANNING) {
     GUI.drawHeader(renderer,
-                   Rect{0, static_cast<int16_t>(metrics.topPadding),
-                        static_cast<int16_t>(pageWidth),
+                   Rect{0, static_cast<int16_t>(metrics.topPadding), static_cast<int16_t>(pageWidth),
                         static_cast<int16_t>(metrics.headerHeight)},
                    "WiFi Scanner");
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Scanning...");
@@ -713,8 +746,7 @@ void WifiScannerActivity::render(RenderLock&&) {
   if (state == DETAIL && detailIndex < static_cast<int>(networks.size())) {
     const auto& net = networks[detailIndex];
     GUI.drawHeader(renderer,
-                   Rect{0, static_cast<int16_t>(metrics.topPadding),
-                        static_cast<int16_t>(pageWidth),
+                   Rect{0, static_cast<int16_t>(metrics.topPadding), static_cast<int16_t>(pageWidth),
                         static_cast<int16_t>(metrics.headerHeight)},
                    net.ssid.c_str());
 
@@ -763,42 +795,38 @@ void WifiScannerActivity::render(RenderLock&&) {
   }
 
   if (viewMode == CHANNEL_VIEW) {
-    if (channelViewMode == VIEW_SPECTRUM) renderChannelSpectrum();
-    else renderChannelTable();
+    if (channelViewMode == VIEW_SPECTRUM)
+      renderChannelSpectrum();
+    else
+      renderChannelTable();
     renderer.displayBuffer();
     return;
   }
 
   // LIST_VIEW
   char subtitle[48];
-  snprintf(subtitle, sizeof(subtitle), "%d found | %s",
-           static_cast<int>(networks.size()), sortBySignal ? "By Signal" : "By Name");
+  snprintf(subtitle, sizeof(subtitle), "%d found | %s", static_cast<int>(networks.size()),
+           sortBySignal ? "By Signal" : "By Name");
   GUI.drawHeader(renderer,
-                 Rect{0, static_cast<int16_t>(metrics.topPadding),
-                      static_cast<int16_t>(pageWidth),
+                 Rect{0, static_cast<int16_t>(metrics.topPadding), static_cast<int16_t>(pageWidth),
                       static_cast<int16_t>(metrics.headerHeight)},
                  "WiFi Scanner", subtitle);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight =
-      pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
   if (networks.empty()) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "No networks found");
   } else {
     GUI.drawList(
-        renderer, Rect{0, static_cast<int16_t>(contentTop),
-                       static_cast<int16_t>(pageWidth),
-                       static_cast<int16_t>(contentHeight)},
+        renderer,
+        Rect{0, static_cast<int16_t>(contentTop), static_cast<int16_t>(pageWidth), static_cast<int16_t>(contentHeight)},
         static_cast<int>(networks.size()), selectorIndex,
-        [this](int index) -> std::string {
-          return networks[index].ssid;
-        },
+        [this](int index) -> std::string { return networks[index].ssid; },
         [this](int index) -> std::string {
           const auto& net = networks[index];
-          return std::string(signalBars(net.rssi)) + " " + std::to_string(net.rssi) +
-                 "dBm  Ch" + std::to_string(net.channel) + "  " +
-                 encryptionString(net.encType);
+          return std::string(signalBars(net.rssi)) + " " + std::to_string(net.rssi) + "dBm  Ch" +
+                 std::to_string(net.channel) + "  " + encryptionString(net.encType);
         });
   }
 

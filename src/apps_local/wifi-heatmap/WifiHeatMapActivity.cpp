@@ -1,4 +1,5 @@
 #include "WifiHeatMapActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -12,6 +13,7 @@
 #include "../radio/RadioManager.h"
 
 void WifiHeatMapActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   RADIO.ensureWifi();
   WiFi.disconnect();
@@ -28,6 +30,7 @@ void WifiHeatMapActivity::onEnter() {
 }
 
 void WifiHeatMapActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   stopLogging();
   RADIO.shutdown();

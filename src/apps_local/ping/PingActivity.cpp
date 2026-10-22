@@ -1,4 +1,5 @@
 #include "PingActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <GfxRenderer.h>
@@ -13,6 +14,7 @@
 #include "fontIds.h"
 
 void PingActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = TEXT_INPUT;
   results.clear();
@@ -39,7 +41,8 @@ void PingActivity::onEnter() {
       });
 }
 
-void PingActivity::onExit() { Activity::onExit(); }
+void PingActivity::onExit() { devmode::resume();
+  Activity::onExit(); }
 
 void PingActivity::doPing() {
   if (WiFi.status() != WL_CONNECTED) {

@@ -1,4 +1,5 @@
 #include "CrowdDensityActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <WiFi.h>
@@ -53,6 +54,7 @@ void CrowdDensityActivity::addMac(const uint8_t* mac) {
 // ---------------------------------------------------------------------------
 
 void CrowdDensityActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = READY;
   memset(history, 0, sizeof(history));
@@ -88,6 +90,7 @@ void CrowdDensityActivity::startCapture() {
 }
 
 void CrowdDensityActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   if (promiscuousActive) {
     esp_wifi_set_promiscuous(false);

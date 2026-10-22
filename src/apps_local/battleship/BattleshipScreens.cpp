@@ -55,17 +55,28 @@ const char* startRowLabel(const StartRow row) {
 fui::Rect buildStartMenu(toybox::Screen& screen, const StartModel& model) {
   toyboxChrome(screen, "BATTLESHIP");
 
-  // Your record, in one line, above a rule. Small: it is worth having but it is
-  // not why you opened the app.
-  char record[64];
-  std::snprintf(record, sizeof(record), "%d PLAYED   %d WON   STREAK %d", model.played, model.won, model.streak);
-  const fui::Rect line = screen.takeTop(26);
+  // Identity is visible where the game starts. The first alpha stored global
+  // progression correctly but still showed the old Battleship-local counters,
+  // which made the player system effectively invisible.
+  char identity[96]{};
+  const char* rank = model.playerRank != nullptr && model.playerRank[0] != '\0' ? model.playerRank : "NO RANK";
+  std::snprintf(identity, sizeof(identity), "%s   LV %u   %s", model.playerName == nullptr ? "GUEST" : model.playerName,
+                static_cast<unsigned>(model.playerLevel), rank);
+
   fui::TextStyle recordStyle;
   recordStyle.font = toybox::kTileFont;
   recordStyle.align = fui::TextAlign::Left;
-  screen.target().text(line, record, recordStyle);
-  screen.target().fill(fui::makeRect(line.x, static_cast<int16_t>(line.bottom() + 6), line.width, toybox::kRule),
-                       fui::Paint::solid(fui::Color::Black));
+  const fui::Rect identityLine = screen.takeTop(26);
+  screen.target().text(identityLine, identity, recordStyle);
+
+  char record[80]{};
+  std::snprintf(record, sizeof(record), "%d W   %d L   %d D   STREAK %d", model.won, model.losses, model.draws,
+                model.streak);
+  const fui::Rect recordLine = screen.takeTop(26);
+  screen.target().text(recordLine, record, recordStyle);
+  screen.target().fill(
+      fui::makeRect(recordLine.x, static_cast<int16_t>(recordLine.bottom() + 6), recordLine.width, toybox::kRule),
+      fui::Paint::solid(fui::Color::Black));
 
   fui::ListItem rows[static_cast<int>(StartRow::Count)] = {};
   const int count = startRows(model);

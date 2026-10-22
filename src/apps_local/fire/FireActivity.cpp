@@ -1,4 +1,5 @@
 #include "FireActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <cstring>
@@ -107,7 +108,8 @@ void FireActivity::setAttack(int attackType) {
 }
 
 void FireActivity::onEnter() {
-    Activity::onEnter();
+    devmode::pause();
+  Activity::onEnter();
     TARGETS.loadCache();
 
     targetCount = 0;
@@ -169,7 +171,8 @@ void FireActivity::loadTargetList() {
 
 void FireActivity::onExit() {
     stopAttack();
-    Activity::onExit();
+    devmode::resume();
+  Activity::onExit();
 }
 
 // ---------------------------------------------------------------------------

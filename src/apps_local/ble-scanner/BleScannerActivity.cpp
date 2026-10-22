@@ -1,4 +1,5 @@
 #include "BleScannerActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <BLEAdvertisedDevice.h>
@@ -30,6 +31,7 @@ class BleScanCallback : public BLEAdvertisedDeviceCallbacks {
 // ---- lifecycle ----
 
 void BleScannerActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = SCANNING_VIEW;
   devices.clear();
@@ -48,6 +50,7 @@ void BleScannerActivity::onEnter() {
 }
 
 void BleScannerActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   disconnect();
   stopBleScan();

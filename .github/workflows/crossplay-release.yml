@@ -116,13 +116,30 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.14.3
+            ### What is new in 1.15.1
 
-            - Battleship browser double-tap zoom is disabled so taps stay focused on the game board.
-            - Touch scrolling and mouse-wheel scrolling are locked while the active match screen is open.
-            - Browser context menu / right click is disabled on the Battleship page.
-            - iOS long-press callouts are suppressed during the match.
-            - Setup and fleet placement remain scrollable, and Battleship's own two-tap target/fire interaction is unchanged.
+            A polish release on top of 1.15.0: the Tarot app, the WiFi Scanner
+            and the German translations.
+
+            **Tarot**
+
+            - Reliable navigation: a visible control bar with three labelled
+              zones (meaning, draw, history) replaces the old hidden tap halves,
+              and tapping the card no longer draws a new one by accident.
+            - Cards are dealt face down and turned over to read, with a drawn
+              card back that also shows the deck before you draw.
+
+            **WiFi Scanner**
+
+            - Touch control: tap a network for its details, tap to leave the
+              detail, signal and channel views.
+
+            **Other**
+
+            - The Authenticator's empty, locked and set-up screens no longer run
+              their heading and body together ("NO ACCOUNTSAdd a TOTP...").
+            - 31 German strings that showed in English are translated: the
+              frontlight panel, Developer Mode, OPDS filters and more.
 
             PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
             Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.

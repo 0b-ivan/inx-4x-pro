@@ -1,8 +1,8 @@
 #include "Shelf.h"
 
 #include <HalStorage.h>
-#include <Logging.h>
 #include <I18n.h>
+#include <Logging.h>
 #include <strings.h>
 
 #include <cstdio>
@@ -10,6 +10,7 @@
 #include <string>
 
 #include "../activities/ActivityManager.h"
+#include "../activities/settings/RssFeedListActivity.h"
 #include "ShelfFolderActivity.h"
 #include "ShelfState.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
@@ -81,11 +82,28 @@
 #include "ping/PingActivity.h"
 #include "wifi-connect/WifiConnectActivity.h"
 #include "vehicle-finder/VehicleFinderActivity.h"
+#include "calculator/CalculatorActivity.h"
+#include "cipher/CipherActivity.h"
+#include "clock/ClockActivity.h"
+#include "countdown/CountdownActivity.h"
+#include "device-info/DeviceInfoActivity.h"
+#include "morse-code/MorseCodeActivity.h"
+#include "otp-generator/OtpGeneratorActivity.h"
+#include "password-manager/PasswordManagerActivity.h"
+#include "qr-generator/QrGeneratorActivity.h"
+#include "sd-file-browser/SdFileBrowserActivity.h"
+#include "unit-converter/UnitConverterActivity.h"
+#include "steganography/SteganographyActivity.h"
+#include "sd-encryption/SdEncryptionActivity.h"
+#include "security-pin/SecurityPinActivity.h"
+#include "quick-wipe/QuickWipeActivity.h"
+#include "screen-decoy/ScreenDecoyActivity.h"
+#include "qr-totp/QrTotpActivity.h"
+#include "usb-mass-storage/UsbMassStorageActivity.h"
 #include "knucklebones/KnucklebonesActivity.h"
 #include "minesweeper/MinesweeperActivity.h"
 #include "murdle/MurdleActivity.h"
 #include "player/PlayerActivity.h"
-#include "../activities/settings/RssFeedListActivity.h"
 #include "seasalt/SeaSaltActivity.h"
 #include "solitaire/SolitaireActivity.h"
 #include "study/StudyActivity.h"
@@ -96,6 +114,7 @@
 #include "trivia/TriviaActivity.h"
 #include "ui/ToyboxIcons.h"
 #include "wavelength/WavelengthActivity.h"
+#include "wifi-scanner/WifiScannerActivity.h"
 #include "xkcd/XkcdActivity.h"
 #include "yahtzee/YahtzeeActivity.h"
 
@@ -127,6 +146,8 @@ constexpr shelf::Item kGames[] = {
     {"WAVELENGTH", &icon_wavelength_32, &WavelengthActivity::create},
 };
 constexpr shelf::Item kApps[] = {
+    {"PLAYER", &icon_study_32, &PlayerActivity::create},
+    {"WIFI SCANNER", &icon_study_32, &WifiScannerActivity::create},
     {"STUDY", &icon_study_32, &StudyActivity::create},
     {"HACKER NEWS", &icon_hackernews_32, &HackerNewsActivity::create},
     {"XKCD", &icon_xkcd_32, &XkcdActivity::create},
@@ -177,6 +198,24 @@ constexpr shelf::Item kApps[] = {
     {"PING",           &icon_study_32,  &PingActivity::create},
     {"WIFI CONNECT",   &icon_study_32,  &WifiConnectActivity::create},
     {"VEHICLE FINDER", &icon_study_32,  &VehicleFinderActivity::create},
+    {"CALCULATOR",     &icon_study_32,  &CalculatorActivity::create},
+    {"CIPHER TOOLS",   &icon_study_32,  &CipherActivity::create},
+    {"CLOCK",          &icon_study_32,  &ClockActivity::create},
+    {"COUNTDOWN",      &icon_study_32,  &CountdownActivity::create},
+    {"DEVICE INFO",    &icon_study_32,  &DeviceInfoActivity::create},
+    {"MORSE CODE",     &icon_study_32,  &MorseCodeActivity::create},
+    {"OTP GENERATOR",  &icon_study_32,  &OtpGeneratorActivity::create},
+    {"PASSWORD MANAGER", &icon_study_32, &PasswordManagerActivity::create},
+    {"QR GENERATOR",   &icon_study_32,  &QrGeneratorActivity::create},
+    {"SD FILE BROWSER", &icon_study_32, &SdFileBrowserActivity::create},
+    {"UNIT CONVERTER",  &icon_study_32,  &UnitConverterActivity::create},
+    {"STEGANOGRAPHY",   &icon_study_32,  &SteganographyActivity::create},
+    {"SD ENCRYPTION",   &icon_study_32,  &SdEncryptionActivity::create},
+    {"SECURITY PIN",    &icon_study_32,  &SecurityPinActivity::create},
+    {"QUICK WIPE",      &icon_study_32,  &QuickWipeActivity::create},
+    {"SCREEN DECOY",    &icon_study_32,  &ScreenDecoyActivity::create},
+    {"QR TOTP",         &icon_study_32,  &QrTotpActivity::create},
+    {"USB STORAGE",     &icon_study_32,  &UsbMassStorageActivity::create},
 };
 
 // The two rows Home grows, in reading order. Titles are Title Case because

@@ -1,4 +1,5 @@
 #include "AirTagTestActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <BLEDevice.h>
@@ -14,6 +15,7 @@
 constexpr const char* AirTagTestActivity::MODE_NAMES[];
 
 void AirTagTestActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   RADIO.ensureBle();
 
@@ -30,6 +32,7 @@ void AirTagTestActivity::onEnter() {
 }
 
 void AirTagTestActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   stopSpoofing();
   RADIO.shutdown();

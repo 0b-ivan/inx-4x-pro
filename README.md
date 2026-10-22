@@ -61,6 +61,7 @@ restyled to match the design language the apps use.
 | **Hacker News**  | The front page in a reading serif, articles kept on the card.                |
 | **RSS Reader**   | Follow RSS feeds directly on the device.                                    |
 | **Authenticator**| Store multiple TOTP accounts and generate codes offline.                    |
+| **WiFi Scanner** | Passive 2.4 GHz survey: AP list, signal meter and channel analyser.          |
 | **xkcd**         | The archive, packed for the card and drawn one to one.                       |
 | **Get Books**    | Browse any OPDS catalog and download straight to the card, no computer.      |
 | **Instapaper**   | Your read-later queue, synced both ways: reading position and archiving.     |
@@ -107,6 +108,24 @@ restyled to match the design language the apps use.
 | **Ping** | Send ICMP pings to a host and display RTT results. |
 | **WiFi Connect** | Scan and connect to WiFi networks, save credentials. |
 | **Vehicle Finder** | Fingerprint nearby APs to locate a parked vehicle by signal match. |
+| **Calculator** | Four-function calculator with expression history. |
+| **Cipher Tools** | ROT13, Caesar, Vigenere, XOR, Atbash, Base64 encode/decode. |
+| **Clock** | NTP-synced clock with stopwatch and pomodoro timer. |
+| **Countdown** | 7-segment countdown timer with configurable duration. |
+| **Device Info** | System diagnostics: chip info, heap, uptime, WiFi MAC, IP. |
+| **Morse Code** | Encode and decode Morse code with reference chart. |
+| **OTP Generator** | Generate cryptographically random one-time passwords. |
+| **Password Manager** | Store and retrieve passwords with obfuscated SD-card storage. |
+| **QR Generator** | Generate QR codes for text or URLs, displayed on screen. |
+| **SD File Browser** | Browse, view, and delete files on the SD card. |
+| **Unit Converter** | Convert between units of length, weight, temperature, data, speed. |
+| **Steganography** | Hide and extract text messages inside BMP images on SD card. |
+| **SD Encryption** | Encrypt and decrypt files on the SD card with AES-256. |
+| **Security Pin** | Set a PIN lock that activates on idle or manual lock. |
+| **Quick Wipe** | Securely delete selected files or directories from SD card. |
+| **Screen Decoy** | Display a fake idle screen to deter casual snooping. |
+| **QR TOTP** | Scan a TOTP QR code and generate offline OTP codes. |
+| **USB Storage** | Mount the SD card as a USB mass-storage device over USB. |
 
 Nine of them play over **PLAY NEARBY**: Chess, Checkers, Connect Four,
 Yahtzee, Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle. Put two

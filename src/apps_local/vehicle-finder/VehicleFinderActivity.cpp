@@ -1,4 +1,5 @@
 #include "VehicleFinderActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -18,6 +19,7 @@
 // ----------------------------------------------------------------
 
 void VehicleFinderActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   RADIO.ensureWifi();
   state = IDLE;
@@ -31,6 +33,7 @@ void VehicleFinderActivity::onEnter() {
 }
 
 void VehicleFinderActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   WiFi.scanDelete();
   RADIO.shutdown();

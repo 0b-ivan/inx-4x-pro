@@ -1,4 +1,5 @@
 #include "BleContactExchangeActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <BLEAdvertisedDevice.h>
@@ -21,6 +22,7 @@
 // ---------------------------------------------------------------------------
 
 void BleContactExchangeActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = IDLE;
   idleMenuIndex = 0;
@@ -32,6 +34,7 @@ void BleContactExchangeActivity::onEnter() {
 }
 
 void BleContactExchangeActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   if (bleInitialized) {
     stopExchange();

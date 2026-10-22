@@ -1,4 +1,5 @@
 #include "PacketMonitorActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -66,6 +67,7 @@ void PacketMonitorActivity::onPacket(const uint8_t* buf, uint16_t len, int rssi)
 }
 
 void PacketMonitorActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   if (!fileMux) fileMux = xSemaphoreCreateMutex();
   totalPackets = 0;
@@ -91,6 +93,7 @@ void PacketMonitorActivity::onEnter() {
 }
 
 void PacketMonitorActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   stopPcapRecording();
   stopMonitor();

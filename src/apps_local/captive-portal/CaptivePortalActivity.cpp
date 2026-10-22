@@ -1,4 +1,5 @@
 #include "CaptivePortalActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -37,6 +38,7 @@ static CaptivePortalActivity* portalInstance = nullptr;
 static constexpr const char* BUILTIN_NAME = "(Built-in) WiFi Login";
 
 void CaptivePortalActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   RADIO.ensureWifi();
   state = SELECT_TEMPLATE;
@@ -52,6 +54,7 @@ void CaptivePortalActivity::onEnter() {
 }
 
 void CaptivePortalActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   stopPortal();
   portalInstance = nullptr;

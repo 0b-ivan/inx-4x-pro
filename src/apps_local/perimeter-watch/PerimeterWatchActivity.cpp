@@ -1,4 +1,5 @@
 #include "PerimeterWatchActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -15,6 +16,7 @@ void PerimeterWatchActivity::macToStr(const uint8_t* mac, char* buf, size_t bufL
 }
 
 void PerimeterWatchActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = SETUP;
   baseline.clear();
@@ -26,6 +28,7 @@ void PerimeterWatchActivity::onEnter() {
 }
 
 void PerimeterWatchActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   WiFi.scanDelete();
   RADIO.shutdown();

@@ -64,6 +64,7 @@ class BattleshipLocalPlayActivity final : public Activity {
   void aimX4Shot(int cell);
   void fireX4Shot();
   void reportLastShot(bool browserShot);
+  void recordMatchIfFinished();
 
   void drawTransportChoice();
   void drawNetworkChoice();
@@ -93,6 +94,11 @@ class BattleshipLocalPlayActivity final : public Activity {
   char x4Report_[48] = {};
   bool x4Ready_ = false;
   bool x4SurrenderArmed_ = false;
+  // Browser callbacks and device input can observe the same terminal state on
+  // different loop passes. Only the first observation books progression for
+  // the local X4 identity; the browser opponent is never materialized as a
+  // persistent local Player merely to account for the result.
+  bool resultRecorded_ = false;
   bool devModePaused_ = false;
   bool ownsSta_ = false;
   bool lastClientSeen_ = false;

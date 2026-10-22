@@ -1,4 +1,5 @@
 #include "ApClonerActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <WiFi.h>
@@ -18,6 +19,7 @@
 // ---------------------------------------------------------------------------
 
 void ApClonerActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = SCANNING;
   aps.clear();
@@ -33,6 +35,7 @@ void ApClonerActivity::onExit() {
   stopClone();
   WiFi.scanDelete();
   RADIO.shutdown();
+  devmode::resume();
   Activity::onExit();
 }
 

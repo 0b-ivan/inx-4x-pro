@@ -1,4 +1,5 @@
 #include "MeshChatActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <I18n.h>
@@ -19,6 +20,7 @@
 MeshChatActivity* MeshChatActivity::activeInstance = nullptr;
 
 void MeshChatActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = CHAT_VIEW;
   messageCount = 0;
@@ -44,6 +46,7 @@ void MeshChatActivity::onEnter() {
 }
 
 void MeshChatActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   deinitEspNow();
   activeInstance = nullptr;

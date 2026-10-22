@@ -1,4 +1,5 @@
 #include "DeadDropActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <GfxRenderer.h>
@@ -40,6 +41,7 @@ constexpr int DeadDropActivity::TIMER_OPTIONS[];
 // ---------------------------------------------------------------------------
 
 void DeadDropActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = CONFIG;
   configIndex = 0;
@@ -52,6 +54,7 @@ void DeadDropActivity::onEnter() {
 }
 
 void DeadDropActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   if (state == ACTIVE) {
     stopDrop();

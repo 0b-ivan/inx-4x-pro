@@ -48,7 +48,7 @@
       .grid .miss { color:var(--ink); }
       .grid .selected { outline:3px solid var(--ink); outline-offset:-4px; }
       .grid .selected-target { outline:4px double var(--ink); outline-offset:-5px; }
-      #battle[hidden],#rematch[hidden],#hud[hidden],#setupState[hidden],#profile[hidden],#placement[hidden],#surrender[hidden] { display:none; }
+      #battle[hidden],#rematch[hidden],#hud[hidden],#setupState[hidden],#profile[hidden],#placement[hidden],#surrender[hidden],#playerLogin[hidden],#deviceProfileDetails[hidden],#guestRegistration[hidden],#deviceProfileToggle[hidden] { display:none; }
       #rematch,#surrender { width:100%; margin-top:10px; border:2px solid var(--line); font-weight:700; min-height:44px; }
       #surrender { border-style:dashed; }
       .match-header { position:relative; border:2px solid var(--line); padding:10px; margin:10px 0 8px; overflow:hidden; }
@@ -104,6 +104,31 @@
         .ship-segment { width:12px; height:12px; border-width:1.5px; }
         .mini-grid { max-width:104px; }
       }
+
+      #devicePlayer { margin:14px 0; border:1px solid var(--line); padding:10px; }
+      .device-player-head { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+      .device-player-name { font-size:16px; font-weight:900; }
+      .device-player-mode { color:var(--muted); font-size:10px; text-transform:uppercase; text-align:right; }
+      .device-profile-action { display:grid; justify-items:end; gap:5px; }
+      #deviceProfileToggle { min-height:34px; padding:5px 10px; font-size:12px; font-weight:700; }
+      .profile-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:10px 0; }
+      .metric { border:1px solid var(--line); padding:7px; min-width:0; }
+      .metric b { display:block; font-size:17px; overflow-wrap:anywhere; }
+      .metric span { font-size:10px; color:var(--muted); }
+      .radar-bars { display:grid; gap:4px; margin:10px 0; }
+      .radar-row { display:grid; grid-template-columns:88px 1fr 34px; align-items:center; gap:6px; font-size:11px; }
+      .radar-track { height:10px; border:1px solid var(--line); }
+      .radar-fill { height:100%; background:var(--ink); }
+      .player-controls { display:grid; gap:7px; margin-top:8px; }
+      .player-controls input,.player-controls select { width:100%; min-height:36px; font:inherit; background:var(--panel); color:var(--ink); border:1px solid var(--line); padding:7px; }
+      .player-inline { display:grid; grid-template-columns:1fr auto; gap:7px; }
+      .player-login-row { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(90px,.75fr) auto; gap:7px; }
+      .callsign-actions { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+      #deviceProfileDetails { border-top:1px solid var(--line); margin-top:10px; padding-top:8px; }
+      #guestRegistration { border-top:1px dashed var(--line); margin-top:9px; padding-top:8px; }
+      #playerMessage { min-height:16px; margin:6px 0 0; font-size:11px; color:var(--muted); font-weight:700; }
+      main.in-battle #devicePlayer { display:none; }
+      @media (max-width:520px) { .player-login-row { grid-template-columns:1fr auto; } .player-login-row select { grid-column:1 / -1; } }
     </style>
   </head>
   <body>
@@ -111,6 +136,27 @@
       <header><p class="eyebrow">CrossPlay · X4 Pro</p><h1>BATTLESHIP</h1></header>
       <div class="status"><span class="dot"></span><span id="status">Connecting…</span></div>
       <p id="setupState" class="copy">Device status: <code id="phase">offline</code><br /><span id="turn"></span></p>
+
+      <section id="devicePlayer">
+        <div class="device-player-head">
+          <div><p class="eyebrow">PLAYER</p><div id="devicePlayerName" class="device-player-name">Loading…</div><div id="deviceCallsign" class="hint"></div></div>
+          <div class="device-profile-action"><div id="devicePlayerMode" class="device-player-mode"></div><button id="deviceProfileToggle" type="button" hidden>PROFILE</button></div>
+        </div>
+        <div id="playerLogin" class="player-controls">
+          <div class="player-login-row"><select id="savedPlayer" aria-label="Saved player"></select><input id="playerPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN" /><button id="loginPlayer" type="button">LOGIN</button></div>
+        </div>
+        <div id="deviceProfileDetails" hidden>
+          <div id="deviceMetrics" class="profile-grid"></div>
+          <div id="deviceRadar" class="radar-bars"></div>
+          <button id="useGuestPlayer" type="button">USE GUEST</button>
+        </div>
+        <div id="guestRegistration" class="player-controls" hidden>
+          <div id="guestCallsignActions" class="callsign-actions"><button data-slot="0" type="button">HAIR +</button><button data-slot="1" type="button">EYES +</button><button data-slot="2" type="button">MOUTH +</button></div>
+          <div class="player-inline"><input id="registerName" maxlength="20" placeholder="New player name" /><input id="registerPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN" /></div>
+          <button id="registerPlayer" type="button">REGISTER GUEST</button>
+        </div>
+        <p id="playerMessage" role="status"></p>
+      </section>
 
       <fieldset id="profile" disabled>
         <legend>YOUR PLAYER</legend>
@@ -292,6 +338,90 @@
       window.addEventListener('pagehide',()=>{hidden=true;++generation;clearTimeout(retry);token='';controls();if(socket){socket.onclose=null;socket.close();}});
       window.addEventListener('pageshow',e=>{if(e.persisted){hidden=false;connect();}});
       connect();
+
+      // Device-wide player UI stays intentionally small until a registered
+      // profile is selected. Full stats are opt-in through the PROFILE button.
+      let pxTokenValue = '', pxProfileOpen = false, pxLastState = null;
+      const pxLabels = ['STRATEGY','TACTICS','PRECISION','RISK','ENDURANCE','VERSATILITY'];
+      async function pxToken() {
+        if (token) { pxTokenValue = token; return token; }
+        const response = await fetch('/battleship/session', {cache:'no-store'});
+        pxTokenValue = (await response.text()).trim();
+        return pxTokenValue;
+      }
+      async function pxState() {
+        try {
+          const token = await pxToken();
+          const response = await fetch('/player/state?token=' + encodeURIComponent(token), {cache:'no-store'});
+          const data = await response.json();
+          pxRender(data);
+        } catch (_) {
+          document.getElementById('playerMessage').textContent = 'PLAYER API OFFLINE';
+        }
+      }
+      async function pxAction(action, fields={}) {
+        const token = await pxToken();
+        const body = new URLSearchParams({token, action, ...fields});
+        const response = await fetch('/player/action', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body});
+        const data = await response.json();
+        pxRender(data);
+        return data;
+      }
+      function pxRender(data) {
+        pxLastState = data;
+        const current = data.current || {};
+        const profile = data.profile || {};
+        const battleship = profile.battleship || {};
+        const registered = !!current.registered;
+        const persistent = !!data.persistence;
+        const players = data.players || [];
+        document.getElementById('devicePlayerName').textContent = current.name || 'GUEST';
+        document.getElementById('deviceCallsign').textContent = pxProfileOpen ? (current.callsign || '') : '';
+        document.getElementById('devicePlayerMode').textContent = data.mode === 'guest-only' ? 'STORAGE OFFLINE' : (registered ? 'REGISTERED' : 'GUEST');
+        document.getElementById('playerMessage').textContent = data.message || (data.mode === 'guest-only' ? 'Player database unavailable.' : '');
+
+        const metrics = [
+          ['LEVEL', profile.level ?? 1], ['XP', profile.xp ?? 0], ['CLASS', profile.class || 'ALLROUNDER'],
+          ['BATTLESHIP', battleship.rank || 'NO RANK'], ['W / L / D', `${battleship.wins||0} / ${battleship.losses||0} / ${battleship.draws||0}`], ['BEST STREAK', battleship.bestStreak||0]
+        ];
+        document.getElementById('deviceMetrics').innerHTML = metrics.map(([label,value]) => `<div class="metric"><b>${String(value)}</b><span>${label}</span></div>`).join('');
+        const radar = Array.isArray(profile.radar) ? profile.radar : [0,0,0,0,0,0];
+        document.getElementById('deviceRadar').innerHTML = pxLabels.map((label,i) => `<div class="radar-row"><span>${label}</span><div class="radar-track"><div class="radar-fill" style="width:${Math.max(0,Math.min(100,radar[i]||0))}%"></div></div><b>${radar[i]||0}</b></div>`).join('');
+
+        const select = document.getElementById('savedPlayer');
+        const previous = select.value;
+        select.replaceChildren();
+        players.forEach(player => { const option=document.createElement('option'); option.value=player.id; option.textContent=player.name; select.appendChild(option); });
+        if ([...select.options].some(option => option.value === previous)) select.value = previous;
+
+        document.getElementById('playerLogin').hidden = registered || !persistent || players.length === 0;
+        document.getElementById('deviceProfileToggle').hidden = !registered;
+        document.getElementById('deviceProfileToggle').textContent = pxProfileOpen ? 'CLOSE PROFILE' : 'PROFILE';
+        document.getElementById('deviceProfileDetails').hidden = !registered || !pxProfileOpen;
+        document.getElementById('guestRegistration').hidden = registered || !current.canRegister;
+        document.getElementById('loginPlayer').disabled = !persistent || !select.value;
+        document.getElementById('playerPin').disabled = !persistent || !select.value;
+        document.getElementById('registerPlayer').disabled = !current.canRegister;
+        document.getElementById('registerName').disabled = !current.canRegister;
+        document.getElementById('registerPin').disabled = !current.canRegister;
+        document.getElementById('guestCallsignActions').hidden = !current.canRegister;
+      }
+      document.getElementById('deviceProfileToggle').addEventListener('click', () => {
+        pxProfileOpen = !pxProfileOpen;
+        if (pxLastState) pxRender(pxLastState);
+      });
+      document.getElementById('useGuestPlayer').addEventListener('click', async () => { pxProfileOpen=false; await pxAction('guest'); });
+      document.getElementById('loginPlayer').addEventListener('click', async () => {
+        const select=document.getElementById('savedPlayer'); const pin=document.getElementById('playerPin');
+        await pxAction('login', {id:select.value, pin:pin.value}); pin.value='';
+      });
+      document.getElementById('registerPlayer').addEventListener('click', async () => {
+        const name=document.getElementById('registerName'); const pin=document.getElementById('registerPin');
+        await pxAction('register', {name:name.value.trim(), pin:pin.value}); pin.value='';
+      });
+      document.querySelectorAll('#guestCallsignActions button').forEach(button => button.addEventListener('click', () => pxAction('callsign', {slot:button.dataset.slot})));
+      pxState();
+      setInterval(() => { if (!document.getElementById('app').classList.contains('in-battle')) pxState(); }, 5000);
     </script>
   </body>
 </html>

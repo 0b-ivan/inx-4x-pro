@@ -1,4 +1,5 @@
 #include "HostScannerActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -23,6 +24,7 @@ std::string HostScannerActivity::ipToString(uint32_t ip) const {
 }
 
 void HostScannerActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = CHECKING_WIFI;
   hosts.clear();
@@ -38,6 +40,7 @@ void HostScannerActivity::onEnter() {
 }
 
 void HostScannerActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   RADIO.shutdown();
 }

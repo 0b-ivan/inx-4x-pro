@@ -1255,7 +1255,7 @@ inline const char* localize(const char* text) {
       {"OFFICE", "BUERO"},
       {"PARK", "PARK"},
       {"ROOF", "DACH"},
-      {"STUDY", "ARBEITSZIMMER"},
+      {"STUDY", "LERNEN"},
       {"TOWER", "TURM"},
       {"ANGER", "WUT"},
       {"DEBT", "SCHULDEN"},
@@ -1309,11 +1309,16 @@ inline const char* localize(const char* text) {
       {"Each suspect carried one weapon and was in one place, and no two of them share. One of them did it.",
        "Jeder Verdaechtige hatte eine Waffe und war an einem Ort. Nichts kommt doppelt vor. Einer war der Taeter."},
       {"THE GRID IS YOUR PENCIL", "DAS RASTER IST DEIN NOTIZBLOCK"},
-      {"Every pair of things meets in one square. Tap once to rule it out, again to lock it in. Locking one rules out the rest of its row and column in a lighter mark. The grid only ever takes back marks it made itself; yours stay until you clear them.",
-       "Jedes Paar trifft sich in einem Feld. Einmal tippen schliesst es aus, zweimal legt es fest. Eine Festlegung schliesst den Rest der Zeile und Spalte aus."},
+      {"Every pair of things meets in one square. Tap once to rule it out, again to lock it in. Locking one rules out "
+       "the rest of its row and column in a lighter mark. The grid only ever takes back marks it made itself; yours "
+       "stay until you clear them.",
+       "Jedes Paar trifft sich in einem Feld. Einmal tippen schliesst es aus, zweimal legt es fest. Eine Festlegung "
+       "schliesst den Rest der Zeile und Spalte aus."},
       {"THE CLUES DO THE REST", "DIE HINWEISE HELFEN WEITER"},
-      {"Read one, mark what it rules out, tap its number to tick it off. Clues never lie, unless the case says a suspect is speaking.",
-       "Hinweis lesen, Ausgeschlossenes markieren und seine Nummer abhaken. Hinweise luegen nur, wenn ein Verdaechtiger spricht."},
+      {"Read one, mark what it rules out, tap its number to tick it off. Clues never lie, unless the case says a "
+       "suspect is speaking.",
+       "Hinweis lesen, Ausgeschlossenes markieren und seine Nummer abhaken. Hinweise luegen nur, wenn ein "
+       "Verdaechtiger spricht."},
       {"THEN NAME THEM", "DANN BESCHULDIGE SIE"},
       {"The last clue describes what was beside the body, not who left it there. Find that thing on your grid.",
        "Der letzte Hinweis beschreibt, was neben der Leiche lag, nicht wer es dort liess. Finde es im Raster."},
@@ -1342,6 +1347,13 @@ inline const char* localize(const char* text) {
   int consumed = 0;
   char word[32] = {};
   char other[32] = {};
+  // Every pattern below tests text[consumed] for a full match. %n only writes
+  // when the whole pattern matched, so a stale value from an earlier attempt
+  // would accept a partial one ("0 / 16" as "%d POINTS").
+  const auto scan = [text, &consumed](const char* format, auto*... out) {
+    consumed = 0;
+    return std::sscanf(text, format, out...);
+  };
   const auto germanShip = [](const char* ship) {
     if (std::strcmp(ship, "CARRIER") == 0) return "TRAEGER";
     if (std::strcmp(ship, "BATTLESHIP") == 0) return "SCHLACHTSCHIFF";
@@ -1352,11 +1364,21 @@ inline const char* localize(const char* text) {
   };
   const auto germanSudokuTerm = [](const char* term) {
     static constexpr LocalTranslation kTerms[] = {
-        {"EASY", "LEICHT"},           {"MEDIUM", "MITTEL"},        {"HARD", "SCHWER"},
-        {"EXPERT", "EXPERTE"},       {"NOTHING", "NICHTS"},       {"ONLY DIGIT", "EINZIGE ZAHL"},
-        {"ONLY CELL", "EINZIGES FELD"}, {"LOCKED", "GESPERRT"},    {"CELL PAIR", "FELDPAAR"},
-        {"DIGIT PAIR", "ZAHLENPAAR"}, {"CELL TRIO", "FELDTRIO"},  {"DIGIT TRIO", "ZAHLENTRIO"},
-        {"RECTANGLE", "RECHTECK"},   {"Y CHAIN", "Y-KETTE"},      {"SWORDFISH", "SCHWERTFISCH"},
+        {"EASY", "LEICHT"},
+        {"MEDIUM", "MITTEL"},
+        {"HARD", "SCHWER"},
+        {"EXPERT", "EXPERTE"},
+        {"NOTHING", "NICHTS"},
+        {"ONLY DIGIT", "EINZIGE ZAHL"},
+        {"ONLY CELL", "EINZIGES FELD"},
+        {"LOCKED", "GESPERRT"},
+        {"CELL PAIR", "FELDPAAR"},
+        {"DIGIT PAIR", "ZAHLENPAAR"},
+        {"CELL TRIO", "FELDTRIO"},
+        {"DIGIT TRIO", "ZAHLENTRIO"},
+        {"RECTANGLE", "RECHTECK"},
+        {"Y CHAIN", "Y-KETTE"},
+        {"SWORDFISH", "SCHWERTFISCH"},
     };
     for (const auto& entry : kTerms) {
       if (std::strcmp(term, entry.english) == 0) return entry.german;
@@ -1374,120 +1396,113 @@ inline const char* localize(const char* text) {
     return nullptr;
   };
 
-  if (std::sscanf(text, "%d PLAYED   %d WON   STREAK %d%n", &first, &second, &third, &consumed) == 3 &&
-      text[consumed] == '\0') {
+  if (scan("%d PLAYED   %d WON   STREAK %d%n", &first, &second, &third, &consumed) == 3 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d GESPIELT   %d GEWONNEN   SERIE %d", first, second, third);
     return formatted;
   }
-  if (std::sscanf(text, "%d PLAYED   %d WON%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d PLAYED   %d WON%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d GESPIELT   %d GEWONNEN", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "BEST %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("BEST %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "BESTE %d", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d SECONDS%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d SECONDS%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d SEKUNDEN", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d LISTS%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d LISTS%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d LISTEN", first);
     return formatted;
   }
-  if (std::sscanf(text, "OUT OF %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("OUT OF %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "VON %d", first);
     return formatted;
   }
-  if (std::sscanf(text, "TOTAL  %d %31s  %d %31s%n", &first, word, &second, other, &consumed) == 4 &&
-      text[consumed] == '\0') {
-    std::snprintf(formatted, sizeof(formatted), "GESAMT  %d %s  %d %s", first,
-                  first == 1 ? "RUNDE" : "RUNDEN", second, second == 1 ? "WORT" : "WOERTER");
+  if (scan("TOTAL  %d %31s  %d %31s%n", &first, word, &second, other, &consumed) == 4 && text[consumed] == '\0') {
+    std::snprintf(formatted, sizeof(formatted), "GESAMT  %d %s  %d %s", first, first == 1 ? "RUNDE" : "RUNDEN", second,
+                  second == 1 ? "WORT" : "WOERTER");
     return formatted;
   }
-  if (std::sscanf(text, "MEDALS %d - %d%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("MEDALS %d - %d%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "MEDAILLEN %d - %d", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "%d-%d OF %d%n", &first, &second, &third, &consumed) == 3 && text[consumed] == '\0') {
+  if (scan("%d-%d OF %d%n", &first, &second, &third, &consumed) == 3 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d-%d VON %d", first, second, third);
     return formatted;
   }
-  if (std::sscanf(text, "%d MOVES. THE DECK NEVER STOOD A CHANCE.%n", &first, &consumed) == 1 &&
-      text[consumed] == '\0') {
+  if (scan("%d MOVES. THE DECK NEVER STOOD A CHANCE.%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d ZUEGE. DER STAPEL HATTE KEINE CHANCE.", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d MOVES, AND NOT ONE OF THEM WASTED.%n", &first, &consumed) == 1 &&
-      text[consumed] == '\0') {
+  if (scan("%d MOVES, AND NOT ONE OF THEM WASTED.%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d ZUEGE, KEIN EINZIGER VERSCHWENDET.", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d MOVES. SOMEBODY HAS DONE THIS BEFORE.%n", &first, &consumed) == 1 &&
-      text[consumed] == '\0') {
+  if (scan("%d MOVES. SOMEBODY HAS DONE THIS BEFORE.%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d ZUEGE. DAS WAR NICHT DEIN ERSTES MAL.", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d MOVES. THE STOCK IS STILL RECOVERING.%n", &first, &consumed) == 1 &&
-      text[consumed] == '\0') {
+  if (scan("%d MOVES. THE STOCK IS STILL RECOVERING.%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d ZUEGE. DER TALON ERHOLT SICH NOCH.", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d CLEARED, %d IN A ROW%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d CLEARED, %d IN A ROW%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d GELOEST, %d IN FOLGE", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "%d MOVES DEEP%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d MOVES DEEP%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d ZUEGE GESPIELT", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d DEALT, %d CLEARED, %d IN A ROW%n", &first, &second, &third, &consumed) == 3 &&
-      text[consumed] == '\0') {
+  if (scan("%d DEALT, %d CLEARED, %d IN A ROW%n", &first, &second, &third, &consumed) == 3 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d GESPIELT, %d GELOEST, %d IN FOLGE", first, second, third);
     return formatted;
   }
-  if (std::sscanf(text, "%d PLAYED   %d CLEARED%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d PLAYED   %d CLEARED%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d GESPIELT   %d GERAEUMT", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "%d OF %d CELLS OPENED%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d OF %d CELLS OPENED%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d VON %d FELDERN AUFGEDECKT", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "%d OF %d MINES FLAGGED%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d OF %d MINES FLAGGED%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d VON %d MINEN MARKIERT", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "%31s, STARTING FRESH%n", word, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%31s, STARTING FRESH%n", word, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%s, NEUER START", germanSudokuTerm(word));
     return formatted;
   }
-  if (std::sscanf(text, "%d SOLVED   BEST %31s%n", &first, word, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d SOLVED   BEST %31s%n", &first, word, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d GELOEST   BESTZEIT %s", first, word);
     return formatted;
   }
-  if (std::sscanf(text, "%d SOLVED   NO %31s TIME YET%n", &first, word, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d SOLVED   NO %31s TIME YET%n", &first, word, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d GELOEST   NOCH KEINE %s-ZEIT", first, germanSudokuTerm(word));
     return formatted;
   }
-  if (std::sscanf(text, "%d HINT, SO NO TIME RECORDED%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d HINT, SO NO TIME RECORDED%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d HINWEIS, DAHER KEINE ZEIT", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d HINTS, SO NO TIME RECORDED%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d HINTS, SO NO TIME RECORDED%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d HINWEISE, DAHER KEINE ZEIT", first);
     return formatted;
   }
-  if (std::sscanf(text, "YOUR BEST %31s YET%n", word, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("YOUR BEST %31s YET%n", word, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "DEINE BESTE %s-ZEIT", germanSudokuTerm(word));
     return formatted;
   }
-  if (std::sscanf(text, "YOUR BEST IS %31s%n", word, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("YOUR BEST IS %31s%n", word, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "DEINE BESTZEIT IST %s", word);
     return formatted;
   }
   int techniqueAt = 0;
-  if (std::sscanf(text, "%d CLUES   HARDEST %n", &first, &techniqueAt) == 1 && techniqueAt > 0) {
+  if (scan("%d CLUES   HARDEST %n", &first, &techniqueAt) == 1 && techniqueAt > 0) {
     const char* separator = std::strstr(text + techniqueAt, "   ");
     const size_t techniqueLength = separator == nullptr ? 0 : static_cast<size_t>(separator - (text + techniqueAt));
     int detailConsumed = 0;
@@ -1501,20 +1516,19 @@ inline const char* localize(const char* text) {
       return formatted;
     }
   }
-  if (std::sscanf(text, "%d W   %d L   %d D%n", &first, &second, &third, &consumed) == 3 &&
-      text[consumed] == '\0') {
+  if (scan("%d W   %d L   %d D%n", &first, &second, &third, &consumed) == 3 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d S   %d N   %d U", first, second, third);
     return formatted;
   }
-  if (std::sscanf(text, "%d WHITE%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d WHITE%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d WEISS", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d BLACK%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d BLACK%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d SCHWARZ", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d OVER%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d OVER%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d VORBEI", first);
     return formatted;
   }
@@ -1526,220 +1540,221 @@ inline const char* localize(const char* text) {
     std::snprintf(formatted, sizeof(formatted), "%.*s AM ZUG", static_cast<int>(nameLength), text);
     return formatted;
   }
-  if (std::sscanf(text, "%d OF %d%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d OF %d%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d VON %d", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "%d-%d OF %d%n", &first, &second, &third, &consumed) == 3 && text[consumed] == '\0') {
+  if (scan("%d-%d OF %d%n", &first, &second, &third, &consumed) == 3 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d-%d VON %d", first, second, third);
     return formatted;
   }
-  if (std::sscanf(text, "REACHED %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("REACHED %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "ERREICHT: %d", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d PLAYED%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d PLAYED%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d GESPIELT", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d QUESTION ON THE CARD%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d QUESTION ON THE CARD%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d FRAGE AUF DER KARTE", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d QUESTIONS ON THE CARD%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d QUESTIONS ON THE CARD%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d FRAGEN AUF DER KARTE", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d OF %d SEEN%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d OF %d SEEN%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d VON %d GESEHEN", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "Level %d of %d%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("Level %d of %d%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "Stufe %d von %d", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "The questions need about %d MB free and the card has %d MB. Delete something from the card, then try again. Nothing was written.%n",
-                  &first, &second, &consumed) == 2 && text[consumed] == '\0') {
-    std::snprintf(formatted, sizeof(formatted), "Fragen brauchen etwa %d MB; frei sind %d MB. Etwas loeschen und erneut versuchen.", first, second);
-    return formatted;
-  }
-  if (std::sscanf(text, "Fetching the questions: %d of %d MB. Back stops it.%n", &first, &second, &consumed) == 2 &&
+  if (scan("The questions need about %d MB free and the card has %d MB. Delete something from the card, then try "
+           "again. Nothing was written.%n",
+           &first, &second, &consumed) == 2 &&
       text[consumed] == '\0') {
-    std::snprintf(formatted, sizeof(formatted), "Fragen werden geladen: %d von %d MB. Zurueck bricht ab.", first, second);
+    std::snprintf(formatted, sizeof(formatted),
+                  "Fragen brauchen etwa %d MB; frei sind %d MB. Etwas loeschen und erneut versuchen.", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "Fetching the questions: %d MB so far. Back stops it.%n", &first, &consumed) == 1 &&
+  if (scan("Fetching the questions: %d of %d MB. Back stops it.%n", &first, &second, &consumed) == 2 &&
+      text[consumed] == '\0') {
+    std::snprintf(formatted, sizeof(formatted), "Fragen werden geladen: %d von %d MB. Zurueck bricht ab.", first,
+                  second);
+    return formatted;
+  }
+  if (scan("Fetching the questions: %d MB so far. Back stops it.%n", &first, &consumed) == 1 &&
       text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "Fragen werden geladen: bisher %d MB. Zurueck bricht ab.", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d questions on the card. Ready when you are.%n", &first, &consumed) == 1 &&
-      text[consumed] == '\0') {
+  if (scan("%d questions on the card. Ready when you are.%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d Fragen auf der Karte. Bereit, wenn du es bist.", first);
     return formatted;
   }
-  if (std::sscanf(text, "You got %d of %d.%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("You got %d of %d.%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "Du hast %d von %d richtig.", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "That question will not come back. %d hidden so far.%n", &first, &consumed) == 1 &&
-      text[consumed] == '\0') {
+  if (scan("That question will not come back. %d hidden so far.%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "Diese Frage kommt nicht wieder. Bisher %d ausgeblendet.", first);
     return formatted;
   }
-  if (std::sscanf(text, "ROUND %d   %d POINT%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("ROUND %d   %d POINT%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "RUNDE %d   %d PUNKT", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "ROUND %d   %d POINTS%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("ROUND %d   %d POINTS%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "RUNDE %d   %d PUNKTE", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "%d ROUND ABANDONED SO FAR%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d ROUND ABANDONED SO FAR%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "BISHER %d RUNDE AUFGEGEBEN", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d ROUNDS ABANDONED SO FAR%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d ROUNDS ABANDONED SO FAR%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "BISHER %d RUNDEN AUFGEGEBEN", first);
     return formatted;
   }
-  if (std::sscanf(text, "YOU LOCKED %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("YOU LOCKED %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "DU HAST %d FESTGELEGT", first);
     return formatted;
   }
-  if (std::sscanf(text, "GUESS  %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("GUESS  %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "TIPP  %d", first);
     return formatted;
   }
-  if (std::sscanf(text, "NUMBER %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("NUMBER %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "ZAHL %d", first);
     return formatted;
   }
-  if (std::sscanf(text, "PLAY ROUND %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("PLAY ROUND %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "RUNDE %d SPIELEN", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d POINT IN %d ROUND%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d POINT IN %d ROUND%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d PUNKT IN %d RUNDE", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "%d POINTS IN %d ROUNDS%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d POINTS IN %d ROUNDS%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d PUNKTE IN %d RUNDEN", first, second);
     return formatted;
   }
   {
     int fourth = 0;
-    if (std::sscanf(text, "%d / %d      %d OF %d DONE%n", &first, &second, &third, &fourth, &consumed) == 4 &&
+    if (scan("%d / %d      %d OF %d DONE%n", &first, &second, &third, &fourth, &consumed) == 4 &&
         text[consumed] == '\0') {
       std::snprintf(formatted, sizeof(formatted), "%d / %d      %d VON %d FERTIG", first, second, third, fourth);
       return formatted;
     }
   }
-  if (std::sscanf(text, "%d OF %d CLUES USED%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d OF %d CLUES USED%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d VON %d HINWEISEN BENUTZT", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "%d OF %d SQUARES SETTLED%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%d OF %d SQUARES SETTLED%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d VON %d FELDERN GEKLAERT", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "SOLVED, AFTER %d WRONG ACCUSATIONS.%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("SOLVED, AFTER %d WRONG ACCUSATIONS.%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "NACH %d FALSCHEN BESCHULDIGUNGEN GELOEST.", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d PLAYED   %d PERFECT   STREAK %d%n", &first, &second, &third, &consumed) == 3 &&
-      text[consumed] == '\0') {
+  if (scan("%d PLAYED   %d PERFECT   STREAK %d%n", &first, &second, &third, &consumed) == 3 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d GESPIELT   %d PERFEKT   SERIE %d", first, second, third);
     return formatted;
   }
-  if (std::sscanf(text, "%d %31s %d%n", &first, word, &second, &consumed) == 3 && text[consumed] == '\0') {
+  if (scan("%d %31s %d%n", &first, word, &second, &consumed) == 3 && text[consumed] == '\0') {
     const char* month = germanMonth(word);
     if (month != nullptr) {
       std::snprintf(formatted, sizeof(formatted), "%d %s %d", first, month, second);
       return formatted;
     }
   }
-  if (std::sscanf(text, "ROUND %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("ROUND %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "RUNDE %d", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d POINTS%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d POINTS%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d PUNKTE", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d POINT%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d POINT%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d PUNKT", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d YAHTZEES ROLLED%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d YAHTZEES ROLLED%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%d KNIFFEL GEWUERFELT", first);
     return formatted;
   }
-  if (std::sscanf(text, "ROLL AGAIN (%d LEFT)%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("ROLL AGAIN (%d LEFT)%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "NOCHMAL WUERFELN (%d UEBRIG)", first);
     return formatted;
   }
-  if (std::sscanf(text, "%d MORE%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d MORE%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "NOCH %d", first);
     return formatted;
   }
-  if (std::sscanf(text, "TOP HALF BONUS  %d - %d%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("TOP HALF BONUS  %d - %d%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "BONUS OBERER BLOCK  %d - %d", first, second);
     return formatted;
   }
-  if (std::sscanf(text, "%d LEFT%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%d LEFT%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "NOCH %d", first);
     return formatted;
   }
-  if (std::sscanf(text, "LAST GAME: WON BY %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("LAST GAME: WON BY %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "LETZTES SPIEL: MIT %d MEHR GEWONNEN", first);
     return formatted;
   }
-  if (std::sscanf(text, "LAST GAME: LOST BY %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("LAST GAME: LOST BY %d%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "LETZTES SPIEL: MIT %d WENIGER VERLOREN", first);
     return formatted;
   }
-  if (std::sscanf(text, "%31s WINS%n", word, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%31s WINS%n", word, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%s GEWINNT", word);
     return formatted;
   }
-  if (std::sscanf(text, "FIRE AT %31s%n", word, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("FIRE AT %31s%n", word, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "AUF %s FEUERN", word);
     return formatted;
   }
-  if (std::sscanf(text, "WAITING FOR %31s%n", word, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("WAITING FOR %31s%n", word, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "WARTE AUF %s", word);
     return formatted;
   }
-  if (std::sscanf(text, "%31s: HIT%n", word, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%31s: HIT%n", word, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%s: TREFFER", word);
     return formatted;
   }
-  if (std::sscanf(text, "%31s: MISS%n", word, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("%31s: MISS%n", word, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%s: DANEBEN", word);
     return formatted;
   }
-  if (std::sscanf(text, "%31s HIT YOU AT %31s%n", word, other, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%31s HIT YOU AT %31s%n", word, other, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%s TRAF DICH AUF %s", word, other);
     return formatted;
   }
-  if (std::sscanf(text, "%31s MISSED AT %31s%n", word, other, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%31s MISSED AT %31s%n", word, other, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%s VERFEHLTE %s", word, other);
     return formatted;
   }
-  if (std::sscanf(text, "%31s SANK YOUR %31s%n", word, other, &consumed) == 2 && text[consumed] == '\0') {
+  if (scan("%31s SANK YOUR %31s%n", word, other, &consumed) == 2 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "%s VERSENKTE DEIN %s", word, germanShip(other));
     return formatted;
   }
-  if (std::sscanf(text, "YOU SANK THEIR %31s%n", word, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("YOU SANK THEIR %31s%n", word, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "DU VERSENKTEST IHR %s", germanShip(word));
     return formatted;
   }
-  if (std::sscanf(text, "YOU WIN IN %d SHOTS%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("YOU WIN IN %d SHOTS%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "SIEG NACH %d SCHUESSEN", first);
     return formatted;
   }
-  if (std::sscanf(text, "THEY WIN IN %d SHOTS%n", &first, &consumed) == 1 && text[consumed] == '\0') {
+  if (scan("THEY WIN IN %d SHOTS%n", &first, &consumed) == 1 && text[consumed] == '\0') {
     std::snprintf(formatted, sizeof(formatted), "NIEDERLAGE NACH %d SCHUESSEN", first);
     return formatted;
   }

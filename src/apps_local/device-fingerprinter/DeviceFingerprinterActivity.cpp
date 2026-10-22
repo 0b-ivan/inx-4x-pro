@@ -1,4 +1,5 @@
 #include "DeviceFingerprinterActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <WiFi.h>
@@ -115,6 +116,7 @@ void DeviceFingerprinterActivity::onProbePacket(const uint8_t* payload, uint16_t
 // ---------------------------------------------------------------------------
 
 void DeviceFingerprinterActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
   state = READY;
   devices.clear();
@@ -145,6 +147,7 @@ void DeviceFingerprinterActivity::startCapture() {
 }
 
 void DeviceFingerprinterActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   if (promiscuousActive) {
     esp_wifi_set_promiscuous(false);

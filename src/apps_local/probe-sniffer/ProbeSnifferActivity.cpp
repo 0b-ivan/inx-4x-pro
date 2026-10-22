@@ -1,4 +1,5 @@
 #include "ProbeSnifferActivity.h"
+#include "DevMode.h"
 #include "../Shelf.h"
 
 #include <HalStorage.h>
@@ -77,6 +78,7 @@ void ProbeSnifferActivity::onProbeRequest(const uint8_t* srcMac, const char* ssi
 }
 
 void ProbeSnifferActivity::onEnter() {
+  devmode::pause();
   Activity::onEnter();
 
   state = SNIFFING_VIEW;
@@ -96,6 +98,7 @@ void ProbeSnifferActivity::onEnter() {
 }
 
 void ProbeSnifferActivity::onExit() {
+  devmode::resume();
   Activity::onExit();
   stopSniffing();
   activeSniffer = nullptr;

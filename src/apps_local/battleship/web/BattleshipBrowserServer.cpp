@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include "../../../DevMode.h"
+#include "../../player/PlayerWebApi.h"
 #include "BattleshipPageHtml.generated.h"
 
 namespace bshipweb {
@@ -21,6 +22,39 @@ constexpr uint8_t kApChannel = 1;
 constexpr uint8_t kApMaxClients = 2;
 constexpr uint16_t kDnsPort = 53;
 constexpr const char* kGamePath = "/battleship";
+
+bool playerAuthorized(WebServer& http, const char* token) {
+  return token != nullptr && token[0] != '\0' && http.hasArg("token") && http.arg("token") == token;
+}
+
+void sendPlayerReply(WebServer& http, const playerweb::Reply& reply) {
+  http.sendHeader("Cache-Control", "no-store");
+  http.sendHeader("Cross-Origin-Resource-Policy", "same-origin");
+  http.send(reply.status, "application/json", reply.body.c_str());
+}
+
+size_t serializePeerName(const std::string& name, char* output, const size_t capacity) {
+  if (output == nullptr || capacity < 28) return 0;
+  size_t at = 0;
+  const char prefix[] = "{\"type\":\"peer\",\"name\":\"";
+  const char suffix[] = "\"}";
+  for (size_t i = 0; i < sizeof(prefix) - 1; ++i) output[at++] = prefix[i];
+  for (const unsigned char ch : name) {
+    if (ch < 0x20) continue;
+    if (ch == '"' || ch == '\\') {
+      if (at + 2 + sizeof(suffix) > capacity) return 0;
+      output[at++] = '\\';
+      output[at++] = static_cast<char>(ch);
+    } else {
+      if (at + 1 + sizeof(suffix) > capacity) return 0;
+      output[at++] = static_cast<char>(ch);
+    }
+  }
+  if (at + sizeof(suffix) > capacity) return 0;
+  for (size_t i = 0; i < sizeof(suffix) - 1; ++i) output[at++] = suffix[i];
+  output[at] = '\0';
+  return at;
+}
 }  // namespace
 
 Server::~Server() { stop(); }
@@ -32,6 +66,7 @@ bool Server::begin(const NetworkMode mode) {
   commandSeen_ = false;
   rotateToken();
   rotateResumeToken();
+  opponentName_ = playerweb::displayName();
   mode_ = mode;
   clientSeen_ = false;
   ssid_.clear();
@@ -134,8 +169,8 @@ void Server::sendOpponentName(const uint8_t client) {
   // player::name() currently guarantees a short generated name made from known
   // uppercase words and spaces, so it is safe to place directly in this JSON
   // string. The future typed-name PlayerService should own escaping/validation.
-  const int n = snprintf(reply_, sizeof(reply_), "{\"type\":\"peer\",\"name\":\"%s\"}", opponentName_.c_str());
-  if (n > 0 && static_cast<size_t>(n) < sizeof(reply_)) ws_.sendTXT(client, reply_, static_cast<size_t>(n));
+  const size_t n = serializePeerName(opponentName_, reply_, sizeof(reply_));
+  if (n != 0) ws_.sendTXT(client, reply_, n);
 }
 
 void Server::sendResumeCapability(const uint8_t client) {
@@ -221,6 +256,45 @@ void Server::configureRoutes() {
     http_.sendHeader("Cache-Control", "no-store");
     http_.sendHeader("Cross-Origin-Resource-Policy", "same-origin");
     http_.send(200, "text/plain", token_);
+  });
+  http_.on("/player/state", HTTP_GET, [this] {
+    if (!playerAuthorized(http_, token_)) {
+      sendPlayerReply(http_, playerweb::Reply{403, "{\"ok\":false,\"message\":\"FORBIDDEN\"}"});
+      return;
+    }
+    sendPlayerReply(http_, playerweb::state());
+  });
+  http_.on("/player/action", HTTP_POST, [this] {
+    if (!playerAuthorized(http_, token_)) {
+      sendPlayerReply(http_, playerweb::Reply{403, "{\"ok\":false,\"message\":\"FORBIDDEN\"}"});
+      return;
+    }
+    if (snapshot_.phase == BrowserPhase::Playing) {
+      sendPlayerReply(http_, playerweb::Reply{409, "{\"ok\":false,\"message\":\"PLAYER LOCKED DURING MATCH\"}"});
+      return;
+    }
+
+    const String action = http_.arg("action");
+    playerweb::Reply reply;
+    if (action == "guest") {
+      reply = playerweb::useGuest();
+    } else if (action == "login") {
+      reply = playerweb::login(http_.arg("id").c_str(), http_.arg("pin").c_str());
+    } else if (action == "register") {
+      reply = playerweb::registerGuest(http_.arg("name").c_str(), http_.arg("pin").c_str());
+    } else if (action == "callsign") {
+      reply = playerweb::stepGuestCallsign(http_.arg("slot").toInt());
+    } else {
+      reply = playerweb::Reply{400, "{\"ok\":false,\"message\":\"UNKNOWN ACTION\"}"};
+    }
+
+    if (reply.status == 200) {
+      opponentName_ = playerweb::displayName();
+      char peerMessage[96]{};
+      const size_t n = serializePeerName(opponentName_, peerMessage, sizeof(peerMessage));
+      if (n != 0) ws_.broadcastTXT(peerMessage, n);
+    }
+    sendPlayerReply(http_, reply);
   });
   http_.onNotFound([this] { handleNotFound(); });
   routesConfigured_ = true;
