@@ -128,8 +128,7 @@ void DeadDropActivity::setupWebServer() {
 
 void DeadDropActivity::handleRoot() {
   if (!server) return;
-  // Send from PROGMEM — cast away const for send() which takes char*
-  server->send_P(200, "text/html", DROP_HTML);
+  server->send(200, "text/html", DROP_HTML);
 }
 
 void DeadDropActivity::handleUploadData() {

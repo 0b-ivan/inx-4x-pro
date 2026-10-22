@@ -115,7 +115,7 @@ void BulletinBoardActivity::setupWebServer() {
 
   // GET / — serve bulletin board HTML
   server->on("/", HTTP_GET, [this] {
-    if (server) server->send_P(200, "text/html", BOARD_HTML);
+    if (server) server->send(200, "text/html", BOARD_HTML);
   });
 
   // POST /post — receive a message from the form
