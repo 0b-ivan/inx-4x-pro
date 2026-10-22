@@ -12,11 +12,12 @@
 class BleScannerActivity final : public Activity {
  public:
   explicit BleScannerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("BleScanner", renderer, mappedInput) {}
+
 
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<BleScannerActivity>(r, m);
   }
-      : Activity("BleScanner", renderer, mappedInput) {}
 
   void onEnter() override;
   void onExit() override;

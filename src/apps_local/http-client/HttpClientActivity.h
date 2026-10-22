@@ -9,11 +9,12 @@
 class HttpClientActivity final : public Activity {
  public:
   explicit HttpClientActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("HttpClient", renderer, mappedInput) {}
+
 
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<HttpClientActivity>(r, m);
   }
-      : Activity("HttpClient", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

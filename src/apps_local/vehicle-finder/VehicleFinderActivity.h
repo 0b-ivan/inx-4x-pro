@@ -6,11 +6,12 @@
 class VehicleFinderActivity final : public Activity {
  public:
   explicit VehicleFinderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("VehicleFinder", renderer, mappedInput) {}
+
 
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<VehicleFinderActivity>(r, m);
   }
-      : Activity("VehicleFinder", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
