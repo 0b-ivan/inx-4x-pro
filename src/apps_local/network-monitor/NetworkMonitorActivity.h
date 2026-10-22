@@ -3,7 +3,10 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-#include <freertos/portmacro.h>
+// Arduino.h initializes the ESP32 FreeRTOS port definitions in the correct
+// order and exposes portMUX_TYPE / portMUX_INITIALIZER_UNLOCKED.
+// Including portmacro.h directly first breaks multi-core ESP32-S3 builds.
+#include <Arduino.h>
 #include <Memory.h>
 #include "../../activities/Activity.h"
 #include "../../util/ButtonNavigator.h"
