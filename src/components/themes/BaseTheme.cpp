@@ -44,6 +44,35 @@ void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int 
 
 }  // namespace
 
+// Adapted from biscuit_x3/src/components/themes/BaseTheme.cpp.
+// Kept in the base theme so imported apps work with every CrossPlay skin.
+void BaseTheme::drawSpinner(const GfxRenderer& renderer, int centerX, int centerY,
+                            const char* label, int frame) const {
+  if (label && label[0] != '\0') {
+    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
+    renderer.drawText(UI_10_FONT_ID, centerX - textWidth / 2, centerY - 22, label);
+  }
+
+  // Three compact dots, alternating filled and outlined as the frame advances.
+  auto drawDot = [&](int cx, int cy, bool filled) {
+    static constexpr int halfWidths[5] = {3, 4, 4, 4, 3};
+    for (int i = 0; i < 5; ++i) {
+      const int dy = i - 2;
+      const int w = halfWidths[i];
+      if (filled || i == 0 || i == 4) {
+        renderer.drawLine(cx - w, cy + dy, cx + w, cy + dy, true);
+      } else {
+        renderer.drawPixel(cx - w, cy + dy, true);
+        renderer.drawPixel(cx + w, cy + dy, true);
+      }
+    }
+  };
+
+  const int activeDot = ((frame % 3) + 3) % 3;
+  const int centers[3] = {centerX - 14, centerX, centerX + 14};
+  for (int i = 0; i < 3; ++i) drawDot(centers[i], centerY, i == activeDot);
+}
+
 void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight) {
   // Top line
   renderer.drawLine(x + 1, y, x + battWidth - 3, y);
