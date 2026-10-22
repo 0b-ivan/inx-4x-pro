@@ -237,7 +237,7 @@ void DeauthDetectorActivity::render(RenderLock&&) {
                               "Press OK to start monitoring.");
 
     const auto labels = mappedInput.mapLabels("Back", "Start", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -256,7 +256,7 @@ void DeauthDetectorActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, buf);
     renderer.drawCenteredText(SMALL_FONT_ID, midY + 50, "Press any button to continue");
 
-    GUI.drawButtonHints(renderer, "Dismiss", "", "", "");
+    GUI.drawButtonHintsAlways(renderer, "Dismiss", "", "", "");
     renderer.displayBuffer();
     return;
   }
@@ -336,7 +336,7 @@ void DeauthDetectorActivity::render(RenderLock&&) {
   }
 
   const auto labels = mappedInput.mapLabels("Stop", autoHop ? "Manual" : "Auto", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   GUI.drawSideButtonHints(renderer, "Scroll", "Scroll");
 
   renderer.displayBuffer();

@@ -180,7 +180,7 @@ void QrTotpActivity::render(RenderLock&&) {
     }
 
     const auto labels = mappedInput.mapLabels("Back", accountCount > 0 ? "Select" : "", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   } else {
     // SHOW_QR
@@ -197,7 +197,7 @@ void QrTotpActivity::render(RenderLock&&) {
       renderer.drawCenteredText(UI_12_FONT_ID, midY - 24, "Clock not set", true, EpdFontFamily::BOLD);
       renderer.drawCenteredText(UI_10_FONT_ID, midY + 4, "Connect to WiFi to sync time.");
       renderer.drawCenteredText(SMALL_FONT_ID, midY + 28, "TOTP codes require a valid clock.");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       renderer.displayBuffer();
       return;
     }
@@ -234,7 +234,7 @@ void QrTotpActivity::render(RenderLock&&) {
     snprintf(timeBuf, sizeof(timeBuf), "%ds", remaining);
     renderer.drawCenteredText(SMALL_FONT_ID, textY + 46, timeBuf);
 
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer();

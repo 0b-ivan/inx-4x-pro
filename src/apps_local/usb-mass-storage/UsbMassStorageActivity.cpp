@@ -96,7 +96,7 @@ void UsbMassStorageActivity::render(RenderLock&&) {
                                 "to firmware while active.");
 
       const auto labels = mappedInput.mapLabels("Back", "Enable", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       break;
     }
 
@@ -141,7 +141,7 @@ void UsbMassStorageActivity::render(RenderLock&&) {
                                 "Press Back to safely disconnect.");
 
       const auto labels = mappedInput.mapLabels("Disconnect", "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       break;
     }
 
@@ -157,7 +157,7 @@ void UsbMassStorageActivity::render(RenderLock&&) {
                                 "SD card restored for firmware use.");
 
       const auto labels = mappedInput.mapLabels("Back", "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       break;
     }
   }

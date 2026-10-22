@@ -161,7 +161,7 @@ void CredentialViewerActivity::render(RenderLock&&) {
       renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, "No captured credentials");
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 20, "Use portal to capture");
       const auto labels = mappedInput.mapLabels("Back", "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       break;
     }
 
@@ -183,7 +183,7 @@ void CredentialViewerActivity::render(RenderLock&&) {
           });
 
       const auto labels = mappedInput.mapLabels("Exit", "Hold:Delete", "^", "v");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       break;
     }
 
@@ -219,7 +219,7 @@ void CredentialViewerActivity::render(RenderLock&&) {
       }
 
       const auto labels = mappedInput.mapLabels("Back", "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       break;
     }
 
@@ -228,7 +228,7 @@ void CredentialViewerActivity::render(RenderLock&&) {
       renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, "Delete all credentials?", true,
                                 EpdFontFamily::BOLD);
       const auto labels = mappedInput.mapLabels("Cancel", "Delete", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       break;
     }
   }

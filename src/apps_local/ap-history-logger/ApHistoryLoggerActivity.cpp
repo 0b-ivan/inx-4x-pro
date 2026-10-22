@@ -149,7 +149,7 @@ void ApHistoryLoggerActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_12_FONT_ID, midY - 20, INTERVAL_LABELS[intervalIndex], true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(SMALL_FONT_ID, midY + 20, "Logs to /crossplay/logs/ap_history.csv");
     const auto labels = mappedInput.mapLabels("Back", "Start", "Prev", "Next");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == LOGGING) {
     unsigned long elapsed = (millis() - logStartMs) / 1000UL;
     snprintf(buf, sizeof(buf), "Running: %lus", elapsed);
@@ -177,7 +177,7 @@ void ApHistoryLoggerActivity::render(RenderLock&&) {
     renderer.drawCenteredText(SMALL_FONT_ID, midY + 95, buf);
 
     const auto labels = mappedInput.mapLabels("Stop", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else {
     // STATS
     unsigned long dur = logStartMs > 0 ? (millis() - logStartMs) / 1000UL : 0;
@@ -196,7 +196,7 @@ void ApHistoryLoggerActivity::render(RenderLock&&) {
     renderer.drawCenteredText(SMALL_FONT_ID, midY + 80, buf);
 
     const auto labels = mappedInput.mapLabels("Back", "New session", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer();

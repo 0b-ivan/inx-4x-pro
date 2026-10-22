@@ -1167,7 +1167,7 @@ void FireActivity::renderTargetSelect() const {
     }
 
     const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void FireActivity::renderAttackSelect() const {
@@ -1207,7 +1207,7 @@ void FireActivity::renderAttackSelect() const {
         });
 
     const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void FireActivity::renderConfirm() const {
@@ -1237,7 +1237,7 @@ void FireActivity::renderConfirm() const {
     renderer.drawCenteredText(SMALL_FONT_ID, cy + 60, "Press Confirm to execute.");
 
     const auto labels = mappedInput.mapLabels("Cancel", "Execute", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void FireActivity::renderExecuting() const {
@@ -1271,7 +1271,7 @@ void FireActivity::renderExecuting() const {
     }
 
     const auto labels = mappedInput.mapLabels("Stop", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void FireActivity::renderResults() const {
@@ -1298,5 +1298,5 @@ void FireActivity::renderResults() const {
     }
 
     const auto labels = mappedInput.mapLabels("Back", "Repeat", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

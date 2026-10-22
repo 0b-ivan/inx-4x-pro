@@ -216,7 +216,7 @@ void HostScannerActivity::render(RenderLock&&) {
   if (state == CHECKING_WIFI) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_NOT_CONNECTED));
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -264,7 +264,7 @@ void HostScannerActivity::render(RenderLock&&) {
     }
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -282,6 +282,6 @@ void HostScannerActivity::render(RenderLock&&) {
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, "Hold: CSV", labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, "Hold: CSV", labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

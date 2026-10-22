@@ -286,7 +286,7 @@ void BulletinBoardActivity::renderConfig() const {
       });
 
   const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void BulletinBoardActivity::renderActive() const {
@@ -335,7 +335,7 @@ void BulletinBoardActivity::renderActive() const {
   renderer.drawCenteredText(UI_10_FONT_ID, y, clientsBuf, true);
 
   const auto labels = mappedInput.mapLabels("Stop", "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void BulletinBoardActivity::renderDone() const {
@@ -358,5 +358,5 @@ void BulletinBoardActivity::renderDone() const {
   renderer.drawCenteredText(UI_10_FONT_ID, y, ssidName.c_str(), true);
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

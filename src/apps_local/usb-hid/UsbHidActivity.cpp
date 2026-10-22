@@ -688,7 +688,7 @@ void UsbHidActivity::render(RenderLock&&) {
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 5,
                                 "Place .txt files in /crossplay/ducky/");
       const auto labels = mappedInput.mapLabels("Back", "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     } else {
       GUI.drawList(
           renderer, Rect{0, listTop, pageWidth, listHeight}, count, fileIndex,
@@ -698,7 +698,7 @@ void UsbHidActivity::render(RenderLock&&) {
           [](int) -> std::string { return ""; });
 
       const auto labels = mappedInput.mapLabels("Back", "Load", "^", "v");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
     renderer.displayBuffer();
     return;
@@ -739,7 +739,7 @@ void UsbHidActivity::render(RenderLock&&) {
     renderer.drawCenteredText(SMALL_FONT_ID, hintsTop - 20, statBuf);
 
     const auto labels = mappedInput.mapLabels("Back", "Continue", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -758,7 +758,7 @@ void UsbHidActivity::render(RenderLock&&) {
     renderer.drawCenteredText(SMALL_FONT_ID, y, "Continue?");
 
     const auto labels = mappedInput.mapLabels("Back", "Run!", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -840,7 +840,7 @@ void UsbHidActivity::render(RenderLock&&) {
     renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 35, ksBuf);
 
     const auto labels = mappedInput.mapLabels("Abort", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -859,7 +859,7 @@ void UsbHidActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, statBuf);
 
     const auto labels = mappedInput.mapLabels("Back", "Re-run", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -871,7 +871,7 @@ void UsbHidActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, errorMsg);
 
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }

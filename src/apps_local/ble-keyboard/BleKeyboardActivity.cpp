@@ -454,7 +454,7 @@ void BleKeyboardActivity::render(RenderLock&&) {
     }
 
     const auto labels = mappedInput.mapLabels("Back", scriptFiles.empty() ? "" : "Select", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   } else if (state == PREVIEW) {
     const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + 5;
@@ -474,7 +474,7 @@ void BleKeyboardActivity::render(RenderLock&&) {
     renderer.drawCenteredText(SMALL_FONT_ID, lineY + 10, countBuf);
 
     const auto labels = mappedInput.mapLabels("Back", "Run", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   } else if (state == ADVERTISING) {
     const int centerY = pageHeight / 2 - 20;
@@ -482,14 +482,14 @@ void BleKeyboardActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, centerY + 15, "Waiting for connection");
     renderer.drawCenteredText(SMALL_FONT_ID, centerY + 40, BLE_DEVICE_NAME);
     const auto labels = mappedInput.mapLabels("Cancel", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   } else if (state == PAIRED) {
     const int centerY = pageHeight / 2 - 20;
     renderer.drawCenteredText(UI_12_FONT_ID, centerY - 15, "Connected!", true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, centerY + 15, "Press OK to execute script");
     const auto labels = mappedInput.mapLabels("Cancel", "Execute", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   } else if (state == EXECUTING) {
     const int centerY = pageHeight / 2 - 30;
@@ -503,13 +503,13 @@ void BleKeyboardActivity::render(RenderLock&&) {
     snprintf(progBuf, sizeof(progBuf), "Line %d of %zu", currentLine, scriptLines.size());
     renderer.drawCenteredText(UI_10_FONT_ID, centerY + 40, progBuf);
     const auto labels = mappedInput.mapLabels("Abort", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   } else if (state == DONE) {
     const int centerY = pageHeight / 2 - 10;
     renderer.drawCenteredText(UI_12_FONT_ID, centerY, "Done", true, EpdFontFamily::BOLD);
     const auto labels = mappedInput.mapLabels("Back", "OK", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer();

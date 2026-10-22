@@ -219,7 +219,7 @@ void VehicleFinderActivity::renderIdle() const {
   }
 
   const auto labels = mappedInput.mapLabels("Back", "Save Spot", "", hasSavedSpot ? "Find Car" : "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void VehicleFinderActivity::renderSaved() const {
@@ -237,7 +237,7 @@ void VehicleFinderActivity::renderSaved() const {
   renderer.drawCenteredText(SMALL_FONT_ID, y, "Confirm to start finding.");
 
   const auto labels = mappedInput.mapLabels("Back", "Find Car", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void VehicleFinderActivity::renderFinding() const {
@@ -280,6 +280,6 @@ void VehicleFinderActivity::renderFinding() const {
   renderer.drawCenteredText(SMALL_FONT_ID, y, buf);
 
   const auto labels = mappedInput.mapLabels("Stop", "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   (void)pageHeight;
 }

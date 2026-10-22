@@ -297,7 +297,7 @@ void TrackerDetectorActivity::renderIdle() const {
                             "Press Confirm to start monitoring.");
 
   const auto labels = mappedInput.mapLabels("« Exit", "Start", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void TrackerDetectorActivity::renderMonitoring() const {
@@ -359,7 +359,7 @@ void TrackerDetectorActivity::renderMonitoring() const {
   renderer.drawText(SMALL_FONT_ID, 16, pageHeight - metrics.buttonHintsHeight - 20, statusBuf);
 
   const auto labels = mappedInput.mapLabels("Stop", "", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void TrackerDetectorActivity::renderAlert() const {
@@ -411,5 +411,5 @@ void TrackerDetectorActivity::renderAlert() const {
   }
 
   const auto labels = mappedInput.mapLabels("Stop", "Confirm", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

@@ -332,7 +332,7 @@ void KeyCopierActivity::drawTypeMenu() const {
                });
 
   const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 // ---- save / load ------------------------------------------------------------
@@ -418,7 +418,7 @@ void KeyCopierActivity::render(RenderLock&&) {
     GUI.drawPopup(renderer, "Bitting saved to SD!");
   } else {
     const auto labels = mappedInput.mapLabels("Back", "Save", "L/R Cut", "U/D Depth");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer();

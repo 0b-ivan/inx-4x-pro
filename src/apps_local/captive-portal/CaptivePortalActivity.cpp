@@ -234,7 +234,7 @@ void CaptivePortalActivity::render(RenderLock&&) {
     }
 
     const auto labels = mappedInput.mapLabels("Stop", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -247,6 +247,6 @@ void CaptivePortalActivity::render(RenderLock&&) {
       [this](int i) -> std::string { return templates[i]; }, nullptr);
 
   const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

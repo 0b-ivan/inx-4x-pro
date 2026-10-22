@@ -585,7 +585,7 @@ void NetworkMonitorActivity::renderFrameDetection() {
       renderer.drawText(UI_10_FONT_ID, leftPad, y, timeBuf);
 
       const auto labels = mappedInput.mapLabels("Back", "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
     return;
   }
@@ -704,7 +704,7 @@ void NetworkMonitorActivity::renderFrameDetection() {
   }
 
   const auto labels = mappedInput.mapLabels("Exit", "Detail", "Ch-", "Ch+");
-  GUI.drawButtonHints(renderer, labels.btn1, "Hold:AP Scan", labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, "Hold:AP Scan", labels.btn3, labels.btn4);
 }
 
 // ---------------------------------------------------------------------------
@@ -772,7 +772,7 @@ void NetworkMonitorActivity::renderRogueResults() {
   }
 
   const auto labels = mappedInput.mapLabels("Exit", "Detail", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, "Hold:Frame Mon", labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, "Hold:Frame Mon", labels.btn3, labels.btn4);
 }
 
 // ---------------------------------------------------------------------------
@@ -844,7 +844,7 @@ void NetworkMonitorActivity::renderRogueDetail() {
   }
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 // ---------------------------------------------------------------------------

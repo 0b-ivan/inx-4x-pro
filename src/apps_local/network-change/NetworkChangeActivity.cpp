@@ -298,7 +298,7 @@ void NetworkChangeActivity::render(RenderLock&&) {
                  [](int i) -> std::string { return NetworkChangeActivity::MENU_ITEMS[i]; });
 
     const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -342,6 +342,6 @@ void NetworkChangeActivity::render(RenderLock&&) {
   }
 
   const auto labels = mappedInput.mapLabels("Back", "", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

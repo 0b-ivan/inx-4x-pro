@@ -230,7 +230,7 @@ void HttpClientActivity::render(RenderLock&&) {
         nullptr, nullptr);
 
     const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   } else if (state == CONNECTING) {
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "HTTP Client");
@@ -276,7 +276,7 @@ void HttpClientActivity::render(RenderLock&&) {
     }
 
     const auto labels = mappedInput.mapLabels("Back", "", "Pg Up", "Pg Dn");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer();

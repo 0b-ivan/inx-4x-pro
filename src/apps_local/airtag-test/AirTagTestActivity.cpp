@@ -180,7 +180,7 @@ void AirTagTestActivity::render(RenderLock&&) {
         [](int index) { return std::string(MODE_NAMES[index]); });
 
     const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else {
     // SPOOFING display
     const int centerY = pageHeight / 2 - 50;
@@ -203,7 +203,7 @@ void AirTagTestActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, centerY + 80, buf);
 
     const auto labels = mappedInput.mapLabels("Stop", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer();

@@ -298,7 +298,7 @@ void CountdownActivity::render(RenderLock&&) {
     }
 
     const auto labels = mappedInput.mapLabels("Back", "Start", "+", "-");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -344,7 +344,7 @@ void CountdownActivity::render(RenderLock&&) {
     }
 
     const auto labels = mappedInput.mapLabels("Pause", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -360,7 +360,7 @@ void CountdownActivity::render(RenderLock&&) {
                                "PAUSED", true, EpdFontFamily::BOLD);
 
     const auto labels = mappedInput.mapLabels("Reset", "Resume", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -379,7 +379,7 @@ void CountdownActivity::render(RenderLock&&) {
                       pageWidth - metrics.contentSidePadding, midY + 30, true);
 
     const auto labels = mappedInput.mapLabels("Reset", "Restart", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }

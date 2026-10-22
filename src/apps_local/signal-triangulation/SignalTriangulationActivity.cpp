@@ -235,7 +235,7 @@ void SignalTriangulationActivity::render(RenderLock&&) {
     if (initialScanning) {
       renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Scanning for APs...");
       const auto labels = mappedInput.mapLabels("Back", "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       renderer.displayBuffer();
       return;
     }
@@ -243,7 +243,7 @@ void SignalTriangulationActivity::render(RenderLock&&) {
     if (apCount == 0) {
       renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "No APs found");
       const auto labels = mappedInput.mapLabels("Back", "", "", "Rescan");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       renderer.displayBuffer();
       return;
     }
@@ -264,7 +264,7 @@ void SignalTriangulationActivity::render(RenderLock&&) {
         });
 
     const auto labels = mappedInput.mapLabels("Back", "Select", "", "Rescan");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -306,10 +306,10 @@ void SignalTriangulationActivity::render(RenderLock&&) {
 
     if (!scanning && currentReading < 3) {
       const auto labels = mappedInput.mapLabels("Back", "Take Reading", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     } else {
       const auto labels = mappedInput.mapLabels("Back", "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
     renderer.displayBuffer();
     return;
@@ -392,6 +392,6 @@ void SignalTriangulationActivity::render(RenderLock&&) {
   renderer.drawCenteredText(UI_10_FONT_ID, y, dirBuf, true, EpdFontFamily::BOLD);
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

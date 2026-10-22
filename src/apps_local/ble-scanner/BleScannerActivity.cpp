@@ -558,7 +558,7 @@ void BleScannerActivity::render(RenderLock&&) {
     }
 
     const auto labels = mappedInput.mapLabels("Discon.", "Explore", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     GUI.drawSideButtonHints(renderer, "^", "v");
     renderer.displayBuffer();
     return;
@@ -597,7 +597,7 @@ void BleScannerActivity::render(RenderLock&&) {
     }
 
     const auto labels = mappedInput.mapLabels("Back", "Read", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     GUI.drawSideButtonHints(renderer, "^", "v");
     renderer.displayBuffer();
     return;
@@ -649,7 +649,7 @@ void BleScannerActivity::render(RenderLock&&) {
     }
 
     const auto labels = mappedInput.mapLabels("Back", "Re-read", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -678,7 +678,7 @@ void BleScannerActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, leftPad, y, rssiStr.c_str());
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -703,7 +703,7 @@ void BleScannerActivity::render(RenderLock&&) {
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "Connect", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, "Hold: CSV", labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, "Hold: CSV", labels.btn3, labels.btn4);
   GUI.drawSideButtonHints(renderer, "^", "v");
 
   renderer.displayBuffer();

@@ -159,7 +159,7 @@ void PerimeterWatchActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_12_FONT_ID, midY - 30, buf, true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, "Confirm to start watching");
     const auto labels = mappedInput.mapLabels("Back", "Start", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == WATCHING) {
     unsigned long elapsed = (millis() - watchStartMs) / 1000UL;
     snprintf(buf, sizeof(buf), "Watching: %lus", elapsed);
@@ -173,7 +173,7 @@ void PerimeterWatchActivity::render(RenderLock&&) {
     snprintf(buf, sizeof(buf), "Next scan: %lus", nextScan);
     renderer.drawCenteredText(SMALL_FONT_ID, midY + 60, buf);
     const auto labels = mappedInput.mapLabels("Stop", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else {
     // REPORT
     const int count = static_cast<int>(intrusions.size());
@@ -196,7 +196,7 @@ void PerimeterWatchActivity::render(RenderLock&&) {
           });
     }
     const auto labels = mappedInput.mapLabels("Back", "Export CSV", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer();

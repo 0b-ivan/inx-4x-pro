@@ -354,7 +354,7 @@ void BleContactExchangeActivity::renderIdle() const {
                [&labels](int i) -> std::string { return labels[i]; });
 
   const auto hints = mappedInput.mapLabels("Back", "Select", "^", "v");
-  GUI.drawButtonHints(renderer, hints.btn1, hints.btn2, hints.btn3, hints.btn4);
+  GUI.drawButtonHintsAlways(renderer, hints.btn1, hints.btn2, hints.btn3, hints.btn4);
 }
 
 void BleContactExchangeActivity::renderExchanging() const {
@@ -403,7 +403,7 @@ void BleContactExchangeActivity::renderExchanging() const {
   }
 
   const auto hints = mappedInput.mapLabels("Stop", "", "", "");
-  GUI.drawButtonHints(renderer, hints.btn1, hints.btn2, hints.btn3, hints.btn4);
+  GUI.drawButtonHintsAlways(renderer, hints.btn1, hints.btn2, hints.btn3, hints.btn4);
 }
 
 void BleContactExchangeActivity::renderReceived() const {
@@ -426,5 +426,5 @@ void BleContactExchangeActivity::renderReceived() const {
                [this](int i) -> std::string { return received[i].phone; });
 
   const auto hints = mappedInput.mapLabels("Back", "Save", "^", "v");
-  GUI.drawButtonHints(renderer, hints.btn1, hints.btn2, hints.btn3, hints.btn4);
+  GUI.drawButtonHintsAlways(renderer, hints.btn1, hints.btn2, hints.btn3, hints.btn4);
 }

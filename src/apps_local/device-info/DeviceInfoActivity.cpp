@@ -115,7 +115,7 @@ void DeviceInfoActivity::render(RenderLock&&) {
     renderer.drawText(SMALL_FONT_ID, pageWidth - 60, contentTop, scrollBuf);
   }
 
-  GUI.drawButtonHints(renderer, "Back", "", "Up", "Down");
+  GUI.drawButtonHintsAlways(renderer, "Back", "", "Up", "Down");
 
   renderer.displayBuffer();
 }

@@ -381,7 +381,7 @@ void BarcodeActivity::render(RenderLock&&) {
         }
 
         const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-        GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+        GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
     } else if (state == SHOWING) {
         GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
@@ -389,7 +389,7 @@ void BarcodeActivity::render(RenderLock&&) {
         renderBarcode();
 
         const auto labels = mappedInput.mapLabels("Back", "New", "", "");
-        GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+        GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
 
     renderer.displayBuffer(HalDisplay::FULL_REFRESH);

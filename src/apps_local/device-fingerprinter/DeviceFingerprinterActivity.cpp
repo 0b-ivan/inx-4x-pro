@@ -220,7 +220,7 @@ void DeviceFingerprinterActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, centerY, "by analyzing WiFi probe requests.");
     renderer.drawCenteredText(SMALL_FONT_ID, centerY + 40, "Press Confirm to start capture.");
     const auto labels = mappedInput.mapLabels("Back", "Start", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -268,6 +268,6 @@ void DeviceFingerprinterActivity::render(RenderLock&&) {
   }
 
   const auto labels = mappedInput.mapLabels("Back", "", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

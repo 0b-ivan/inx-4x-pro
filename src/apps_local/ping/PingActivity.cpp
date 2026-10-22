@@ -174,7 +174,7 @@ void PingActivity::renderPinging() const {
   }
 
   const auto labels = mappedInput.mapLabels("Summary", "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void PingActivity::renderSummary() const {
@@ -209,5 +209,5 @@ void PingActivity::renderSummary() const {
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

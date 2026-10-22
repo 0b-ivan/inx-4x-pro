@@ -428,7 +428,7 @@ void MeshChatActivity::renderChatView() const {
   }
 
   const auto labels = mappedInput.mapLabels("Exit", "Send", "", "Peers >");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   GUI.drawSideButtonHints(renderer, "^", "v");
 }
 
@@ -477,5 +477,5 @@ void MeshChatActivity::renderPeers() const {
                     pageHeight - metrics.buttonHintsHeight - 22, relayStr);
 
   const auto labels = mappedInput.mapLabels("Back", "Relay", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

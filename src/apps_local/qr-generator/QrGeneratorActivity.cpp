@@ -82,7 +82,7 @@ void QrGeneratorActivity::render(RenderLock&&) {
     QrUtils::drawQrCode(renderer, qrBounds, textPayload);
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "New", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer(HalDisplay::FULL_REFRESH);

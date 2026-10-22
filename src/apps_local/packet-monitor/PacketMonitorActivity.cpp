@@ -346,7 +346,7 @@ void PacketMonitorActivity::render(RenderLock&&) {
   }
 
   const auto labels = mappedInput.mapLabels("« Exit", autoHop ? "Manual" : "Auto", "Ch-", "Ch+");
-  GUI.drawButtonHints(renderer, labels.btn1, "Hold: REC", labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, "Hold: REC", labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }

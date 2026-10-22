@@ -110,7 +110,7 @@ void PasswordGeneratorActivity::render(RenderLock&&) {
   if (state == SAVED) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_SAVED), true, EpdFontFamily::BOLD);
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -139,7 +139,7 @@ void PasswordGeneratorActivity::render(RenderLock&&) {
   renderer.drawCenteredText(SMALL_FONT_ID, y, "Side button: regenerate");
 
   const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_CONFIRM), "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }

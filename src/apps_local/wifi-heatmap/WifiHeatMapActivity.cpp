@@ -217,7 +217,7 @@ void WifiHeatMapActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, y, "Press OK to start", true);
 
     const auto labels = mappedInput.mapLabels("Back", "Start", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   } else if (state == LOGGING) {
     char subtitleBuf[40];
@@ -244,7 +244,7 @@ void WifiHeatMapActivity::render(RenderLock&&) {
     }
 
     const auto labels = mappedInput.mapLabels("Exit", "Done", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   } else {  // SUMMARY
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
@@ -283,7 +283,7 @@ void WifiHeatMapActivity::render(RenderLock&&) {
     renderer.drawCenteredText(SMALL_FONT_ID, y, fname, true);
 
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer();

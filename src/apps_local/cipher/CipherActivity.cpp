@@ -220,7 +220,7 @@ void CipherActivity::renderSelect() const {
     [](int i) -> std::string { return CipherActivity::CIPHER_NAMES[i]; });
 
   const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void CipherActivity::renderResult() const {
@@ -235,5 +235,5 @@ void CipherActivity::renderResult() const {
   renderer.drawCenteredText(UI_10_FONT_ID, top + 110, result.c_str());
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

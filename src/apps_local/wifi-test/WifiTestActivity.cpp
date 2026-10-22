@@ -191,7 +191,7 @@ void WifiTestActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 15, "Raw TX not available");
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 15, "on this hardware");
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -217,7 +217,7 @@ void WifiTestActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, y, timeStr.c_str());
 
     const auto labels = mappedInput.mapLabels("Exit", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -238,6 +238,6 @@ void WifiTestActivity::render(RenderLock&&) {
   }
 
   const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

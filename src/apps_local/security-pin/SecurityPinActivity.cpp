@@ -492,7 +492,7 @@ void SecurityPinActivity::renderPinEntry() const {
   }
 
   const auto labels = mappedInput.mapLabels("", "Confirm", "<", ">");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   GUI.drawSideButtonHints(renderer, "Up", "Down");
 }
 
@@ -524,7 +524,7 @@ void SecurityPinActivity::renderSetPin() const {
   }
 
   const auto labels = mappedInput.mapLabels("Back", "Confirm", "<", ">");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   GUI.drawSideButtonHints(renderer, "Up", "Down");
 }
 
@@ -563,5 +563,5 @@ void SecurityPinActivity::renderSettingsMenu() const {
       });
 
   const auto labels = mappedInput.mapLabels("Back", "Select", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

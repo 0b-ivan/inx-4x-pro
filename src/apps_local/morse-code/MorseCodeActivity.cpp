@@ -232,7 +232,7 @@ void MorseCodeActivity::renderModeSelect() const {
       [&modes](int i) { return std::string(modes[i]); });
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void MorseCodeActivity::renderEncode() const {
@@ -251,7 +251,7 @@ void MorseCodeActivity::renderEncode() const {
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void MorseCodeActivity::renderDecode() const {
@@ -274,7 +274,7 @@ void MorseCodeActivity::renderDecode() const {
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "./--", "Space", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   GUI.drawSideButtonHints(renderer, "Letter", "Del");
 }
 
@@ -297,5 +297,5 @@ void MorseCodeActivity::renderReference() const {
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

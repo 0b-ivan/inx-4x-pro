@@ -321,7 +321,7 @@ void QuickWipeActivity::renderConfirm() const {
                     pageWidth - metrics.contentSidePadding, divY, true);
 
   const auto labels = mappedInput.mapLabels("Cancel", "Hold to Wipe", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void QuickWipeActivity::renderWiping() const {
@@ -354,7 +354,7 @@ void QuickWipeActivity::renderDone() const {
                     pageWidth - metrics.contentSidePadding, divY, true);
 
   const auto labels = mappedInput.mapLabels("Exit", "Verify", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void QuickWipeActivity::renderVerified() const {
@@ -385,5 +385,5 @@ void QuickWipeActivity::renderVerified() const {
                     pageWidth - metrics.contentSidePadding, divY, true);
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

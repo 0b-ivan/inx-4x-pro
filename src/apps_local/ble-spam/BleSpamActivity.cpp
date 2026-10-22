@@ -279,7 +279,7 @@ void BleSpamActivity::render(RenderLock&&) {
         "where you have permission.");
 
     const auto labels = mappedInput.mapLabels("Back", "Proceed", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -305,7 +305,7 @@ void BleSpamActivity::render(RenderLock&&) {
                  [](int i) -> std::string { return (i >= 0 && i < ADV_TYPE_COUNT) ? subtitles[i] : ""; });
 
     const auto labels = mappedInput.mapLabels("Back", "Start", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -352,6 +352,6 @@ void BleSpamActivity::render(RenderLock&&) {
   renderer.drawCenteredText(SMALL_FONT_ID, y, dotFrames[frame]);
 
   const auto labels = mappedInput.mapLabels("Stop", "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

@@ -324,7 +324,7 @@ void SsidChannelActivity::renderModeSelect() const {
       [](int i) -> std::string { return kModeSubtitles[i]; });
 
   const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void SsidChannelActivity::renderSending() const {
@@ -360,7 +360,7 @@ void SsidChannelActivity::renderSending() const {
   renderer.drawCenteredText(SMALL_FONT_ID, y, countBuf);
 
   const auto labels = mappedInput.mapLabels("Stop", "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void SsidChannelActivity::renderReceiving() const {
@@ -402,5 +402,5 @@ void SsidChannelActivity::renderReceiving() const {
   }
 
   const auto labels = mappedInput.mapLabels("Back", "", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

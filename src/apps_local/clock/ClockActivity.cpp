@@ -395,7 +395,7 @@ void ClockActivity::renderNtpClock() {
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "HoldConfirm=Mode", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void ClockActivity::renderStopwatch() {
@@ -427,7 +427,7 @@ void ClockActivity::renderStopwatch() {
       (swState == SW_IDLE) ? "Start" : (swState == SW_RUNNING ? "Lap" : "Restart");
   const char* backLabel = (swState == SW_RUNNING) ? "Stop" : tr(STR_BACK);
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void ClockActivity::renderPomodoro() {
@@ -453,5 +453,5 @@ void ClockActivity::renderPomodoro() {
   const char* confirmLabel = (pomState == POM_IDLE) ? "Start" : (pomPaused ? "Resume" : "Pause");
   const char* backLabel = (pomState == POM_IDLE) ? tr(STR_BACK) : "Reset";
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, "+1min", "-1min");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

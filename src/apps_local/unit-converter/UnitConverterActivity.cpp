@@ -291,7 +291,7 @@ void UnitConverterActivity::renderCategorySelect() const {
       [&cats](int i) { return std::string(cats[i].name); });
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void UnitConverterActivity::renderUnitSelect() const {
@@ -308,7 +308,7 @@ void UnitConverterActivity::renderUnitSelect() const {
       [&cat](int i) { return std::string(cat.units[i].abbrev); });
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void UnitConverterActivity::renderInputValue() const {
@@ -331,7 +331,7 @@ void UnitConverterActivity::renderInputValue() const {
   renderer.drawCenteredText(UI_12_FONT_ID, y, display.c_str(), true, EpdFontFamily::BOLD);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "Convert", "<", ">");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   GUI.drawSideButtonHints(renderer, "+", "-");
 }
 
@@ -357,5 +357,5 @@ void UnitConverterActivity::renderResults() const {
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

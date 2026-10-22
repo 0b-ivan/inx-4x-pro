@@ -858,6 +858,6 @@ void InstapaperActivity::render(RenderLock&&) {
   // inverted row pretending to be a cursor, which is gone.
   const bool reading = phase_ == Phase::Reading;
   const auto labels = mappedInput.mapLabels("Back", "", reading ? "Prev" : "Up", reading ? "Next" : "Down");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

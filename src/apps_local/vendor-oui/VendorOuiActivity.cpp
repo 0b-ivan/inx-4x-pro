@@ -215,7 +215,7 @@ void VendorOuiActivity::render(RenderLock&&) {
     GUI.drawList(renderer, Rect{0, contentTop, pageWidth, contentH}, MENU_COUNT, menuIndex,
         [](int i) -> std::string { return MENU_LABELS[i]; });
     const auto labels = mappedInput.mapLabels("Back", "Select", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == SCANNING) {
     renderer.drawCenteredText(UI_10_FONT_ID, midY, "Scanning WiFi...");
   } else if (state == SCAN_LIST) {
@@ -234,7 +234,7 @@ void VendorOuiActivity::render(RenderLock&&) {
           });
     }
     const auto labels = mappedInput.mapLabels("Back", "Lookup", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else {
     // RESULT
     int y = metrics.topPadding + metrics.headerHeight + 40;
@@ -246,7 +246,7 @@ void VendorOuiActivity::render(RenderLock&&) {
     y += 25;
     renderer.drawCenteredText(UI_12_FONT_ID, y, vendorResult.c_str(), true, EpdFontFamily::BOLD);
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer();

@@ -251,7 +251,7 @@ void ProbeSnifferActivity::render(RenderLock&&) {
       renderer.drawText(UI_10_FONT_ID, leftPad, y, lastSeenStr);
 
       const auto labels = mappedInput.mapLabels("« Back", "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       renderer.displayBuffer();
       return;
     }
@@ -300,7 +300,7 @@ void ProbeSnifferActivity::render(RenderLock&&) {
   }
 
   const auto labels = mappedInput.mapLabels("« Exit", "Select", "^", "v");
-  GUI.drawButtonHints(renderer, labels.btn1, "Hold:CSV", labels.btn3, labels.btn4);
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, "Hold:CSV", labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
 

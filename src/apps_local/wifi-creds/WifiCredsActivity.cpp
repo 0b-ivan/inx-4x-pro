@@ -135,7 +135,7 @@ void WifiCredsActivity::render(RenderLock&&) {
     renderer.drawCenteredText(SMALL_FONT_ID, y + 8, "Up/Down: change  Confirm: generate QR");
 
     const auto labels = mappedInput.mapLabels("« Back", "Select", "^", "v");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   } else if (state == DISPLAY_QR) {
     const int headerBottom = metrics.topPadding + metrics.headerHeight;
@@ -161,7 +161,7 @@ void WifiCredsActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, labelY, ssidBuf, true, EpdFontFamily::BOLD);
 
     const auto labels = mappedInput.mapLabels("« Back", "New", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
   renderer.displayBuffer(HalDisplay::FULL_REFRESH);
