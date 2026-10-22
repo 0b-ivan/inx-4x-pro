@@ -84,6 +84,20 @@ restyled to match the design language the apps use.
 | **Cred Viewer** | View and manage sniffed network credentials saved on SD card. |
 | **Barcode Gen** | Generate CODE128, CODE39 and EAN-13 barcodes for display. |
 | **Key Copier** | Edit and save mechanical key cut depths for Kwikset, Schlage, Yale. |
+| **Beacon Flood** | Broadcast random, custom, or themed SSIDs to flood nearby WiFi scanners. |
+| **AP Cloner** | Clone a scanned AP's SSID and channel to run an evil-twin access point. |
+| **BLE Spam** | Flood nearby devices with Apple/Android/Windows/Samsung pairing notifications. |
+| **Captive Portal** | Serve a phishing-style captive portal from a rogue AP and capture credentials. |
+| **WiFi Deauth** | Send IEEE 802.11 deauthentication frames at a selected target AP. |
+| **Fire** | Offense orchestrator: 13 WiFi/BLE attack types with target selection. |
+| **SSID Channel** | Encode short messages in SSIDs for covert proximity communication. |
+| **AirTag Spoof** | Broadcast AirTag BLE advertisements with static or rotating MAC. |
+| **BLE Beacon** | Spam Apple/Samsung/Google/Windows BLE beacon advertisements. |
+| **BLE Keyboard** | Pair as BLE HID keyboard and execute DuckyScript payloads from SD. |
+| **USB HID** | Execute DuckyScript payloads over USB HID from SD card. |
+| **Dead Drop** | Ephemeral WiFi AP + web server for anonymous file exchange. |
+| **Mesh Chat** | ESP-NOW broadcast chat between nearby devices. |
+| **Bulletin Board** | Ephemeral WiFi AP + web board for anonymous local messaging. |
 
 Nine of them play over **PLAY NEARBY**: Chess, Checkers, Connect Four,
 Yahtzee, Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle. Put two
