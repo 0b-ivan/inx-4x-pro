@@ -95,7 +95,7 @@ void WifiConnectActivity::selectNetwork(int index) {
   selectedSSID = net.ssid;
   enteredPassword.clear();
 
-  const auto* saved = WIFI_STORE.findCredential(selectedSSID);
+  const auto saved = WIFI_STORE.findCredential(selectedSSID);
   if (saved && !saved->password.empty()) {
     enteredPassword = saved->password;
     attemptConnection();
