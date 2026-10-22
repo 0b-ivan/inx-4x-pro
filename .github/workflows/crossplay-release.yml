@@ -116,6 +116,14 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.1
+
+            Touch input for all 17 biscuit apps. Every app in
+            src/apps_local/ now responds to capacitive touch alongside
+            buttons: row taps for menus and lists, area taps for actions,
+            and coordinate-mapped taps for grids (calculator keypad,
+            Morse dot/dash halves).
+
             ### What is new in 1.16.0
 
             62 apps ported from [biscuit](https://github.com/yattsu/biscuit)
