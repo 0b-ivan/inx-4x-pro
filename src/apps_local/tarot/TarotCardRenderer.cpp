@@ -63,4 +63,44 @@ bool drawCard(const GfxRenderer& renderer, const int card, const int x, const in
   return true;
 }
 
+void drawCardBack(const GfxRenderer& renderer, const int x, const int y, const int width, const int height) {
+  // Clean slate so the lattice reads on e-ink.
+  renderer.fillRect(x, y, width, height, false);
+
+  // Double border, a hand-span in from the card edge.
+  const int inset = std::max(6, width / 20);
+  renderer.drawRect(x + inset, y + inset, width - 2 * inset, height - 2 * inset, 2, true);
+  const int inner = inset + 8;
+  renderer.drawRect(x + inner, y + inner, width - 2 * inner, height - 2 * inner, 1, true);
+
+  // Diagonal diamond lattice inside the inner border. Each 45-degree line is
+  // clipped to the box in the parameter t so no pixel lands outside it.
+  const int left = x + inner + 4, top = y + inner + 4;
+  const int right = x + width - inner - 4, bottom = y + height - inner - 4;
+  const int span = bottom - top, run = right - left;
+  const int step = std::max(16, width / 14);
+  for (int d = -span; d < run; d += step) {
+    const int tlo = std::max(0, -d), thi = std::min(span, run - d);
+    if (tlo > thi) continue;
+    // '\' family through (left+d, top), slope +1.
+    renderer.drawLine(left + d + tlo, top + tlo, left + d + thi, top + thi, 1, true);
+    // '/' family through (right-d, top), slope -1.
+    renderer.drawLine(right - d - tlo, top + tlo, right - d - thi, top + thi, 1, true);
+  }
+
+  // Centre emblem: three concentric diamonds, the innermost filled.
+  const int cx = x + width / 2, cy = y + height / 2;
+  for (int r = step * 2, k = 0; r >= step / 2; r -= step, ++k) {
+    renderer.drawLine(cx, cy - r, cx + r, cy, 1, true);
+    renderer.drawLine(cx + r, cy, cx, cy + r, 1, true);
+    renderer.drawLine(cx, cy + r, cx - r, cy, 1, true);
+    renderer.drawLine(cx - r, cy, cx, cy - r, 1, true);
+  }
+  const int f = step / 2;
+  for (int dy = -f; dy <= f; ++dy) {
+    const int w = f - (dy < 0 ? -dy : dy);
+    renderer.drawLine(cx - w, cy + dy, cx + w, cy + dy, 1, true);
+  }
+}
+
 }  // namespace tarot

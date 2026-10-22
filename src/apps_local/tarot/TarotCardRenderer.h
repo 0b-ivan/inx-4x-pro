@@ -9,4 +9,9 @@ namespace tarot {
 // reverse; the rows keep the BMP's own orientation.
 bool drawCard(const GfxRenderer& renderer, int card, int x, int y, int width, int height);
 
+// Draws the face-down card back: a bordered diamond lattice with a centre
+// emblem. Procedural and 1-bit, so it needs no asset and shows even before the
+// deck is downloaded -- it is the deck the player draws from.
+void drawCardBack(const GfxRenderer& renderer, int x, int y, int width, int height);
+
 }  // namespace tarot
