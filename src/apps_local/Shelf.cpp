@@ -82,6 +82,17 @@
 #include "ping/PingActivity.h"
 #include "wifi-connect/WifiConnectActivity.h"
 #include "vehicle-finder/VehicleFinderActivity.h"
+#include "calculator/CalculatorActivity.h"
+#include "cipher/CipherActivity.h"
+#include "clock/ClockActivity.h"
+#include "countdown/CountdownActivity.h"
+#include "device-info/DeviceInfoActivity.h"
+#include "morse-code/MorseCodeActivity.h"
+#include "otp-generator/OtpGeneratorActivity.h"
+#include "password-manager/PasswordManagerActivity.h"
+#include "qr-generator/QrGeneratorActivity.h"
+#include "sd-file-browser/SdFileBrowserActivity.h"
+#include "unit-converter/UnitConverterActivity.h"
 #include "knucklebones/KnucklebonesActivity.h"
 #include "minesweeper/MinesweeperActivity.h"
 #include "murdle/MurdleActivity.h"
@@ -180,6 +191,17 @@ constexpr shelf::Item kApps[] = {
     {"PING",           &icon_study_32,  &PingActivity::create},
     {"WIFI CONNECT",   &icon_study_32,  &WifiConnectActivity::create},
     {"VEHICLE FINDER", &icon_study_32,  &VehicleFinderActivity::create},
+    {"CALCULATOR",     &icon_study_32,  &CalculatorActivity::create},
+    {"CIPHER TOOLS",   &icon_study_32,  &CipherActivity::create},
+    {"CLOCK",          &icon_study_32,  &ClockActivity::create},
+    {"COUNTDOWN",      &icon_study_32,  &CountdownActivity::create},
+    {"DEVICE INFO",    &icon_study_32,  &DeviceInfoActivity::create},
+    {"MORSE CODE",     &icon_study_32,  &MorseCodeActivity::create},
+    {"OTP GENERATOR",  &icon_study_32,  &OtpGeneratorActivity::create},
+    {"PASSWORD MANAGER", &icon_study_32, &PasswordManagerActivity::create},
+    {"QR GENERATOR",   &icon_study_32,  &QrGeneratorActivity::create},
+    {"SD FILE BROWSER", &icon_study_32, &SdFileBrowserActivity::create},
+    {"UNIT CONVERTER", &icon_study_32,  &UnitConverterActivity::create},
 };
 
 // The two rows Home grows, in reading order. Titles are Title Case because

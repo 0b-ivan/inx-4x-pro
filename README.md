@@ -108,6 +108,17 @@ restyled to match the design language the apps use.
 | **Ping** | Send ICMP pings to a host and display RTT results. |
 | **WiFi Connect** | Scan and connect to WiFi networks, save credentials. |
 | **Vehicle Finder** | Fingerprint nearby APs to locate a parked vehicle by signal match. |
+| **Calculator** | Four-function calculator with expression history. |
+| **Cipher Tools** | ROT13, Caesar, Vigenere, XOR, Atbash, Base64 encode/decode. |
+| **Clock** | NTP-synced clock with stopwatch and pomodoro timer. |
+| **Countdown** | 7-segment countdown timer with configurable duration. |
+| **Device Info** | System diagnostics: chip info, heap, uptime, WiFi MAC, IP. |
+| **Morse Code** | Encode and decode Morse code with reference chart. |
+| **OTP Generator** | Generate cryptographically random one-time passwords. |
+| **Password Manager** | Store and retrieve passwords with obfuscated SD-card storage. |
+| **QR Generator** | Generate QR codes for text or URLs, displayed on screen. |
+| **SD File Browser** | Browse, view, and delete files on the SD card. |
+| **Unit Converter** | Convert between units of length, weight, temperature, data, speed. |
 
 Nine of them play over **PLAY NEARBY**: Chess, Checkers, Connect Four,
 Yahtzee, Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle. Put two
