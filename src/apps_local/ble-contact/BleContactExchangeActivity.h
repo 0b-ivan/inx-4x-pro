@@ -9,11 +9,10 @@
 class BleContactExchangeActivity final : public Activity {
  public:
   explicit BleContactExchangeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-
+      : Activity("BleContactExchange", renderer, mappedInput) {}
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<BleContactExchangeActivity>(r, m);
   }
-      : Activity("BleContactExchange", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

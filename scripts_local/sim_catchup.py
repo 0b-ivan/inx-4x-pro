@@ -295,6 +295,41 @@ patch(
     marker="BSSID(int i)",
 )
 
+# CrowdDensity, DeviceFingerprinter and Fire read wifi_promiscuous_pkt_type_t,
+# which the simulator's esp_wifi.h does not declare (it only has wifi_ps_type_t).
+# sim-stubs/ cannot fix this: the library's own path wins over -I. Append the
+# enum to the library's copy instead.
+# sd-encryption and qr-totp use the one-shot mbedtls_sha256(). The simulator
+# ships only the context-based API. Add the convenience wrapper.
+patch(
+    src / "mbedtls/sha256.h",
+    "inline void mbedtls_sha256_free(mbedtls_sha256_context *) {}",
+    "inline void mbedtls_sha256_free(mbedtls_sha256_context *) {}\n\n"
+    "inline int mbedtls_sha256(const unsigned char *input, size_t ilen,\n"
+    "                          unsigned char output[32], int /*is224*/) {\n"
+    "  mbedtls_sha256_context ctx;\n"
+    "  mbedtls_sha256_init(&ctx);\n"
+    "  mbedtls_sha256_update(&ctx, input, ilen);\n"
+    "  mbedtls_sha256_finish(&ctx, output);\n"
+    "  return 0;\n"
+    "}",
+    "mbedtls one-shot mbedtls_sha256()",
+    marker="inline int mbedtls_sha256(",
+)
+
+patch(
+    src / "esp_wifi.h",
+    "inline esp_err_t esp_wifi_stop() { return ESP_OK; }",
+    "inline esp_err_t esp_wifi_stop() { return ESP_OK; }\n\n"
+    "enum wifi_promiscuous_pkt_type_t {\n"
+    "  WIFI_PKT_MGMT = 0,\n"
+    "  WIFI_PKT_DATA = 1,\n"
+    "  WIFI_PKT_MISC = 2,\n"
+    "};",
+    "esp_wifi wifi_promiscuous_pkt_type_t",
+    marker="wifi_promiscuous_pkt_type_t",
+)
+
 
 # -- the seam, checked rather than remembered -------------------------------
 #

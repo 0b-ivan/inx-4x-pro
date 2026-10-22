@@ -104,7 +104,7 @@ void WifiConnectActivity::selectNetwork(int index) {
 
   if (net.encrypted) {
     startActivityForResult(
-        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "WiFi Password", "", 64, false),
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "WiFi Password", "", 64, InputType::Password),
         [this](const ActivityResult& result) {
           if (result.isCancelled) {
             state = LIST;

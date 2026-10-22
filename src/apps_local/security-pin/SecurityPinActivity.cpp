@@ -10,10 +10,9 @@
 #include <cstring>
 
 #include "MappedInputManager.h"
-#include "QuickWipeActivity.h"
+#include "../quick-wipe/QuickWipeActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/DuressManager.h"
 
 // ---------------------------------------------------------------------------
 // Helpers

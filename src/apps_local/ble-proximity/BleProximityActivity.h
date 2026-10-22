@@ -11,11 +11,10 @@
 class BleProximityActivity final : public Activity {
  public:
   explicit BleProximityActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-
+      : Activity("BleProximity", renderer, mappedInput) {}
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<BleProximityActivity>(r, m);
   }
-      : Activity("BleProximity", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
