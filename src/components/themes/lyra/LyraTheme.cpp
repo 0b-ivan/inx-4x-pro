@@ -1,6 +1,7 @@
 #include "LyraTheme.h"
 
 #include <GfxRenderer.h>
+#include <BoardConfig.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
@@ -305,7 +306,7 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
 void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
-  if (gpio.hasTouch()) {
+  if (BoardConfig::hasTouch()) {
     return;
   }
 
@@ -382,7 +383,7 @@ void LyraTheme::drawButtonHintsAlways(GfxRenderer& renderer, const char* btn1, c
 }
 
 void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
-  if (gpio.hasTouch()) {
+  if (BoardConfig::hasTouch()) {
     return;
   }
 

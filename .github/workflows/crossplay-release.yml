@@ -116,6 +116,14 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.4
+
+            Fix: button hints no longer appear on reader screens (home,
+            settings, etc.) on the X4 Pro. The check now uses the
+            compile-time `BoardConfig::hasTouch()` instead of the runtime
+            `gpio.hasTouch()`, which could return false if the GT911 touch
+            controller did not answer on boot.
+
             ### What is new in 1.16.3
 
             Touch button hints: all three themes (Base, Lyra, RoundedRaff) now

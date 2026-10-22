@@ -3,6 +3,7 @@
 #include <FreeInkUIGfxRenderer.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
+#include <BoardConfig.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
@@ -198,7 +199,7 @@ void BaseTheme::drawHintLabel(GfxRenderer& renderer, const int fontId, const cha
 
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
-  if (gpio.hasTouch()) {
+  if (BoardConfig::hasTouch()) {
     return;
   }
 
@@ -301,7 +302,7 @@ int BaseTheme::tappedHintButton(int tapX, int tapY, const GfxRenderer& renderer)
 }
 
 void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
-  if (gpio.hasTouch()) {
+  if (BoardConfig::hasTouch()) {
     return;
   }
 
