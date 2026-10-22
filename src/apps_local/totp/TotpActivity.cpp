@@ -1,7 +1,7 @@
 #include "TotpActivity.h"
 
-#include <Memory.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <cstdio>
 #include <cstring>
@@ -69,6 +69,15 @@ fui::TextStyle centered(const fui::TextStyle& base, const uint8_t maxLines = 1) 
   fui::TextStyle style = base;
   style.align = fui::TextAlign::Center;
   style.maxLines = maxLines;
+  return style;
+}
+
+// A single-line centred heading. Used so a heading and its body are drawn as
+// two calls -- the app font has no '\n' glyph, so one string carrying a newline
+// renders as "NO ACCOUNTSAdd a..." with the break swallowed.
+fui::TextStyle centeredBold(const fui::TextStyle& base) {
+  fui::TextStyle style = centered(base);
+  style.bold = true;
   return style;
 }
 
@@ -146,9 +155,9 @@ bool TotpActivity::validPin(const char* pin) {
 bool TotpActivity::deriveVaultKey(const char* pin, const std::array<uint8_t, kVaultSaltBytes>& salt,
                                   std::array<uint8_t, kVaultKeyBytes>& key) const {
   if (!validPin(pin)) return false;
-  return mbedtls_pkcs5_pbkdf2_hmac_ext(MBEDTLS_MD_SHA256, reinterpret_cast<const unsigned char*>(pin),
-                                       std::strlen(pin), salt.data(), salt.size(), kPbkdf2Iterations,
-                                       static_cast<uint32_t>(key.size()), key.data()) == 0;
+  return mbedtls_pkcs5_pbkdf2_hmac_ext(MBEDTLS_MD_SHA256, reinterpret_cast<const unsigned char*>(pin), std::strlen(pin),
+                                       salt.data(), salt.size(), kPbkdf2Iterations, static_cast<uint32_t>(key.size()),
+                                       key.data()) == 0;
 }
 
 bool TotpActivity::vaultExists() const {
@@ -272,73 +281,68 @@ bool TotpActivity::initialiseVault(const char* pin) {
 }
 
 void TotpActivity::beginUnlock() {
-  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "VAULT PIN", "", 12, InputType::Password);
+  auto keyboard =
+      makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "VAULT PIN", "", 12, InputType::Password);
   if (!keyboard) {
     showNotice("LOW MEMORY", "The PIN keyboard could not be opened. Try again.", Phase::Locked);
     return;
   }
-  startActivityForResult(
-      std::move(keyboard),
-      [this](const ActivityResult& result) {
-        if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
-        const std::string& pin = std::get<KeyboardResult>(result.data).text;
-        if (!validPin(pin.c_str())) {
-          showNotice("INVALID PIN", "Use 6 to 12 digits.", Phase::Locked);
-          return;
-        }
-        if (!unlockWithPin(pin.c_str())) {
-          showNotice("UNLOCK FAILED", "The PIN is wrong or the vault is damaged.", Phase::Locked);
-          return;
-        }
-        phase_ = Phase::List;
-        shownCounter_ = UINT64_MAX;
-        shownClockValid_ = false;
-        requestUpdate();
-      });
+  startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
+    if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
+    const std::string& pin = std::get<KeyboardResult>(result.data).text;
+    if (!validPin(pin.c_str())) {
+      showNotice("INVALID PIN", "Use 6 to 12 digits.", Phase::Locked);
+      return;
+    }
+    if (!unlockWithPin(pin.c_str())) {
+      showNotice("UNLOCK FAILED", "The PIN is wrong or the vault is damaged.", Phase::Locked);
+      return;
+    }
+    phase_ = Phase::List;
+    shownCounter_ = UINT64_MAX;
+    shownClockValid_ = false;
+    requestUpdate();
+  });
 }
 
 void TotpActivity::beginSetPin() {
-  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "NEW VAULT PIN", "", 12,
-                                                            InputType::Password);
+  auto keyboard =
+      makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "NEW VAULT PIN", "", 12, InputType::Password);
   if (!keyboard) {
     showNotice("LOW MEMORY", "The PIN keyboard could not be opened. Try again.", Phase::SetupPin);
     return;
   }
-  startActivityForResult(
-      std::move(keyboard),
-      [this](const ActivityResult& result) {
-        if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
-        const std::string pin = std::get<KeyboardResult>(result.data).text;
-        if (!validPin(pin.c_str())) {
-          showNotice("INVALID PIN", "Use 6 to 12 digits.", Phase::SetupPin);
-          return;
-        }
+  startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
+    if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
+    const std::string pin = std::get<KeyboardResult>(result.data).text;
+    if (!validPin(pin.c_str())) {
+      showNotice("INVALID PIN", "Use 6 to 12 digits.", Phase::SetupPin);
+      return;
+    }
 
-        auto confirm = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "CONFIRM VAULT PIN", "", 12,
-                                                                 InputType::Password);
-        if (!confirm) {
-          showNotice("LOW MEMORY", "The PIN keyboard could not be opened. Try again.", Phase::SetupPin);
-          return;
-        }
-        startActivityForResult(
-            std::move(confirm),
-            [this, pin](const ActivityResult& confirmResult) {
-              if (confirmResult.isCancelled || !std::holds_alternative<KeyboardResult>(confirmResult.data)) return;
-              const std::string& confirmation = std::get<KeyboardResult>(confirmResult.data).text;
-              if (confirmation != pin) {
-                showNotice("PIN MISMATCH", "The two PIN entries did not match.", Phase::SetupPin);
-                return;
-              }
-              if (!initialiseVault(pin.c_str())) {
-                showNotice("NOT SAVED", "The encrypted vault could not be created.", Phase::SetupPin);
-                return;
-              }
-              phase_ = Phase::List;
-              shownCounter_ = UINT64_MAX;
-              shownClockValid_ = false;
-              requestUpdate();
-            });
-      });
+    auto confirm = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "CONFIRM VAULT PIN", "", 12,
+                                                            InputType::Password);
+    if (!confirm) {
+      showNotice("LOW MEMORY", "The PIN keyboard could not be opened. Try again.", Phase::SetupPin);
+      return;
+    }
+    startActivityForResult(std::move(confirm), [this, pin](const ActivityResult& confirmResult) {
+      if (confirmResult.isCancelled || !std::holds_alternative<KeyboardResult>(confirmResult.data)) return;
+      const std::string& confirmation = std::get<KeyboardResult>(confirmResult.data).text;
+      if (confirmation != pin) {
+        showNotice("PIN MISMATCH", "The two PIN entries did not match.", Phase::SetupPin);
+        return;
+      }
+      if (!initialiseVault(pin.c_str())) {
+        showNotice("NOT SAVED", "The encrypted vault could not be created.", Phase::SetupPin);
+        return;
+      }
+      phase_ = Phase::List;
+      shownCounter_ = UINT64_MAX;
+      shownClockValid_ = false;
+      requestUpdate();
+    });
+  });
 }
 #endif
 
@@ -410,38 +414,35 @@ void TotpActivity::beginAdd() {
     return;
   }
 
-  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "ACCOUNT NAME", "", 39, InputType::Text);
+  auto keyboard =
+      makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "ACCOUNT NAME", "", 39, InputType::Text);
   if (!keyboard) {
     showNotice("LOW MEMORY", "The account editor could not be opened. Try again after leaving other apps.");
     return;
   }
-  startActivityForResult(
-      std::move(keyboard),
-      [this](const ActivityResult& result) {
-        if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
-        const std::string& name = std::get<KeyboardResult>(result.data).text;
-        if (name.empty()) {
-          showNotice("NO NAME", "Give the account a name before saving it.");
-          return;
-        }
-        addSecretForName(name.c_str());
-      });
+  startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
+    if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
+    const std::string& name = std::get<KeyboardResult>(result.data).text;
+    if (name.empty()) {
+      showNotice("NO NAME", "Give the account a name before saving it.");
+      return;
+    }
+    addSecretForName(name.c_str());
+  });
 }
 
 void TotpActivity::addSecretForName(const char* name) {
   const std::string savedName(name == nullptr ? "" : name);
   auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, "BASE32 SECRET", "",
-                                                            totp::kMaxSecretChars, InputType::Password);
+                                                           totp::kMaxSecretChars, InputType::Password);
   if (!keyboard) {
     showNotice("LOW MEMORY", "The secret editor could not be opened. Try again after leaving other apps.");
     return;
   }
-  startActivityForResult(
-      std::move(keyboard),
-      [this, savedName](const ActivityResult& result) {
-        if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
-        addAccount(savedName.c_str(), std::get<KeyboardResult>(result.data).text.c_str());
-      });
+  startActivityForResult(std::move(keyboard), [this, savedName](const ActivityResult& result) {
+    if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
+    addAccount(savedName.c_str(), std::get<KeyboardResult>(result.data).text.c_str());
+  });
 }
 
 void TotpActivity::addAccount(const char* name, const char* secretInput) {
@@ -650,8 +651,10 @@ void TotpActivity::render(RenderLock&&) {
     case Phase::Locked: {
       chrome(screen, "AUTHENTICATOR");
       const fui::Rect body = screen.body();
-      target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 90), width, 180),
-                  "VAULT LOCKED\nEnter your PIN to decrypt the stored TOTP accounts.", centered(screen.theme().bodyText, 4));
+      target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 70), width, 40), "VAULT LOCKED",
+                  centeredBold(screen.theme().bodyText));
+      target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 120), width, 160),
+                  "Enter your PIN to decrypt the stored TOTP accounts.", centered(screen.theme().bodyText, 4));
       fui::ButtonProps unlock;
       unlock.label = "UNLOCK";
       unlock.action = kActionUnlock;
@@ -663,8 +666,10 @@ void TotpActivity::render(RenderLock&&) {
     case Phase::SetupPin: {
       chrome(screen, "AUTHENTICATOR");
       const fui::Rect body = screen.body();
-      target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 70), width, 230),
-                  "SET UP ENCRYPTED VAULT\nCreate a 6 to 12 digit PIN. Secrets are encrypted before they are written to internal storage.",
+      target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 55), width, 40),
+                  "SET UP ENCRYPTED VAULT", centeredBold(screen.theme().bodyText));
+      target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 105), width, 190),
+                  "Create a 6 to 12 digit PIN. Secrets are encrypted before they are written to internal storage.",
                   centered(screen.theme().bodyText, 5));
       fui::ButtonProps setup;
       setup.label = "SET PIN";
@@ -692,9 +697,10 @@ void TotpActivity::render(RenderLock&&) {
       if (visibleRows_ < 1 && listHeight >= kTokenRowHeight) visibleRows_ = 1;
 
       if (store_.count == 0) {
-        target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 70), width, 120),
-                    "NO ACCOUNTS\nAdd a TOTP account on the device or in the web interface.",
-                    centered(screen.theme().bodyText, 3));
+        target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 60), width, 40), "NO ACCOUNTS",
+                    centeredBold(screen.theme().bodyText));
+        target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + 108), width, 120),
+                    "Add a TOTP account on the device or in the web interface.", centered(screen.theme().bodyText, 3));
         topIndex_ = 0;
         shownClockValid_ = false;
         shownCounter_ = 0;
@@ -721,8 +727,7 @@ void TotpActivity::render(RenderLock&&) {
           const fui::Rect card = fui::makeRect(body.x, y, body.width, kTokenRowHeight);
           target.stroke(card, fui::Paint::solid(fui::Color::Black), toybox::kHairline, 8);
 
-          target.text(fui::makeRect(static_cast<int16_t>(card.x + toybox::kGutter),
-                                    static_cast<int16_t>(card.y + 5),
+          target.text(fui::makeRect(static_cast<int16_t>(card.x + toybox::kGutter), static_cast<int16_t>(card.y + 5),
                                     static_cast<int16_t>(card.width - 2 * toybox::kGutter), 34),
                       account.name, nameStyle);
 
@@ -741,8 +746,7 @@ void TotpActivity::render(RenderLock&&) {
           } else {
             std::snprintf(shown, sizeof(shown), "CLOCK NOT SET");
           }
-          target.text(fui::makeRect(static_cast<int16_t>(card.x + toybox::kGutter),
-                                    static_cast<int16_t>(card.y + 34),
+          target.text(fui::makeRect(static_cast<int16_t>(card.x + toybox::kGutter), static_cast<int16_t>(card.y + 34),
                                     static_cast<int16_t>(card.width - 2 * toybox::kGutter), 63),
                       shown, codeStyle);
         }
@@ -763,8 +767,8 @@ void TotpActivity::render(RenderLock&&) {
       const Account& account = store_.accounts[static_cast<size_t>(selected_)];
       chrome(screen, "AUTHENTICATOR");
       const fui::Rect body = screen.body();
-      target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + toybox::kGutter), width, 48), account.name,
-                  centered(screen.theme().smallText));
+      target.text(fui::makeRect(toybox::kMargin, static_cast<int16_t>(body.y + toybox::kGutter), width, 48),
+                  account.name, centered(screen.theme().smallText));
 
       const bool validClock = clockValid();
       if (validClock) {

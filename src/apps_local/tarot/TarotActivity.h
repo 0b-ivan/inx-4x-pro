@@ -15,12 +15,17 @@ class TarotActivity final : public Activity {
 
  private:
   void drawNext();
+  void reveal();
+  void cardAction();
+  void openHistory();
   void startDownload();
   void drawTextCard();
-  void drawBottomPanel(const char* title, const char* body, int maxLines);
+  void drawControlBar(const char* left, const char* mid, const char* right);
+  void drawBottomPanel(const char* title, const char* body, int maxLines, int bottomInset = 0);
   TarotDeck deck_;
   TarotAssets assets_;
   int card_ = -1;
+  bool faceUp_ = false;
   bool showMeaning_ = false;
   bool history_ = false;
   bool awaitRelease_ = false;
