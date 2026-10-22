@@ -198,10 +198,6 @@ void BaseTheme::drawHintLabel(GfxRenderer& renderer, const int fontId, const cha
 
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
-  if (gpio.hasTouch()) {
-    return;
-  }
-
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
@@ -229,6 +225,47 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   }
 
   renderer.setOrientation(orig_orientation);
+}
+
+int BaseTheme::tappedHintButton(int tapX, int tapY, const GfxRenderer& renderer) const {
+  using Ori = GfxRenderer::Orientation;
+  const int sw = renderer.getScreenWidth();
+  const int sh = renderer.getScreenHeight();
+  const Ori ori = renderer.getOrientation();
+
+  // Convert logical tap coordinates (caller's orientation) to portrait logical
+  // coordinates, mirroring the setOrientation(Portrait) inside drawButtonHints().
+  int px, py;
+  switch (ori) {
+    case Ori::Portrait:
+      px = tapX;
+      py = tapY;
+      break;
+    case Ori::PortraitInverted:
+      px = sw - 1 - tapX;
+      py = sh - 1 - tapY;
+      break;
+    case Ori::LandscapeClockwise:
+      px = tapY;
+      py = sw - 1 - tapX;
+      break;
+    case Ori::LandscapeCounterClockwise:
+    default:
+      px = sh - 1 - tapY;
+      py = tapX;
+      break;
+  }
+
+  const int portraitW = (ori == Ori::Portrait || ori == Ori::PortraitInverted) ? sw : sh;
+  const int portraitH = (ori == Ori::Portrait || ori == Ori::PortraitInverted) ? sh : sw;
+
+  if (py < portraitH - UITheme::getInstance().getMetrics().buttonHintsHeight) return 0;
+
+  const int zoneW = portraitW / 4;
+  if (px < zoneW)     return 1;
+  if (px < zoneW * 2) return 2;
+  if (px < zoneW * 3) return 3;
+  return 4;
 }
 
 void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {

@@ -240,6 +240,12 @@ class BaseTheme {
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
+  // Returns 1–4 (which labelled button was tapped) or 0 (tap outside the hint
+  // bar).  tapX/tapY are logical coordinates in the caller's current orientation
+  // as returned by MappedInputManager::wasScreenTapped().  The conversion to
+  // portrait space mirrors the orientation switch drawButtonHints() does when it
+  // draws, so hit-testing always matches the visual layout.
+  virtual int tappedHintButton(int tapX, int tapY, const GfxRenderer& renderer) const;
   // Shared by every theme's drawButtonHints(): centres a hint label in its box,
   // wrapping to two lines rather than overflowing when it's too wide to fit.
   static void drawHintLabel(GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,

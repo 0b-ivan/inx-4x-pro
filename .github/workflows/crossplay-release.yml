@@ -116,6 +116,14 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.3
+
+            Touch button hints: all three themes (Base, Lyra, RoundedRaff) now
+            draw their button-hint bar on touch devices instead of leaving it
+            blank. A new `tappedHintButton(tapX, tapY, renderer)` helper on
+            `BaseTheme` maps a tap to button 1–4 (or 0 for a miss), accounting
+            for the current screen orientation.
+
             ### What is new in 1.16.2
 
             Touch fix: the three apps missing touch in 1.16.1 (Clock,
