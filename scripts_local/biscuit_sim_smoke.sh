@@ -731,7 +731,12 @@ python3 - "$rogue_log" "$out/NETWORK_MONITOR_rogue_results.bmp" "$out/NETWORK_MO
 from pathlib import Path
 import struct,sys,hashlib
 log=Path(sys.argv[1]).read_text(errors="replace")
-assert "NETWORK:rogue-results:3:1" in log, "synthetic AP grouping not executed"
+assert "NETWORK:rogue-scan:0:1" in log, (
+    "Long Confirm was treated as short (expected rogue AP scan). "
+    + log[-1200:])
+assert "NETWORK:rogue-results:3:1" in log, (
+    "3-phase virtual rogue AP grouping did not complete. "
+    + log[-1200:])
 pictures=[]
 for name in sys.argv[2:]:
     bmp=Path(name).read_bytes()
