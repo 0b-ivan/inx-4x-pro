@@ -21,6 +21,7 @@ for name, cls, path in (
     ("HTTP CLIENT", "HttpClientActivity", "http-client/HttpClientActivity.cpp"),
     ("MDNS BROWSER", "MdnsBrowserActivity", "mdns-browser/MdnsBrowserActivity.cpp"),
     ("BLE PROXIMITY", "BleProximityActivity", "ble-proximity/BleProximityActivity.cpp"),
+    ("BLE SCANNER", "BleScannerActivity", "ble-scanner/BleScannerActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -48,6 +49,9 @@ ble = (root / "src/apps_local/ble-proximity/BleProximityActivity.cpp").read_text
 assert "biscuit_sim::bleAdvertisements()" in ble, "BLE proximity must consume virtual BLE fixtures"
 assert "#ifndef SIMULATOR" in ble, "BLE radio access must be hardware-only"
 assert (root / "src/platform/sim_biscuit_ble.h").exists(), "BLE simulator fixtures missing"
+scanner = (root / "src/apps_local/ble-scanner/BleScannerActivity.cpp").read_text()
+assert "biscuit_sim::bleGattServices" in scanner and "biscuit_sim::bleAdvertisements()" in scanner, "BLE scanner must use fixture-backed real activity"
+assert "biscuit_sim::bleGattCharacteristics" in scanner and "biscuit_sim::bleConnects" in scanner, "BLE GATT must be isolated"
 smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
 assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
 assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"

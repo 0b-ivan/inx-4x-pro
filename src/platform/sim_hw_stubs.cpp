@@ -39,7 +39,6 @@ HWSTUB_ACTIVITY(AirTagTestActivity)
 HWSTUB_ACTIVITY(BleBeaconActivity)
 HWSTUB_ACTIVITY(BleContactExchangeActivity)
 HWSTUB_ACTIVITY(BleKeyboardActivity)
-HWSTUB_ACTIVITY(BleScannerActivity)
 HWSTUB_ACTIVITY(BleSpamActivity)
 HWSTUB_ACTIVITY(CrowdDensityActivity)
 DeauthDetectorActivity::~DeauthDetectorActivity() {}

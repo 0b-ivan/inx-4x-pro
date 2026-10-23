@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,9 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "BLE SCANNER" ]; then
+    # Short Confirm on first fixture device: open its synthetic GATT service list.
+    script="1900:ENTER:100;6000:QUIT"
   elif [ "$app" = "HTTP CLIENT" ] || [ "$app" = "MDNS BROWSER" ]; then
     # Confirm toggles the HTTP method or starts mDNS discovery.
     script="1900:ENTER:650;6000:QUIT"
@@ -26,7 +29,7 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "OTP GENERATOR" ] || [ "$app" = "HTTP CLIENT" ] || [ "$app" = "MDNS BROWSER" ]; then
+  if [ "$app" = "OTP GENERATOR" ] || [ "$app" = "HTTP CLIENT" ] || [ "$app" = "MDNS BROWSER" ] || [ "$app" = "BLE SCANNER" ]; then
     shots="1600:$out/${name}_before.bmp;4300:$frame"
   fi
   echo "[biscuit-ui-smoke] $app"
@@ -155,4 +158,15 @@ assert hashlib.sha256(normal.read_bytes()).digest() != hashlib.sha256(empty.read
     "BLE advertisements and empty scan rendered identical images"
 print("PASS BLE fixture vs empty scan: UI state differs")
 PYBLE
-echo "PASS biscuit-ui-smoke: 10 activities, 15 screenshots, 3 interactions, BLE empty and Host Scanner offline states"
+python3 - <<'PYSCANNER'
+from pathlib import Path
+import hashlib
+root = Path(".pio/biscuit-ui-smoke")
+before, after = root / "BLE_SCANNER_before.bmp", root / "BLE_SCANNER.bmp"
+assert before.is_file() and after.is_file(), "BLE Scanner screenshots missing"
+assert hashlib.sha256(before.read_bytes()).digest() != hashlib.sha256(after.read_bytes()).digest(), (
+    "BLE Scanner Confirm did not change rendered screen"
+)
+print("PASS BLE Scanner: device selection changes GATT screen")
+PYSCANNER
+echo "PASS biscuit-ui-smoke: 11 activities, 17 screenshots, 4 interactions, BLE empty and Host Scanner offline states"

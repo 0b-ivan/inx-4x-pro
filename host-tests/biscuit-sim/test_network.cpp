@@ -82,5 +82,18 @@ int main() {
   advertisements = biscuit_sim::bleAdvertisements();
   check(advertisements.size() == 2 && advertisements[0].rssi == -93, "BLE weak-signal scenario");
   unsetenv("CROSSPLAY_SIM_BLE_SCENARIO");
+  auto services = biscuit_sim::bleGattServices("02:00:00:00:00:11");
+  check(services.size() == 2, "BLE synthetic sensor exposes GATT services");
+  auto chars = biscuit_sim::bleGattCharacteristics("02:00:00:00:00:11", services[0].uuid);
+  check(chars.size() == 1 && chars[0].canRead, "BLE battery characteristic readable");
+  check(std::string(chars[0].uuid).find("2a19") != std::string::npos, "BLE battery UUID");
+  check(biscuit_sim::bleConnects("02:00:00:00:00:22"), "BLE beacon connects in fixture");
+  check(!biscuit_sim::bleConnects("AA:BB:CC:DD:EE:FF"), "BLE unknown address cannot connect");
+  check(biscuit_sim::bleGattServices("AA:BB:CC:DD:EE:FF").empty(), "BLE no external service enumeration");
+  check(biscuit_sim::bleGattCharacteristics("02:00:00:00:00:11", "0000ffff").empty(), "BLE unknown service yields no values");
+  setenv("CROSSPLAY_SIM_BLE_SCENARIO", "disconnect", 1);
+  check(!biscuit_sim::bleConnects("02:00:00:00:00:11"), "BLE simulated connection failure");
+  check(biscuit_sim::bleGattServices("02:00:00:00:00:11").empty(), "BLE connection failure hides services");
+  unsetenv("CROSSPLAY_SIM_BLE_SCENARIO");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }
