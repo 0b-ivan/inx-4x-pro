@@ -50,15 +50,17 @@ for app in "${apps[@]}"; do
     # Confirm toggles the HTTP method or starts mDNS discovery.
     script="1900:ENTER:650;6000:QUIT"
   elif [ "$app" = "CLOCK" ]; then
-    script="1900:ENTER:650;6000:QUIT"
+    # Capture the established 4300-ms Clock golden BEFORE changing mode.
+    # The simulator boot logo can still be visible at 1600 ms.
+    script="5300:ENTER:650;8500:QUIT"
   elif [ "$app" = "DEVICE INFO" ] || [ "$app" = "WIFI CONNECT" ]; then
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
   if [ "$app" = "CLOCK" ]; then
-    # Freeze the pixel golden BEFORE the intentional long-confirm mode switch.
-    # The real Stopwatch state is checked separately below.
-    shots="1600:$frame;4300:$out/${name}_stopwatch.bmp"
+    # Preserve the previously validated Clock.bmp pixel reference at 4300 ms.
+    # The Stopwatch must render separately after the delayed long press.
+    shots="4300:$frame;7200:$out/${name}_stopwatch.bmp"
   elif [ "$app" = "BLE KEYBOARD" ]; then
     shots="1600:$out/${name}_scripts.bmp;2200:$out/${name}_preview.bmp;2950:$out/${name}_paired.bmp;4900:$out/${name}_executed.bmp;6800:$out/${name}_reset.bmp;8000:$frame"
   elif [ "$app" = "BLE SPAM" ]; then
@@ -961,8 +963,9 @@ for state in ("NETWORK:monitoring:0:0","NETWORK:processed:4:3",
     assert pos>=0, f"Network Monitor touch missing {state}: {log[-1400:]}"
 print("PASS X4 Pro touch: Network Monitor event/detail/back/exit, cleanup")
 PYNETTOUCH
-# A long Confirm must ACTUALLY change Clock -> Stopwatch. Clock.bmp is
-# captured before the interaction, so its golden always describes Clock.
+# A long Confirm must ACTUALLY change Clock -> Stopwatch. The 4300-ms Clock.bmp
+# is captured after startup but before the 5300-ms input; the existing pixel
+# golden must remain unchanged, not silently replaced by the boot splash.
 python3 - <<'PYCLOCK'
 from pathlib import Path
 import hashlib, struct
