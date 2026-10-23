@@ -25,5 +25,10 @@ inline bool resolveHost(const std::string& host, uint8_t (&ip)[4]) {
   }
   return false;
 }
+// This probe never opens a socket or sends radio frames. Non-test
+// destinations and non-HTTP ports are deliberately unreachable.
+inline bool tcpProbe(const std::string& host, uint16_t port) {
+  return port == 80 && (host == "example.test" || host == "gateway.test" || host == "localhost");
+}
 }  // namespace biscuit_sim
 #endif  // SIMULATOR

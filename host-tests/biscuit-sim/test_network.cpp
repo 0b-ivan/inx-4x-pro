@@ -24,5 +24,11 @@ int main() {
   setenv("CROSSPLAY_SIM_WIFI_CONNECTED", "1", 1);
   check(biscuit_sim::wifiConnected(false), "force online");
   unsetenv("CROSSPLAY_SIM_WIFI_CONNECTED");
+  check(biscuit_sim::tcpProbe("example.test", 80), "fixture TCP reachable");
+  check(biscuit_sim::tcpProbe("gateway.test", 80), "gateway TCP reachable");
+  check(biscuit_sim::tcpProbe("localhost", 80), "loopback TCP reachable");
+  check(!biscuit_sim::tcpProbe("gateway.test", 22), "no additional open ports");
+  check(!biscuit_sim::tcpProbe("unknown.test", 80), "unknown host unreachable");
+  check(!biscuit_sim::tcpProbe("8.8.8.8", 80), "no real internet probe");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }

@@ -6,7 +6,11 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
+#ifdef SIMULATOR
+#include "platform/sim_biscuit_network.h"
+#else
 #include <WiFiClient.h>
+#endif
 
 #include "MappedInputManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -45,7 +49,11 @@ void PingActivity::onExit() { devmode::resume();
   Activity::onExit(); }
 
 void PingActivity::doPing() {
+#ifdef SIMULATOR
+  if (!biscuit_sim::wifiConnected(WiFi.status() == WL_CONNECTED)) {
+#else
   if (WiFi.status() != WL_CONNECTED) {
+#endif
     PingResult pr;
     pr.success = false;
     pr.rttMs = 0;
@@ -57,11 +65,19 @@ void PingActivity::doPing() {
     return;
   }
 
+#ifdef SIMULATOR
+  // The firmware's "ping" tool performs a TCP probe to port 80, not ICMP.
+  // Never open a real host socket from the simulator: the fixture models the
+  // success/failure and a fixed RTT for deterministic navigation tests.
+  bool ok = biscuit_sim::tcpProbe(targetHost, 80);
+  unsigned long rtt = ok ? 3UL : 0UL;
+#else
   WiFiClient client;
   unsigned long start = millis();
   bool ok = client.connect(targetHost.c_str(), 80, 3000);
   unsigned long rtt = millis() - start;
   client.stop();
+#endif
 
   PingResult pr;
   pr.success = ok;

@@ -46,7 +46,8 @@
 #include "dead-drop/DeadDropActivity.h"
 #include "bulletin-board/BulletinBoardActivity.h"
 #include "vehicle-finder/VehicleFinderActivity.h"
-// Real app bodies share the virtual WiFi stack and deterministic DNS fixture.
+// Real network app bodies share virtual WiFi and deterministic fixtures.
+#include "ping/PingActivity.h"
 #include "dns-lookup/DnsLookupActivity.h"
 #include "wifi-connect/WifiConnectActivity.h"
 #if !defined(SIMULATOR)  // Requires raw 802.11 promiscuous mode, BLE stack, or ESP-NOW
@@ -70,7 +71,6 @@
 #include "host-scanner/HostScannerActivity.h"
 #include "http-client/HttpClientActivity.h"
 #include "mdns-browser/MdnsBrowserActivity.h"
-#include "ping/PingActivity.h"
 #endif  // !SIMULATOR
 #include "calculator/CalculatorActivity.h"
 #include "cipher/CipherActivity.h"
@@ -189,10 +189,10 @@ constexpr shelf::Item kApps[] = {
     {"HOST SCANNER",   &icon_study_32,  &HostScannerActivity::create},
     {"HTTP CLIENT",    &icon_study_32,  &HttpClientActivity::create},
     {"MDNS BROWSER",   &icon_study_32,  &MdnsBrowserActivity::create},
-    {"PING",           &icon_study_32,  &PingActivity::create},
 #endif  // !SIMULATOR
     {"DNS LOOKUP", &icon_study_32, &DnsLookupActivity::create},
     {"WIFI CONNECT", &icon_study_32, &WifiConnectActivity::create},
+    {"PING", &icon_study_32, &PingActivity::create},
     {"CALCULATOR",     &icon_study_32,  &CalculatorActivity::create},
     {"CIPHER TOOLS",   &icon_study_32,  &CipherActivity::create},
     {"CLOCK",          &icon_study_32,  &ClockActivity::create},

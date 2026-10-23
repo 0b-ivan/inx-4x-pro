@@ -38,3 +38,8 @@ Hardwareeffekte und Funkinteroperabilität bleiben Device-Abnahmetests.
 - Der WiFi-Status kann über `CROSSPLAY_SIM_WIFI_CONNECTED=0|1` gesetzt werden.
 - Beide Activities werden real kompiliert; No-op-VTables entfernt.
 - Unit-, Wiring- und Buildtests vorhanden; kein SDL-UI-Smoke-Test.
+
+- Ping ist jetzt ebenfalls eine echte native Activity. Sie prüft wie auf dem
+  ESP32 **TCP-Port 80, nicht ICMP**; im Simulator werden allein
+  `example.test`, `gateway.test` und `localhost` als erreichbar gemeldet.
+  Alle anderen Ziele liefern Timeout, ohne ein Netzwerkpaket zu versenden.

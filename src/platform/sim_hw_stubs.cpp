@@ -25,7 +25,6 @@
 #include "../apps_local/mesh-chat/MeshChatActivity.h"
 #include "../apps_local/network-monitor/NetworkMonitorActivity.h"
 #include "../apps_local/packet-monitor/PacketMonitorActivity.h"
-#include "../apps_local/ping/PingActivity.h"
 #include "../apps_local/probe-sniffer/ProbeSnifferActivity.h"
 #include "../apps_local/tracker-detector/TrackerDetectorActivity.h"
 #include "../apps_local/wifi-test/WifiTestActivity.h"
@@ -54,7 +53,6 @@ HWSTUB_ACTIVITY(MdnsBrowserActivity)
 HWSTUB_ACTIVITY(MeshChatActivity)
 HWSTUB_ACTIVITY(NetworkMonitorActivity)
 HWSTUB_ACTIVITY(PacketMonitorActivity)
-HWSTUB_ACTIVITY(PingActivity)
 HWSTUB_ACTIVITY(ProbeSnifferActivity)
 HWSTUB_ACTIVITY(TrackerDetectorActivity)
 HWSTUB_ACTIVITY(WifiTestActivity)
