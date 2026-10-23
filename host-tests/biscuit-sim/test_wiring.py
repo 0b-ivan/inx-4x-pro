@@ -165,6 +165,44 @@ for rel in touch_footer_activities:
     assert "GUI.tappedHintButton(" not in content, f"{rel}: still using zero-height touch hitbox"
 
 
+# Touch-screen navigation hints belong to the Biscuit Activities only.
+# Shelf and original CrossPlay games/apps provide their own FreeInkUI touch
+# controls. A forced legacy footer overlays their last row (X4 Pro HW report).
+shelf_folder = (root / "src/apps_local/ShelfFolderActivity.cpp").read_text()
+assert "drawButtonHintsAlways(" not in shelf_folder, "Shelf folder paints footer over touch rows"
+assert "tappedAlwaysHintButton(" not in shelf_folder, "Shelf folder consumes Biscuit footer hitboxes"
+
+legacy_app_roots = (
+    "battleship", "checkers", "chess", "connectfour", "connections",
+    "dungeon", "forehead", "hackernews", "insider", "instapaper",
+    "jaipur", "knucklebones", "link", "minesweeper", "murdle",
+    "player", "sample", "seasalt", "solitaire", "study", "sudoku",
+    "tarot", "totp", "toybattle", "trivia", "wavelength",
+    "wifi-scanner", "xkcd", "yahtzee",
+)
+for folder in legacy_app_roots:
+    for path in (root / "src/apps_local" / folder).rglob("*.cpp"):
+        code = path.read_text()
+        assert "GUI.drawButtonHintsAlways(" not in code, (
+            f"{path.relative_to(root)}: forced Biscuit footer in a legacy screen"
+        )
+        assert "GUI.tappedAlwaysHintButton(" not in code, (
+            f"{path.relative_to(root)}: invisible forced-footer touch target"
+        )
+
+# Normal legacy hints must remain disabled on touch-capable boards in all
+# supported themes, while Biscuit's explicit 'Always' method stays available.
+for theme in (
+    "BaseTheme.cpp",
+    "lyra/LyraTheme.cpp",
+    "roundedraff/RoundedRaffTheme.cpp",
+):
+    code = (root / "src/components/themes" / theme).read_text()
+    normal_hint = code.index("::drawButtonHints(")
+    guard = code[normal_hint:normal_hint + 300]
+    assert "BoardConfig::hasTouch()" in guard, f"{theme}: touch hints no longer suppressed"
+
+
 workflow = (root / ".github/workflows/crossplay-ci.yml").read_text()
 assert 'bash scripts_local/biscuit_sim_smoke.sh' in workflow, "smoke test not gated by CI"
 assert 'test_visual_goldens.py .pio/biscuit-ui-smoke' in workflow, "real screenshot goldens must gate CI"
