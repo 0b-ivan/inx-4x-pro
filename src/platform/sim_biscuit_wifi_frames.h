@@ -61,7 +61,7 @@ inline std::vector<ProbeFrame> fingerprintFrames() {
   const uint8_t ios[6] = {0x02,0,0,0,0,0x41};
   const uint8_t android[6] = {0x06,0,0,0,0,0x42};
   const uint8_t windows[6] = {0x00,0x1b,0x21,0,0,0x43};
-  const uint8_t linux[6] = {0xb8,0x27,0xeb,0,0,0x44};
+  const uint8_t linuxDevice[6] = {0xb8,0x27,0xeb,0,0,0x44};
   const uint8_t unknown[6] = {0x10,0x22,0x33,0,0,0x45};
   auto beacon = makeProbe(ios, "IgnoreBeacon", -80);
   beacon.bytes[0] = 0x80; // not a probe request
@@ -74,7 +74,7 @@ inline std::vector<ProbeFrame> fingerprintFrames() {
     localIOS, localIOS,
     localAndroid, localAndroid, localAndroid, localAndroid,
     makeProbe(windows, "Lab-Windows", -48),
-    makeProbe(linux, "Lab-Linux", -71),
+    makeProbe(linuxDevice, "Lab-Linux", -71),
     makeProbe(unknown, "Lab-Unknown", -82),
     beacon, truncated
   };
