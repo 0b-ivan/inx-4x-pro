@@ -186,10 +186,10 @@ constexpr shelf::Item kApps[] = {
     {"BLE SCANNER",    &icon_nearby_32, &BleScannerActivity::create},
     {"BLE PROXIMITY",  &icon_nearby_32, &BleProximityActivity::create},
     {"BLE CONTACT",    &icon_nearby_32, &BleContactExchangeActivity::create},
+#endif  // !SIMULATOR
     {"HOST SCANNER",   &icon_study_32,  &HostScannerActivity::create},
     {"HTTP CLIENT",    &icon_study_32,  &HttpClientActivity::create},
     {"MDNS BROWSER",   &icon_study_32,  &MdnsBrowserActivity::create},
-#endif  // !SIMULATOR
     {"DNS LOOKUP", &icon_study_32, &DnsLookupActivity::create},
     {"WIFI CONNECT", &icon_study_32, &WifiConnectActivity::create},
     {"PING", &icon_study_32, &PingActivity::create},
