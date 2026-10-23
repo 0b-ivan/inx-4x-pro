@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -122,4 +122,37 @@ for app in ("HTTP_CLIENT", "MDNS_BROWSER"):
     )
     print(f"PASS {app}: Confirm changes rendered screen")
 PYUI
-echo "PASS biscuit-ui-smoke: 9 activities, 13 screenshots, 3 interactions and Host Scanner offline state"
+# The BLE fixture with two advertisements must render differently from an empty scan.
+ble_empty="$out/BLE_PROXIMITY_empty.bmp"
+ble_empty_log="$out/BLE_PROXIMITY_empty.log"
+if ! env CROSSPLAY_AUTOSTART="BLE PROXIMITY" \
+  CROSSPLAY_SIM_BLE_SCENARIO=empty \
+  CROSSPLAY_SIM_EPOCH=1704067200 \
+  CROSSPOINT_SIM_INPUT_SCRIPT="6000:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="4300:$ble_empty" \
+  LIBGL_ALWAYS_SOFTWARE=1 \
+  xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$ble_empty_log" 2>&1; then
+  echo "FAIL biscuit-ui-smoke: empty BLE Proximity simulator run"
+  tail -100 "$ble_empty_log"
+  exit 1
+fi
+grep -Fq "Autostart into BLE PROXIMITY" "$ble_empty_log" || {
+  echo "FAIL biscuit-ui-smoke: BLE Proximity empty autostart not confirmed"
+  exit 1
+}
+python3 - "$out/BLE_PROXIMITY.bmp" "$ble_empty" <<'PYBLE'
+from pathlib import Path
+import hashlib
+import struct
+import sys
+normal, empty = [Path(p) for p in sys.argv[1:]]
+for shot in (normal, empty):
+    data = shot.read_bytes()
+    assert data[:2] == b"BM" and len(data) > 1000, f"missing/invalid BMP {shot}"
+    assert tuple(map(abs, struct.unpack_from("<ii", data, 18))) == (480, 800), f"bad dimensions {shot}"
+assert hashlib.sha256(normal.read_bytes()).digest() != hashlib.sha256(empty.read_bytes()).digest(), \
+    "BLE advertisements and empty scan rendered identical images"
+print("PASS BLE fixture vs empty scan: UI state differs")
+PYBLE
+echo "PASS biscuit-ui-smoke: 10 activities, 15 screenshots, 3 interactions, BLE empty and Host Scanner offline states"

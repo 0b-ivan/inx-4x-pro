@@ -1,4 +1,5 @@
 #include "platform/sim_biscuit_network.h"
+#include "platform/sim_biscuit_ble.h"
 #include <cstdio>
 #include <cstdlib>
 static int checks = 0;
@@ -68,5 +69,18 @@ int main() {
   check(biscuit_sim::mdnsDiscover("_ssh._tcp").size() == 1, "mDNS SSH fixture");
   check(biscuit_sim::mdnsDiscover("_missing._tcp").empty(), "mDNS unknown type empty");
   check(biscuit_sim::mdnsDiscover("http").empty(), "mDNS exact service match");
+  unsetenv("CROSSPLAY_SIM_BLE_SCENARIO");
+  auto advertisements = biscuit_sim::bleAdvertisements();
+  check(advertisements.size() == 2, "BLE two deterministic advertisements");
+  check(std::string(advertisements[0].mac) == "02:00:00:00:00:11", "BLE stable synthetic MAC");
+  check(advertisements[0].rssi > advertisements[1].rssi, "BLE RSSI ranking");
+  setenv("CROSSPLAY_SIM_BLE_SCENARIO", "empty", 1);
+  check(biscuit_sim::bleAdvertisements().empty(), "BLE no-device scenario");
+  setenv("CROSSPLAY_SIM_BLE_SCENARIO", "timeout", 1);
+  check(biscuit_sim::bleAdvertisements().empty(), "BLE timeout scenario");
+  setenv("CROSSPLAY_SIM_BLE_SCENARIO", "weak", 1);
+  advertisements = biscuit_sim::bleAdvertisements();
+  check(advertisements.size() == 2 && advertisements[0].rssi == -93, "BLE weak-signal scenario");
+  unsetenv("CROSSPLAY_SIM_BLE_SCENARIO");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }
