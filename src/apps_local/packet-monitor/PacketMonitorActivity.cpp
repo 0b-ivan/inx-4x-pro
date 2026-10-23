@@ -18,6 +18,13 @@
 
 #include <string>
 
+#ifdef SIMULATOR
+// Native FreeRTOS shim lacks pdMS_TO_TICKS() and vSemaphoreDelete().
+#define PACKET_MONITOR_TICKS(ms) (ms)
+#else
+#define PACKET_MONITOR_TICKS(ms) pdMS_TO_TICKS(ms)
+#endif
+
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -76,7 +83,7 @@ void PacketMonitorActivity::onPacket(const uint8_t* buf, uint16_t len, int rssi)
   if (pcapRecording && pcapFileOpen) {
     if (captureMode == CAPTURE_EAPOL_ONLY && !isEapolPacket(buf, len)) return;
     if (isEapolPacket(buf, len)) eapolFound = true;
-    if (xSemaphoreTake(fileMux, pdMS_TO_TICKS(50)) == pdTRUE) {
+    if (xSemaphoreTake(fileMux, PACKET_MONITOR_TICKS(50)) == pdTRUE) {
       writePcapPacket(buf, len);
       xSemaphoreGive(fileMux);
     }
@@ -117,7 +124,9 @@ void PacketMonitorActivity::onExit() {
   stopPcapRecording();
   stopMonitor();
   if (fileMux) {
+#ifndef SIMULATOR
     vSemaphoreDelete(fileMux);
+#endif
     fileMux = nullptr;
   }
   Activity::onExit();
@@ -201,7 +210,7 @@ void PacketMonitorActivity::startPcapRecording() {
 
 void PacketMonitorActivity::stopPcapRecording() {
   pcapRecording = false;
-  if (fileMux && xSemaphoreTake(fileMux, pdMS_TO_TICKS(1000)) == pdTRUE) {
+  if (fileMux && xSemaphoreTake(fileMux, PACKET_MONITOR_TICKS(1000)) == pdTRUE) {
     if (pcapFileOpen) {
       pcapFile.flush();
       pcapFile.close();
