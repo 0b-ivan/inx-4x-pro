@@ -65,7 +65,9 @@ void ApClonerActivity::processScanResults() {
       ap.rssi = WiFi.RSSI(i);
       ap.channel = static_cast<uint8_t>(WiFi.channel(i));
       ap.encType = static_cast<uint8_t>(WiFi.encryptionType(i));
-      aps.push_back(std::move(ap));
+      // Restrict this build to self-labelled laboratory networks. Never
+      // imitate an arbitrary public or third-party access point.
+      if (ap.ssid.rfind("X4PRO-LAB-", 0) == 0) aps.push_back(std::move(ap));
     }
     std::sort(aps.begin(), aps.end(), [](const AP& a, const AP& b) { return a.rssi > b.rssi; });
   }
@@ -82,10 +84,24 @@ void ApClonerActivity::startClone(int apIndex) {
   if (apIndex < 0 || apIndex >= static_cast<int>(aps.size())) return;
 
   WiFi.scanDelete();
+  // Only reproduce a deliberately named X4PRO-LAB-* test network.
+  if (aps[apIndex].ssid.rfind("X4PRO-LAB-", 0) != 0) {
+    LOG_ERR("APLAB", "Refusing non-lab SSID");
+    return;
+  }
   clonedSsid = aps[apIndex].ssid;
   clonedChannel = aps[apIndex].channel;
+  if (clonedChannel < 1 || clonedChannel > 13) {
+    LOG_ERR("APLAB", "Unsupported AP channel: %u", clonedChannel);
+    return;
+  }
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(clonedSsid.c_str(), nullptr, clonedChannel, 0, 4);
+  if (!WiFi.softAP(clonedSsid.c_str(), nullptr, clonedChannel, 0, 4)) {
+    LOG_ERR("APLAB", "Test AP startup failed");
+    WiFi.mode(WIFI_STA);
+    requestUpdate();
+    return;
+  }
   cloneActive = true;
   cloneStartTime = millis();
   connectedClients = 0;
@@ -169,22 +185,27 @@ void ApClonerActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
         if (btn == 2 && !aps.empty()) { startClone(selectorIndex); return; }
         if (count > 0) {
           int touchRow = -1;
           const auto& m = UITheme::getInstance().getMetrics();
           const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
-          const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+          const int contentH = renderer.getScreenHeight() - contentTop - BaseMetrics::values.buttonHintsHeight - m.verticalSpacing;
           const int rowStep = GUI.getListRowStep(true);
           const int pageItems = std::max(1, contentH / rowStep);
           const int pageStart = (selectorIndex / pageItems) * pageItems;
           const int pageCount = std::min(pageItems, count - pageStart);
           const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
                                                 renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
-          if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
-            selectorIndex = pageStart + touchRow; requestUpdate();
+          if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < pageCount) {
+            selectorIndex = pageStart + touchRow;
+            if (rt == MappedInputManager::RowTouch::Tap) {
+              startClone(selectorIndex);
+            } else {
+              requestUpdate();
+            }
           }
         }
       }
@@ -206,7 +227,7 @@ void ApClonerActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) {
+      if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) {
         stopClone(); state = SELECT_AP; startScan(); requestUpdate();
       }
     }
@@ -226,7 +247,7 @@ void ApClonerActivity::render(RenderLock&&) {
 
   // ---- SCANNING ----
   if (state == SCANNING) {
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "AP Cloner");
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "AP Lab");
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Scanning...");
     renderer.displayBuffer();
     return;
@@ -236,13 +257,13 @@ void ApClonerActivity::render(RenderLock&&) {
   if (state == SELECT_AP) {
     char subtitle[32];
     snprintf(subtitle, sizeof(subtitle), "%d found", static_cast<int>(aps.size()));
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "AP Cloner", subtitle);
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "AP Lab", subtitle);
 
     const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+    const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - metrics.verticalSpacing;
 
     if (aps.empty()) {
-      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "No entries");
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "No X4PRO-LAB-* WiFi found");
     } else {
       GUI.drawList(
           renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(aps.size()), selectorIndex,
@@ -257,14 +278,14 @@ void ApClonerActivity::render(RenderLock&&) {
           });
     }
 
-    const auto labels = mappedInput.mapLabels("Back", "Clone", "^", "v");
+    const auto labels = mappedInput.mapLabels("Back", "Start Lab AP", "^", "v");
     GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
 
   // ---- CLONE_RUNNING ----
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "AP Cloner", "ACTIVE");
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "AP Lab", "ACTIVE");
 
   const int leftPad = metrics.contentSidePadding;
   int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + 16;
