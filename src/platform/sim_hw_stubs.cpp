@@ -18,7 +18,6 @@
 #include "../apps_local/crowd-density/CrowdDensityActivity.h"
 #include "../apps_local/deauth-detector/DeauthDetectorActivity.h"
 #include "../apps_local/device-fingerprinter/DeviceFingerprinterActivity.h"
-#include "../apps_local/dns-lookup/DnsLookupActivity.h"
 #include "../apps_local/fire/FireActivity.h"
 #include "../apps_local/host-scanner/HostScannerActivity.h"
 #include "../apps_local/http-client/HttpClientActivity.h"
@@ -29,7 +28,6 @@
 #include "../apps_local/ping/PingActivity.h"
 #include "../apps_local/probe-sniffer/ProbeSnifferActivity.h"
 #include "../apps_local/tracker-detector/TrackerDetectorActivity.h"
-#include "../apps_local/wifi-connect/WifiConnectActivity.h"
 #include "../apps_local/wifi-test/WifiTestActivity.h"
 
 #define HWSTUB_ACTIVITY(cls)                              \
@@ -49,7 +47,6 @@ HWSTUB_ACTIVITY(CrowdDensityActivity)
 DeauthDetectorActivity::~DeauthDetectorActivity() {}
 HWSTUB_ACTIVITY(DeauthDetectorActivity)
 HWSTUB_ACTIVITY(DeviceFingerprinterActivity)
-HWSTUB_ACTIVITY(DnsLookupActivity)
 HWSTUB_ACTIVITY(FireActivity)
 HWSTUB_ACTIVITY(HostScannerActivity)
 HWSTUB_ACTIVITY(HttpClientActivity)
@@ -60,7 +57,6 @@ HWSTUB_ACTIVITY(PacketMonitorActivity)
 HWSTUB_ACTIVITY(PingActivity)
 HWSTUB_ACTIVITY(ProbeSnifferActivity)
 HWSTUB_ACTIVITY(TrackerDetectorActivity)
-HWSTUB_ACTIVITY(WifiConnectActivity)
 HWSTUB_ACTIVITY(WifiTestActivity)
 
 #undef HWSTUB_ACTIVITY

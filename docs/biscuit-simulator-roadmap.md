@@ -27,3 +27,14 @@ dass die drei Apps nie wieder durch No-op-VTables ersetzt werden.
 
 **Tests dürfen nicht durch leere HAL-/Activity-Stubs grün werden.**
 Hardwareeffekte und Funkinteroperabilität bleiben Device-Abnahmetests.
+
+## Stand 2: virtuelles WLAN + DNS (Integration)
+
+- WiFi Connect verwendet die bestehende CrossPoint-Simulator-WLAN-Klasse,
+  einschließlich `CROSSPOINT_SIM_WIFI_CONNECT=fail|timeout|no-ssid`.
+- DNS Lookup verwendet rein lokale Resolver-Fixtures:
+  `example.test → 192.0.2.10`, `gateway.test → 192.0.2.1`,
+  `localhost → 127.0.0.1`. Andere Hosts schlagen kontrolliert fehl.
+- Der WiFi-Status kann über `CROSSPLAY_SIM_WIFI_CONNECTED=0|1` gesetzt werden.
+- Beide Activities werden real kompiliert; No-op-VTables entfernt.
+- Unit-, Wiring- und Buildtests vorhanden; kein SDL-UI-Smoke-Test.

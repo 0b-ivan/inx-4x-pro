@@ -14,6 +14,8 @@ for name, cls, path in (
     ("CLOCK", "ClockActivity", "clock/ClockActivity.cpp"),
     ("DEVICE INFO", "DeviceInfoActivity", "device-info/DeviceInfoActivity.cpp"),
     ("OTP GENERATOR", "OtpGeneratorActivity", "otp-generator/OtpGeneratorActivity.cpp"),
+    ("DNS LOOKUP", "DnsLookupActivity", "dns-lookup/DnsLookupActivity.cpp"),
+    ("WIFI CONNECT", "WifiConnectActivity", "wifi-connect/WifiConnectActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -23,5 +25,8 @@ for name, cls, path in (
     checks += 5
 assert "biscuit_sim::readClockUtc" in clock, "clock does not use simulated time"
 assert "simulated X4 Pro" in info, "device info reports false ESP metrics"
-checks += 2
+assert "snprintf(ipBuf" in info, "native String must not require toCharArray"
+dns = (root / "src/apps_local/dns-lookup/DnsLookupActivity.cpp").read_text()
+assert "biscuit_sim::resolveHost" in dns, "DNS must use isolated host resolver"
+checks += 4
 print(f"biscuit-sim wiring: {checks} checks, 0 failed")

@@ -5,6 +5,9 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
+#ifdef SIMULATOR
+#include "platform/sim_biscuit_network.h"
+#endif
 
 #include "MappedInputManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -39,7 +42,11 @@ void DnsLookupActivity::doResolve() {
   state = RESOLVING;
   requestUpdate();
 
+#ifdef SIMULATOR
+  if (!biscuit_sim::wifiConnected(WiFi.status() == WL_CONNECTED)) {
+#else
   if (WiFi.status() != WL_CONNECTED) {
+#endif
     resolutionFailed = true;
     state = RESULTS;
     requestUpdate();
@@ -48,7 +55,14 @@ void DnsLookupActivity::doResolve() {
 
   IPAddress ip;
   unsigned long start = millis();
+#ifdef SIMULATOR
+  uint8_t address[4] = {};
+  const bool resolved = biscuit_sim::resolveHost(hostname, address);
+  if (resolved) ip = IPAddress(address[0], address[1], address[2], address[3]);
+  int ret = resolved ? 1 : 0;
+#else
   int ret = WiFi.hostByName(hostname.c_str(), ip);
+#endif
   resolutionTimeMs = millis() - start;
 
   if (ret == 1) {

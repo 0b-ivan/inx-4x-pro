@@ -103,7 +103,7 @@ void DeviceInfoActivity::render(RenderLock&&) {
   {
     if (WiFi.status() == WL_CONNECTED) {
       char ipBuf[20];
-      WiFi.localIP().toString().toCharArray(ipBuf, sizeof(ipBuf));
+      snprintf(ipBuf, sizeof(ipBuf), "%s", WiFi.localIP().toString().c_str());
       snprintf(lines[n++], 80, "WiFi:      %s  %s", WiFi.SSID().c_str(), ipBuf);
     } else {
       snprintf(lines[n++], 80, "WiFi:      Off");

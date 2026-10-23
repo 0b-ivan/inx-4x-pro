@@ -46,6 +46,9 @@
 #include "dead-drop/DeadDropActivity.h"
 #include "bulletin-board/BulletinBoardActivity.h"
 #include "vehicle-finder/VehicleFinderActivity.h"
+// Real app bodies share the virtual WiFi stack and deterministic DNS fixture.
+#include "dns-lookup/DnsLookupActivity.h"
+#include "wifi-connect/WifiConnectActivity.h"
 #if !defined(SIMULATOR)  // Requires raw 802.11 promiscuous mode, BLE stack, or ESP-NOW
 #include "probe-sniffer/ProbeSnifferActivity.h"
 #include "crowd-density/CrowdDensityActivity.h"
@@ -64,12 +67,10 @@
 #include "ble-scanner/BleScannerActivity.h"
 #include "ble-proximity/BleProximityActivity.h"
 #include "ble-contact/BleContactExchangeActivity.h"
-#include "dns-lookup/DnsLookupActivity.h"
 #include "host-scanner/HostScannerActivity.h"
 #include "http-client/HttpClientActivity.h"
 #include "mdns-browser/MdnsBrowserActivity.h"
 #include "ping/PingActivity.h"
-#include "wifi-connect/WifiConnectActivity.h"
 #endif  // !SIMULATOR
 #include "calculator/CalculatorActivity.h"
 #include "cipher/CipherActivity.h"
@@ -185,13 +186,13 @@ constexpr shelf::Item kApps[] = {
     {"BLE SCANNER",    &icon_nearby_32, &BleScannerActivity::create},
     {"BLE PROXIMITY",  &icon_nearby_32, &BleProximityActivity::create},
     {"BLE CONTACT",    &icon_nearby_32, &BleContactExchangeActivity::create},
-    {"DNS LOOKUP",     &icon_study_32,  &DnsLookupActivity::create},
     {"HOST SCANNER",   &icon_study_32,  &HostScannerActivity::create},
     {"HTTP CLIENT",    &icon_study_32,  &HttpClientActivity::create},
     {"MDNS BROWSER",   &icon_study_32,  &MdnsBrowserActivity::create},
     {"PING",           &icon_study_32,  &PingActivity::create},
-    {"WIFI CONNECT",   &icon_study_32,  &WifiConnectActivity::create},
 #endif  // !SIMULATOR
+    {"DNS LOOKUP", &icon_study_32, &DnsLookupActivity::create},
+    {"WIFI CONNECT", &icon_study_32, &WifiConnectActivity::create},
     {"CALCULATOR",     &icon_study_32,  &CalculatorActivity::create},
     {"CIPHER TOOLS",   &icon_study_32,  &CipherActivity::create},
     {"CLOCK",          &icon_study_32,  &ClockActivity::create},
