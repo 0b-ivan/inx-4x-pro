@@ -129,8 +129,9 @@ assert 'CROSSPOINT_SIM_INPUT_SCRIPT' in smoke_script, "CI smoke must inject inpu
 assert 'TAP:100,210,120' in smoke_script, "X4 Pro native touch row hit test must be covered"
 assert 'TAP:180,780,120' in smoke_script, "X4 Pro on-screen Select hint must be tested"
 assert 'PROBE:touch-detail:3' in smoke_script, "X4 Pro touch path must prove real Activity navigation"
-assert 'script="5300:ENTER:650;8500:QUIT"' in smoke_script, "Clock mode-switch must happen after stable golden"
-assert 'shots="4300:$frame;7200:$out/${name}_stopwatch.bmp"' in smoke_script, "Clock golden must show actual Clock after boot, before Stopwatch"
+assert 'script="8500:ENTER:650;11800:QUIT"' in smoke_script, "Clock mode-switch must happen after stable golden"
+assert 'shots="6500:$frame;10400:$out/${name}_stopwatch.bmp"' in smoke_script, "Clock golden must show actual Clock after boot, before Stopwatch"
+assert 'Entering activity: Clock' in smoke_script, "Clock must reject boot-splash screenshots"
 assert 'TAP:420,780,120' in smoke_script and 'MESH:touch-relay:2:2' in smoke_script, "Mesh Chat X4 Pro touch E2E missing"
 assert 'CLOCK:mode:stopwatch' in smoke_script, "Clock long-hold mode transition must be checked"
 
