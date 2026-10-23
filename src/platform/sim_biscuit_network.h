@@ -27,6 +27,15 @@ inline bool resolveHost(const std::string& host, uint8_t (&ip)[4]) {
 }
 // This probe never opens a socket or sends radio frames. Non-test
 // destinations and non-HTTP ports are deliberately unreachable.
+// 192.0.2.0/27 is reserved documentation space. Never probe host sockets.
+inline uint32_t hostScanIp(unsigned int lastOctet) {
+  return lastOctet >= 1 && lastOctet <= 30
+             ? 0x000200C0U | (static_cast<uint32_t>(lastOctet) << 24)
+             : 0;
+}
+inline bool hostScanPortOpen(uint32_t ip, uint16_t port) {
+  return port == 80 && (ip == hostScanIp(1) || ip == hostScanIp(20));
+}
 inline bool tcpProbe(const std::string& host, uint16_t port) {
   return port == 80 && (host == "example.test" || host == "gateway.test" || host == "localhost");
 }
