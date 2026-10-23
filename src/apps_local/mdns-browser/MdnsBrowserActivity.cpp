@@ -1,7 +1,11 @@
 #include "MdnsBrowserActivity.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <ESPmDNS.h>
+#else
+#include "platform/sim_biscuit_network.h"
+#endif
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -65,7 +69,11 @@ static bool parseServiceType(const char* full, char* typeOut, size_t typeLen,
 void MdnsBrowserActivity::onEnter() {
   Activity::onEnter();
 
+  #ifdef SIMULATOR
+  if (biscuit_sim::wifiConnected(WiFi.status() == WL_CONNECTED)) {
+#else
   if (WiFi.status() == WL_CONNECTED) {
+#endif
     state = SERVICE_SELECT;
     selectorIndex = 0;
     requestUpdate();
@@ -76,7 +84,11 @@ void MdnsBrowserActivity::onEnter() {
     startActivityForResult(
         std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
         [this](const ActivityResult& result) {
+          #ifdef SIMULATOR
+          if (!result.isCancelled && biscuit_sim::wifiConnected(WiFi.status() == WL_CONNECTED)) {
+#else
           if (!result.isCancelled && WiFi.status() == WL_CONNECTED) {
+#endif
             state = SERVICE_SELECT;
             selectorIndex = 0;
           } else {
@@ -91,7 +103,9 @@ void MdnsBrowserActivity::onEnter() {
 void MdnsBrowserActivity::onExit() {
   Activity::onExit();
   if (mdnsStarted) {
+#ifndef SIMULATOR
     MDNS.end();
+#endif
     mdnsStarted = false;
   }
   // Do NOT call RADIO.shutdown() — WiFi was pre-connected or managed externally.
@@ -107,6 +121,24 @@ void MdnsBrowserActivity::queryService(const char* serviceType) {
     return;
   }
 
+#ifdef SIMULATOR
+  const auto fixtures = biscuit_sim::mdnsDiscover(serviceType);
+  for (const auto& fixture : fixtures) {
+    if (results.size() >= 50) break;
+    bool duplicate = false;
+    for (const auto& existing : results) {
+      if (existing.ip == fixture.ip && existing.port == fixture.port) { duplicate = true; break; }
+    }
+    if (duplicate) continue;
+    ServiceResult item;
+    item.hostname = fixture.host;
+    item.ip = fixture.ip;
+    item.port = fixture.port;
+    item.serviceType = serviceType;
+    item.instanceName = fixture.instance;
+    results.push_back(std::move(item));
+  }
+#else
   int n = MDNS.queryService(typeStr, protoStr);
   LOG_DBG("MDNS", "queryService(%s, %s) => %d", typeStr, protoStr, n);
 
@@ -131,6 +163,7 @@ void MdnsBrowserActivity::queryService(const char* serviceType) {
     sr.instanceName = MDNS.instanceName(i).c_str();
     results.push_back(std::move(sr));
   }
+#endif
 }
 
 void MdnsBrowserActivity::startDiscovery(int serviceIdx) {
@@ -140,7 +173,9 @@ void MdnsBrowserActivity::startDiscovery(int serviceIdx) {
   scanServiceIdx = serviceIdx;
 
   if (!mdnsStarted) {
+#ifndef SIMULATOR
     MDNS.begin("biscuit");
+#endif
     mdnsStarted = true;
   }
 
@@ -157,7 +192,9 @@ void MdnsBrowserActivity::startDiscoveryAll() {
   scanAllServices = true;
 
   if (!mdnsStarted) {
+#ifndef SIMULATOR
     MDNS.begin("biscuit");
+#endif
     mdnsStarted = true;
   }
 
