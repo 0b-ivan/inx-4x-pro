@@ -3,7 +3,8 @@
 // Shelf.cpp includes their headers unconditionally, so the vtables must exist
 // somewhere — this is that somewhere.
 //
-// Activities that can now simulate (WiFi scan, softAP, display-only) are NOT
+// Activities that can now simulate (WiFi scan, softAP, Clock, Device Info,
+// OTP Generator and display-only apps) are NOT
 // listed here — their real .cpp files compile in the simulator build.
 #ifdef SIMULATOR
 
@@ -14,11 +15,9 @@
 #include "../apps_local/ble-proximity/BleProximityActivity.h"
 #include "../apps_local/ble-scanner/BleScannerActivity.h"
 #include "../apps_local/ble-spam/BleSpamActivity.h"
-#include "../apps_local/clock/ClockActivity.h"
 #include "../apps_local/crowd-density/CrowdDensityActivity.h"
 #include "../apps_local/deauth-detector/DeauthDetectorActivity.h"
 #include "../apps_local/device-fingerprinter/DeviceFingerprinterActivity.h"
-#include "../apps_local/device-info/DeviceInfoActivity.h"
 #include "../apps_local/dns-lookup/DnsLookupActivity.h"
 #include "../apps_local/fire/FireActivity.h"
 #include "../apps_local/host-scanner/HostScannerActivity.h"
@@ -26,7 +25,6 @@
 #include "../apps_local/mdns-browser/MdnsBrowserActivity.h"
 #include "../apps_local/mesh-chat/MeshChatActivity.h"
 #include "../apps_local/network-monitor/NetworkMonitorActivity.h"
-#include "../apps_local/otp-generator/OtpGeneratorActivity.h"
 #include "../apps_local/packet-monitor/PacketMonitorActivity.h"
 #include "../apps_local/ping/PingActivity.h"
 #include "../apps_local/probe-sniffer/ProbeSnifferActivity.h"
@@ -47,12 +45,10 @@ HWSTUB_ACTIVITY(BleKeyboardActivity)
 HWSTUB_ACTIVITY(BleProximityActivity)
 HWSTUB_ACTIVITY(BleScannerActivity)
 HWSTUB_ACTIVITY(BleSpamActivity)
-HWSTUB_ACTIVITY(ClockActivity)
 HWSTUB_ACTIVITY(CrowdDensityActivity)
 DeauthDetectorActivity::~DeauthDetectorActivity() {}
 HWSTUB_ACTIVITY(DeauthDetectorActivity)
 HWSTUB_ACTIVITY(DeviceFingerprinterActivity)
-HWSTUB_ACTIVITY(DeviceInfoActivity)
 HWSTUB_ACTIVITY(DnsLookupActivity)
 HWSTUB_ACTIVITY(FireActivity)
 HWSTUB_ACTIVITY(HostScannerActivity)
@@ -60,7 +56,6 @@ HWSTUB_ACTIVITY(HttpClientActivity)
 HWSTUB_ACTIVITY(MdnsBrowserActivity)
 HWSTUB_ACTIVITY(MeshChatActivity)
 HWSTUB_ACTIVITY(NetworkMonitorActivity)
-HWSTUB_ACTIVITY(OtpGeneratorActivity)
 HWSTUB_ACTIVITY(PacketMonitorActivity)
 HWSTUB_ACTIVITY(PingActivity)
 HWSTUB_ACTIVITY(ProbeSnifferActivity)

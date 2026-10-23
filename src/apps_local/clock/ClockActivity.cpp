@@ -6,11 +6,24 @@
 #include <Logging.h>
 #include <WiFi.h>
 #include <time.h>
+#ifdef SIMULATOR
+#include "platform/sim_biscuit_clock.h"
+#endif
 
 #include "MappedInputManager.h"
 #include "../../activities/network/WifiSelectionActivity.h"
 #include "../../components/UITheme.h"
 #include "fontIds.h"
+
+namespace {
+bool readClockTime(struct tm* timeinfo) {
+#ifdef SIMULATOR
+  return biscuit_sim::readClockUtc(timeinfo);
+#else
+  return getLocalTime(timeinfo);
+#endif
+}
+}  // namespace
 
 void ClockActivity::onEnter() {
   Activity::onEnter();
@@ -42,6 +55,15 @@ void ClockActivity::onEnter() {
 void ClockActivity::onExit() { Activity::onExit(); }
 
 void ClockActivity::ntpSync() {
+#ifdef SIMULATOR
+  // Virtual clock: never connect to external NTP or open the WiFi pairing UI.
+  // An explicit CROSSPLAY_SIM_EPOCH makes snapshots deterministic.
+  struct tm timeinfo {};
+  ntpSynced = readClockTime(&timeinfo);
+  ntpSyncFailed = !ntpSynced;
+  ntpLastUpdateMs = millis();
+  requestUpdate();
+#else
   if (WiFi.status() != WL_CONNECTED) {
     startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, true),
                            [this](const ActivityResult& result) {
@@ -72,6 +94,7 @@ void ClockActivity::ntpSync() {
   }
   ntpLastUpdateMs = millis();
   requestUpdate();
+#endif
 }
 
 const char* ClockActivity::dayOfWeekName(int wday) {
@@ -376,7 +399,7 @@ void ClockActivity::renderNtpClock() {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_SYNCING_NTP));
   } else {
     struct tm timeinfo;
-    if (getLocalTime(&timeinfo)) {
+    if (readClockTime(&timeinfo)) {
       int y = pageHeight / 2 - 60;
 
       renderer.drawCenteredText(UI_10_FONT_ID, y, dayOfWeekName(timeinfo.tm_wday));

@@ -200,17 +200,11 @@ constexpr shelf::Item kApps[] = {
 #endif  // !SIMULATOR
     {"CALCULATOR",     &icon_study_32,  &CalculatorActivity::create},
     {"CIPHER TOOLS",   &icon_study_32,  &CipherActivity::create},
-#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
     {"CLOCK",          &icon_study_32,  &ClockActivity::create},
-#endif  // !SIMULATOR
     {"COUNTDOWN",      &icon_study_32,  &CountdownActivity::create},
-#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
     {"DEVICE INFO",    &icon_study_32,  &DeviceInfoActivity::create},
-#endif  // !SIMULATOR
     {"MORSE CODE",     &icon_study_32,  &MorseCodeActivity::create},
-#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
     {"OTP GENERATOR",  &icon_study_32,  &OtpGeneratorActivity::create},
-#endif  // !SIMULATOR
     {"PASSWORD MANAGER", &icon_study_32, &PasswordManagerActivity::create},
     {"QR GENERATOR",   &icon_study_32,  &QrGeneratorActivity::create},
     {"SD FILE BROWSER", &icon_study_32, &SdFileBrowserActivity::create},
