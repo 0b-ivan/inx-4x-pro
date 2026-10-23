@@ -284,5 +284,14 @@ int main() {
         "Network Monitor source/BSSID grouping fixtures");
   std::set<std::string> rogueNetworks{"SimLab", "SimLab", "GuestLab"};
   check(rogueNetworks.size()==2, "Network Monitor grouping includes duplicate SSID");
+  for (int i = 0; i < 6; ++i) {
+    const auto packet = biscuit_sim::blePreview(i, 17);
+    check(packet.family == i && packet.sequence == 17,
+          "offline BLE preview carries deterministic mode and sequence");
+    check(packet.bytes.find("OFFLINE-SIM:") == 0,
+          "BLE preview is deliberately not wire-compatible");
+    check(biscuit_sim::blePreview(i, 17).bytes == packet.bytes,
+          "BLE preview is repeatable with no entropy source");
+  }
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }

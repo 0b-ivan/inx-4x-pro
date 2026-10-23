@@ -8,8 +8,6 @@
 // listed here — their real .cpp files compile in the simulator build.
 #ifdef SIMULATOR
 
-#include "../apps_local/airtag-test/AirTagTestActivity.h"
-#include "../apps_local/ble-beacon/BleBeaconActivity.h"
 #include "../apps_local/ble-contact/BleContactExchangeActivity.h"
 #include "../apps_local/ble-keyboard/BleKeyboardActivity.h"
 #include "../apps_local/ble-proximity/BleProximityActivity.h"
@@ -28,8 +26,6 @@
   void cls::loop() {}                                     \
   void cls::render(RenderLock&&) {}
 
-HWSTUB_ACTIVITY(AirTagTestActivity)
-HWSTUB_ACTIVITY(BleBeaconActivity)
 HWSTUB_ACTIVITY(BleKeyboardActivity)
 HWSTUB_ACTIVITY(BleSpamActivity)
 HWSTUB_ACTIVITY(FireActivity)

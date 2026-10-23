@@ -60,6 +60,8 @@
 #include "deauth-detector/DeauthDetectorActivity.h"
 #include "packet-monitor/PacketMonitorActivity.h"
 #include "network-monitor/NetworkMonitorActivity.h"
+#include "ble-beacon/BleBeaconActivity.h"
+#include "airtag-test/AirTagTestActivity.h"
 #include "host-scanner/HostScannerActivity.h"
 #include "http-client/HttpClientActivity.h"
 #include "mdns-browser/MdnsBrowserActivity.h"
@@ -67,8 +69,6 @@
 #include "ble-spam/BleSpamActivity.h"
 #include "wifi-test/WifiTestActivity.h"
 #include "fire/FireActivity.h"
-#include "airtag-test/AirTagTestActivity.h"
-#include "ble-beacon/BleBeaconActivity.h"
 #include "ble-keyboard/BleKeyboardActivity.h"
 #include "mesh-chat/MeshChatActivity.h"
 #endif  // !SIMULATOR
@@ -172,8 +172,6 @@ constexpr shelf::Item kApps[] = {
     {"BLE SPAM", &icon_nearby_32, &BleSpamActivity::create},
     {"WIFI DEAUTH", &icon_minesweeper_32, &WifiTestActivity::create},
     {"FIRE", &icon_minesweeper_32, &FireActivity::create},
-    {"AIRTAG SPOOF", &icon_nearby_32, &AirTagTestActivity::create},
-    {"BLE BEACON", &icon_nearby_32, &BleBeaconActivity::create},
     {"BLE KEYBOARD", &icon_nearby_32, &BleKeyboardActivity::create},
     {"MESH CHAT", &icon_study_32, &MeshChatActivity::create},
 #endif  // !SIMULATOR
@@ -187,6 +185,8 @@ constexpr shelf::Item kApps[] = {
     {"DEAUTH DETECTOR", &icon_minesweeper_32, &DeauthDetectorActivity::create},
     {"PACKET MONITOR", &icon_study_32, &PacketMonitorActivity::create},
     {"NETWORK MONITOR", &icon_study_32, &NetworkMonitorActivity::create},
+    {"BLE BEACON", &icon_nearby_32, &BleBeaconActivity::create},
+    {"AIRTAG SPOOF", &icon_nearby_32, &AirTagTestActivity::create},
     {"HOST SCANNER",   &icon_study_32,  &HostScannerActivity::create},
     {"HTTP CLIENT",    &icon_study_32,  &HttpClientActivity::create},
     {"MDNS BROWSER",   &icon_study_32,  &MdnsBrowserActivity::create},

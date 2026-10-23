@@ -30,6 +30,8 @@ for name, cls, path in (
     ("DEAUTH DETECTOR", "DeauthDetectorActivity", "deauth-detector/DeauthDetectorActivity.cpp"),
     ("PACKET MONITOR", "PacketMonitorActivity", "packet-monitor/PacketMonitorActivity.cpp"),
     ("NETWORK MONITOR", "NetworkMonitorActivity", "network-monitor/NetworkMonitorActivity.cpp"),
+    ("BLE BEACON", "BleBeaconActivity", "ble-beacon/BleBeaconActivity.cpp"),
+    ("AIRTAG SPOOF", "AirTagTestActivity", "airtag-test/AirTagTestActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -95,6 +97,13 @@ assert "biscuit_sim::deauthMonitorFrames()" in netmon, "Network Monitor must con
 assert "onFrame(frame.bytes.data()" in netmon, "Network Monitor must execute original event grouping"
 assert "networkSimTrace" in netmon and "#ifndef SIMULATOR" in netmon, "Network Monitor must isolate radio calls"
 assert "analyzeGroups()" in netmon and "rogue-results" in netmon, "Network Monitor must exercise rogue AP grouping"
+for filename, trace in (
+    ("ble-beacon/BleBeaconActivity.cpp", "beaconSimTrace"),
+    ("airtag-test/AirTagTestActivity.cpp", "airtagSimTrace"),
+):
+    code = (root / "src/apps_local" / filename).read_text()
+    assert "biscuit_sim::blePreview(" in code, f"{filename}: no non-radio preview packet"
+    assert trace in code and "#ifndef SIMULATOR" in code, f"{filename}: radio isolation missing"
 smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
 assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
 assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"

@@ -2,15 +2,15 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **19 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **21 echte Biscuit-Activities** aus:
 
 | Gruppe | Activities |
 | --- | --- |
 | Offline/System | CLOCK, DEVICE INFO, OTP GENERATOR |
 | WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT, DEAUTH DETECTOR, PACKET MONITOR, NETWORK MONITOR |
-| BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT |
+| BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT, BLE BEACON, AIRTAG SPOOF |
 
-Die ursprünglichen No-op-VTables der neunzehn Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der einundzwanzig Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
@@ -54,7 +54,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller neunzehn Apps
+- Autostart und nichtleere Screenshots aller einundzwanzig Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -221,3 +221,18 @@ sowie leere Scans und Radio-Cleanup. Im nativen Build laufen weder
 Monitor-Modus noch echte WLAN-Scans.
 
 Diese Erweiterung bedarf noch einer vollständig grünen CI-Abnahme.
+
+## Offline-BLE-Advertising-Previews
+
+`BLE BEACON` und `AIRTAG SPOOF` führen im nativen Simulator ihre echten
+Menü-, Auswahl-, Intervall-, Zähler-, Abbruch- und Anzeigezustände aus.
+Statt funkfähiger oder markentreuer Advertising-Daten benutzen beide den
+explizit nicht sendefähigen Test-Payload `OFFLINE-SIM:<mode>:<sequence>`.
+Die Testdaten werden nur im Arbeitsspeicher erzeugt und ausschließlich in
+Status-/Screenshot-Regressionsprüfungen verwendet. Die AirTag-MAC-Rotation
+ist im Simulator auf zwei Sekunden beschleunigt, damit sie ohne Wartezeit
+geprüft werden kann; Firmware-Timing bleibt unverändert.
+
+**Kein BLE-Funkverkehr, kein Replay, keine reale Apple-/Google-/Samsung-Identität.**
+Die reale drahtlose Interoperabilität wird damit nicht geprüft. Die beiden
+Integrationen benötigen noch einen vollständig grünen neuen CI-Lauf.

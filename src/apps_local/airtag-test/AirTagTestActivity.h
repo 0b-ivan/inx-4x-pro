@@ -42,7 +42,11 @@ class AirTagTestActivity final : public Activity {
   unsigned long lastRotateTime = 0;
   unsigned long lastAdvTime = 0;
 
+#ifdef SIMULATOR
+  static constexpr unsigned long ROTATE_INTERVAL_MS = 2000;
+#else
   static constexpr unsigned long ROTATE_INTERVAL_MS = 30000;
+#endif
   static constexpr unsigned long ADV_INTERVAL_MS = 1000;
 
   BLEAdvertising* pAdvertising = nullptr;

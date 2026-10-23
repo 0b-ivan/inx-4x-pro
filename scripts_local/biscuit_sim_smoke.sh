@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR" "BLE BEACON" "AIRTAG SPOOF")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,10 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "BLE BEACON" ]; then
+    script="1900:ENTER:100;4700:BACK:100;5800:BACK:100;6900:QUIT"
+  elif [ "$app" = "AIRTAG SPOOF" ]; then
+    script="1900:DOWN:100;2400:ENTER:100;5500:BACK:100;6400:BACK:100;7500:QUIT"
   elif [ "$app" = "NETWORK MONITOR" ]; then
     script="2400:ENTER:100;3300:BACK:100;4200:BACK:100;5500:QUIT"
   elif [ "$app" = "PACKET MONITOR" ]; then
@@ -45,7 +49,11 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "NETWORK MONITOR" ]; then
+  if [ "$app" = "BLE BEACON" ]; then
+    shots="1600:$out/${name}_menu.bmp;4200:$out/${name}_advertising.bmp;5400:$out/${name}_stopped.bmp;6300:$frame"
+  elif [ "$app" = "AIRTAG SPOOF" ]; then
+    shots="1700:$out/${name}_menu.bmp;3700:$out/${name}_active.bmp;5100:$out/${name}_rotated.bmp;6000:$frame"
+  elif [ "$app" = "NETWORK MONITOR" ]; then
     shots="1800:$out/${name}_monitor.bmp;2800:$out/${name}_detail.bmp;3900:$out/${name}_back.bmp;5000:$frame"
   elif [ "$app" = "PACKET MONITOR" ]; then
     shots="1600:$out/${name}_initial.bmp;3500:$out/${name}_stats.bmp;5200:$frame"
@@ -738,6 +746,37 @@ grep -Fq "NETWORK:processed:0:0" "$empty_log" || {
 grep -Fq "NETWORK:radio-off:0:0" "$empty_log" || {
   echo "FAIL Network Monitor empty scenario leaked radio"; exit 1
 }
-echo "PASS biscuit-ui-smoke: 19 activities, Network Monitor frame/rogue/empty regression"
+# Simulated BLE advertising flows: no brand impersonation and no host radio.
+python3 - <<'PYBLEADV'
+from pathlib import Path
+import hashlib,struct,re
+root=Path(".pio/biscuit-ui-smoke")
+checks={
+  "BLE_BEACON":("BLE_BEACON_menu.bmp","BLE_BEACON_advertising.bmp",
+                 "BLE_BEACON_stopped.bmp","BLE_BEACON.bmp"),
+  "AIRTAG_SPOOF":("AIRTAG_SPOOF_menu.bmp","AIRTAG_SPOOF_active.bmp",
+                  "AIRTAG_SPOOF_rotated.bmp","AIRTAG_SPOOF.bmp"),
+}
+for app,names in checks.items():
+    digests=[]
+    for name in names:
+        data=(root/name).read_bytes()
+        assert data[:2]==b"BM" and len(data)>1000, f"invalid {name}"
+        assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+        digests.append(hashlib.sha256(data).digest())
+    assert digests[0]!=digests[1] and digests[1]!=digests[2], (
+        f"{app} did not change UI on start/stop")
+    log=(root/(app+".log")).read_text(errors="replace")
+    prefix="BLE_BEACON" if app=="BLE_BEACON" else "AIRTAG"
+    assert re.search(rf"{prefix}:start:0:",log), f"missing start for {app}"
+    assert re.search(rf"{prefix}:adv:[1-9][0-9]*:",log), f"missing synthetic preview for {app}"
+    assert re.search(rf"{prefix}:radio-off:[0-9]+:",log), f"radio cleanup missing for {app}"
+    if app=="AIRTAG_SPOOF":
+        assert re.search(r"AIRTAG:rotated:[0-9]+:1",log), "virtual MAC rotation missing"
+    else:
+        assert re.search(r"BLE_BEACON:stop:[1-9][0-9]*:",log), "BLE beacon abort missing"
+print("PASS BLE advertising preview modes, MAC rotation, cancel and radio cleanup")
+PYBLEADV
+echo "PASS biscuit-ui-smoke: 21 activities, BLE Beacon/AirTag virtual preview and prior regressions"
 
 

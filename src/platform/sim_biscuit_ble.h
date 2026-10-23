@@ -116,5 +116,18 @@ inline std::vector<BleTrackerFrame> bleTrackerFrames() {
     {"02:00:00:00:00:54", -90, std::string("\x01\x00", 2), ""} // ignored
   };
 }
+
+// Deliberately non-wire-compatible demo payload. Never emit as BLE adverts.
+// Mode transitions can be tested without impersonating a real device.
+struct SimBlePreview {
+  int family;
+  uint32_t sequence;
+  std::string bytes;
+};
+inline SimBlePreview blePreview(int family, uint32_t sequence) {
+  const auto label = std::string("OFFLINE-SIM:") + std::to_string(family) +
+                     ":" + std::to_string(sequence);
+  return {family, sequence, label};
+}
 }  // namespace biscuit_sim
 #endif
