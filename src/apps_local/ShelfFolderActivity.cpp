@@ -245,7 +245,7 @@ void ShelfFolderActivity::render(RenderLock&&) {
   interactionsReady = true;
   toybox::reportOverflow(interactions, self.title);
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  // The shelf is entirely touch-driven; its page marks and rows already
+  // provide navigation. Never paint a persistent Biscuit-style footer here.
   renderer.displayBuffer();
 }
