@@ -62,5 +62,11 @@ int main() {
   check(response.status < 0, "no public HTTP connection");
   response = biscuit_sim::httpRequest("GET", "http://example.test.evil/ok", "");
   check(response.status < 0, "HTTP fixture hostname must match exactly");
+  auto mdns = biscuit_sim::mdnsDiscover("_http._tcp");
+  check(mdns.size() == 2, "mDNS HTTP service fixtures");
+  check(mdns[0].port == 80 && std::string(mdns[0].ip) == "192.0.2.1", "mDNS gateway fixture");
+  check(biscuit_sim::mdnsDiscover("_ssh._tcp").size() == 1, "mDNS SSH fixture");
+  check(biscuit_sim::mdnsDiscover("_missing._tcp").empty(), "mDNS unknown type empty");
+  check(biscuit_sim::mdnsDiscover("http").empty(), "mDNS exact service match");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }
