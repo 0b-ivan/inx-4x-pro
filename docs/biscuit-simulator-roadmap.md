@@ -1,5 +1,42 @@
 # Biscuit im X4-Pro-Simulator – Integrationsplan
 
+## Hardwarebefund: fünf weitere Biscuit-Activities (24.10.2026)
+
+Auf realem X4 Pro als nicht funktionsfähig gemeldet: **AP Clone, Captive
+Portal, Bulletin Board, Dead Drop, Wardriving**. Diese waren nicht Teil der
+ursprünglichen 26-Activity-Smoke-Matrix.
+
+**Gemeinsamer GT911-Fehler:** Die fünf Activities zeichneten
+`drawButtonHintsAlways()`, lasen Touch-Koordinaten aber mit
+`tappedHintButton()`. Letztere hat auf Touch-Hardware wegen
+der absichtlich nullhohen normalen Hint-Leiste keine Trefferzone. Dies ist
+für die fünf Activities auf `tappedAlwaysHintButton()` umgestellt;
+für die Listengeometrie werden 40 px der expliziten Leiste reserviert.
+
+- **Bulletin Board:** Start/Stop und Timer-Zeilen antippbar; AP-Start wird
+  geprüft; Server/Radio werden vor der Developer-Mode-Freigabe beendet.
+  Clients öffnen die Seite manuell über `http://192.168.4.1/`.
+- **Dead Drop:** gleiche GT911-Korrektur, Upload-Verzeichnis mit
+  übergeordnetem Verzeichnis; AP-Start wird geprüft.
+  Clients öffnen ebenfalls `http://192.168.4.1/`.
+- **Wardriving:** Start/Stop per Touch; ausstehende WLAN-Scans werden
+  explizit verfolgt, um Ergebnisse nicht mehrfach zu verarbeiten. CSV
+  wird unter `/crossplay/logs/` gespeichert; keine GPS-Daten.
+- **AP Clone:** sicherer **AP Lab**-Modus nur für vorher ausdrücklich
+  `X4PRO-LAB-*` genannte Testnetze, keine Nachahmung beliebiger
+  SSIDs. Laborkanal und AP-Start überprüft.
+- **Captive Portal:** Passwort-/Login-Capture und fremde Vorlagen entfallen;
+  die Activity bietet stattdessen einen lokalen Test-Hotspot
+  `X4PRO-PORTAL` mit einer Landingpage ohne Dateneingabe.
+
+Automatisierte Prüfung: ursprüngliche 26 plus **5 gesonderte UI-/Lifecycle-
+Smoke-Runs** im SDL-Simulator. Das ist ausdrücklich kein Nachweis für
+echte WLAN-Funkstrecken, reale HTTP-Zugriffe, SD-I/O oder GT911-Hardware.
+
+**Hardware-Abnahme offen:** GT911-Taps, Start/Stop, AP/Client-Verbindung,
+`192.168.4.1`, Bulletin-Post und Dead-Drop-Upload/Download,
+asynchrone Wardriving-Scans und CSV-Speicherung.
+
 ## X4-Pro-Hardwareabnahme: Touch-Footer nur in Biscuit (24.10.2026)
 
 Ein Gerätefoto zeigte im Shelf eine über den unteren Listeneinträgen
