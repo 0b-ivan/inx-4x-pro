@@ -55,11 +55,11 @@
 #include "ble-contact/BleContactExchangeActivity.h"
 #include "tracker-detector/TrackerDetectorActivity.h"
 #include "probe-sniffer/ProbeSnifferActivity.h"
+#include "crowd-density/CrowdDensityActivity.h"
 #include "host-scanner/HostScannerActivity.h"
 #include "http-client/HttpClientActivity.h"
 #include "mdns-browser/MdnsBrowserActivity.h"
 #if !defined(SIMULATOR)  // Requires raw 802.11 promiscuous mode, BLE stack, or ESP-NOW
-#include "crowd-density/CrowdDensityActivity.h"
 #include "deauth-detector/DeauthDetectorActivity.h"
 #include "packet-monitor/PacketMonitorActivity.h"
 #include "network-monitor/NetworkMonitorActivity.h"
@@ -169,7 +169,6 @@ constexpr shelf::Item kApps[] = {
     {"KEY COPIER", &icon_study_32, &KeyCopierActivity::create},
     {"USB HID", &icon_study_32, &UsbHidActivity::create},
 #if !defined(SIMULATOR)  // Requires raw 802.11 promiscuous mode or BLE/ESP-NOW hardware
-    {"CROWD DENSITY", &icon_nearby_32, &CrowdDensityActivity::create},
     {"DEAUTH DETECTOR", &icon_minesweeper_32, &DeauthDetectorActivity::create},
     {"PACKET MONITOR", &icon_study_32, &PacketMonitorActivity::create},
     {"NETWORK MONITOR", &icon_study_32, &NetworkMonitorActivity::create},
@@ -187,6 +186,7 @@ constexpr shelf::Item kApps[] = {
     {"BLE CONTACT",    &icon_nearby_32, &BleContactExchangeActivity::create},
     {"TRACKER DETECT", &icon_minesweeper_32, &TrackerDetectorActivity::create},
     {"PROBE SNIFFER", &icon_nearby_32, &ProbeSnifferActivity::create},
+    {"CROWD DENSITY", &icon_nearby_32, &CrowdDensityActivity::create},
     {"HOST SCANNER",   &icon_study_32,  &HostScannerActivity::create},
     {"HTTP CLIENT",    &icon_study_32,  &HttpClientActivity::create},
     {"MDNS BROWSER",   &icon_study_32,  &MdnsBrowserActivity::create},

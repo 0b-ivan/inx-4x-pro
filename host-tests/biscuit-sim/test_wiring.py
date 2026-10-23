@@ -25,6 +25,7 @@ for name, cls, path in (
     ("BLE CONTACT", "BleContactExchangeActivity", "ble-contact/BleContactExchangeActivity.cpp"),
     ("TRACKER DETECT", "TrackerDetectorActivity", "tracker-detector/TrackerDetectorActivity.cpp"),
     ("PROBE SNIFFER", "ProbeSnifferActivity", "probe-sniffer/ProbeSnifferActivity.cpp"),
+    ("CROWD DENSITY", "CrowdDensityActivity", "crowd-density/CrowdDensityActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -67,6 +68,11 @@ assert "biscuit_sim::probeFrames()" in probe and "biscuit_sim::parseProbe" in pr
 assert "onProbeRequest(parsed.mac" in probe, "native frames must use real dedup handler"
 assert "#ifndef SIMULATOR" in probe, "hardware-only raw packet callback missing guard"
 assert (root / "src/platform/sim_biscuit_wifi_frames.h").exists(), "virtual 802.11 fixtures missing"
+crowd = (root / "src/apps_local/crowd-density/CrowdDensityActivity.cpp").read_text()
+assert "biscuit_sim::probeFrames()" in crowd and "biscuit_sim::parseProbe" in crowd, "crowd density must use isolated probe frames"
+assert "addMac(parsed.mac)" in crowd, "crowd counting must reuse real MAC dedup"
+assert "simFedWindow" in crowd and "crowdSimTrace" in crowd, "simulated sampling/cleanup evidence missing"
+assert "#ifndef SIMULATOR" in crowd, "raw capture remains outside the simulator"
 smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
 assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
 assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"

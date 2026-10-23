@@ -2,21 +2,21 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **14 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **15 echte Biscuit-Activities** aus:
 
 | Gruppe | Activities |
 | --- | --- |
 | Offline/System | CLOCK, DEVICE INFO, OTP GENERATOR |
-| WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER |
-| BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT, PROBE SNIFFER |
+| WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY |
+| BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT |
 
-Die ursprünglichen No-op-VTables der vierzehn Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der fünfzehn Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
 Letzte erfolgreich bestätigte Pipeline:
-[CI #39965661782](https://github.com/0b-ivan/inx-4x-pro/actions/runs/39965661782)
-(12 Activities). Die neue Tracker-Erweiterung benötigt eine eigene CI-Bestätigung.
+[CI #39984886630](https://github.com/0b-ivan/inx-4x-pro/actions/runs/39984886630)
+(14 Activities). Die Crowd-Density-Erweiterung benötigt noch eine eigene CI-Bestätigung.
 
 ## Deterministische Fixtures – kein Zugriff auf Funkhardware
 
@@ -52,7 +52,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller vierzehn Apps
+- Autostart und nichtleere Screenshots aller fünfzehn Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -111,3 +111,22 @@ SDL testet Geräteliste, Detailansicht, Rücknavigation und Radio-Cleanup.
 Der neue Stand ist erst nach grüner CI vollständig bestätigt.
 
 **Keine realen WLAN-Scans, Monitor-Mode-Aufrufe oder fremde Gerätedaten.**
+
+## Crowd Density: synthetische Messfenster
+
+`CROWD DENSITY` benutzt die echte Activity und erhält ausschließlich synthetische
+802.11-Probe-Requests. MAC-Deduplizierung, Ringpuffer für Messwerte und die
+grafische Darstellung bleiben erhalten. Im Simulator wird das reguläre
+30-Sekunden-Messfenster auf drei Sekunden beschleunigt. Auf der Firmware
+bleiben die produktiven 30 Sekunden unverändert.
+
+Die neue SDL-Suite prüft drei eindeutige MAC-Adressen trotz Duplikaten,
+eine erste Fenster-Auswertung, den erneuten Start der Zählung und Radio-Cleanup.
+`CROSSPLAY_SIM_PROBE_SCENARIO=empty|malformed` liefert Negativtests.
+
+Die angezeigte Zahl ist eine **Geräteschätzung, keine Personenzählung**.
+MAC-Randomisierung, mehrere Geräte pro Person und unvollständige Scans
+verursachen teils erhebliche Abweichungen. Es werden keine realen Pakete
+aufgezeichnet und kein WLAN-Monitor-Modus aktiviert.
+
+Diese Erweiterung gilt erst nach erfolgreicher CI als validiert.

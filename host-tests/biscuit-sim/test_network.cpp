@@ -3,6 +3,8 @@
 #include "platform/sim_biscuit_wifi_frames.h"
 #include <cstdio>
 #include <cstdlib>
+#include <set>
+#include <string>
 static int checks = 0;
 static void check(bool b, const char* what) {
   ++checks;
@@ -161,6 +163,32 @@ int main() {
         "malformed-only scenario never produces a probe");
   setenv("CROSSPLAY_SIM_PROBE_SCENARIO","empty",1);
   check(biscuit_sim::probeFrames().empty(), "empty probe scenario");
+  unsetenv("CROSSPLAY_SIM_PROBE_SCENARIO");
+  unsetenv("CROSSPLAY_SIM_PROBE_SCENARIO");
+  std::set<std::string> uniqueMacs;
+  for (const auto& p : biscuit_sim::probeFrames()) {
+    biscuit_sim::ParsedProbe probe;
+    if (biscuit_sim::parseProbe(p.bytes.data(), p.bytes.size(), probe)) {
+      uniqueMacs.insert(std::string(reinterpret_cast<const char*>(probe.mac), 6));
+    }
+  }
+  check(uniqueMacs.size() == 3, "crowd density deduplicates repeated MACs");
+  setenv("CROSSPLAY_SIM_PROBE_SCENARIO", "empty", 1);
+  uniqueMacs.clear();
+  for (const auto& p : biscuit_sim::probeFrames()) {
+    biscuit_sim::ParsedProbe probe;
+    if (biscuit_sim::parseProbe(p.bytes.data(),p.bytes.size(),probe))
+      uniqueMacs.insert(std::string(reinterpret_cast<const char*>(probe.mac),6));
+  }
+  check(uniqueMacs.empty(), "crowd empty fixture has no MACs");
+  setenv("CROSSPLAY_SIM_PROBE_SCENARIO", "malformed", 1);
+  uniqueMacs.clear();
+  for (const auto& p : biscuit_sim::probeFrames()) {
+    biscuit_sim::ParsedProbe probe;
+    if (biscuit_sim::parseProbe(p.bytes.data(),p.bytes.size(),probe))
+      uniqueMacs.insert(std::string(reinterpret_cast<const char*>(probe.mac),6));
+  }
+  check(uniqueMacs.empty(), "crowd malformed fixture cannot increase count");
   unsetenv("CROSSPLAY_SIM_PROBE_SCENARIO");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }

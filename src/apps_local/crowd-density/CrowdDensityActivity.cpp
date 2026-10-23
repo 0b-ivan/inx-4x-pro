@@ -2,8 +2,14 @@
 #include "DevMode.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <WiFi.h>
 #include <esp_wifi.h>
+#else
+#include "platform/sim_biscuit_wifi_frames.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 #include <string.h>
 
 #include "MappedInputManager.h"
@@ -15,6 +21,7 @@
 // Static instance
 // ---------------------------------------------------------------------------
 
+#ifndef SIMULATOR
 CrowdDensityActivity* CrowdDensityActivity::activeInstance = nullptr;
 
 void CrowdDensityActivity::promiscuousCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
@@ -33,6 +40,14 @@ void CrowdDensityActivity::promiscuousCallback(void* buf, wifi_promiscuous_pkt_t
   // Source MAC at offset 10
   activeInstance->addMac(payload + 10);
 }
+
+#else
+static void crowdSimTrace(const char* event, int count, int windows) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_CROWD_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0')
+    std::fprintf(stderr, "[BISCUIT_SIM] CROWD:%s:%d:%d\n", event, count, windows);
+}
+#endif
 
 void CrowdDensityActivity::addMac(const uint8_t* mac) {
   portENTER_CRITICAL(&dataMux);
@@ -64,6 +79,9 @@ void CrowdDensityActivity::onEnter() {
   memset(seenMacs, 0, sizeof(seenMacs));
   seenMacCount = 0;
   promiscuousActive = false;
+#ifdef SIMULATOR
+  simFedWindow = false;
+#endif
   requestUpdate();
 }
 
@@ -73,6 +91,7 @@ void CrowdDensityActivity::startCapture() {
   windowStart = millis();
 
   RADIO.ensureWifi();
+#ifndef SIMULATOR
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
@@ -83,21 +102,35 @@ void CrowdDensityActivity::startCapture() {
   wifi_promiscuous_filter_t filter{};
   filter.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT;
   esp_wifi_set_promiscuous_filter(&filter);
+#else
+  simFedWindow = false;
+#endif
 
   promiscuousActive = true;
   state = CAPTURING;
+#ifdef SIMULATOR
+  crowdSimTrace("started", 0, 0);
+#endif
   requestUpdate();
 }
 
 void CrowdDensityActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   if (promiscuousActive) {
+#ifndef SIMULATOR
     esp_wifi_set_promiscuous(false);
+#endif
     promiscuousActive = false;
   }
+#ifndef SIMULATOR
   activeInstance = nullptr;
+#endif
   RADIO.shutdown();
+#ifdef SIMULATOR
+  crowdSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                    ? "radio-off" : "radio-leak", seenMacCount, historyCount);
+#endif
+  Activity::onExit();
+  devmode::resume();
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +155,20 @@ void CrowdDensityActivity::loop() {
   }
 
   const unsigned long now = millis();
+#ifdef SIMULATOR
+  // Fake 802.11 frames only. Reuse the real addMac() dedup mechanism and
+  // never access host WiFi, sockets or physical 802.11 promiscuous mode.
+  if (promiscuousActive && !simFedWindow && now - windowStart >= 350) {
+    for (const auto& frame : biscuit_sim::probeFrames()) {
+      biscuit_sim::ParsedProbe parsed;
+      if (biscuit_sim::parseProbe(frame.bytes.data(), frame.bytes.size(), parsed))
+        addMac(parsed.mac);
+    }
+    simFedWindow = true;
+    crowdSimTrace("observed", seenMacCount, historyCount);
+    requestUpdate();
+  }
+#endif
 
   // Sample into history ring buffer every SAMPLE_INTERVAL_MS
   if (now - lastSample >= SAMPLE_INTERVAL_MS) {
@@ -141,6 +188,10 @@ void CrowdDensityActivity::loop() {
 
     windowStart = now;
     lastSample = now;
+#ifdef SIMULATOR
+    simFedWindow = false;
+    crowdSimTrace("sample", currentCount, historyCount);
+#endif
     requestUpdate();
   }
 
@@ -191,7 +242,11 @@ void CrowdDensityActivity::render(RenderLock&&) {
   portEXIT_CRITICAL(&dataMux);
 
   char subtitle[24];
+#ifdef SIMULATOR
+  snprintf(subtitle, sizeof(subtitle), "%d seen (simulated window)", liveCount);
+#else
   snprintf(subtitle, sizeof(subtitle), "%d seen (30s window)", liveCount);
+#endif
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
                  "Crowd Density", subtitle);
 
@@ -211,7 +266,11 @@ void CrowdDensityActivity::render(RenderLock&&) {
   {
     unsigned long elapsed = (millis() - windowStart) / 1000UL;
     char sampBuf[32];
+#ifdef SIMULATOR
+    snprintf(sampBuf, sizeof(sampBuf), "simulated window: %lus / 3s", elapsed);
+#else
     snprintf(sampBuf, sizeof(sampBuf), "sampling... %lus / 30s", elapsed);
+#endif
     renderer.drawCenteredText(SMALL_FONT_ID, countY, sampBuf);
     countY += renderer.getTextHeight(SMALL_FONT_ID) + 14;
   }

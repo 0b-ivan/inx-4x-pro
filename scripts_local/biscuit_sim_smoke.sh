@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "CROWD DENSITY" ]; then
+    script="1900:ENTER:100;6600:BACK:100;7800:QUIT"
   elif [ "$app" = "PROBE SNIFFER" ]; then
     script="1900:ENTER:100;3200:BACK:100;4300:BACK:100;5800:QUIT"
   elif [ "$app" = "TRACKER DETECT" ]; then
@@ -35,7 +37,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "PROBE SNIFFER" ]; then
+  if [ "$app" = "CROWD DENSITY" ]; then
+    shots="1600:$out/${name}_before.bmp;3100:$out/${name}_live.bmp;5150:$out/${name}_sampled.bmp;6000:$out/${name}_refilled.bmp;7100:$frame"
+  elif [ "$app" = "PROBE SNIFFER" ]; then
     shots="1600:$out/${name}_list.bmp;2800:$out/${name}_detail.bmp;3800:$out/${name}_back.bmp;5200:$frame"
   elif [ "$app" = "TRACKER DETECT" ]; then
     shots="1600:$out/${name}_before.bmp;4200:$out/${name}_monitoring.bmp;6100:$frame"
@@ -50,6 +54,7 @@ for app in "${apps[@]}"; do
   if ! env CROSSPLAY_AUTOSTART="$app" \
     CROSSPLAY_SIM_BLE_TRACE=1 \
     CROSSPLAY_SIM_PROBE_TRACE=1 \
+    CROSSPLAY_SIM_CROWD_TRACE=1 \
     CROSSPLAY_SIM_EPOCH=1704067200 \
     CROSSPLAY_SIM_WIFI_CONNECTED=1 \
     CROSSPOINT_SIM_INPUT_SCRIPT="$script" \
@@ -415,4 +420,54 @@ assert data[:2]==b"BM" and len(data)>1000
 assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
 PYPROBEEMPTY
 done
-echo "PASS biscuit-ui-smoke: 14 activities, probe normal/empty/malformed, tracker and BLE cleanup"
+python3 - <<'PYCROWD'
+from pathlib import Path
+import hashlib, struct
+root=Path(".pio/biscuit-ui-smoke")
+names=("before","live","sampled","refilled",None)
+frames=[root/(f"CROWD_DENSITY_{n}.bmp" if n else "CROWD_DENSITY.bmp") for n in names]
+digests=[]
+for p in frames:
+    data=p.read_bytes()
+    assert data[:2]==b"BM" and len(data)>1000, f"invalid Crowd Density BMP: {p}"
+    assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+    digests.append(hashlib.sha256(data).digest())
+assert digests[0]!=digests[1] and digests[1]!=digests[2], "Crowd Density capture/window transition missing"
+log=(root/"CROWD_DENSITY.log").read_text(errors="replace")
+pos=-1
+for state in ("CROWD:started:0:0", "CROWD:observed:3:0",
+              "CROWD:sample:3:1", "CROWD:observed:3:1", "CROWD:radio-off:3:1"):
+    pos=log.find(state,pos+1)
+    assert pos>=0, f"Crowd Density missing/out-of-order {state}: {log[-1400:]}"
+print("PASS Crowd Density: 3 unique MACs, window rollover, re-count and radio shutdown")
+PYCROWD
+
+# Empty and malformed input must not produce any counted MACs.
+for scenario in empty malformed; do
+  log="$out/CROWD_DENSITY_${scenario}.log"
+  frame="$out/CROWD_DENSITY_${scenario}.bmp"
+  if ! env CROSSPLAY_AUTOSTART="CROWD DENSITY" \
+    CROSSPLAY_SIM_CROWD_TRACE=1 \
+    CROSSPLAY_SIM_PROBE_SCENARIO="$scenario" \
+    CROSSPOINT_SIM_INPUT_SCRIPT="1900:ENTER:100;3700:BACK:100;4900:QUIT" \
+    CROSSPOINT_SIM_SCREENSHOTS="3200:$frame" \
+    LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+    timeout 18s "$bin" >"$log" 2>&1; then
+    echo "FAIL Crowd Density $scenario test"; tail -100 "$log"; exit 1
+  fi
+  grep -Fq "CROWD:observed:0:0" "$log" || {
+    echo "FAIL Crowd Density $scenario unexpectedly counted invalid frames"; exit 1
+  }
+  grep -Fq "CROWD:radio-off:0:0" "$log" || {
+    echo "FAIL Crowd Density $scenario failed to release radio"; exit 1
+  }
+  python3 - "$frame" <<'PYCROWDNEG'
+from pathlib import Path
+import struct, sys
+data=Path(sys.argv[1]).read_bytes()
+assert data[:2]==b"BM" and len(data)>1000
+assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+PYCROWDNEG
+done
+echo "PASS biscuit-ui-smoke: 15 activities, Crowd Density normal/empty/malformed, Probe Sniffer, tracker and BLE"
+
