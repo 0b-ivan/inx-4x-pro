@@ -2,12 +2,17 @@
 #include "DevMode.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <BLEDevice.h>
 #include <BLEHIDDevice.h>
 #include <BLEServer.h>
+#include <HIDKeyboardTypes.h>
+#else
+#include <cstdio>
+#include <cstdlib>
+#endif
 #include <GfxRenderer.h>
 #include <HalStorage.h>
-#include <HIDKeyboardTypes.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -18,6 +23,7 @@
 #include "fontIds.h"
 #include "../util/RadioManager.h"
 
+#ifndef SIMULATOR
 static const uint8_t HID_REPORT_DESCRIPTOR[] = {
     0x05, 0x01, 0x09, 0x06, 0xA1, 0x01, 0x85, 0x01,
     0x05, 0x07, 0x19, 0xE0, 0x29, 0xE7, 0x15, 0x00,
@@ -26,6 +32,7 @@ static const uint8_t HID_REPORT_DESCRIPTOR[] = {
     0x75, 0x08, 0x15, 0x00, 0x25, 0x65, 0x05, 0x07,
     0x19, 0x00, 0x29, 0x65, 0x81, 0x00, 0xC0
 };
+#endif
 
 // Built-in demo scripts (no SD card needed)
 static constexpr const char* BUILTIN_DEMO_NAME = "(Demo) Hello World";
@@ -47,6 +54,7 @@ static const char* BUILTIN_DEMO_LINES[] = {
     nullptr  // sentinel
 };
 
+#ifndef SIMULATOR
 class BleKeyboardActivity::ServerCallbacks : public BLEServerCallbacks {
   BleKeyboardActivity& activity;
  public:
@@ -65,6 +73,14 @@ class BleKeyboardActivity::ServerCallbacks : public BLEServerCallbacks {
   }
 };
 
+#else
+static void keyboardSimTrace(const char* stage, int value) {
+  const char* v = std::getenv("CROSSPLAY_SIM_KEYBOARD_TRACE");
+  if (v && v[0] == '1' && v[1] == '\0')
+    std::fprintf(stderr, "[BISCUIT_SIM] BLE_KEYBOARD:%s:%d\n", stage, value);
+}
+#endif
+
 void BleKeyboardActivity::onEnter() {
   devmode::pause();
   Activity::onEnter();
@@ -79,6 +95,10 @@ void BleKeyboardActivity::onEnter() {
   pServer = nullptr;
   pHid = nullptr;
   pInputChar = nullptr;
+#ifdef SIMULATOR
+  simKeys = 0;
+  keyboardSimTrace("ready", 0);
+#endif
 
   // Ensure directory exists
   Storage.mkdir("/crossplay/ducky");
@@ -91,10 +111,14 @@ void BleKeyboardActivity::onEnter() {
 }
 
 void BleKeyboardActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   stopAdvertising();
   RADIO.shutdown();
+#ifdef SIMULATOR
+  keyboardSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                      ? "radio-off" : "radio-leak", simKeys);
+#endif
+  Activity::onExit();
+  devmode::resume();
 }
 
 void BleKeyboardActivity::loadScriptList() {
@@ -102,6 +126,10 @@ void BleKeyboardActivity::loadScriptList() {
 
   // Built-in demo always first
   scriptFiles.push_back(BUILTIN_DEMO_NAME);
+#ifdef SIMULATOR
+  // No host filesystem scripts or user data; the built-in demo is sufficient.
+  return;
+#endif
 
   // Load .txt files from SD
   auto dir = Storage.open(DUCKY_DIR);
@@ -164,6 +192,12 @@ void BleKeyboardActivity::loadScriptContent(const std::string& path) {
 }
 
 void BleKeyboardActivity::startAdvertising() {
+#ifdef SIMULATOR
+  // Virtual peer only: no BLE pairing and never interact with host HID.
+  deviceConnected = true;
+  state = PAIRED;
+  keyboardSimTrace("paired", 1);
+#else
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new ServerCallbacks(*this));
 
@@ -181,14 +215,27 @@ void BleKeyboardActivity::startAdvertising() {
   pAdv->start();
 
   LOG_DBG("BadBLE", "Advertising as '%s'", BLE_DEVICE_NAME);
+#endif
 }
 
 void BleKeyboardActivity::stopAdvertising() {
+#ifndef SIMULATOR
   if (pServer) pServer->getAdvertising()->stop();
+#endif
   deviceConnected = false;
+#ifdef SIMULATOR
+  keyboardSimTrace("disconnected", simKeys);
+#endif
 }
 
 void BleKeyboardActivity::sendKey(uint8_t keyCode, uint8_t modifiers) {
+#ifdef SIMULATOR
+  if (!deviceConnected || keyCode == 0) return;
+  (void)modifiers;
+  ++simKeys;
+  keyboardSimTrace("key", simKeys);
+  return;
+#else
   if (!pInputChar || !deviceConnected) return;
   uint8_t report[8] = {0};
   report[0] = modifiers;
@@ -197,6 +244,7 @@ void BleKeyboardActivity::sendKey(uint8_t keyCode, uint8_t modifiers) {
   pInputChar->notify();
   delay(15);
   releaseKeys();
+#endif
 }
 
 void BleKeyboardActivity::sendKeyCombo(uint8_t modifiers, uint8_t keyCode) {
@@ -204,11 +252,16 @@ void BleKeyboardActivity::sendKeyCombo(uint8_t modifiers, uint8_t keyCode) {
 }
 
 void BleKeyboardActivity::releaseKeys() {
+#ifdef SIMULATOR
+  // No HID report was ever sent.
+  return;
+#else
   if (!pInputChar || !deviceConnected) return;
   uint8_t report[8] = {0};
   pInputChar->setValue(report, sizeof(report));
   pInputChar->notify();
   delay(15);
+#endif
 }
 
 void BleKeyboardActivity::sendString(const std::string& text) {
@@ -308,6 +361,9 @@ void BleKeyboardActivity::executeLine(const std::string& line) {
 
   if (line.size() > 6 && line.substr(0, 6) == "DELAY ") {
     unsigned long ms = strtoul(line.substr(6).c_str(), nullptr, 10);
+#ifdef SIMULATOR
+    if (ms > 100) ms = 100;  // fast deterministic offline script execution
+#endif
     delayUntil = millis() + ms;
     lastCommand = line;
     return;
@@ -359,6 +415,9 @@ void BleKeyboardActivity::executeCurrentLine() {
   if (currentLine >= static_cast<int>(scriptLines.size())) {
     state = DONE;
     releaseKeys();
+#ifdef SIMULATOR
+    keyboardSimTrace("done", simKeys);
+#endif
     requestUpdate();
     return;
   }
@@ -441,7 +500,11 @@ void BleKeyboardActivity::loop() {
   if (state == PAIRED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) { stopAdvertising(); state = SELECT_SCRIPT; requestUpdate(); return; }
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      state = EXECUTING; currentLine = 0; repeatCount = 0; delayUntil = 0; lastCommand.clear(); requestUpdate(); return;
+      state = EXECUTING; currentLine = 0; repeatCount = 0; delayUntil = 0; lastCommand.clear();
+#ifdef SIMULATOR
+      keyboardSimTrace("executing", scriptLines.size());
+#endif
+      requestUpdate(); return;
     }
     {
       int tx_ = 0, ty_ = 0;

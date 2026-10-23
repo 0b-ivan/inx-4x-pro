@@ -34,6 +34,7 @@ for name, cls, path in (
     ("AIRTAG SPOOF", "AirTagTestActivity", "airtag-test/AirTagTestActivity.cpp"),
     ("WIFI DEAUTH", "WifiTestActivity", "wifi-test/WifiTestActivity.cpp"),
     ("BLE SPAM", "BleSpamActivity", "ble-spam/BleSpamActivity.cpp"),
+    ("BLE KEYBOARD", "BleKeyboardActivity", "ble-keyboard/BleKeyboardActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -113,6 +114,10 @@ assert "esp_wifi_80211_tx" in wifi_test and "#ifndef SIMULATOR" in wifi_test, "r
 spam = (root / "src/apps_local/ble-spam/BleSpamActivity.cpp").read_text()
 assert "biscuit_sim::blePreview(" in spam and "spamSimTrace" in spam, "BLE Spam must use isolated preview data"
 assert "#ifndef SIMULATOR" in spam and "Simulated previews" in spam, "BLE Spam must show simulated-only mode"
+keyboard = (root / "src/apps_local/ble-keyboard/BleKeyboardActivity.cpp").read_text()
+assert "keyboardSimTrace" in keyboard and "simKeys" in keyboard, "virtual HID backend missing"
+assert "executeCurrentLine()" in keyboard and "executeLine(scriptLines[currentLine])" in keyboard, "real script parser must execute"
+assert "#ifndef SIMULATOR" in keyboard and "if (!deviceConnected || keyCode == 0) return;" in keyboard, "host input isolation missing"
 smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
 assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
 assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"

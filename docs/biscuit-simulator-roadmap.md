@@ -2,15 +2,15 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **23 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **24 echte Biscuit-Activities** aus:
 
 | Gruppe | Activities |
 | --- | --- |
 | Offline/System | CLOCK, DEVICE INFO, OTP GENERATOR |
 | WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT, DEAUTH DETECTOR, PACKET MONITOR, NETWORK MONITOR, WIFI DEAUTH |
-| BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT, BLE BEACON, AIRTAG SPOOF, BLE SPAM |
+| BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT, BLE BEACON, AIRTAG SPOOF, BLE SPAM, BLE KEYBOARD |
 
-Die ursprünglichen No-op-VTables der dreiundzwanzig Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der vierundzwanzig Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
@@ -54,7 +54,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller dreiundzwanzig Apps
+- Autostart und nichtleere Screenshots aller vierundzwanzig Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -255,3 +255,14 @@ nutzt ausschließlich `OFFLINE-SIM`-Datensätze, die ausdrücklich keine
 BLE-Advertising-Frames darstellen. Der originale Arduino-BLE-Pfad wird nur
 auf der Hardware kompiliert. Der SDL-Lauf prüft alle vier Modusfamilien,
 Laufzeit-Zähler und Ressourcenfreigabe. **Kein Funk, keine fremden Geräte.**
+
+## BLE Keyboard: isolierte DuckyScript-/HID-Emulation
+
+Die echte `BleKeyboardActivity` führt im Simulator ihr eingebautes
+Demo-DuckyScript durch: Skriptliste, Vorschau, virtuelle Paarung,
+DuckyScript-Befehle (`STRING`, `GUI`, `ENTER`, `DELAY`), Done und Stopp.
+Anstelle von Bluetooth-HID-Berichten werden in-memory Ereignisse gezählt
+und protokolliert. Skripte des Host-Dateisystems werden nicht geladen;
+Simulator-Delays sind auf 100 ms begrenzt. Der BLE-Server und die
+HID-Report-Charakteristik sind ausschließlich im Firmwarepfad aktiv.
+**Keine echten Tastatureingaben und keine Bluetooth-Kopplung am Host.**

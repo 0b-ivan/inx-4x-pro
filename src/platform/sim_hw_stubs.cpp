@@ -9,7 +9,6 @@
 #ifdef SIMULATOR
 
 #include "../apps_local/ble-contact/BleContactExchangeActivity.h"
-#include "../apps_local/ble-keyboard/BleKeyboardActivity.h"
 #include "../apps_local/ble-proximity/BleProximityActivity.h"
 #include "../apps_local/ble-scanner/BleScannerActivity.h"
 #include "../apps_local/fire/FireActivity.h"
@@ -24,7 +23,6 @@
   void cls::loop() {}                                     \
   void cls::render(RenderLock&&) {}
 
-HWSTUB_ACTIVITY(BleKeyboardActivity)
 HWSTUB_ACTIVITY(FireActivity)
 HWSTUB_ACTIVITY(MeshChatActivity)
 

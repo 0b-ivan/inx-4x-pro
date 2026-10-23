@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR" "BLE BEACON" "AIRTAG SPOOF" "WIFI DEAUTH" "BLE SPAM")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR" "BLE BEACON" "AIRTAG SPOOF" "WIFI DEAUTH" "BLE SPAM" "BLE KEYBOARD")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "BLE KEYBOARD" ]; then
+    script="1900:ENTER:100;2500:ENTER:100;3200:ENTER:100;6400:BACK:100;7300:BACK:100;8500:QUIT"
   elif [ "$app" = "BLE SPAM" ]; then
     script="1900:ENTER:100;2400:ENTER:100;4400:BACK:100;5400:BACK:100;6700:QUIT"
   elif [ "$app" = "WIFI DEAUTH" ]; then
@@ -53,7 +55,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "BLE SPAM" ]; then
+  if [ "$app" = "BLE KEYBOARD" ]; then
+    shots="1600:$out/${name}_scripts.bmp;2200:$out/${name}_preview.bmp;2950:$out/${name}_paired.bmp;4900:$out/${name}_executed.bmp;6800:$out/${name}_reset.bmp;8000:$frame"
+  elif [ "$app" = "BLE SPAM" ]; then
     shots="1700:$out/${name}_disclaimer.bmp;2200:$out/${name}_menu.bmp;3700:$out/${name}_active.bmp;4900:$out/${name}_stopped.bmp;6000:$frame"
   elif [ "$app" = "WIFI DEAUTH" ]; then
     shots="1600:$out/${name}_targets.bmp;3200:$out/${name}_preview.bmp;4350:$out/${name}_stopped.bmp;5500:$frame"
@@ -91,6 +95,7 @@ for app in "${apps[@]}"; do
     CROSSPLAY_SIM_DEAUTH_TRACE=1 \
     CROSSPLAY_SIM_PACKET_TRACE=1 \
     CROSSPLAY_SIM_NETWORK_TRACE=1 \
+    CROSSPLAY_SIM_KEYBOARD_TRACE=1 \
     CROSSPLAY_SIM_EPOCH=1704067200 \
     CROSSPLAY_SIM_WIFI_CONNECTED=1 \
     CROSSPOINT_SIM_INPUT_SCRIPT="$script" \
@@ -848,6 +853,30 @@ assert re.search(r"BLE_SPAM:stop:[1-9][0-9]*:4",log), "preview stop missing"
 assert re.search(r"BLE_SPAM:radio-off:[1-9][0-9]*:4",log), "radio cleanup failed"
 print("PASS BLE Spam: disclaimer, four in-memory families, stop and cleanup")
 PYSPAM
-echo "PASS biscuit-ui-smoke: 23 activities, BLE Spam preview non-transmitting"
+python3 - <<'PYKEYBOARD'
+from pathlib import Path
+import re,struct,hashlib
+root=Path(".pio/biscuit-ui-smoke")
+names=("scripts","preview","paired","executed","reset",None)
+screens=[root/(f"BLE_KEYBOARD_{n}.bmp" if n else "BLE_KEYBOARD.bmp") for n in names]
+hashes=[]
+for frame in screens:
+    bmp=frame.read_bytes()
+    assert bmp[:2]==b"BM" and len(bmp)>1000
+    assert tuple(map(abs,struct.unpack_from("<ii",bmp,18)))==(480,800)
+    hashes.append(hashlib.sha256(bmp).digest())
+assert hashes[0]!=hashes[1] and hashes[1]!=hashes[2], (
+    "BLE Keyboard script list/preview/virtual pairing unchanged")
+log=(root/"BLE_KEYBOARD.log").read_text(errors="replace")
+pos=-1
+for marker in ("ready:0","paired:1","executing:14"):
+    pos=log.find("BLE_KEYBOARD:"+marker,pos+1)
+    assert pos>=0, f"virtual keyboard did not enter {marker}"
+assert re.search(r"BLE_KEYBOARD:key:[1-9][0-9]*",log), "script generated no virtual HID report"
+assert re.search(r"BLE_KEYBOARD:done:[1-9][0-9]*",log), "DuckyScript was not fully executed"
+assert re.search(r"BLE_KEYBOARD:radio-off:[1-9][0-9]*",log), "virtual keyboard left radio enabled"
+print("PASS BLE Keyboard: genuine built-in DuckyScript parse, virtual HID, no OS input")
+PYKEYBOARD
+echo "PASS biscuit-ui-smoke: 24 activities, virtual BLE Keyboard script and prior regressions"
 
 
