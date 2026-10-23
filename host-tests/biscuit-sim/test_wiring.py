@@ -214,6 +214,39 @@ for theme in (
     assert "BoardConfig::hasTouch()" in guard, f"{theme}: touch hints no longer suppressed"
 
 
+# Additional Biscuit apps reported unusable on real GT911 hardware.
+# An always-painted footer must NEVER be paired with tappedHintButton(),
+# because UITheme sets normal hint height to zero when touch is enabled.
+for rel in (
+    "ap-cloner/ApClonerActivity.cpp",
+    "captive-portal/CaptivePortalActivity.cpp",
+    "bulletin-board/BulletinBoardActivity.cpp",
+    "dead-drop/DeadDropActivity.cpp",
+    "wardriving/WardrivingActivity.cpp",
+):
+    content = (root / "src/apps_local" / rel).read_text()
+    assert "GUI.drawButtonHintsAlways(" in content, f"{rel}: no Biscuit controls"
+    assert "GUI.tappedAlwaysHintButton(" in content, f"{rel}: GT911 footer ignores touch"
+    assert "GUI.tappedHintButton(" not in content, f"{rel}: zero-height touch hitbox"
+    assert "BaseMetrics::values.buttonHintsHeight" in content, (
+        f"{rel}: touches or list rows can overlap always-visible footer"
+    )
+board = (root / "src/apps_local/bulletin-board/BulletinBoardActivity.cpp").read_text()
+drop = (root / "src/apps_local/dead-drop/DeadDropActivity.cpp").read_text()
+for title, code in (("Bulletin Board", board), ("Dead Drop", drop)):
+    assert "mappedInput.rowTouch(" in code, f"{title}: list cannot be tapped directly"
+    assert "Storage.mkdir" in code, f"{title}: missing AP/file preparation"
+wardrive = (root / "src/apps_local/wardriving/WardrivingActivity.cpp").read_text()
+assert "if (!scanPending) return;" in wardrive and "if (!scanPending &&" in wardrive, (
+    "Wardriving must process async results only for an outstanding scan")
+ap_lab = (root / "src/apps_local/ap-cloner/ApClonerActivity.cpp").read_text()
+assert 'rfind("X4PRO-LAB-", 0)' in ap_lab, "AP lab must not clone arbitrary SSIDs"
+portal = (root / "src/apps_local/captive-portal/CaptivePortalActivity.cpp").read_text()
+assert 'TEST_SSID[] = "X4PRO-PORTAL"' in portal, "Portal must advertise an identifiable test SSID"
+for secret in ("creds.csv", "handleLogin(", "lastPassword", 'name="password"'):
+    assert secret not in portal, f"Portal must not collect credentials: {secret}"
+
+
 workflow = (root / ".github/workflows/crossplay-ci.yml").read_text()
 assert 'bash scripts_local/biscuit_sim_smoke.sh' in workflow, "smoke test not gated by CI"
 assert 'test_visual_goldens.py .pio/biscuit-ui-smoke' in workflow, "real screenshot goldens must gate CI"
