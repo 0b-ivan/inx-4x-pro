@@ -35,4 +35,11 @@ inline bool validTestId(const std::string& id) {
   return true;
 }
 
+// Accept only the intentionally fabricated form field, never account inputs.
+inline bool validSyntheticSubmission(const std::string& fieldName,
+                                     const std::string& fieldValue,
+                                     size_t fieldCount) {
+  return fieldCount == 1 && fieldName == "test_id" && validTestId(fieldValue);
+}
+
 }  // namespace portal_lab
