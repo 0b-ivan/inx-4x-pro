@@ -122,6 +122,10 @@ smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
 assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
 assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"
 assert 'CROSSPOINT_SIM_INPUT_SCRIPT' in smoke_script, "CI smoke must inject input"
+assert 'TAP:100,150,120' in smoke_script, "X4 Pro native touch row hit test must be covered"
+assert 'TAP:180,780,120' in smoke_script, "X4 Pro on-screen Select hint must be tested"
+assert 'PROBE:touch-detail:3' in smoke_script, "X4 Pro touch path must prove real Activity navigation"
+
 workflow = (root / ".github/workflows/crossplay-ci.yml").read_text()
 assert 'bash scripts_local/biscuit_sim_smoke.sh' in workflow, "smoke test not gated by CI"
 assert 'test_visual_goldens.py .pio/biscuit-ui-smoke' in workflow, "real screenshot goldens must gate CI"

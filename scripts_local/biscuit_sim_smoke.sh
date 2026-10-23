@@ -882,6 +882,44 @@ assert re.search(r"BLE_KEYBOARD:done:[1-9][0-9]*",log), "DuckyScript was not ful
 assert re.search(r"BLE_KEYBOARD:radio-off:[1-9][0-9]*",log), "virtual keyboard left radio enabled"
 print("PASS BLE Keyboard: genuine built-in DuckyScript parse, virtual HID, no OS input")
 PYKEYBOARD
+# X4 Pro touch matrix: use the SDL simulator's actual capacitive touch
+# injection (TAP), not virtual ENTER/BACK keys. Exercise real row hit-testing,
+# bottom-row hint zones, list/detail/back and the Activity's cleanup lifecycle.
+touch_log="$out/PROBE_SNIFFER_touch.log"
+if ! env CROSSPLAY_AUTOSTART="PROBE SNIFFER" \
+  CROSSPLAY_SIM_PROBE_TRACE=1 \
+  CROSSPOINT_SIM_INPUT_SCRIPT="2100:TAP:100,150,120;2900:TAP:180,780,120;3850:TAP:60,780,120;4750:TAP:60,780,120;6100:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="1800:$out/PROBE_SNIFFER_touch_before.bmp;3350:$out/PROBE_SNIFFER_touch_detail.bmp;4300:$out/PROBE_SNIFFER_touch_back.bmp;5450:$out/PROBE_SNIFFER_touch_exit.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$touch_log" 2>&1; then
+  echo "FAIL X4 Pro touch: Probe Sniffer TAP script"
+  tail -100 "$touch_log"; exit 1
+fi
+python3 - "$touch_log" \
+  "$out/PROBE_SNIFFER_touch_before.bmp" \
+  "$out/PROBE_SNIFFER_touch_detail.bmp" \
+  "$out/PROBE_SNIFFER_touch_back.bmp" \
+  "$out/PROBE_SNIFFER_touch_exit.bmp" <<'PYTOUCH'
+from pathlib import Path
+import hashlib, re, struct, sys
+log=Path(sys.argv[1]).read_text(errors="replace")
+screens=[]
+for name in sys.argv[2:]:
+    bmp=Path(name).read_bytes()
+    assert bmp[:2]==b"BM" and len(bmp)>1000, f"touch BMP missing: {name}"
+    assert tuple(map(abs, struct.unpack_from("<ii",bmp,18)))==(480,800)
+    screens.append(hashlib.sha256(bmp).hexdigest())
+assert screens[0]!=screens[1], "touching hint Select did not enter detail"
+assert screens[1]!=screens[2], "touching hint Back did not return to list"
+assert screens[2]!=screens[3], "touching hint Exit did not leave Activity"
+assert re.search(r"PROBE:touch-row:[0-9]+",log), "X4 Pro list-row tap ignored"
+position=-1
+for event in ("PROBE:touch-detail:3","PROBE:touch-back:3",
+              "PROBE:touch-exit:3","PROBE:radio-off:3"):
+    position=log.find(event,position+1)
+    assert position>=0, f"X4 Pro touch flow missing {event}: {log[-1300:]}"
+print("PASS X4 Pro touch: row tap, Select/Back/Exit hints and radio cleanup")
+PYTOUCH
 echo "PASS biscuit-ui-smoke: 24 activities, virtual BLE Keyboard script and prior regressions"
 
 

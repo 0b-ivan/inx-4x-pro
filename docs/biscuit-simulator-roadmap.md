@@ -266,3 +266,21 @@ und protokolliert. Skripte des Host-Dateisystems werden nicht geladen;
 Simulator-Delays sind auf 100 ms begrenzt. Der BLE-Server und die
 HID-Report-Charakteristik sind ausschließlich im Firmwarepfad aktiv.
 **Keine echten Tastatureingaben und keine Bluetooth-Kopplung am Host.**
+
+## X4 Pro Touch-E2E
+
+Der X4 Pro hat ein **GT911-Touchpanel** (FreeInk `FREEINK_CAP_TOUCH`).
+Die bisherige Biscuit-CI verwendete fast ausschließlich simulierte
+Tastendrücke. Zusätzlich enthält die SDL-Smoke-Suite nun einen echten
+Touch-Eingabetest über `CROSSPOINT_SIM_INPUT_SCRIPT` mit `TAP:x,y,120`:
+
+- Listeneintrag per Koordinate treffen (`rowTouch`)
+- On-Screen-Tasten „Select“, „Back“ und „Exit“ bedienen
+- Unterscheidbare 480 × 800-BMPs für Liste/Detail/Rücknavigation/Exit
+- Nachweis der echten `ProbeSnifferActivity`-Zustände und Radio-Freigabe
+
+Die Touch- und Tastensimulation laufen über denselben
+`MappedInputManager`, aber über unterschiedliche Eingabepfade. Ein
+Tasten-Smoke-Test ersetzt den Touch-Test daher nicht. Wischgesten,
+Orientierungswechsel und weitere Activities brauchen separat erweiterte
+Abdeckung. Das ersetzt keinen Test am realen GT911-Digitizer.
