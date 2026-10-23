@@ -235,7 +235,7 @@ board = (root / "src/apps_local/bulletin-board/BulletinBoardActivity.cpp").read_
 drop = (root / "src/apps_local/dead-drop/DeadDropActivity.cpp").read_text()
 for title, code in (("Bulletin Board", board), ("Dead Drop", drop)):
     assert "mappedInput.rowTouch(" in code, f"{title}: list cannot be tapped directly"
-    assert "Storage.mkdir" in code, f"{title}: missing AP/file preparation"
+assert 'Storage.mkdir("/crossplay");' in drop, "Dead Drop must create the parent upload directory"
 wardrive = (root / "src/apps_local/wardriving/WardrivingActivity.cpp").read_text()
 assert "if (!scanPending) return;" in wardrive and "if (!scanPending &&" in wardrive, (
     "Wardriving must process async results only for an outstanding scan")
