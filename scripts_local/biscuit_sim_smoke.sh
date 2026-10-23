@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -70,4 +70,4 @@ digest = lambda p: hashlib.sha256(p.read_bytes()).digest()
 assert digest(before) != digest(after), "OTP RIGHT action did not change the rendered screen"
 print("PASS OTP page interaction: screen changed after RIGHT")
 PY
-echo "PASS biscuit-ui-smoke: 6 activities, 7 screenshots, 1 interaction"
+echo "PASS biscuit-ui-smoke: 7 activities, 8 screenshots, 1 interaction"
