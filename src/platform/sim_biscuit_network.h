@@ -6,6 +6,14 @@
 #include <string>
 
 namespace biscuit_sim {
+struct HttpResult { int status; std::string body; unsigned long latencyMs; };
+inline HttpResult httpRequest(const std::string& method, const std::string& url, const std::string& body) {
+  if (url == "http://example.test/ok" && method == "GET") return {200, "simulated OK", 3};
+  if (url == "http://example.test/missing" && method == "GET") return {404, "not found", 3};
+  if (url == "http://example.test/echo" && method == "POST") return {200, body, 3};
+  if (url == "http://example.test/timeout") return {-11, "", 5000};
+  return {-1, "", 0};
+}
 inline bool wifiConnected(bool actual) {
   const char* v = std::getenv("CROSSPLAY_SIM_WIFI_CONNECTED");
   if (!v || !*v) return actual;
