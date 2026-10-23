@@ -66,6 +66,7 @@ void DeadDropActivity::onExit() {
 // ---------------------------------------------------------------------------
 
 void DeadDropActivity::startDrop() {
+  Storage.mkdir("/crossplay");
   Storage.mkdir(DROP_DIR);
 
   // Generate random SSID suffix
@@ -288,12 +289,35 @@ void DeadDropActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
-        if (btn == 2) {
-          if (configIndex == 0) { timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT); timerMinutes = TIMER_OPTIONS[timerIndex]; requestUpdate(); }
-          else { startDrop(); requestUpdate(); }
+        int tappedRow = -1;
+        const auto& m = UITheme::getInstance().getMetrics();
+        const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+        // The always-visible Biscuit footer occupies 40 pixels on touch screens.
+        const int pageHeight = renderer.getScreenHeight();
+        const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - m.verticalSpacing;
+        const int rowStep = GUI.getListRowStep(false);
+        const int rowCount = std::min(2, std::max(1, contentHeight / rowStep));
+        const auto touch = mappedInput.rowTouch(tappedRow, contentTop, rowStep, rowCount, 0,
+                                                renderer.getScreenWidth(), m.listRowHeight);
+        if (touch != MappedInputManager::RowTouch::None && tappedRow >= 0 && tappedRow < 2) {
+          configIndex = tappedRow;
+          if (touch == MappedInputManager::RowTouch::Tap || btn == 2) {
+            if (configIndex == 0) {
+              timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT);
+              timerMinutes = TIMER_OPTIONS[timerIndex];
+            } else { startDrop(); }
+          }
+          requestUpdate();
           return;
+        }
+        if (btn == 2) {
+          if (configIndex == 0) {
+            timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT);
+            timerMinutes = TIMER_OPTIONS[timerIndex];
+          } else { startDrop(); }
+          requestUpdate();
         }
       }
     }
@@ -315,7 +339,7 @@ void DeadDropActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopDrop(); state = DONE; requestUpdate(); return; }
+        if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { stopDrop(); state = DONE; requestUpdate(); return; }
       }
     }
 
@@ -372,7 +396,7 @@ void DeadDropActivity::renderConfig() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - metrics.verticalSpacing;
 
   // Build timer label inline
   char timerLabel[32];
