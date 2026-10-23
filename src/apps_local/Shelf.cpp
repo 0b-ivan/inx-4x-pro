@@ -52,6 +52,7 @@
 #include "wifi-connect/WifiConnectActivity.h"
 #include "ble-proximity/BleProximityActivity.h"
 #include "ble-scanner/BleScannerActivity.h"
+#include "ble-contact/BleContactExchangeActivity.h"
 #include "host-scanner/HostScannerActivity.h"
 #include "http-client/HttpClientActivity.h"
 #include "mdns-browser/MdnsBrowserActivity.h"
@@ -70,7 +71,6 @@
 #include "ble-beacon/BleBeaconActivity.h"
 #include "ble-keyboard/BleKeyboardActivity.h"
 #include "mesh-chat/MeshChatActivity.h"
-#include "ble-contact/BleContactExchangeActivity.h"
 #endif  // !SIMULATOR
 #include "calculator/CalculatorActivity.h"
 #include "cipher/CipherActivity.h"
@@ -183,10 +183,10 @@ constexpr shelf::Item kApps[] = {
     {"BLE BEACON", &icon_nearby_32, &BleBeaconActivity::create},
     {"BLE KEYBOARD", &icon_nearby_32, &BleKeyboardActivity::create},
     {"MESH CHAT", &icon_study_32, &MeshChatActivity::create},
-    {"BLE CONTACT",    &icon_nearby_32, &BleContactExchangeActivity::create},
 #endif  // !SIMULATOR
     {"BLE PROXIMITY",  &icon_nearby_32, &BleProximityActivity::create},
     {"BLE SCANNER",    &icon_nearby_32, &BleScannerActivity::create},
+    {"BLE CONTACT",    &icon_nearby_32, &BleContactExchangeActivity::create},
     {"HOST SCANNER",   &icon_study_32,  &HostScannerActivity::create},
     {"HTTP CLIENT",    &icon_study_32,  &HttpClientActivity::create},
     {"MDNS BROWSER",   &icon_study_32,  &MdnsBrowserActivity::create},

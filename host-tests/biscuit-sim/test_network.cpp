@@ -95,5 +95,16 @@ int main() {
   check(!biscuit_sim::bleConnects("02:00:00:00:00:11"), "BLE simulated connection failure");
   check(biscuit_sim::bleGattServices("02:00:00:00:00:11").empty(), "BLE connection failure hides services");
   unsetenv("CROSSPLAY_SIM_BLE_SCENARIO");
+  auto frames = biscuit_sim::bleContactPackets();
+  check(frames.size() == 6, "BLE Contact synthetic and invalid fixtures");
+  check(frames[0].size() == 29, "BLE contact manufacturer payload length");
+  check(static_cast<unsigned char>(frames[0][0]) == 0xCC &&
+        static_cast<unsigned char>(frames[0][1]) == 0xB1, "BLE contact company ID");
+  check(frames[1][0] != frames[0][0], "BLE foreign company ID fixture");
+  check(frames[0] == frames[3], "BLE duplicate fixture");
+  check(frames[5].size() < 29, "BLE truncated frame fixture");
+  setenv("CROSSPLAY_SIM_BLE_SCENARIO", "empty", 1);
+  check(biscuit_sim::bleContactPackets().empty(), "BLE Contact empty scan");
+  unsetenv("CROSSPLAY_SIM_BLE_SCENARIO");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }

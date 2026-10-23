@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "BLE CONTACT" ]; then
+    script="1900:DOWN:100;2400:ENTER:100;4400:BACK:100;5400:BACK:100;6800:QUIT"
   elif [ "$app" = "BLE SCANNER" ]; then
     # Scan -> Services -> Characteristics -> Value -> Back all the way to scan.
     script="1900:ENTER:100;2800:ENTER:100;3700:ENTER:100;4600:BACK:100;5500:BACK:100;6400:BACK:100;8000:QUIT"
@@ -29,7 +31,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "BLE SCANNER" ]; then
+  if [ "$app" = "BLE CONTACT" ]; then
+    shots="1600:$out/${name}_before.bmp;3200:$out/${name}_exchange.bmp;4000:$out/${name}_found.bmp;5000:$out/${name}_received.bmp;6100:$frame"
+  elif [ "$app" = "BLE SCANNER" ]; then
     shots="1600:$out/${name}_before.bmp;2500:$out/${name}_services.bmp;3400:$out/${name}_characteristics.bmp;4300:$out/${name}_value.bmp;5200:$out/${name}_back_characteristics.bmp;6100:$out/${name}_back_services.bmp;7000:$frame"
   elif [ "$app" = "OTP GENERATOR" ] || [ "$app" = "HTTP CLIENT" ] || [ "$app" = "MDNS BROWSER" ]; then
     shots="1600:$out/${name}_before.bmp;4300:$frame"
@@ -196,4 +200,41 @@ for state in states:
     assert pos >= 0, f"GATT navigation did not reach {state!r}; log: {log[-1000:]}"
 print("PASS BLE Scanner: scan -> GATT services -> characteristics -> value -> back to scan")
 PYSCANNER
-echo "PASS biscuit-ui-smoke: 11 activities, 22 screenshots, full BLE GATT roundtrip, BLE empty and Host Scanner offline states"
+python3 - <<'PYCONTACT'
+from pathlib import Path
+import hashlib, struct
+root=Path(".pio/biscuit-ui-smoke")
+steps=["before","exchange","found","received",None]
+frames=[root/(f"BLE_CONTACT_{name}.bmp" if name else "BLE_CONTACT.bmp") for name in steps]
+hashes=[]
+for p in frames:
+    data=p.read_bytes()
+    assert data[:2]==b"BM" and len(data)>1000, f"invalid contact screen: {p}"
+    assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+    hashes.append(hashlib.sha256(data).digest())
+assert all(a!=b for a,b in zip(hashes,hashes[1:])), "Contact screen did not transition"
+log=(root/"BLE_CONTACT.log").read_text(errors="replace")
+pos=-1
+for name in ("exchange:0","found:2","received:2","idle:2"):
+    pos=log.find("[BISCUIT_SIM] BLE_CONTACT:"+name,pos+1)
+    assert pos>=0, f"BLE contact lifecycle missing {name}: {log[-800:]}"
+print("PASS BLE Contact: two valid remote contacts and lifecycle")
+PYCONTACT
+empty_log="$out/BLE_CONTACT_empty.log"
+if ! env CROSSPLAY_AUTOSTART="BLE CONTACT" \
+  CROSSPLAY_SIM_BLE_TRACE=1 \
+  CROSSPLAY_SIM_BLE_SCENARIO=empty \
+  CROSSPOINT_SIM_INPUT_SCRIPT="1900:DOWN:100;2400:ENTER:100;4400:BACK:100;6000:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="5000:$out/BLE_CONTACT_empty.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$empty_log" 2>&1; then
+  echo "FAIL biscuit-ui-smoke: BLE Contact empty scenario"
+  tail -100 "$empty_log"
+  exit 1
+fi
+grep -Fq "BLE_CONTACT:idle:0" "$empty_log" || {
+  echo "FAIL BLE Contact empty scan must return to idle"
+  tail -100 "$empty_log"
+  exit 1
+}
+echo "PASS biscuit-ui-smoke: 12 activities, 28 screenshots, BLE contact and GATT"

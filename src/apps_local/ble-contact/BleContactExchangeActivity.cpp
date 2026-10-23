@@ -2,10 +2,16 @@
 #include "DevMode.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <BLEAdvertisedDevice.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>
 #include <BLEUtils.h>
+#else
+#include "platform/sim_biscuit_ble.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 
@@ -17,6 +23,13 @@
 #include "fontIds.h"
 #include "util/RadioManager.h"
 
+#ifdef SIMULATOR
+static void simContactTrace(const char* state, size_t count) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_BLE_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0')
+    std::fprintf(stderr, "[BISCUIT_SIM] BLE_CONTACT:%s:%zu\n", state, count);
+}
+#endif
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
@@ -29,7 +42,13 @@ void BleContactExchangeActivity::onEnter() {
   contactIndex = 0;
   received.clear();
   bleInitialized = false;
+#ifdef SIMULATOR
+  // Isolated demo persona: never read genuine host/user contact details.
+  std::strncpy(myName, "Sim Operator", sizeof(myName) - 1);
+  std::strncpy(myPhone, "TEST-SELF", sizeof(myPhone) - 1);
+#else
   loadMyContact();
+#endif
   requestUpdate();
 }
 
@@ -72,10 +91,8 @@ void BleContactExchangeActivity::saveMyContact() {
 void BleContactExchangeActivity::saveContact(const Contact& contact) {
   auto file = Storage.open(CONTACTS_PATH, O_WRITE | O_CREAT | O_APPEND);
   if (file) {
-    file.print(contact.name);
-    file.print(',');
-    file.print(contact.phone);
-    file.print('\n');
+    const std::string line = std::string(contact.name) + "," + contact.phone;
+    file.println(line.c_str());
     file.close();
   }
 }
@@ -88,6 +105,7 @@ void BleContactExchangeActivity::startExchange() {
   RADIO.ensureBle();
   bleInitialized = true;
 
+#ifndef SIMULATOR
   // Build manufacturer data: company_id(2) + name(14) + phone(13) = 29 bytes
   uint8_t mfgData[MFG_TOTAL] = {};
   mfgData[0] = BISCUIT_COMPANY_ID & 0xFF;
@@ -110,30 +128,41 @@ void BleContactExchangeActivity::startExchange() {
   scan->setInterval(100);
   scan->setWindow(99);
   scan->start(0, nullptr, true);  // non-blocking continuous scan
+#endif
 
   exchangeStart = millis();
   lastScanMs = millis();
   state = EXCHANGING;
+#ifdef SIMULATOR
+  simContactTrace("exchange", received.size());
+#endif
 }
 
 void BleContactExchangeActivity::stopExchange() {
+#ifndef SIMULATOR
   BLEDevice::getAdvertising()->stop();
   BLEDevice::getScan()->stop();
+#endif
   RADIO.shutdown();
   bleInitialized = false;
 }
 
 void BleContactExchangeActivity::pollScanResults() {
+#ifdef SIMULATOR
+  const auto packets = biscuit_sim::bleContactPackets();
+  for (const auto& packet : packets) {
+    if (static_cast<int>(packet.size()) < MFG_TOTAL) continue;
+    const char* mfg = packet.data();
+#else
   BLEScanResults* pResults = BLEDevice::getScan()->getResults();
   if (!pResults) return;
   for (int i = 0; i < pResults->getCount(); i++) {
     BLEAdvertisedDevice dev = pResults->getDevice(i);
     if (!dev.haveManufacturerData()) continue;
-
     String mfgRaw = dev.getManufacturerData();
     if (static_cast<int>(mfgRaw.length()) < MFG_TOTAL) continue;
-
     const char* mfg = mfgRaw.c_str();
+#endif
     uint16_t compId = static_cast<uint8_t>(mfg[0]) |
                       (static_cast<uint8_t>(mfg[1]) << 8);
     if (compId != BISCUIT_COMPANY_ID) continue;
@@ -162,6 +191,9 @@ void BleContactExchangeActivity::pollScanResults() {
       requestUpdate();
     }
   }
+#ifdef SIMULATOR
+  simContactTrace("found", received.size());
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +287,9 @@ void BleContactExchangeActivity::loop() {
         (now - exchangeStart >= EXCHANGE_DURATION_MS)) {
       stopExchange();
       if (!received.empty()) { contactIndex = 0; state = RECEIVED; } else { state = IDLE; }
+#ifdef SIMULATOR
+      simContactTrace(state == RECEIVED ? "received" : "idle", received.size());
+#endif
       requestUpdate();
     }
     {
@@ -272,7 +307,11 @@ void BleContactExchangeActivity::loop() {
 
   if (state == RECEIVED) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      state = IDLE; idleMenuIndex = 0; requestUpdate(); return;
+      state = IDLE; idleMenuIndex = 0; requestUpdate();
+#ifdef SIMULATOR
+      simContactTrace("idle", received.size());
+#endif
+      return;
     }
 
     buttonNavigator.onNext([this] {

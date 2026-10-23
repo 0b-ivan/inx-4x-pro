@@ -67,5 +67,28 @@ inline std::vector<BleGattCharacteristic> bleGattCharacteristics(
     return {{"00002a00-0000-1000-8000-00805f9b34fb", "Sim Beacon", true, false, false}};
   return {};
 }
+
+inline std::string makeBleContactPacket(unsigned company, const std::string& name,
+                                         const std::string& phone) {
+  std::string packet(29, '\0');  // 2 byte ID, 14 byte name, 13 byte phone.
+  packet[0] = static_cast<char>(company & 255);
+  packet[1] = static_cast<char>((company >> 8) & 255);
+  for (size_t i = 0; i < name.size() && i < 14; ++i) packet[2+i] = name[i];
+  for (size_t i = 0; i < phone.size() && i < 13; ++i) packet[16+i] = phone[i];
+  return packet;
+}
+inline std::vector<std::string> bleContactPackets() {
+  const char* v = std::getenv("CROSSPLAY_SIM_BLE_SCENARIO");
+  const std::string scenario = v ? v : "normal";
+  if (scenario == "empty" || scenario == "timeout" || scenario == "disconnect") return {};
+  return {
+    makeBleContactPacket(0xB1CC, "Sim Alice", "TEST-0001"),
+    makeBleContactPacket(0xDEAD, "Wrong ID", "TEST-9999"),
+    makeBleContactPacket(0xB1CC, "Sim Bob", "TEST-0002"),
+    makeBleContactPacket(0xB1CC, "Sim Alice", "TEST-0001"),
+    makeBleContactPacket(0xB1CC, "Sim Operator", "TEST-SELF"),
+    std::string("short")
+  };
+}
 }  // namespace biscuit_sim
 #endif
