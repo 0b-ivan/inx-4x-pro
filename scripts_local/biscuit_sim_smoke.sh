@@ -143,6 +143,67 @@ assert len(set(pixels)) > 1, f"blank screenshot: {p}"
 print(f"PASS screenshot {p.name} {w}x{h}")
 PY
 done
+
+# Guard every Biscuit Activity against a screenshot taken during the boot
+# splash. Merely checking for a nonblank BMP accepted CLOCK.bmp in CI when
+# startup slipped beyond the 4300ms capture. Pick a capture while each app is
+# deliberately active (not the final after-exit screenshot).
+python3 - <<'PYACTIVITYSCREENS'
+from pathlib import Path
+import struct
+
+root = Path(".pio/biscuit-ui-smoke")
+samples = {
+    "CLOCK": "CLOCK.bmp",
+    "DEVICE INFO": "DEVICE_INFO.bmp",
+    "OTP GENERATOR": "OTP_GENERATOR_before.bmp",
+    "WIFI CONNECT": "WIFI_CONNECT.bmp",
+    "DNS LOOKUP": "DNS_LOOKUP.bmp",
+    "PING": "PING.bmp",
+    "HOST SCANNER": "HOST_SCANNER.bmp",
+    "HTTP CLIENT": "HTTP_CLIENT_before.bmp",
+    "MDNS BROWSER": "MDNS_BROWSER.bmp",
+    "BLE PROXIMITY": "BLE_PROXIMITY.bmp",
+    "BLE SCANNER": "BLE_SCANNER_before.bmp",
+    "BLE CONTACT": "BLE_CONTACT_received.bmp",
+    "TRACKER DETECT": "TRACKER_DETECT_monitoring.bmp",
+    "PROBE SNIFFER": "PROBE_SNIFFER_list.bmp",
+    "CROWD DENSITY": "CROWD_DENSITY_live.bmp",
+    "DEV FINGERPRINT": "DEV_FINGERPRINT_capturing.bmp",
+    "DEAUTH DETECTOR": "DEAUTH_DETECTOR_monitor.bmp",
+    "PACKET MONITOR": "PACKET_MONITOR_initial.bmp",
+    "NETWORK MONITOR": "NETWORK_MONITOR_monitor.bmp",
+    "BLE BEACON": "BLE_BEACON_advertising.bmp",
+    "AIRTAG SPOOF": "AIRTAG_SPOOF_active.bmp",
+    "WIFI DEAUTH": "WIFI_DEAUTH_preview.bmp",
+    "BLE SPAM": "BLE_SPAM_active.bmp",
+    "BLE KEYBOARD": "BLE_KEYBOARD_executed.bmp",
+    "MESH CHAT": "MESH_CHAT_messages.bmp",
+    "FIRE": "FIRE_preview.bmp",
+}
+assert len(samples) == 26, "expected all 26 Biscuit entries"
+for app, filename in samples.items():
+    path = root / filename
+    data = path.read_bytes()
+    assert data[:2] == b"BM", f"{app}: invalid activity BMP"
+    width, height = struct.unpack_from("<ii", data, 18)
+    offset = struct.unpack_from("<I", data, 10)[0]
+    assert (width, height) == (480, 800), f"{app}: unexpected image size"
+    bpp = struct.unpack_from("<H", data, 28)[0]
+    assert bpp == 32, f"{app}: unexpected BMP pixel format"
+    raw = memoryview(data)[offset:offset + width * height * 4]
+    assert len(raw) == width * height * 4, f"{app}: truncated pixels"
+    # Positive-height BMP is bottom-up. Boot splash contains no header ink.
+    top_rows = raw[(height - 110) * width * 4:]
+    header_ink = sum(top_rows[i] < 128 for i in range(0, len(top_rows), 4))
+    assert header_ink > 150, (
+        f"{app}: {filename} has no Activity header (only {header_ink} ink "
+        "pixels in top 110px); boot splash or wrong capture state"
+    )
+    print(f"PASS {app}: real Activity screen (header ink {header_ink})")
+print("PASS Biscuit 26/26: screenshots contain rendered Activity headers")
+PYACTIVITYSCREENS
+
 # Regression: connected and disconnected Host Scanner must render different states.
 # This only validates an actual visible state difference, not full scan semantics.
 offline="$out/HOST_SCANNER_offline.bmp"
