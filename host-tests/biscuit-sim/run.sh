@@ -12,6 +12,9 @@ c++ -std=c++17 -DSIMULATOR -Wall -Wextra -Werror -I"$repo/src" -I"$repo/sim-stub
 "$work/test_network"
 c++ -std=c++17 -Wall -Wextra -Werror -I"$repo/src" \
   "$here/test_portal_lab.cpp" -o "$work/test_portal_lab"
+c++ -std=c++17 -Wall -Wextra -Werror -I"$repo/src" \
+  "$here/test_wardrive_csv.cpp" -o "$work/test_wardrive_csv"
+"$work/test_wardrive_csv"
 "$work/test_portal_lab"
 python3 "$here/test_wiring.py" "$repo"
 python3 "$here/test_visual_goldens.py" --self-test
