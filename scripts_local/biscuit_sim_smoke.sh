@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR" "BLE BEACON" "AIRTAG SPOOF")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR" "BLE BEACON" "AIRTAG SPOOF" "WIFI DEAUTH")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "WIFI DEAUTH" ]; then
+    script="2200:ENTER:100;3800:BACK:100;4800:BACK:100;6200:QUIT"
   elif [ "$app" = "BLE BEACON" ]; then
     script="1900:ENTER:100;4700:BACK:100;5800:BACK:100;6900:QUIT"
   elif [ "$app" = "AIRTAG SPOOF" ]; then
@@ -49,7 +51,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "BLE BEACON" ]; then
+  if [ "$app" = "WIFI DEAUTH" ]; then
+    shots="1600:$out/${name}_targets.bmp;3200:$out/${name}_preview.bmp;4350:$out/${name}_stopped.bmp;5500:$frame"
+  elif [ "$app" = "BLE BEACON" ]; then
     shots="1600:$out/${name}_menu.bmp;4200:$out/${name}_advertising.bmp;5400:$out/${name}_stopped.bmp;6300:$frame"
   elif [ "$app" = "AIRTAG SPOOF" ]; then
     shots="1700:$out/${name}_menu.bmp;3700:$out/${name}_active.bmp;5100:$out/${name}_rotated.bmp;6000:$frame"
@@ -777,6 +781,46 @@ for app,names in checks.items():
         assert re.search(r"BLE_BEACON:stop:[1-9][0-9]*:",log), "BLE beacon abort missing"
 print("PASS BLE advertising preview modes, MAC rotation, cancel and radio cleanup")
 PYBLEADV
-echo "PASS biscuit-ui-smoke: 21 activities, BLE Beacon/AirTag virtual preview and prior regressions"
+python3 - <<'PYWIFIDRY'
+from pathlib import Path
+import hashlib,struct,re
+folder=Path(".pio/biscuit-ui-smoke")
+names=("targets","preview","stopped",None)
+frames=[folder/(f"WIFI_DEAUTH_{n}.bmp" if n else "WIFI_DEAUTH.bmp") for n in names]
+hashes=[]
+for p in frames:
+    bmp=p.read_bytes()
+    assert bmp[:2]==b"BM" and len(bmp)>1000, f"bad simulated deauth BMP {p}"
+    assert tuple(map(abs,struct.unpack_from("<ii",bmp,18)))==(480,800)
+    hashes.append(hashlib.sha256(bmp).digest())
+assert hashes[0]!=hashes[1] and hashes[1]!=hashes[2], "deauth simulator UI states not distinct"
+log=(folder/"WIFI_DEAUTH.log").read_text(errors="replace")
+pos=-1
+for stage in ("scan:0:2","started:0:2"):
+    pos=log.find("WIFI_DEAUTH:"+stage,pos+1)
+    assert pos>=0, f"WiFi Deauth missing {stage}"
+assert re.search(r"WIFI_DEAUTH:preview:[1-9][0-9]*:1",log), "offline frames not counted"
+assert re.search(r"WIFI_DEAUTH:stopped:[1-9][0-9]*:2",log), "dry-run cancel failed"
+assert re.search(r"WIFI_DEAUTH:radio-off:[1-9][0-9]*:2",log), "radio not released"
+print("PASS WiFi Deauth: synthetic target, frame counts, cancellation, no physical TX")
+PYWIFIDRY
+
+empty_log="$out/WIFI_DEAUTH_empty.log"
+if ! env CROSSPLAY_AUTOSTART="WIFI DEAUTH" \
+  CROSSPLAY_SIM_DEAUTH_TRACE=1 \
+  CROSSPLAY_SIM_WIFI_DEAUTH_SCENARIO=empty \
+  CROSSPOINT_SIM_INPUT_SCRIPT="2700:BACK:100;4200:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="2100:$out/WIFI_DEAUTH_empty.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$empty_log" 2>&1; then
+  echo "FAIL offline WiFi Deauth empty target scenario"; tail -100 "$empty_log"; exit 1
+fi
+grep -Fq "WIFI_DEAUTH:scan:0:0" "$empty_log" || {
+  echo "FAIL offline WiFi Deauth fabricated an AP"; exit 1
+}
+if grep -Fq "WIFI_DEAUTH:preview:" "$empty_log"; then
+  echo "FAIL offline WiFi Deauth fabricated packets"; exit 1
+fi
+echo "PASS biscuit-ui-smoke: 22 activities, WiFi Deauth strictly offline preview"
 
 

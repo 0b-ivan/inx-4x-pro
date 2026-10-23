@@ -131,5 +131,21 @@ inline std::vector<ProbeFrame> packetMonitorFrames() {
           makeProbe(a, "Lab-A", -43), makeProbe(c, "", -80),
           malformed};
 }
+
+// Offline-only synthetic APs used for WiFi Deauth UI preview. Never TX.
+struct SimLabAp {
+  const char* ssid;
+  uint8_t bssid[6];
+  int rssi;
+  uint8_t channel;
+};
+inline std::vector<SimLabAp> deauthPreviewAps() {
+  const char* scenario = std::getenv("CROSSPLAY_SIM_WIFI_DEAUTH_SCENARIO");
+  if (scenario && std::string(scenario) == "empty") return {};
+  return {
+    {"LabAP", {0x02,0,0,0,0,0x71}, -48, 1},
+    {"GuestLab", {0x02,0,0,0,0,0x72}, -72, 6}
+  };
+}
 }  // namespace biscuit_sim
 #endif

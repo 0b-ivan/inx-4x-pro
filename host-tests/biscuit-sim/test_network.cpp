@@ -293,5 +293,15 @@ int main() {
     check(biscuit_sim::blePreview(i, 17).bytes == packet.bytes,
           "BLE preview is repeatable with no entropy source");
   }
+  unsetenv("CROSSPLAY_SIM_WIFI_DEAUTH_SCENARIO");
+  const auto previewAps = biscuit_sim::deauthPreviewAps();
+  check(previewAps.size()==2, "WiFi Deauth preview has only fake APs");
+  check(previewAps[0].bssid[0]==0x02 && previewAps[1].bssid[0]==0x02,
+        "preview target BSSIDs are locally administered");
+  check(previewAps[0].channel==1 && previewAps[1].channel==6,
+        "preview AP channels deterministic");
+  setenv("CROSSPLAY_SIM_WIFI_DEAUTH_SCENARIO","empty",1);
+  check(biscuit_sim::deauthPreviewAps().empty(), "empty WiFi Deauth target list");
+  unsetenv("CROSSPLAY_SIM_WIFI_DEAUTH_SCENARIO");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }

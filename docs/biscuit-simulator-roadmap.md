@@ -2,15 +2,15 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **21 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **22 echte Biscuit-Activities** aus:
 
 | Gruppe | Activities |
 | --- | --- |
 | Offline/System | CLOCK, DEVICE INFO, OTP GENERATOR |
-| WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT, DEAUTH DETECTOR, PACKET MONITOR, NETWORK MONITOR |
+| WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT, DEAUTH DETECTOR, PACKET MONITOR, NETWORK MONITOR, WIFI DEAUTH |
 | BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT, BLE BEACON, AIRTAG SPOOF |
 
-Die ursprünglichen No-op-VTables der einundzwanzig Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der zweiundzwanzig Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
@@ -54,7 +54,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller einundzwanzig Apps
+- Autostart und nichtleere Screenshots aller zweiundzwanzig Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -236,3 +236,13 @@ geprüft werden kann; Firmware-Timing bleibt unverändert.
 **Kein BLE-Funkverkehr, kein Replay, keine reale Apple-/Google-/Samsung-Identität.**
 Die reale drahtlose Interoperabilität wird damit nicht geprüft. Die beiden
 Integrationen benötigen noch einen vollständig grünen neuen CI-Lauf.
+
+## WiFi Deauth: ausschließlich Simulation ohne Übertragung
+
+`WIFI DEAUTH` führt im nativen Simulator die echte Auswahl- und
+Aktivitätslogik mit zwei rein virtuellen APs aus. Der Hardware-TX-Pfad
+bleibt unverändert und ist mittels `#ifndef SIMULATOR` vollständig aus
+der nativen Kompilierung ausgeschlossen. Der Simulator zählt ausschließlich
+lokale Testereignisse und kennzeichnet die Ansicht mit `NO TX` sowie
+`Simulated Frames`. Ein leerer Scan sowie Abbruch und Radio-Cleanup
+sind Teil der Headless-SDL-Abnahme. **Es werden keine Deauth-Pakete gesendet.**
