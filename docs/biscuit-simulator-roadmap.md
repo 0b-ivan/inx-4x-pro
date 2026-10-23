@@ -1,5 +1,26 @@
 # Biscuit im X4-Pro-Simulator – Integrationsplan
 
+## X4-Pro-Hardwareabnahme: Touch-Footer nur in Biscuit (24.10.2026)
+
+Ein Gerätefoto zeigte im Shelf eine über den unteren Listeneinträgen
+liegende Leiste mit „Zurück“, „Öffnen“, „Hoch“, „Runter“. Ursache:
+`ShelfFolderActivity` rief `drawButtonHintsAlways()` auf, obwohl die
+FreeInkUI-Liste eine eigene Touch-/Seitentasten-Navigation besitzt.
+
+**Regel für GT911-Touchgeräte:** Die permanenten, tappbaren
+Vier-Tasten-Footer bleiben ausschließlich in den Biscuit-Activities.
+Shelf, Spiele, Player und die bisherigen CrossPlay-Apps benutzen stattdessen
+ihre eigenen Touch-Flächen und Gesten; sie zeichnen keinen zusätzlichen
+Biscuit-Footer. Die vorhandenen nicht erzwungenen Button-Hinweise dürfen auf
+Geräten ohne Touch weiterhin erscheinen. Bestehende Biscuit-
+`drawButtonHintsAlways()`-Aufrufe und passende Hitboxen bleiben intakt.
+
+Der Host-Wiring-Test verhindert eine erneute Einblendung in
+`ShelfFolderActivity` und den ursprünglichen CrossPlay-Apps.
+CI-Firmware- und SDL-Tests prüfen die Software; eine abschließende
+Sichtprüfung auf realem GT911 bleibt erforderlich.
+
+
 ## Aktueller Integrationsstand (23.10.2026)
 
 Der native X4-Pro-Simulator führt **25 Original-Activities und 1 sichere UI-Preview** aus:
