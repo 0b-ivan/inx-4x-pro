@@ -4,8 +4,28 @@
 #include <cstdint>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 namespace biscuit_sim {
+struct MdnsService {
+  const char* type;
+  const char* host;
+  const char* ip;
+  uint16_t port;
+  const char* instance;
+};
+inline std::vector<MdnsService> mdnsDiscover(const std::string& serviceType) {
+  static const MdnsService services[] = {
+    {"_http._tcp", "gateway.test", "192.0.2.1", 80, "Simulated Gateway"},
+    {"_http._tcp", "example.test", "192.0.2.10", 80, "Simulated Web"},
+    {"_ssh._tcp", "gateway.test", "192.0.2.1", 22, "Simulated SSH"}
+  };
+  std::vector<MdnsService> result;
+  for (const auto& service : services) {
+    if (serviceType == service.type) result.push_back(service);
+  }
+  return result;
+}
 struct HttpResult { int status; std::string body; unsigned long latencyMs; };
 inline HttpResult httpRequest(const std::string& method, const std::string& url, const std::string& body) {
   if (url == "http://example.test/ok" && method == "GET") return {200, "simulated OK", 3};
