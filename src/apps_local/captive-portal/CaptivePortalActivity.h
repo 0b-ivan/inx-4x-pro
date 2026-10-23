@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <Memory.h>
 #include <DNSServer.h>
 #include <WebServer.h>
 #include <string>
