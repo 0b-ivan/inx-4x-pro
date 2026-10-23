@@ -559,7 +559,7 @@ void TriviaActivity::render(RenderLock&&) {
   toybox::reportOverflow(interactions_, "Trivia");
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(flashOnNextPaint_ ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
   flashOnNextPaint_ = false;
