@@ -1518,7 +1518,7 @@ void StudyActivity::render(RenderLock&&) {
     const fui::Rect qr = studyui::buildPairQr(screen, pairCode_.c_str());
     QrUtils::drawQrCode(renderer, Rect{qr.x, qr.y, qr.width, qr.height}, study::StudySync::pairUrl(pairCode_));
     const auto labels = mappedInput.mapLabels("Cancel", "", "", "");
-    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -1539,7 +1539,7 @@ void StudyActivity::render(RenderLock&&) {
     confirmW_ = layout.pill.width;
     confirmH_ = layout.pill.height;
     const auto labels = mappedInput.mapLabels("Cancel", "", "", "Confirm");
-    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -1554,7 +1554,7 @@ void StudyActivity::render(RenderLock&&) {
     interactionsReady_ = true;
     toybox::reportOverflow(interactions_, "Study deck picker");
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
-    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -1571,7 +1571,7 @@ void StudyActivity::render(RenderLock&&) {
     const bool backLive =
         flow_.verdict != studyui::SyncVerdictKind::None || flow_.safety >= studyui::SyncSafety::ReviewsSafe;
     const auto labels = mappedInput.mapLabels(backLive ? "Back" : "", "", "", "");
-    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -1594,7 +1594,7 @@ void StudyActivity::render(RenderLock&&) {
     toybox::reportOverflow(interactions_, "Study deck");
 
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
-    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -1728,7 +1728,7 @@ void StudyActivity::render(RenderLock&&) {
   }
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
 
