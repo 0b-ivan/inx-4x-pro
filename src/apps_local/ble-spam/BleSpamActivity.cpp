@@ -2,18 +2,32 @@
 #include "DevMode.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <BLEAdvertising.h>
 #include <BLEDevice.h>
 #include <BLEUtils.h>
+#include <esp_random.h>
+#else
+#include "platform/sim_biscuit_ble.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
-#include <esp_random.h>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "../util/RadioManager.h"
+
+#ifdef SIMULATOR
+static void spamSimTrace(const char* event, int count, int family) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_BLE_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0')
+    std::fprintf(stderr, "[BISCUIT_SIM] BLE_SPAM:%s:%d:%d\n", event, count, family);
+}
+#endif
 
 // ---- helpers ----
 
@@ -46,12 +60,17 @@ void BleSpamActivity::onEnter() {
 
 void BleSpamActivity::onExit() {
   if (state == BROADCASTING) {
+#ifndef SIMULATOR
     BLEAdvertising* adv = BLEDevice::getAdvertising();
     if (adv) adv->stop();
+#endif
     RADIO.shutdown();
+#ifdef SIMULATOR
+    spamSimTrace("radio-off", sentCount, advType);
+#endif
   }
-  devmode::resume();
   Activity::onExit();
+  devmode::resume();
 }
 
 // ---- BLE operations ----
@@ -59,23 +78,34 @@ void BleSpamActivity::onExit() {
 void BleSpamActivity::startBroadcasting() {
   RADIO.ensureBle();
 
+#ifndef SIMULATOR
   if (!BLEDevice::getInitialized()) {
     BLEDevice::init("");
   }
-
+#endif
   sentCount = 0;
   startTime = millis();
   lastAdvTime = 0;
   lastDisplayMs = 0;
   currentRandomType = 0;
   state = BROADCASTING;
+#ifdef SIMULATOR
+  spamSimTrace("start", 0, advType);
+#endif
   requestUpdate();
 }
 
 void BleSpamActivity::stopBroadcasting() {
+#ifndef SIMULATOR
   BLEAdvertising* adv = BLEDevice::getAdvertising();
   if (adv) adv->stop();
+#endif
   RADIO.shutdown();
+#ifdef SIMULATOR
+  spamSimTrace("stop", sentCount, advType);
+  spamSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                   ? "radio-off" : "radio-leak", sentCount, advType);
+#endif
   state = MENU;
   requestUpdate();
 }
@@ -98,6 +128,7 @@ void BleSpamActivity::sendNextAdvertisement() {
   sentCount++;
 }
 
+#ifndef SIMULATOR
 void BleSpamActivity::sendAppleProximityAdv() {
   // Apple proximity pairing — manufacturer data with company ID 0x004C.
   // Type 0x07 = proximity pairing. Device type byte randomised for variety.
@@ -200,6 +231,27 @@ void BleSpamActivity::sendSamsungBudsAdv() {
   adv->setAdvertisementData(advData);
   adv->start();
 }
+
+#else
+// The preview tokens are not BLE advertising frames and cannot be transmitted.
+// Only the Activity's original menu/cadence/counter state machine is exercised.
+void BleSpamActivity::sendAppleProximityAdv() {
+  const auto preview = biscuit_sim::blePreview(0, sentCount);
+  spamSimTrace("preview", sentCount + 1, preview.family);
+}
+void BleSpamActivity::sendAndroidFastPairAdv() {
+  const auto preview = biscuit_sim::blePreview(1, sentCount);
+  spamSimTrace("preview", sentCount + 1, preview.family);
+}
+void BleSpamActivity::sendWindowsSwiftPairAdv() {
+  const auto preview = biscuit_sim::blePreview(2, sentCount);
+  spamSimTrace("preview", sentCount + 1, preview.family);
+}
+void BleSpamActivity::sendSamsungBudsAdv() {
+  const auto preview = biscuit_sim::blePreview(3, sentCount);
+  spamSimTrace("preview", sentCount + 1, preview.family);
+}
+#endif
 
 // ---- loop ----
 
@@ -351,7 +403,11 @@ void BleSpamActivity::render(RenderLock&&) {
 
   // Packets sent
   char pktBuf[32];
+#ifdef SIMULATOR
+  snprintf(pktBuf, sizeof(pktBuf), "Simulated previews: %d", sentCount);
+#else
   snprintf(pktBuf, sizeof(pktBuf), "Packets sent: %d", sentCount);
+#endif
   renderer.drawCenteredText(UI_12_FONT_ID, y, pktBuf, true, EpdFontFamily::BOLD);
   y += 50;
 

@@ -303,5 +303,12 @@ int main() {
   setenv("CROSSPLAY_SIM_WIFI_DEAUTH_SCENARIO","empty",1);
   check(biscuit_sim::deauthPreviewAps().empty(), "empty WiFi Deauth target list");
   unsetenv("CROSSPLAY_SIM_WIFI_DEAUTH_SCENARIO");
+  for (unsigned mode = 0; mode < 4; ++mode) {
+    const auto preview = biscuit_sim::blePreview(mode, 100);
+    check(preview.family == static_cast<int>(mode) && preview.sequence == 100,
+          "BLE Spam synthetic preview for every advertising mode");
+    check(preview.bytes.find("OFFLINE-SIM:") == 0,
+          "BLE Spam previews cannot be actual advertisements");
+  }
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }

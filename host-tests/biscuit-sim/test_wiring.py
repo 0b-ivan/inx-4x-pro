@@ -33,6 +33,7 @@ for name, cls, path in (
     ("BLE BEACON", "BleBeaconActivity", "ble-beacon/BleBeaconActivity.cpp"),
     ("AIRTAG SPOOF", "AirTagTestActivity", "airtag-test/AirTagTestActivity.cpp"),
     ("WIFI DEAUTH", "WifiTestActivity", "wifi-test/WifiTestActivity.cpp"),
+    ("BLE SPAM", "BleSpamActivity", "ble-spam/BleSpamActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -109,6 +110,9 @@ wifi_test = (root / "src/apps_local/wifi-test/WifiTestActivity.cpp").read_text()
 assert "biscuit_sim::deauthPreviewAps()" in wifi_test, "WiFi Deauth must use virtual AP list"
 assert "OFFLINE SIMULATION - NO TX" in wifi_test and "wifiDeauthSimTrace" in wifi_test, "WiFi Deauth UI must flag dry-run and emit test state"
 assert "esp_wifi_80211_tx" in wifi_test and "#ifndef SIMULATOR" in wifi_test, "real transmit must remain hardware-only"
+spam = (root / "src/apps_local/ble-spam/BleSpamActivity.cpp").read_text()
+assert "biscuit_sim::blePreview(" in spam and "spamSimTrace" in spam, "BLE Spam must use isolated preview data"
+assert "#ifndef SIMULATOR" in spam and "Simulated previews" in spam, "BLE Spam must show simulated-only mode"
 smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
 assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
 assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"

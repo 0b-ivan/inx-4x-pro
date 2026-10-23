@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR" "BLE BEACON" "AIRTAG SPOOF" "WIFI DEAUTH")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR" "BLE BEACON" "AIRTAG SPOOF" "WIFI DEAUTH" "BLE SPAM")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "BLE SPAM" ]; then
+    script="1900:ENTER:100;2400:ENTER:100;4400:BACK:100;5400:BACK:100;6700:QUIT"
   elif [ "$app" = "WIFI DEAUTH" ]; then
     script="2200:ENTER:100;3800:BACK:100;4800:BACK:100;6200:QUIT"
   elif [ "$app" = "BLE BEACON" ]; then
@@ -51,7 +53,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "WIFI DEAUTH" ]; then
+  if [ "$app" = "BLE SPAM" ]; then
+    shots="1700:$out/${name}_disclaimer.bmp;2200:$out/${name}_menu.bmp;3700:$out/${name}_active.bmp;4900:$out/${name}_stopped.bmp;6000:$frame"
+  elif [ "$app" = "WIFI DEAUTH" ]; then
     shots="1600:$out/${name}_targets.bmp;3200:$out/${name}_preview.bmp;4350:$out/${name}_stopped.bmp;5500:$frame"
   elif [ "$app" = "BLE BEACON" ]; then
     shots="1600:$out/${name}_menu.bmp;4200:$out/${name}_advertising.bmp;5400:$out/${name}_stopped.bmp;6300:$frame"
@@ -821,6 +825,29 @@ grep -Fq "WIFI_DEAUTH:scan:0:0" "$empty_log" || {
 if grep -Fq "WIFI_DEAUTH:preview:" "$empty_log"; then
   echo "FAIL offline WiFi Deauth fabricated packets"; exit 1
 fi
-echo "PASS biscuit-ui-smoke: 22 activities, WiFi Deauth strictly offline preview"
+python3 - <<'PYSPAM'
+from pathlib import Path
+import hashlib,struct,re
+root=Path(".pio/biscuit-ui-smoke")
+names=("disclaimer","menu","active","stopped",None)
+paths=[root/(f"BLE_SPAM_{n}.bmp" if n else "BLE_SPAM.bmp") for n in names]
+hashes=[]
+for p in paths:
+    data=p.read_bytes()
+    assert data[:2]==b"BM" and len(data)>1000, f"invalid BLE Spam preview screen {p}"
+    assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+    hashes.append(hashlib.sha256(data).digest())
+assert hashes[0]!=hashes[1] and hashes[1]!=hashes[2] and hashes[2]!=hashes[3], (
+    "BLE Spam disclaimer/menu/preview/stop views not distinct")
+log=(root/"BLE_SPAM.log").read_text(errors="replace")
+assert "BLE_SPAM:start:0:4" in log, "default mixed preview mode not started"
+for family in range(4):
+    assert re.search(rf"BLE_SPAM:preview:[0-9]+:{family}",log), (
+        f"missing synthetic advertising family {family}")
+assert re.search(r"BLE_SPAM:stop:[1-9][0-9]*:4",log), "preview stop missing"
+assert re.search(r"BLE_SPAM:radio-off:[1-9][0-9]*:4",log), "radio cleanup failed"
+print("PASS BLE Spam: disclaimer, four in-memory families, stop and cleanup")
+PYSPAM
+echo "PASS biscuit-ui-smoke: 23 activities, BLE Spam preview non-transmitting"
 
 

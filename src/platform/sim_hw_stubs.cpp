@@ -12,7 +12,6 @@
 #include "../apps_local/ble-keyboard/BleKeyboardActivity.h"
 #include "../apps_local/ble-proximity/BleProximityActivity.h"
 #include "../apps_local/ble-scanner/BleScannerActivity.h"
-#include "../apps_local/ble-spam/BleSpamActivity.h"
 #include "../apps_local/fire/FireActivity.h"
 #include "../apps_local/host-scanner/HostScannerActivity.h"
 #include "../apps_local/http-client/HttpClientActivity.h"
@@ -26,7 +25,6 @@
   void cls::render(RenderLock&&) {}
 
 HWSTUB_ACTIVITY(BleKeyboardActivity)
-HWSTUB_ACTIVITY(BleSpamActivity)
 HWSTUB_ACTIVITY(FireActivity)
 HWSTUB_ACTIVITY(MeshChatActivity)
 

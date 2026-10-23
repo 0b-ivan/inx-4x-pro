@@ -2,15 +2,15 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **22 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **23 echte Biscuit-Activities** aus:
 
 | Gruppe | Activities |
 | --- | --- |
 | Offline/System | CLOCK, DEVICE INFO, OTP GENERATOR |
 | WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT, DEAUTH DETECTOR, PACKET MONITOR, NETWORK MONITOR, WIFI DEAUTH |
-| BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT, BLE BEACON, AIRTAG SPOOF |
+| BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT, BLE BEACON, AIRTAG SPOOF, BLE SPAM |
 
-Die ursprünglichen No-op-VTables der zweiundzwanzig Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der dreiundzwanzig Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
@@ -54,7 +54,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller zweiundzwanzig Apps
+- Autostart und nichtleere Screenshots aller dreiundzwanzig Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -246,3 +246,12 @@ der nativen Kompilierung ausgeschlossen. Der Simulator zählt ausschließlich
 lokale Testereignisse und kennzeichnet die Ansicht mit `NO TX` sowie
 `Simulated Frames`. Ein leerer Scan sowie Abbruch und Radio-Cleanup
 sind Teil der Headless-SDL-Abnahme. **Es werden keine Deauth-Pakete gesendet.**
+
+## BLE Spam: nur virtueller, nicht sendefähiger Testdatenstrom
+
+Die originale Activity samt Disclaimer, Auswahlmenü, Intervallsteuerung,
+Random-All-Zyklus und Stopp ist im Simulator enthalten. Die Vorschau
+nutzt ausschließlich `OFFLINE-SIM`-Datensätze, die ausdrücklich keine
+BLE-Advertising-Frames darstellen. Der originale Arduino-BLE-Pfad wird nur
+auf der Hardware kompiliert. Der SDL-Lauf prüft alle vier Modusfamilien,
+Laufzeit-Zähler und Ressourcenfreigabe. **Kein Funk, keine fremden Geräte.**
