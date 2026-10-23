@@ -1,4 +1,5 @@
 #include "ApClonerActivity.h"
+#include "LabApRules.h"
 #include "DevMode.h"
 #include "../Shelf.h"
 
@@ -72,6 +73,19 @@ void ApClonerActivity::processScanResults() {
     std::sort(aps.begin(), aps.end(), [](const AP& a, const AP& b) { return a.rssi > b.rssi; });
   }
   WiFi.scanDelete();
+  // A first-party, clearly labelled lab AP can be started without any
+  // pre-existing network. It is never derived from a third-party SSID.
+  const std::string ownSsid = ap_lab::localSsid();
+  const bool localAlreadyListed = std::any_of(aps.begin(), aps.end(),
+      [&ownSsid](const AP& ap) { return ap.ssid == ownSsid; });
+  if (!localAlreadyListed) {
+    AP own{};
+    own.ssid = ownSsid;
+    own.rssi = 0;
+    own.channel = ap_lab::localChannel();
+    own.encType = WIFI_AUTH_OPEN;
+    aps.insert(aps.begin(), std::move(own));
+  }
   state = SELECT_AP;
   requestUpdate();
 }
@@ -85,13 +99,13 @@ void ApClonerActivity::startClone(int apIndex) {
 
   WiFi.scanDelete();
   // Only reproduce a deliberately named X4PRO-LAB-* test network.
-  if (aps[apIndex].ssid.rfind("X4PRO-LAB-", 0) != 0) {
+  if (!ap_lab::isLabSsid(aps[apIndex].ssid)) {
     LOG_ERR("APLAB", "Refusing non-lab SSID");
     return;
   }
   clonedSsid = aps[apIndex].ssid;
   clonedChannel = aps[apIndex].channel;
-  if (clonedChannel < 1 || clonedChannel > 13) {
+  if (!ap_lab::validChannel(clonedChannel)) {
     LOG_ERR("APLAB", "Unsupported AP channel: %u", clonedChannel);
     return;
   }
@@ -282,7 +296,7 @@ void ApClonerActivity::render(RenderLock&&) {
                      static_cast<int>(aps[index].channel),
                      static_cast<int>(aps[index].rssi),
                      encryptionString(aps[index].encType),
-                     aps[index].ssid.rfind("X4PRO-LAB-", 0) == 0 ? "LAB" : "view only");
+                     ap_lab::isLabSsid(aps[index].ssid) ? "LAB" : "view only");
             return buf;
           });
     }
