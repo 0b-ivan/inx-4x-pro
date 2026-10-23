@@ -132,6 +132,16 @@ assert 'PROBE:touch-detail:3' in smoke_script, "X4 Pro touch path must prove rea
 assert 'script="8500:ENTER:650;11800:QUIT"' in smoke_script, "Clock mode-switch must happen after stable golden"
 assert 'shots="6500:$frame;10400:$out/${name}_stopwatch.bmp"' in smoke_script, "Clock golden must show actual Clock after boot, before Stopwatch"
 assert 'Entering activity: Clock' in smoke_script, "Clock must reject boot-splash screenshots"
+assert "PASS Biscuit 26/26: screenshots contain rendered Activity headers" in smoke_script, (
+    "all 26 Activity snapshots must be checked against boot-splash false positives")
+crowd_ui = (root / "src/apps_local/crowd-density/CrowdDensityActivity.cpp").read_text()
+assert "const int footerHeight = BaseMetrics::values.buttonHintsHeight;" in crowd_ui, (
+    "Crowd Density must reserve its forced touch footer height")
+assert "const int chartBottom = noteY - 12;" in crowd_ui, (
+    "Crowd Density chart must not draw across the disclaimer")
+assert "MAC randomization reduces accuracy." in crowd_ui and "noteY" in crowd_ui, (
+    "Crowd Density disclaimer must stay above the touch hints")
+
 assert 'TAP:420,780,120' in smoke_script and 'MESH:touch-relay:2:2' in smoke_script, "Mesh Chat X4 Pro touch E2E missing"
 assert 'CLOCK:mode:stopwatch' in smoke_script, "Clock long-hold mode transition must be checked"
 
