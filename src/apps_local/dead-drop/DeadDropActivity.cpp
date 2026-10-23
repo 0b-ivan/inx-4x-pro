@@ -3,6 +3,7 @@
 #include "../Shelf.h"
 
 #include <GfxRenderer.h>
+#include <algorithm>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <WiFi.h>
