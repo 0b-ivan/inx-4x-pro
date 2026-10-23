@@ -54,9 +54,9 @@ for app in "${apps[@]}"; do
     # Confirm toggles the HTTP method or starts mDNS discovery.
     script="1900:ENTER:650;6000:QUIT"
   elif [ "$app" = "CLOCK" ]; then
-    # Capture the established 4300-ms Clock golden BEFORE changing mode.
-    # The simulator boot logo can still be visible at 1600 ms.
-    script="5300:ENTER:650;8500:QUIT"
+    # Allow slow CI runners to finish the boot animation before taking the
+    # established Clock reference. Long-press follows the screenshot.
+    script="8500:ENTER:650;11800:QUIT"
   elif [ "$app" = "DEVICE INFO" ] || [ "$app" = "WIFI CONNECT" ]; then
     script="1900:DOWN;6000:QUIT"
   fi
@@ -66,9 +66,9 @@ for app in "${apps[@]}"; do
   elif [ "$app" = "MESH CHAT" ]; then
     shots="3000:$out/${name}_messages.bmp;4500:$out/${name}_peers.bmp;6100:$out/${name}_chat.bmp;7700:$frame"
   elif [ "$app" = "CLOCK" ]; then
-    # Preserve the previously validated Clock.bmp pixel reference at 4300 ms.
-    # The Stopwatch must render separately after the delayed long press.
-    shots="4300:$frame;7200:$out/${name}_stopwatch.bmp"
+    # Keep the approved CLOCK.bmp baseline; move its capture well beyond boot.
+    # The Stopwatch is a separate post-long-press state.
+    shots="6500:$frame;10400:$out/${name}_stopwatch.bmp"
   elif [ "$app" = "BLE KEYBOARD" ]; then
     shots="1600:$out/${name}_scripts.bmp;2200:$out/${name}_preview.bmp;2950:$out/${name}_paired.bmp;4900:$out/${name}_executed.bmp;6800:$out/${name}_reset.bmp;8000:$frame"
   elif [ "$app" = "BLE SPAM" ]; then
@@ -973,9 +973,9 @@ for state in ("NETWORK:monitoring:0:0","NETWORK:processed:4:3",
     assert pos>=0, f"Network Monitor touch missing {state}: {log[-1400:]}"
 print("PASS X4 Pro touch: Network Monitor event/detail/back/exit, cleanup")
 PYNETTOUCH
-# A long Confirm must ACTUALLY change Clock -> Stopwatch. The 4300-ms Clock.bmp
-# is captured after startup but before the 5300-ms input; the existing pixel
-# golden must remain unchanged, not silently replaced by the boot splash.
+# A long Confirm must ACTUALLY change Clock -> Stopwatch. Clock.bmp is taken
+# at 6500 ms, before the 8500-ms press. Verify that the activity (not the
+# CrossPlay boot splash) was entered before this image was recorded.
 python3 - <<'PYCLOCK'
 from pathlib import Path
 import hashlib, struct
@@ -992,7 +992,13 @@ assert fingerprints[0]!=fingerprints[1], "Long Confirm did not change Clock -> S
 log=(root/"CLOCK.log").read_text(errors="replace")
 assert "[BISCUIT_SIM] CLOCK:mode:stopwatch" in log, (
     "Long Confirm was ignored: Clock -> Stopwatch state transition missing")
-print("PASS Clock: stable initial golden, genuine long-press switches to Stopwatch")
+import re
+entered = re.search(r"\\[(\\d+)\\].*Entering activity: Clock", log)
+assert entered, "CLOCK never entered: screenshot may contain boot splash"
+assert int(entered.group(1)) < 6500, (
+    f"CLOCK entered at {entered.group(1)} ms after the 6500 ms capture; "
+    "test timing is invalid, do not change visual golden")
+print("PASS Clock: activity before screenshot, stable golden, Stopwatch long-press")
 PYCLOCK
 # Mesh Chat: virtual ESP-NOW peer discovery and received message ring buffer.
 python3 - <<'PYMESH'
