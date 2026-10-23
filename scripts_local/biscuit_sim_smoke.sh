@@ -993,7 +993,7 @@ log=(root/"CLOCK.log").read_text(errors="replace")
 assert "[BISCUIT_SIM] CLOCK:mode:stopwatch" in log, (
     "Long Confirm was ignored: Clock -> Stopwatch state transition missing")
 import re
-entered = re.search(r"\\[(\\d+)\\].*Entering activity: Clock", log)
+entered = re.search(r"\[(\d+)\].*Entering activity: Clock", log)
 assert entered, "CLOCK never entered: screenshot may contain boot splash"
 assert int(entered.group(1)) < 6500, (
     f"CLOCK entered at {entered.group(1)} ms after the 6500 ms capture; "
