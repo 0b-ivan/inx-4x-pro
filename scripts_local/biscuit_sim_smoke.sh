@@ -144,6 +144,37 @@ print(f"PASS screenshot {p.name} {w}x{h}")
 PY
 done
 
+# Additional hardware-report Activities beyond the established 26. Virtual
+# WiFi/SD stubs verify UI lifecycle; physical radio and HTTP remain unproven.
+for app in "AP CLONER" "CAPTIVE PORTAL" "BULLETIN BOARD" "DEAD DROP" "WARDRIVING"; do
+  name="$(printf '%s' "$app" | tr ' ' '_')"
+  log="$out/$name"_extended.log
+  frame="$out/$name"_extended.bmp
+  if ! env CROSSPLAY_AUTOSTART="$app" \
+    CROSSPLAY_SIM_WIFI_CONNECTED=0 \
+    CROSSPLAY_SIM_EPOCH=1704067200 \
+    CROSSPOINT_SIM_INPUT_SCRIPT="6200:TAP:180,780,120;10000:QUIT" \
+    CROSSPOINT_SIM_SCREENSHOTS="5700:$out/$name"_menu.bmp";8700:$frame" \
+    LIBGL_ALWAYS_SOFTWARE=1 \
+    xvfb-run -a -s '-screen 0 1280x1024x24' timeout 19s "$bin" >"$log" 2>&1; then
+    echo "FAIL extended Biscuit UI: $app"; tail -80 "$log"; exit 1
+  fi
+  grep -Fq "Autostart into $app" "$log" || {
+    echo "FAIL extended Biscuit UI not entered: $app"; tail -80 "$log"; exit 1
+  }
+  python3 - "$app" "$out/$name"_menu.bmp "$frame" <<'PYEXTBISCUIT'
+from pathlib import Path
+import struct,sys
+app=sys.argv[1]
+for filename in sys.argv[2:]:
+    data=Path(filename).read_bytes()
+    assert data[:2]==b"BM" and len(data)>1000, f"{app}: invalid screenshot {filename}"
+    w,h=struct.unpack_from("<ii",data,18)
+    assert (abs(w),abs(h))==(480,800), f"{app}: wrong screen size {w}x{h}"
+print("PASS extended Biscuit UI:",app)
+PYEXTBISCUIT
+done
+
 # Guard every Biscuit Activity against a screenshot taken during the boot
 # splash. Merely checking for a nonblank BMP accepted CLOCK.bmp in CI when
 # startup slipped beyond the 4300ms capture. Pick a capture while each app is
