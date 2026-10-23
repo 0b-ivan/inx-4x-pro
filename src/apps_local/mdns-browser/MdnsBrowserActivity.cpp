@@ -226,13 +226,9 @@ void MdnsBrowserActivity::saveToCsv() {
 
   file.println("Hostname,IP,Port,ServiceType");
   for (const auto& r : results) {
-    file.print(r.hostname.c_str());
-    file.print(',');
-    file.print(r.ip.c_str());
-    file.print(',');
-    file.print(r.port);
-    file.print(',');
-    file.println(r.serviceType.c_str());
+    const std::string row = r.hostname + "," + r.ip + "," +
+                            std::to_string(r.port) + "," + r.serviceType;
+    file.println(row.c_str());
   }
   file.close();
 
