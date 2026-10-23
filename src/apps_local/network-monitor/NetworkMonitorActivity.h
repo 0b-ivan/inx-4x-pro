@@ -60,6 +60,11 @@ class NetworkMonitorActivity final : public Activity {
 
   uint8_t currentChannel = 1;
   bool autoHop = true;
+#ifdef SIMULATOR
+  bool simInjected = false;
+  unsigned long simStarted = 0;
+  unsigned long simRogueStarted = 0;
+#endif
   unsigned long lastHopTime = 0;
   static constexpr unsigned long HOP_INTERVAL_MS = 300;
 

@@ -5,8 +5,15 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#ifndef SIMULATOR
 #include <WiFi.h>
 #include <esp_wifi.h>
+#else
+#include <WiFi.h>  // Native deterministic WiFi shim for UI cleanup only.
+#include "platform/sim_biscuit_wifi_frames.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 #include <algorithm>
 #include <string>
 
@@ -19,6 +26,7 @@
 // Static C callback — must be a plain function, not a method
 // ---------------------------------------------------------------------------
 
+#ifndef SIMULATOR
 static NetworkMonitorActivity* activeNetworkMonitor = nullptr;
 
 static void networkMonitorPromiscuousCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
@@ -40,12 +48,21 @@ static void networkMonitorPromiscuousCallback(void* buf, wifi_promiscuous_pkt_ty
                                 static_cast<uint8_t>(pkt->rx_ctrl.channel));
 }
 
+#else
+static void networkSimTrace(const char* event, uint32_t a, uint32_t b) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_NETWORK_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0')
+    std::fprintf(stderr, "[BISCUIT_SIM] NETWORK:%s:%u:%u\n", event, a, b);
+}
+#endif
+
 // ---------------------------------------------------------------------------
 // onFrame — called from the WiFi RX task, must be ISR-safe
 // ---------------------------------------------------------------------------
 
 void NetworkMonitorActivity::onFrame(const uint8_t* payload, uint16_t len, int rssi,
                                      uint8_t channel) {
+  if (!payload || len < 26) return;
   portENTER_CRITICAL(&dataMux);
 
   totalFrames = totalFrames + 1;
@@ -121,6 +138,10 @@ void NetworkMonitorActivity::onEnter() {
 
   lastHopTime    = millis();
   lastUpdateTime = millis();
+#ifdef SIMULATOR
+  simInjected = false;
+  simRogueStarted = 0;
+#endif
 
   // Reset rogue AP state
   allAps.clear();
@@ -136,32 +157,49 @@ void NetworkMonitorActivity::onEnter() {
 }
 
 void NetworkMonitorActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   if (monitorMode == FRAME_DETECTION) {
     stopMonitoring();
   } else {
+#ifndef SIMULATOR
     WiFi.scanDelete();
+#endif
     RADIO.shutdown();
+#ifdef SIMULATOR
+    networkSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                        ? "radio-off" : "radio-leak", totalFrames, eventCount);
+#endif
   }
+  Activity::onExit();
+  devmode::resume();
 }
 
 void NetworkMonitorActivity::startMonitoring() {
   RADIO.ensureWifi();
+#ifndef SIMULATOR
   WiFi.disconnect();
 
   activeNetworkMonitor = this;
   esp_wifi_set_promiscuous(true);
   esp_wifi_set_promiscuous_rx_cb(networkMonitorPromiscuousCallback);
   esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
-
+#else
+  simInjected = false;
+  simStarted = millis();
+  networkSimTrace("monitoring", totalFrames, eventCount);
+#endif
   LOG_DBG("NETMON", "Frame monitoring started on ch%d", currentChannel);
 }
 
 void NetworkMonitorActivity::stopMonitoring() {
+#ifndef SIMULATOR
   esp_wifi_set_promiscuous(false);
   activeNetworkMonitor = nullptr;
+#endif
   RADIO.shutdown();
+#ifdef SIMULATOR
+  networkSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                      ? "radio-off" : "radio-leak", totalFrames, eventCount);
+#endif
   LOG_DBG("NETMON", "Frame monitoring stopped, %d events", eventCount);
 }
 
@@ -176,12 +214,45 @@ void NetworkMonitorActivity::startRogueScan() {
     ssidGroups.clear();
   }
   roguesScanCount++;
+#ifndef SIMULATOR
   WiFi.scanDelete();
   WiFi.scanNetworks(true);  // async
+#else
+  simRogueStarted = millis();
+  networkSimTrace("rogue-scan", rogueScanPhase, roguesScanCount);
+#endif
   requestUpdate();
 }
 
 void NetworkMonitorActivity::processRogueScanResults() {
+#ifdef SIMULATOR
+  // Three deterministic passive scan phases; no access to host WiFi.
+  if (millis() - simRogueStarted < 350) return;
+  if (std::getenv("CROSSPLAY_SIM_NETWORK_SCENARIO") == nullptr ||
+      std::string(std::getenv("CROSSPLAY_SIM_NETWORK_SCENARIO")) != "empty") {
+    const ApRecord samples[] = {
+      {"SimLab", "02:00:00:00:01:01", -45, 1, 3},
+      {"SimLab", "02:00:00:00:01:02", -67, 6, 4},
+      {"GuestLab", "02:00:00:00:01:03", -75, 11, 3}
+    };
+    for (const auto& rec : samples) {
+      auto it = std::find_if(allAps.begin(), allAps.end(),
+          [&](const ApRecord& ap) { return ap.bssid == rec.bssid; });
+      if (it != allAps.end()) it->rssi = rec.rssi;
+      else allAps.push_back(rec);
+    }
+  }
+  rogueScanPhase++;
+  if (rogueScanPhase < ROGUE_SCAN_PHASES) {
+    startRogueScan();
+  } else {
+    analyzeGroups();
+    state = ROGUE_RESULTS;
+    rogueSelectorIndex = 0;
+    networkSimTrace("rogue-results", allAps.size(), suspiciousCount);
+    requestUpdate();
+  }
+#else
   int16_t result = WiFi.scanComplete();
   if (result == WIFI_SCAN_RUNNING) return;
 
@@ -226,6 +297,7 @@ void NetworkMonitorActivity::processRogueScanResults() {
     rogueSelectorIndex = 0;
     requestUpdate();
   }
+#endif
 }
 
 void NetworkMonitorActivity::analyzeGroups() {
@@ -305,6 +377,9 @@ void NetworkMonitorActivity::loop() {
   if (state == DETAIL) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       state = MONITORING;
+#ifdef SIMULATOR
+      networkSimTrace("back-monitor", totalFrames, eventCount);
+#endif
       requestUpdate();
     }
     int tx_ = 0, ty_ = 0;
@@ -410,11 +485,37 @@ void NetworkMonitorActivity::loop() {
 
   const unsigned long now = millis();
 
+#ifdef SIMULATOR
+  // Real onFrame() event grouping and counts; synthetic local MACs only.
+  if (!simInjected && now - simStarted >= 800) {
+    simInjected = true;
+    const auto scenario = std::getenv("CROSSPLAY_SIM_NETWORK_SCENARIO");
+    const std::string kind = scenario ? scenario : "normal";
+    if (kind != "empty") {
+      const auto frames = biscuit_sim::deauthMonitorFrames();
+      for (const auto& frame : frames) {
+        if (frame.bytes.size() < 26 || (frame.bytes[0] != 0xc0 && frame.bytes[0] != 0xa0))
+          continue;
+        onFrame(frame.bytes.data(), static_cast<uint16_t>(frame.bytes.size()), frame.rssi,
+                currentChannel);
+      }
+      // Additional duplicate frame exercises the original event merging logic.
+      if (!frames.empty() && frames[0].bytes.size() >= 26)
+        onFrame(frames[0].bytes.data(), static_cast<uint16_t>(frames[0].bytes.size()),
+                frames[0].rssi, currentChannel);
+    }
+    networkSimTrace("processed", totalFrames, eventCount);
+    requestUpdate();
+  }
+#endif
+
   // Channel hopping
   if (autoHop && (now - lastHopTime >= HOP_INTERVAL_MS)) {
     lastHopTime = now;
     currentChannel = static_cast<uint8_t>((currentChannel % 13) + 1);
+#ifndef SIMULATOR
     esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+#endif
   }
 
   // Periodic stats update
@@ -467,11 +568,16 @@ void NetworkMonitorActivity::loop() {
       rogueDetailGroupIndex = -1;
       rogueSelectorIndex = 0;
       RADIO.ensureWifi();
+#ifndef SIMULATOR
       WiFi.disconnect();
+#endif
       startRogueScan();
     } else if (count > 0) {
       detailIndex = selectorIndex;
       state = DETAIL;
+#ifdef SIMULATOR
+      networkSimTrace("detail", totalFrames, eventCount);
+#endif
     }
     requestUpdate();
     return;
@@ -482,7 +588,9 @@ void NetworkMonitorActivity::loop() {
     autoHop = false;
     if (currentChannel > 1) {
       currentChannel--;
-      esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+  #ifndef SIMULATOR
+    esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+#endif
     }
     requestUpdate();
   }
@@ -490,7 +598,9 @@ void NetworkMonitorActivity::loop() {
     autoHop = false;
     if (currentChannel < 13) {
       currentChannel++;
-      esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+  #ifndef SIMULATOR
+    esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+#endif
     }
     requestUpdate();
   }
@@ -509,7 +619,11 @@ void NetworkMonitorActivity::loop() {
           stopMonitoring(); monitorMode = ROGUE_AP_SCAN;
           rogueScanPhase = 0; roguesScanCount = 0; suspiciousCount = 0;
           rogueDetailGroupIndex = -1; rogueSelectorIndex = 0;
-          RADIO.ensureWifi(); WiFi.disconnect(); startRogueScan(); requestUpdate();
+          RADIO.ensureWifi();
+#ifndef SIMULATOR
+          WiFi.disconnect();
+#endif
+          startRogueScan(); requestUpdate();
         } else {
           portENTER_CRITICAL(&dataMux);
           const int cnt = eventCount;

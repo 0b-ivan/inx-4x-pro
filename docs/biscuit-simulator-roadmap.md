@@ -2,15 +2,15 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **18 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **19 echte Biscuit-Activities** aus:
 
 | Gruppe | Activities |
 | --- | --- |
 | Offline/System | CLOCK, DEVICE INFO, OTP GENERATOR |
-| WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT, DEAUTH DETECTOR, PACKET MONITOR |
+| WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT, DEAUTH DETECTOR, PACKET MONITOR, NETWORK MONITOR |
 | BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT |
 
-Die ursprünglichen No-op-VTables der achtzehn Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der neunzehn Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
@@ -54,7 +54,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller achtzehn Apps
+- Autostart und nichtleere Screenshots aller neunzehn Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -207,3 +207,17 @@ PCAP-Schreibstrecke benötigt noch eine eigene isolierte Abnahme. Im
 Simulator wird **keine Funkhardware aktiviert**, kein fremdes Paket
 aufgezeichnet und kein WLAN-Paket gesendet. Auch die neue Packet-Monitor-
 Integration muss erst den Firmware-/Host-/SDL-CI-Lauf bestehen.
+
+## Network Monitor: Frame-Gruppierung und Rogue-AP-Prüfung
+
+Die originale `NetworkMonitorActivity` wertet ausschließlich synthetische
+802.11-Management-Frames aus und gruppiert sie nach Quell-MAC/BSSID.
+Ein zweiter simulato­rinterner Testlauf erzeugt in drei Scanphasen drei
+virtuelle Access Points (zwei davon mit gleicher SSID `SimLab`, aber
+unterschiedlicher Verschlüsselung und Kanal), um die tatsächliche
+`analyzeGroups()`-Anomalieerkennung zu prüfen. Die SDL-Tests starten
+Monitor, Event-Detail, Rücknavigation, Rogue-AP-Liste, Rogue-AP-Detail
+sowie leere Scans und Radio-Cleanup. Im nativen Build laufen weder
+Monitor-Modus noch echte WLAN-Scans.
+
+Diese Erweiterung bedarf noch einer vollständig grünen CI-Abnahme.

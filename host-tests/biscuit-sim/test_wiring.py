@@ -29,6 +29,7 @@ for name, cls, path in (
     ("DEV FINGERPRINT", "DeviceFingerprinterActivity", "device-fingerprinter/DeviceFingerprinterActivity.cpp"),
     ("DEAUTH DETECTOR", "DeauthDetectorActivity", "deauth-detector/DeauthDetectorActivity.cpp"),
     ("PACKET MONITOR", "PacketMonitorActivity", "packet-monitor/PacketMonitorActivity.cpp"),
+    ("NETWORK MONITOR", "NetworkMonitorActivity", "network-monitor/NetworkMonitorActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -89,6 +90,11 @@ packet = (root / "src/apps_local/packet-monitor/PacketMonitorActivity.cpp").read
 assert "biscuit_sim::packetMonitorFrames()" in packet, "Packet Monitor must consume synthetic 802.11 frames"
 assert "onPacket(frame.bytes.data()" in packet, "real Packet Monitor counters must be exercised"
 assert "#ifndef SIMULATOR" in packet and "packetSimTrace" in packet, "native radio isolation and test traces required"
+netmon = (root / "src/apps_local/network-monitor/NetworkMonitorActivity.cpp").read_text()
+assert "biscuit_sim::deauthMonitorFrames()" in netmon, "Network Monitor must consume in-memory management frames"
+assert "onFrame(frame.bytes.data()" in netmon, "Network Monitor must execute original event grouping"
+assert "networkSimTrace" in netmon and "#ifndef SIMULATOR" in netmon, "Network Monitor must isolate radio calls"
+assert "analyzeGroups()" in netmon and "rogue-results" in netmon, "Network Monitor must exercise rogue AP grouping"
 smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
 assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
 assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"

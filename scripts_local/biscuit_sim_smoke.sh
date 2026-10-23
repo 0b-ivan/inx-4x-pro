@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "NETWORK MONITOR" ]; then
+    script="2400:ENTER:100;3300:BACK:100;4200:BACK:100;5500:QUIT"
   elif [ "$app" = "PACKET MONITOR" ]; then
     script="1900:RIGHT:100;4700:BACK:100;6000:QUIT"
   elif [ "$app" = "DEAUTH DETECTOR" ]; then
@@ -43,7 +45,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "PACKET MONITOR" ]; then
+  if [ "$app" = "NETWORK MONITOR" ]; then
+    shots="1800:$out/${name}_monitor.bmp;2800:$out/${name}_detail.bmp;3900:$out/${name}_back.bmp;5000:$frame"
+  elif [ "$app" = "PACKET MONITOR" ]; then
     shots="1600:$out/${name}_initial.bmp;3500:$out/${name}_stats.bmp;5200:$frame"
   elif [ "$app" = "DEAUTH DETECTOR" ]; then
     shots="1600:$out/${name}_idle.bmp;3600:$out/${name}_monitor.bmp;5100:$frame"
@@ -70,6 +74,7 @@ for app in "${apps[@]}"; do
     CROSSPLAY_SIM_FINGERPRINT_TRACE=1 \
     CROSSPLAY_SIM_DEAUTH_TRACE=1 \
     CROSSPLAY_SIM_PACKET_TRACE=1 \
+    CROSSPLAY_SIM_NETWORK_TRACE=1 \
     CROSSPLAY_SIM_EPOCH=1704067200 \
     CROSSPLAY_SIM_WIFI_CONNECTED=1 \
     CROSSPOINT_SIM_INPUT_SCRIPT="$script" \
@@ -669,6 +674,70 @@ assert data[:2]==b"BM" and len(data)>1000
 assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
 PYPACKETNEG
 done
-echo "PASS biscuit-ui-smoke: 18 activities; Packet Monitor normal/empty/malformed; Deauth spike and GATT"
+python3 - <<'PYNETMON'
+from pathlib import Path
+import struct,hashlib
+root=Path(".pio/biscuit-ui-smoke")
+names=("monitor","detail","back",None)
+images=[root/(f"NETWORK_MONITOR_{name}.bmp" if name else "NETWORK_MONITOR.bmp") for name in names]
+digest=[]
+for file in images:
+    bmp=file.read_bytes()
+    assert bmp[:2]==b"BM" and len(bmp)>1000
+    assert tuple(map(abs,struct.unpack_from("<ii",bmp,18)))==(480,800)
+    digest.append(hashlib.sha256(bmp).digest())
+assert digest[0]!=digest[1] and digest[1]!=digest[2], "frame/detail/back views unchanged"
+log=(root/"NETWORK_MONITOR.log").read_text(errors="replace")
+pos=-1
+for stage in ("monitoring:0:0", "processed:4:3", "detail:4:3",
+              "back-monitor:4:3", "radio-off:4:3"):
+    pos=log.find("[BISCUIT_SIM] NETWORK:"+stage,pos+1)
+    assert pos>=0, f"Network Monitor missing state {stage}: {log[-1100:]}"
+print("PASS Network Monitor: frame aggregation, details, back navigation, cleanup")
+PYNETMON
+
+# Multi-phase virtual access point scan, including suspicious duplicate SSID.
+rogue_log="$out/NETWORK_MONITOR_rogue.log"
+if ! env CROSSPLAY_AUTOSTART="NETWORK MONITOR" \
+  CROSSPLAY_SIM_NETWORK_TRACE=1 \
+  CROSSPOINT_SIM_INPUT_SCRIPT="2100:ENTER:650;4900:ENTER:100;5500:BACK:100;6200:BACK:100;7500:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="4300:$out/NETWORK_MONITOR_rogue_results.bmp;5200:$out/NETWORK_MONITOR_rogue_detail.bmp;5900:$out/NETWORK_MONITOR_rogue_back.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$rogue_log" 2>&1; then
+  echo "FAIL Network Monitor rogue AP scenario"; tail -100 "$rogue_log"; exit 1
+fi
+python3 - "$rogue_log" "$out/NETWORK_MONITOR_rogue_results.bmp" "$out/NETWORK_MONITOR_rogue_detail.bmp" <<'PYROGUE'
+from pathlib import Path
+import struct,sys,hashlib
+log=Path(sys.argv[1]).read_text(errors="replace")
+assert "NETWORK:rogue-results:3:1" in log, "synthetic AP grouping not executed"
+pictures=[]
+for name in sys.argv[2:]:
+    bmp=Path(name).read_bytes()
+    assert bmp[:2]==b"BM" and len(bmp)>1000
+    assert tuple(map(abs,struct.unpack_from("<ii",bmp,18)))==(480,800)
+    pictures.append(hashlib.sha256(bmp).digest())
+assert pictures[0]!=pictures[1], "rogue result and detail views identical"
+assert "NETWORK:radio-off:" in log, "rogue AP test leaked radio"
+print("PASS Network Monitor: 3 APs, suspicious SimLab group, result/detail/exit")
+PYROGUE
+
+empty_log="$out/NETWORK_MONITOR_empty.log"
+if ! env CROSSPLAY_AUTOSTART="NETWORK MONITOR" \
+  CROSSPLAY_SIM_NETWORK_TRACE=1 \
+  CROSSPLAY_SIM_NETWORK_SCENARIO=empty \
+  CROSSPOINT_SIM_INPUT_SCRIPT="3200:BACK:100;4500:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="2900:$out/NETWORK_MONITOR_empty.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$empty_log" 2>&1; then
+  echo "FAIL Network Monitor empty scenario"; tail -100 "$empty_log"; exit 1
+fi
+grep -Fq "NETWORK:processed:0:0" "$empty_log" || {
+  echo "FAIL Network Monitor counted events in empty scan"; exit 1
+}
+grep -Fq "NETWORK:radio-off:0:0" "$empty_log" || {
+  echo "FAIL Network Monitor empty scenario leaked radio"; exit 1
+}
+echo "PASS biscuit-ui-smoke: 19 activities, Network Monitor frame/rogue/empty regression"
 
 

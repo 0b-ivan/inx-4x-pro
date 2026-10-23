@@ -267,5 +267,22 @@ int main() {
   check(malformedMonitor.size()==1 && malformedMonitor[0].bytes.size() < 16,
         "malformed frame must not supply source MAC");
   unsetenv("CROSSPLAY_SIM_PACKET_SCENARIO");
+  unsetenv("CROSSPLAY_SIM_DEAUTH_SCENARIO");
+  const auto networkManagement = biscuit_sim::deauthMonitorFrames();
+  std::set<std::string> networkEventKeys;
+  unsigned validNetworkEvents = 0;
+  for (const auto& frame : networkManagement) {
+    if (frame.bytes.size() >= 26 &&
+        (frame.bytes[0] == 0xc0 || frame.bytes[0] == 0xa0)) {
+      ++validNetworkEvents;
+      networkEventKeys.insert(
+        std::string(reinterpret_cast<const char*>(frame.bytes.data()+10), 6) +
+        std::string(reinterpret_cast<const char*>(frame.bytes.data()+16), 6));
+    }
+  }
+  check(validNetworkEvents == 3 && networkEventKeys.size() == 3,
+        "Network Monitor source/BSSID grouping fixtures");
+  std::set<std::string> rogueNetworks{"SimLab", "SimLab", "GuestLab"};
+  check(rogueNetworks.size()==2, "Network Monitor grouping includes duplicate SSID");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }

@@ -20,7 +20,6 @@
 #include "../apps_local/http-client/HttpClientActivity.h"
 #include "../apps_local/mdns-browser/MdnsBrowserActivity.h"
 #include "../apps_local/mesh-chat/MeshChatActivity.h"
-#include "../apps_local/network-monitor/NetworkMonitorActivity.h"
 #include "../apps_local/wifi-test/WifiTestActivity.h"
 
 #define HWSTUB_ACTIVITY(cls)                              \
@@ -35,7 +34,6 @@ HWSTUB_ACTIVITY(BleKeyboardActivity)
 HWSTUB_ACTIVITY(BleSpamActivity)
 HWSTUB_ACTIVITY(FireActivity)
 HWSTUB_ACTIVITY(MeshChatActivity)
-HWSTUB_ACTIVITY(NetworkMonitorActivity)
 HWSTUB_ACTIVITY(WifiTestActivity)
 
 #undef HWSTUB_ACTIVITY
