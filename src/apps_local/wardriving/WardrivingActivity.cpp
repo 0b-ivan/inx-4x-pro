@@ -1,4 +1,5 @@
 #include "WardrivingActivity.h"
+#include "WardriveCsv.h"
 #include "DevMode.h"
 #include "../Shelf.h"
 
@@ -30,10 +31,10 @@ void WardrivingActivity::onEnter() {
 }
 
 void WardrivingActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   stopLogging();
   RADIO.shutdown();
+  devmode::resume();
+  Activity::onExit();
 }
 
 void WardrivingActivity::startLogging() {
@@ -71,7 +72,8 @@ void WardrivingActivity::appendNetworkToCsv(const SeenNetwork& net) {
   if (filename.empty()) return;
   HalFile f = Storage.open(filename.c_str(), O_WRITE | O_CREAT | O_APPEND);
   if (f) {
-    String line = String(net.ssid.c_str()) + "," + net.bssid.c_str() + "," + String(net.rssi) + "," +
+    const std::string ssid = wardrive_csv::escapeField(net.ssid);
+    String line = String(ssid.c_str()) + "," + net.bssid.c_str() + "," + String(net.rssi) + "," +
                   String(net.channel) + "," + encryptionString(net.encType) + "," + String(net.firstSeen) + "\n";
     f.print(line);
     f.close();
