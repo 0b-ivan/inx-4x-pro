@@ -65,9 +65,9 @@ void ApClonerActivity::processScanResults() {
       ap.rssi = WiFi.RSSI(i);
       ap.channel = static_cast<uint8_t>(WiFi.channel(i));
       ap.encType = static_cast<uint8_t>(WiFi.encryptionType(i));
-      // Restrict this build to self-labelled laboratory networks. Never
-      // imitate an arbitrary public or third-party access point.
-      if (ap.ssid.rfind("X4PRO-LAB-", 0) == 0) aps.push_back(std::move(ap));
+      // Show all scan results like original Biscuit, but treat other SSIDs
+      // as read-only. startClone() enforces the explicit laboratory prefix.
+      aps.push_back(std::move(ap));
     }
     std::sort(aps.begin(), aps.end(), [](const AP& a, const AP& b) { return a.rssi > b.rssi; });
   }
@@ -188,6 +188,14 @@ void ApClonerActivity::loop() {
         const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
         if (btn == 2 && !aps.empty()) { startClone(selectorIndex); return; }
+        if (btn == 3 && count > 0) {
+          selectorIndex = ButtonNavigator::previousIndex(selectorIndex, count);
+          requestUpdate(); return;
+        }
+        if (btn == 4 && count > 0) {
+          selectorIndex = ButtonNavigator::nextIndex(selectorIndex, count);
+          requestUpdate(); return;
+        }
         if (count > 0) {
           int touchRow = -1;
           const auto& m = UITheme::getInstance().getMetrics();
@@ -263,17 +271,18 @@ void ApClonerActivity::render(RenderLock&&) {
     const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - metrics.verticalSpacing;
 
     if (aps.empty()) {
-      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "No X4PRO-LAB-* WiFi found");
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "No WiFi networks found");
     } else {
       GUI.drawList(
           renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(aps.size()), selectorIndex,
           [this](int index) -> std::string { return aps[index].ssid; },
           [this](int index) -> std::string {
             char buf[40];
-            snprintf(buf, sizeof(buf), "Ch%d  %ddBm  %s",
+            snprintf(buf, sizeof(buf), "Ch%d %ddBm %s %s",
                      static_cast<int>(aps[index].channel),
                      static_cast<int>(aps[index].rssi),
-                     encryptionString(aps[index].encType));
+                     encryptionString(aps[index].encType),
+                     aps[index].ssid.rfind("X4PRO-LAB-", 0) == 0 ? "LAB" : "view only");
             return buf;
           });
     }
