@@ -37,7 +37,7 @@ void HostScannerActivity::onEnter() {
   selectedHost = -1;
 
   #ifdef SIMULATOR
-  if (biscuit_sim::wifiConnected(WiFi.isConnected())) {
+  if (biscuit_sim::wifiConnected(WiFi.status() == WL_CONNECTED)) {
 #else
   if (WiFi.isConnected()) {
 #endif
@@ -170,7 +170,7 @@ void HostScannerActivity::saveToCsv() {
 void HostScannerActivity::loop() {
   if (state == CHECKING_WIFI) {
 #ifdef SIMULATOR
-    if (!biscuit_sim::wifiConnected(WiFi.isConnected())) {
+    if (!biscuit_sim::wifiConnected(WiFi.status() == WL_CONNECTED)) {
 #else
     if (!WiFi.isConnected()) {
 #endif
