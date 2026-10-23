@@ -1,6 +1,6 @@
 # CrossPlay's fast development CI.
 #
-# Release binaries are built and validated only by crossplay-release.yml.
+# Stable release binaries are built by crossplay-release.yml; guarded nightlies by this CI.
 # The release train is X4 Pro-only. Sticky remains a local development target
 # in platformio.ini, but does not gate main or tagged X4 Pro releases.
 name: CrossPlay
@@ -259,8 +259,9 @@ jobs:
           test -s "$ELF"
           python3 -m esptool image-info "$APP" | tee /tmp/x4pro-image-info.txt
           grep -Eq 'ESP32-S3|Chip ID: 9' /tmp/x4pro-image-info.txt
-          strings "$APP" | grep -Fq 'CROSSPOINT-BOARD-V1:x4pro;'
-          strings "$APP" | grep -Fq "$CROSSPLAY_NIGHTLY_VERSION"
+          # Search binary directly: grep -q with a pipe can cause SIGPIPE under pipefail.
+          grep -aFq 'CROSSPOINT-BOARD-V1:x4pro;' "$APP"
+          grep -aFq "$CROSSPLAY_NIGHTLY_VERSION" "$APP"
           mkdir -p dist
           cp "$APP" dist/firmware.bin
           cp "$ELF" "dist/crossplay-${NIGHTLY_TAG}-x4pro.elf"
