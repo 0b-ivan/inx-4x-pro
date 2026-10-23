@@ -47,7 +47,6 @@ DeauthDetectorActivity::~DeauthDetectorActivity() {}
 HWSTUB_ACTIVITY(DeauthDetectorActivity)
 HWSTUB_ACTIVITY(DeviceFingerprinterActivity)
 HWSTUB_ACTIVITY(FireActivity)
-HWSTUB_ACTIVITY(MdnsBrowserActivity)
 HWSTUB_ACTIVITY(MeshChatActivity)
 HWSTUB_ACTIVITY(NetworkMonitorActivity)
 HWSTUB_ACTIVITY(PacketMonitorActivity)
