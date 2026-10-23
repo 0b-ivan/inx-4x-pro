@@ -180,9 +180,12 @@ void CaptivePortalActivity::handleRoot() {
 void CaptivePortalActivity::handleTestSubmission() {
   if (!webServer) return;
   // A malformed or unrelated POST must never be accepted or logged.
-  // In particular, unexpected username/password form fields are ignored.
+  // In particular, unexpected account/password fields or extra fields are rejected.
   const std::string testId = webServer->arg("test_id").c_str();
-  if (selectedTemplate != FORM_TEST || !portal_lab::validTestId(testId)) {
+  if (selectedTemplate != FORM_TEST ||
+      !portal_lab::validSyntheticSubmission(
+          webServer->args() == 1 ? webServer->argName(0).c_str() : "",
+          testId, webServer->args())) {
     webServer->send(400, "text/html; charset=utf-8", REJECT_HTML);
     return;
   }
