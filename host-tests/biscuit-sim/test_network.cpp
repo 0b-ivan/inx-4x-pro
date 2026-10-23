@@ -50,5 +50,17 @@ int main() {
   check(!biscuit_sim::hostScanPortOpen(biscuit_sim::hostScanIp(2), 80), "unknown fixture host unreachable");
   check(!biscuit_sim::hostScanPortOpen(biscuit_sim::hostScanIp(1), 22), "SSH port closed");
   check(!biscuit_sim::hostScanPortOpen(0x08080808U, 80), "public IPv4 never reachable");
+  auto response = biscuit_sim::httpRequest("GET", "http://example.test/ok", "");
+  check(response.status == 200 && response.body == "simulated OK", "HTTP 200 fixture");
+  response = biscuit_sim::httpRequest("GET", "http://example.test/missing", "");
+  check(response.status == 404, "HTTP 404 fixture");
+  response = biscuit_sim::httpRequest("POST", "http://example.test/echo", "fixture-body");
+  check(response.status == 200 && response.body == "fixture-body", "HTTP POST echo");
+  response = biscuit_sim::httpRequest("GET", "http://example.test/timeout", "");
+  check(response.status < 0 && response.latencyMs == 5000, "HTTP timeout fixture");
+  response = biscuit_sim::httpRequest("GET", "https://example.com/", "");
+  check(response.status < 0, "no public HTTP connection");
+  response = biscuit_sim::httpRequest("GET", "http://example.test.evil/ok", "");
+  check(response.status < 0, "HTTP fixture hostname must match exactly");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }
