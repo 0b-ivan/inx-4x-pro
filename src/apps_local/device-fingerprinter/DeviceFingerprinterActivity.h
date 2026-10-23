@@ -5,7 +5,9 @@
 #include <memory>
 #include <cstdint>
 #include <vector>
+#ifndef SIMULATOR
 #include <esp_wifi.h>
+#endif
 
 #include <Memory.h>
 #include "../../activities/Activity.h"
@@ -53,8 +55,13 @@ class DeviceFingerprinterActivity final : public Activity {
 
   portMUX_TYPE dataMux = portMUX_INITIALIZER_UNLOCKED;
 
+#ifndef SIMULATOR
   static DeviceFingerprinterActivity* activeInstance;
   static void promiscuousCallback(void* buf, wifi_promiscuous_pkt_type_t type);
+#else
+  bool simInjected = false;
+  unsigned long simStarted = 0;
+#endif
 
   static const char* estimateOs(const uint8_t* mac, int probeCount);
 };

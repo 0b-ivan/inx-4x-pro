@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "DEV FINGERPRINT" ]; then
+    script="1900:ENTER:100;4600:BACK:100;5800:QUIT"
   elif [ "$app" = "CROWD DENSITY" ]; then
     script="1900:ENTER:100;6600:BACK:100;7800:QUIT"
   elif [ "$app" = "PROBE SNIFFER" ]; then
@@ -37,7 +39,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "CROWD DENSITY" ]; then
+  if [ "$app" = "DEV FINGERPRINT" ]; then
+    shots="1600:$out/${name}_ready.bmp;3600:$out/${name}_capturing.bmp;5000:$frame"
+  elif [ "$app" = "CROWD DENSITY" ]; then
     shots="1600:$out/${name}_before.bmp;3100:$out/${name}_live.bmp;5150:$out/${name}_sampled.bmp;6000:$out/${name}_refilled.bmp;7100:$frame"
   elif [ "$app" = "PROBE SNIFFER" ]; then
     shots="1600:$out/${name}_list.bmp;2800:$out/${name}_detail.bmp;3800:$out/${name}_back.bmp;5200:$frame"
@@ -55,6 +59,7 @@ for app in "${apps[@]}"; do
     CROSSPLAY_SIM_BLE_TRACE=1 \
     CROSSPLAY_SIM_PROBE_TRACE=1 \
     CROSSPLAY_SIM_CROWD_TRACE=1 \
+    CROSSPLAY_SIM_FINGERPRINT_TRACE=1 \
     CROSSPLAY_SIM_EPOCH=1704067200 \
     CROSSPLAY_SIM_WIFI_CONNECTED=1 \
     CROSSPOINT_SIM_INPUT_SCRIPT="$script" \
@@ -469,5 +474,51 @@ assert data[:2]==b"BM" and len(data)>1000
 assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
 PYCROWDNEG
 done
-echo "PASS biscuit-ui-smoke: 15 activities, Crowd Density normal/empty/malformed, Probe Sniffer, tracker and BLE"
+python3 - <<'PYFINGER'
+from pathlib import Path
+import hashlib,struct
+out=Path(".pio/biscuit-ui-smoke")
+screens=[out/"DEV_FINGERPRINT_ready.bmp",out/"DEV_FINGERPRINT_capturing.bmp",out/"DEV_FINGERPRINT.bmp"]
+digests=[]
+for frame in screens:
+    data=frame.read_bytes()
+    assert data[:2]==b"BM" and len(data)>1000, f"bad fingerprint BMP: {frame}"
+    assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+    digests.append(hashlib.sha256(data).digest())
+assert digests[0]!=digests[1] and digests[1]!=digests[2], "fingerprint view did not change"
+log=(out/"DEV_FINGERPRINT.log").read_text(errors="replace")
+pos=-1
+for state in ("ready:0:0","capturing:0:0","scan:5:9",
+              "iOS:2:-50","Android:4:-62","Windows:1:-48",
+              "Linux:1:-71","Unknown:1:-82","radio-off:5:0"):
+    pos=log.find("[BISCUIT_SIM] FINGERPRINT:"+state,pos+1)
+    assert pos>=0, f"fingerprint {state} missing or out of order: {log[-1400:]}"
+print("PASS Device Fingerprinter: unique MACs, real OS heuristics, cleanup")
+PYFINGER
+for scenario in empty malformed; do
+  log="$out/DEV_FINGERPRINT_$scenario.log"
+  frame="$out/DEV_FINGERPRINT_$scenario.bmp"
+  if ! env CROSSPLAY_AUTOSTART="DEV FINGERPRINT" \
+    CROSSPLAY_SIM_FINGERPRINT_TRACE=1 \
+    CROSSPLAY_SIM_FINGERPRINT_SCENARIO="$scenario" \
+    CROSSPOINT_SIM_INPUT_SCRIPT="1900:ENTER:100;3500:BACK:100;4700:QUIT" \
+    CROSSPOINT_SIM_SCREENSHOTS="3000:$frame" \
+    LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+    timeout 18s "$bin" >"$log" 2>&1; then
+    echo "FAIL Device Fingerprinter $scenario"; tail -100 "$log"; exit 1
+  fi
+  for state in "FINGERPRINT:scan:0:0" "FINGERPRINT:radio-off:0:0"; do
+    grep -Fq "$state" "$log" || {
+      echo "FAIL fingerprint $scenario: $state absent"; tail -100 "$log"; exit 1
+    }
+  done
+  python3 - "$frame" <<'PYBAD'
+from pathlib import Path
+import struct,sys
+data=Path(sys.argv[1]).read_bytes()
+assert data[:2]==b"BM" and len(data)>1000
+assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+PYBAD
+done
+echo "PASS biscuit-ui-smoke: 16 activities, Fingerprinter normal/empty/malformed"
 

@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <set>
+#include <map>
 #include <string>
 static int checks = 0;
 static void check(bool b, const char* what) {
@@ -190,5 +191,35 @@ int main() {
   }
   check(uniqueMacs.empty(), "crowd malformed fixture cannot increase count");
   unsetenv("CROSSPLAY_SIM_PROBE_SCENARIO");
+  unsetenv("CROSSPLAY_SIM_FINGERPRINT_SCENARIO");
+  auto fingerprints = biscuit_sim::fingerprintFrames();
+  check(fingerprints.size() == 11, "fingerprinting fixture has nine valid and two invalid frames");
+  std::map<std::string, int> fingerprintCounts;
+  biscuit_sim::ParsedProbe parsedFingerprint;
+  for (const auto& frame : fingerprints) {
+    if (biscuit_sim::parseProbe(frame.bytes.data(), frame.bytes.size(),
+                               parsedFingerprint))
+      ++fingerprintCounts[std::string(reinterpret_cast<const char*>(parsedFingerprint.mac), 6)];
+  }
+  check(fingerprintCounts.size() == 5, "fingerprint fixture has five unique MACs");
+  check(fingerprintCounts[std::string("\x02\x00\x00\x00\x00\x41", 6)] == 2,
+        "iOS-like local address has two probes");
+  check(fingerprintCounts[std::string("\x06\x00\x00\x00\x00\x42", 6)] == 4,
+        "Android-like local address has four probes");
+  check(fingerprintCounts[std::string("\x00\x1b\x21\x00\x00\x43", 6)] == 1,
+        "Intel OUI fixture present");
+  check(fingerprintCounts[std::string("\xb8\x27\xeb\x00\x00\x44", 6)] == 1,
+        "Raspberry Pi OUI fixture present");
+  setenv("CROSSPLAY_SIM_FINGERPRINT_SCENARIO", "empty", 1);
+  check(biscuit_sim::fingerprintFrames().empty(), "fingerprint empty scenario");
+  setenv("CROSSPLAY_SIM_FINGERPRINT_SCENARIO", "malformed", 1);
+  const auto invalidFingerprints = biscuit_sim::fingerprintFrames();
+  check(invalidFingerprints.size() == 2, "fingerprint malformed fixture includes two frames");
+  bool anyValidFingerprint = false;
+  for (const auto& frame : invalidFingerprints)
+    anyValidFingerprint |= biscuit_sim::parseProbe(frame.bytes.data(),
+                                                     frame.bytes.size(), parsedFingerprint);
+  check(!anyValidFingerprint, "invalid fingerprint frames cannot inflate device list");
+  unsetenv("CROSSPLAY_SIM_FINGERPRINT_SCENARIO");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }

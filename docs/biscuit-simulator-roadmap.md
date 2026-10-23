@@ -2,21 +2,22 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **15 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **16 echte Biscuit-Activities** aus:
 
 | Gruppe | Activities |
 | --- | --- |
 | Offline/System | CLOCK, DEVICE INFO, OTP GENERATOR |
-| WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY |
+| WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT |
 | BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT |
 
-Die ursprünglichen No-op-VTables der fünfzehn Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der sechzehn Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
 Letzte erfolgreich bestätigte Pipeline:
-[CI #39984886630](https://github.com/0b-ivan/inx-4x-pro/actions/runs/39984886630)
-(14 Activities). Die Crowd-Density-Erweiterung benötigt noch eine eigene CI-Bestätigung.
+[CI #39994795735](https://github.com/0b-ivan/inx-4x-pro/actions/runs/39994795735)
+(15 Activities inklusive nativer BMP-Previews und sechs visueller Referenzen).
+Device Fingerprinter benötigt eine neue CI-Bestätigung.
 
 ## Deterministische Fixtures – kein Zugriff auf Funkhardware
 
@@ -52,7 +53,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller fünfzehn Apps
+- Autostart und nichtleere Screenshots aller sechzehn Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -158,3 +159,18 @@ und eingecheckt werden; CI aktualisiert sie **niemals automatisch**.
 
 **Lokal:** `bash host-tests/biscuit-preview/run.sh` sowie nach dem SDL-Lauf
 `python3 host-tests/biscuit-sim/test_visual_goldens.py .pio/biscuit-ui-smoke`.
+
+## Device Fingerprinter – synthetische OS-Heuristiken
+
+Die echte `DeviceFingerprinterActivity` erhält ausschließlich künstliche 802.11-
+Probe-Requests aus der bestehenden Fixture-Infrastruktur. Fünf einzigartige
+MACs erzeugen iOS-, Android-, Windows-, Linux- und Unknown-Ergebnisse sowie
+zwei absichtlich ungültige Pakete. Die originale `onProbePacket()`-Methode
+führt Zählung, Deduplizierung und `estimateOs()` aus.
+
+`CROSSPLAY_SIM_FINGERPRINT_SCENARIO=normal|empty|malformed` und optional
+`CROSSPLAY_SIM_FINGERPRINT_TRACE=1` prüfen die echte Logik, UI-Übergänge und
+Ressourcenfreigabe. **OS-Erkennung aus Probe-Häufigkeit und OUI ist lediglich
+eine unzuverlässige Heuristik**, keine Identifizierung des Geräts oder Users.
+Keine WLAN-Hardware oder fremden Netze werden im Simulator untersucht.
+Der neue Stand gilt erst nach grüner CI als bestätigt.

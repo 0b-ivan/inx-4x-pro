@@ -26,6 +26,7 @@ for name, cls, path in (
     ("TRACKER DETECT", "TrackerDetectorActivity", "tracker-detector/TrackerDetectorActivity.cpp"),
     ("PROBE SNIFFER", "ProbeSnifferActivity", "probe-sniffer/ProbeSnifferActivity.cpp"),
     ("CROWD DENSITY", "CrowdDensityActivity", "crowd-density/CrowdDensityActivity.cpp"),
+    ("DEV FINGERPRINT", "DeviceFingerprinterActivity", "device-fingerprinter/DeviceFingerprinterActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -73,6 +74,10 @@ assert "biscuit_sim::probeFrames()" in crowd and "biscuit_sim::parseProbe" in cr
 assert "addMac(parsed.mac)" in crowd, "crowd counting must reuse real MAC dedup"
 assert "simFedWindow" in crowd and "crowdSimTrace" in crowd, "simulated sampling/cleanup evidence missing"
 assert "#ifndef SIMULATOR" in crowd, "raw capture remains outside the simulator"
+fingerprinter = (root / "src/apps_local/device-fingerprinter/DeviceFingerprinterActivity.cpp").read_text()
+assert "biscuit_sim::fingerprintFrames()" in fingerprinter, "fingerprinter must use isolated frames"
+assert "biscuit_sim::parseProbe" in fingerprinter and "onProbePacket(frame.bytes.data()" in fingerprinter, "real fingerprinter handler must be exercised"
+assert "fingerprintSimTrace" in fingerprinter and '#ifndef SIMULATOR' in fingerprinter, "fingerprinter radio isolation missing"
 smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
 assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
 assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"

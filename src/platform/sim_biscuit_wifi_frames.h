@@ -52,5 +52,32 @@ inline std::vector<ProbeFrame> probeFrames() {
   return {first, makeProbe(macB, "", -73), makeProbe(macC, "GuestLab", -62),
           first, wrongType, truncated};
 }
+
+// Independent OS-heuristic fixtures: never change the Probe Sniffer scenarios.
+inline std::vector<ProbeFrame> fingerprintFrames() {
+  const char* raw = std::getenv("CROSSPLAY_SIM_FINGERPRINT_SCENARIO");
+  const std::string scenario = raw ? raw : "normal";
+  if (scenario == "empty") return {};
+  const uint8_t ios[6] = {0x02,0,0,0,0,0x41};
+  const uint8_t android[6] = {0x06,0,0,0,0,0x42};
+  const uint8_t windows[6] = {0x00,0x1b,0x21,0,0,0x43};
+  const uint8_t linux[6] = {0xb8,0x27,0xeb,0,0,0x44};
+  const uint8_t unknown[6] = {0x10,0x22,0x33,0,0,0x45};
+  auto beacon = makeProbe(ios, "IgnoreBeacon", -80);
+  beacon.bytes[0] = 0x80; // not a probe request
+  auto truncated = makeProbe(android, "BadTag", -85);
+  truncated.bytes[25] = 32; // 802.11 tag claims missing data
+  if (scenario == "malformed") return {beacon, truncated};
+  const auto localIOS = makeProbe(ios, "Lab-iOS", -50);
+  const auto localAndroid = makeProbe(android, "Lab-Android", -62);
+  return {
+    localIOS, localIOS,
+    localAndroid, localAndroid, localAndroid, localAndroid,
+    makeProbe(windows, "Lab-Windows", -48),
+    makeProbe(linux, "Lab-Linux", -71),
+    makeProbe(unknown, "Lab-Unknown", -82),
+    beacon, truncated
+  };
+}
 }  // namespace biscuit_sim
 #endif
