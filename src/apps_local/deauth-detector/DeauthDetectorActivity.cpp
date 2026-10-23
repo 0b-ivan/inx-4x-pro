@@ -45,7 +45,11 @@ void DeauthDetectorActivity::onPacket(const uint8_t* data, uint16_t len, int rss
 
   if (frameType != 0) return;  // not a management frame
 
+#ifdef SIMULATOR
+  portENTER_CRITICAL(&statsMux);
+#else
   portENTER_CRITICAL_ISR(&statsMux);
+#endif
   totalFrames++;
 
   bool isDeauth   = (subType == 0x0C);  // Deauthentication
@@ -68,7 +72,11 @@ void DeauthDetectorActivity::onPacket(const uint8_t* data, uint16_t len, int rss
     eventLogHead = (eventLogHead + 1) % EVENT_LOG_SIZE;
     if (eventLogCount < EVENT_LOG_SIZE) eventLogCount++;
   }
+#ifdef SIMULATOR
+  portEXIT_CRITICAL(&statsMux);
+#else
   portEXIT_CRITICAL_ISR(&statsMux);
+#endif
 }
 
 // ---------------------------------------------------------------------------
