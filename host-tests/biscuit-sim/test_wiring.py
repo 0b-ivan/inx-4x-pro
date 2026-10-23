@@ -18,8 +18,9 @@ for name, cls, path in (
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
     assert f'{{"{name}"' in shelf, f"{name} missing from the app list"
+    assert f'#include "{path.replace(".cpp", ".h")}"' in shelf, f"{cls} header unavailable in simulator"
     assert (root / "src/apps_local" / path).exists(), f"real {cls} missing"
-    checks += 4
+    checks += 5
 assert "biscuit_sim::readClockUtc" in clock, "clock does not use simulated time"
 assert "simulated X4 Pro" in info, "device info reports false ESP metrics"
 checks += 2

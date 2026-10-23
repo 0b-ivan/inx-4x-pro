@@ -21,5 +21,5 @@ int main() {
   check(!biscuit_sim::readClockUtc(&result), "negative timestamp rejected");
   check(unsetenv("CROSSPLAY_SIM_EPOCH") == 0, "unset fixture");
   check(biscuit_sim::readClockUtc(&result), "host time available");
-  std::puts("biscuit-sim clock: 8 checks, 0 failed");
+  std::puts("biscuit-sim clock: 13 checks, 0 failed");
 }

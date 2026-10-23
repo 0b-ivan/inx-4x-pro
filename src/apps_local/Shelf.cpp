@@ -73,17 +73,11 @@
 #endif  // !SIMULATOR
 #include "calculator/CalculatorActivity.h"
 #include "cipher/CipherActivity.h"
-#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
 #include "clock/ClockActivity.h"
-#endif  // !SIMULATOR
 #include "countdown/CountdownActivity.h"
-#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
 #include "device-info/DeviceInfoActivity.h"
-#endif  // !SIMULATOR
 #include "morse-code/MorseCodeActivity.h"
-#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
 #include "otp-generator/OtpGeneratorActivity.h"
-#endif  // !SIMULATOR
 #include "password-manager/PasswordManagerActivity.h"
 #include "qr-generator/QrGeneratorActivity.h"
 #include "sd-file-browser/SdFileBrowserActivity.h"
