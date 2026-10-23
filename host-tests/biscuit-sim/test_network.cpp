@@ -221,5 +221,34 @@ int main() {
                                                      frame.bytes.size(), parsedFingerprint);
   check(!anyValidFingerprint, "invalid fingerprint frames cannot inflate device list");
   unsetenv("CROSSPLAY_SIM_FINGERPRINT_SCENARIO");
+  unsetenv("CROSSPLAY_SIM_DEAUTH_SCENARIO");
+  auto managed = biscuit_sim::deauthMonitorFrames();
+  check(managed.size() == 6, "Deauth detector fixture includes normal and malformed frames");
+  unsigned deauths = 0, disassocs = 0, management = 0;
+  for (const auto& packet : managed) {
+    if (packet.bytes.size() < 24) continue;
+    const uint8_t fc = packet.bytes[0];
+    if (((fc >> 2) & 3) != 0) continue;
+    ++management;
+    deauths += ((fc >> 4) & 15) == 12;
+    disassocs += ((fc >> 4) & 15) == 10;
+  }
+  check(management == 4 && deauths == 2 && disassocs == 1,
+        "normal management classification remains below alert threshold");
+  setenv("CROSSPLAY_SIM_DEAUTH_SCENARIO", "spike", 1);
+  managed = biscuit_sim::deauthMonitorFrames();
+  check(managed.size() == 7, "spike fixture emits six deauth frames plus disassoc");
+  deauths = 0;
+  for (const auto& packet : managed)
+    if (packet.bytes.size() >= 24 && ((packet.bytes[0] >> 4) & 15) == 12) ++deauths;
+  check(deauths == 6, "spike exceeds detector threshold of five");
+  setenv("CROSSPLAY_SIM_DEAUTH_SCENARIO", "empty", 1);
+  check(biscuit_sim::deauthMonitorFrames().empty(), "empty management capture");
+  setenv("CROSSPLAY_SIM_DEAUTH_SCENARIO", "malformed", 1);
+  auto invalidMgmt = biscuit_sim::deauthMonitorFrames();
+  check(invalidMgmt.size() == 2 && invalidMgmt[0].bytes.size() < 24 &&
+        ((invalidMgmt[1].bytes[0] >> 2) & 3) != 0,
+        "malformed management fixtures cannot count as deauth");
+  unsetenv("CROSSPLAY_SIM_DEAUTH_SCENARIO");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }

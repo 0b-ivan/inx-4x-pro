@@ -79,5 +79,41 @@ inline std::vector<ProbeFrame> fingerprintFrames() {
     beacon, truncated
   };
 }
+
+// Passive deauthentication/disassociation monitor fixtures.
+// 802.11 management headers are 24 bytes; no frame is ever transmitted.
+inline ProbeFrame managementFrame(uint8_t frameControl, uint8_t id, int rssi) {
+  ProbeFrame frame{std::vector<uint8_t>(26, 0), rssi};
+  frame.bytes[0] = frameControl;
+  frame.bytes[4] = 0x02; // synthetic receiver
+  frame.bytes[9] = 0x11;
+  frame.bytes[10] = 0x02; // synthetic transmitter
+  frame.bytes[15] = id;
+  frame.bytes[16] = 0x02; // synthetic BSSID
+  frame.bytes[21] = 0x22;
+  frame.bytes[24] = 0x07; // reason code (simulator only)
+  return frame;
+}
+inline std::vector<ProbeFrame> deauthMonitorFrames() {
+  const char* env = std::getenv("CROSSPLAY_SIM_DEAUTH_SCENARIO");
+  const std::string scenario = env ? env : "normal";
+  if (scenario == "empty") return {};
+  auto truncated = managementFrame(0xc0, 1, -80);
+  truncated.bytes.resize(12);
+  if (scenario == "malformed")
+    return {truncated, managementFrame(0x08, 2, -68)}; // data frame ignored
+  if (scenario == "spike") {
+    std::vector<ProbeFrame> frames;
+    for (uint8_t i = 0; i < 6; ++i)
+      frames.push_back(managementFrame(0xc0, static_cast<uint8_t>(i + 1), -50 - i));
+    frames.push_back(managementFrame(0xa0, 8, -65));
+    return frames;
+  }
+  return {managementFrame(0xc0, 1, -48),
+          managementFrame(0xa0, 2, -58),
+          managementFrame(0xc0, 3, -62),
+          managementFrame(0x80, 4, -75), // beacon: counted as management, not deauth
+          truncated, managementFrame(0x08, 5, -80)};
+}
 }  // namespace biscuit_sim
 #endif

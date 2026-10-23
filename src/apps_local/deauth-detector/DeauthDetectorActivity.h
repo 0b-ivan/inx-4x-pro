@@ -62,6 +62,10 @@ class DeauthDetectorActivity final : public Activity {
   bool autoHop = true;
 
   // Timing
+#ifdef SIMULATOR
+  bool simInjected = false;
+  unsigned long simStarted = 0;
+#endif
   unsigned long lastUpdateTime = 0;
   unsigned long lastHopTime = 0;
   static constexpr unsigned long UPDATE_INTERVAL_MS = 2000;

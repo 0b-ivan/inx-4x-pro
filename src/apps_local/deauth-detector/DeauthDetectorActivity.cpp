@@ -2,8 +2,14 @@
 #include "DevMode.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <WiFi.h>
 #include <esp_wifi.h>
+#else
+#include "platform/sim_biscuit_wifi_frames.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -11,6 +17,7 @@
 #include "../radio/RadioManager.h"
 
 // Static instance pointer for the C promiscuous callback
+#ifndef SIMULATOR
 static DeauthDetectorActivity* activeDetector = nullptr;
 
 static void IRAM_ATTR deauthCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
@@ -19,11 +26,19 @@ static void IRAM_ATTR deauthCallback(void* buf, wifi_promiscuous_pkt_type_t type
   activeDetector->onPacket(pkt->payload, pkt->rx_ctrl.sig_len, pkt->rx_ctrl.rssi);
 }
 
+#else
+static void deauthSimTrace(const char* event, uint32_t count, uint32_t other) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_DEAUTH_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0')
+    std::fprintf(stderr, "[BISCUIT_SIM] DEAUTH:%s:%u:%u\n", event, count, other);
+}
+#endif
+
 // ---------------------------------------------------------------------------
 // onPacket — called from ISR context, must be fast, no heap
 // ---------------------------------------------------------------------------
 void DeauthDetectorActivity::onPacket(const uint8_t* data, uint16_t len, int rssi) {
-  if (len < 24) return;  // minimum 802.11 management header
+  if (!data || len < 24) return;  // minimum 802.11 management header
 
   uint8_t frameType = (data[0] >> 2) & 0x03;
   uint8_t subType   = (data[0] >> 4) & 0x0F;
@@ -76,20 +91,26 @@ void DeauthDetectorActivity::onEnter() {
   lastUpdateTime  = millis();
   lastHopTime     = millis();
   memset(eventLog, 0, sizeof(eventLog));
+#ifdef SIMULATOR
+  simInjected = false;
+  deauthSimTrace("ready", 0, 0);
+#endif
   requestUpdate();
 }
 
 void DeauthDetectorActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   if (state != IDLE) stopMonitor();
+  Activity::onExit();
+  devmode::resume();
 }
 
 DeauthDetectorActivity::~DeauthDetectorActivity() {
+#ifndef SIMULATOR
   if (activeDetector == this) {
     esp_wifi_set_promiscuous(false);
     activeDetector = nullptr;
   }
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -97,20 +118,35 @@ DeauthDetectorActivity::~DeauthDetectorActivity() {
 // ---------------------------------------------------------------------------
 void DeauthDetectorActivity::startMonitor() {
   RADIO.ensureWifi();
+#ifndef SIMULATOR
   WiFi.disconnect();
   activeDetector = this;
   esp_wifi_set_promiscuous(true);
   esp_wifi_set_promiscuous_rx_cb(deauthCallback);
   esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+#else
+  simInjected = false;
+  simStarted = millis();
+#endif
   lastHopTime    = millis();
   lastUpdateTime = millis();
   state          = MONITORING;
+#ifdef SIMULATOR
+  deauthSimTrace("monitoring", 0, 0);
+#endif
 }
 
 void DeauthDetectorActivity::stopMonitor() {
+  if (state == IDLE) return;
+#ifndef SIMULATOR
   esp_wifi_set_promiscuous(false);
   activeDetector = nullptr;
+#endif
   RADIO.shutdown();
+#ifdef SIMULATOR
+  deauthSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                      ? "radio-off" : "radio-leak", deauthCount, disassocCount);
+#endif
   state = IDLE;
 }
 
@@ -141,6 +177,9 @@ void DeauthDetectorActivity::loop() {
         mappedInput.wasReleased(MappedInputManager::Button::Up) ||
         mappedInput.wasReleased(MappedInputManager::Button::Down)) {
       state = MONITORING;
+#ifdef SIMULATOR
+      deauthSimTrace("dismissed", deauthCount, disassocCount);
+#endif
       requestUpdate();
     }
     int tx_ = 0, ty_ = 0;
@@ -151,10 +190,22 @@ void DeauthDetectorActivity::loop() {
   // state == MONITORING
   unsigned long now = millis();
 
+#ifdef SIMULATOR
+  if (!simInjected && now - simStarted >= 850) {
+    simInjected = true;
+    for (const auto& frame : biscuit_sim::deauthMonitorFrames())
+      onPacket(frame.bytes.data(), static_cast<uint16_t>(frame.bytes.size()), frame.rssi);
+    deauthSimTrace("processed", deauthCount, disassocCount);
+    requestUpdate();
+  }
+#endif
+
   // Channel hopping
   if (autoHop && (now - lastHopTime >= HOP_INTERVAL_MS)) {
     currentChannel = static_cast<uint8_t>((currentChannel % 13) + 1);
+#ifndef SIMULATOR
     esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+#endif
     lastHopTime = now;
   }
 
@@ -176,6 +227,9 @@ void DeauthDetectorActivity::loop() {
     if (recent >= static_cast<uint32_t>(SPIKE_THRESHOLD)) {
       spikeCount = recent;
       state      = ALERT_SPIKE;
+#ifdef SIMULATOR
+      deauthSimTrace("alert", spikeCount, eventLogCount);
+#endif
     }
     requestUpdate();
   }

@@ -15,7 +15,6 @@
 #include "../apps_local/ble-proximity/BleProximityActivity.h"
 #include "../apps_local/ble-scanner/BleScannerActivity.h"
 #include "../apps_local/ble-spam/BleSpamActivity.h"
-#include "../apps_local/deauth-detector/DeauthDetectorActivity.h"
 #include "../apps_local/fire/FireActivity.h"
 #include "../apps_local/host-scanner/HostScannerActivity.h"
 #include "../apps_local/http-client/HttpClientActivity.h"
@@ -35,8 +34,6 @@ HWSTUB_ACTIVITY(AirTagTestActivity)
 HWSTUB_ACTIVITY(BleBeaconActivity)
 HWSTUB_ACTIVITY(BleKeyboardActivity)
 HWSTUB_ACTIVITY(BleSpamActivity)
-DeauthDetectorActivity::~DeauthDetectorActivity() {}
-HWSTUB_ACTIVITY(DeauthDetectorActivity)
 HWSTUB_ACTIVITY(FireActivity)
 HWSTUB_ACTIVITY(MeshChatActivity)
 HWSTUB_ACTIVITY(NetworkMonitorActivity)

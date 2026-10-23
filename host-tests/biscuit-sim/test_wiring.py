@@ -27,6 +27,7 @@ for name, cls, path in (
     ("PROBE SNIFFER", "ProbeSnifferActivity", "probe-sniffer/ProbeSnifferActivity.cpp"),
     ("CROWD DENSITY", "CrowdDensityActivity", "crowd-density/CrowdDensityActivity.cpp"),
     ("DEV FINGERPRINT", "DeviceFingerprinterActivity", "device-fingerprinter/DeviceFingerprinterActivity.cpp"),
+    ("DEAUTH DETECTOR", "DeauthDetectorActivity", "deauth-detector/DeauthDetectorActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -78,6 +79,11 @@ fingerprinter = (root / "src/apps_local/device-fingerprinter/DeviceFingerprinter
 assert "biscuit_sim::fingerprintFrames()" in fingerprinter, "fingerprinter must use isolated frames"
 assert "biscuit_sim::parseProbe" in fingerprinter and "onProbePacket(frame.bytes.data()" in fingerprinter, "real fingerprinter handler must be exercised"
 assert "fingerprintSimTrace" in fingerprinter and '#ifndef SIMULATOR' in fingerprinter, "fingerprinter radio isolation missing"
+deauth = (root / "src/apps_local/deauth-detector/DeauthDetectorActivity.cpp").read_text()
+assert "biscuit_sim::deauthMonitorFrames()" in deauth, "Deauth Detector must consume isolated management frames"
+assert "onPacket(frame.bytes.data()" in deauth, "real event ring-buffer handler must be executed"
+assert "deauthSimTrace" in deauth and "#ifndef SIMULATOR" in deauth, "physical radio must be guarded"
+assert "esp_wifi_set_promiscuous" in deauth, "hardware build must keep existing radio behavior"
 smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
 assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
 assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"

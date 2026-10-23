@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "DEAUTH DETECTOR" ]; then
+    script="1900:ENTER:100;4500:BACK:100;6000:QUIT"
   elif [ "$app" = "DEV FINGERPRINT" ]; then
     script="1900:ENTER:100;4600:BACK:100;5800:QUIT"
   elif [ "$app" = "CROWD DENSITY" ]; then
@@ -39,7 +41,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "DEV FINGERPRINT" ]; then
+  if [ "$app" = "DEAUTH DETECTOR" ]; then
+    shots="1600:$out/${name}_idle.bmp;3600:$out/${name}_monitor.bmp;5100:$frame"
+  elif [ "$app" = "DEV FINGERPRINT" ]; then
     shots="1600:$out/${name}_ready.bmp;3600:$out/${name}_capturing.bmp;5000:$frame"
   elif [ "$app" = "CROWD DENSITY" ]; then
     shots="1600:$out/${name}_before.bmp;3100:$out/${name}_live.bmp;5150:$out/${name}_sampled.bmp;6000:$out/${name}_refilled.bmp;7100:$frame"
@@ -60,6 +64,7 @@ for app in "${apps[@]}"; do
     CROSSPLAY_SIM_PROBE_TRACE=1 \
     CROSSPLAY_SIM_CROWD_TRACE=1 \
     CROSSPLAY_SIM_FINGERPRINT_TRACE=1 \
+    CROSSPLAY_SIM_DEAUTH_TRACE=1 \
     CROSSPLAY_SIM_EPOCH=1704067200 \
     CROSSPLAY_SIM_WIFI_CONNECTED=1 \
     CROSSPOINT_SIM_INPUT_SCRIPT="$script" \
@@ -520,5 +525,91 @@ assert data[:2]==b"BM" and len(data)>1000
 assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
 PYBAD
 done
-echo "PASS biscuit-ui-smoke: 16 activities, Fingerprinter normal/empty/malformed"
+python3 - <<'PYDEAUTH'
+from pathlib import Path
+import hashlib, struct
+root=Path(".pio/biscuit-ui-smoke")
+pictures=[root/"DEAUTH_DETECTOR_idle.bmp",
+          root/"DEAUTH_DETECTOR_monitor.bmp",root/"DEAUTH_DETECTOR.bmp"]
+digests=[]
+for p in pictures:
+    b=p.read_bytes()
+    assert b[:2]==b"BM" and len(b)>1000, f"bad Deauth Detector screenshot {p}"
+    assert tuple(map(abs,struct.unpack_from("<ii",b,18)))==(480,800)
+    digests.append(hashlib.sha256(b).digest())
+assert digests[0]!=digests[1] and digests[1]!=digests[2], (
+    "monitoring/exit screens are not distinct")
+log=(root/"DEAUTH_DETECTOR.log").read_text(errors="replace")
+position=-1
+for item in ("DEAUTH:ready:0:0","DEAUTH:monitoring:0:0",
+             "DEAUTH:processed:2:1","DEAUTH:radio-off:2:1"):
+    position=log.find("[BISCUIT_SIM] "+item,position+1)
+    assert position>=0, f"missing or unordered Deauth Detector event: {item}"
+assert "DEAUTH:alert:" not in log, "normal frames must not trigger alarm"
+print("PASS Deauth Detector: normal management frames, no alert, cleanup")
+PYDEAUTH
+
+# A burst of synthetic management frames must activate the REAL alert path.
+spike_log="$out/DEAUTH_DETECTOR_spike.log"
+if ! env CROSSPLAY_AUTOSTART="DEAUTH DETECTOR" \
+  CROSSPLAY_SIM_DEAUTH_TRACE=1 \
+  CROSSPLAY_SIM_DEAUTH_SCENARIO=spike \
+  CROSSPOINT_SIM_INPUT_SCRIPT="1900:ENTER:100;5200:BACK:100;6300:BACK:100;7500:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="1600:$out/DEAUTH_DETECTOR_spike_idle.bmp;4700:$out/DEAUTH_DETECTOR_spike_alert.bmp;5700:$out/DEAUTH_DETECTOR_spike_dismissed.bmp;6900:$out/DEAUTH_DETECTOR_spike_exit.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$spike_log" 2>&1; then
+  echo "FAIL Deauth Detector synthetic alert"; tail -100 "$spike_log"; exit 1
+fi
+python3 - "$spike_log" "$out/DEAUTH_DETECTOR_spike_alert.bmp" "$out/DEAUTH_DETECTOR_spike_dismissed.bmp" <<'PYDEAUTHSPIKE'
+from pathlib import Path
+import hashlib,struct,sys
+log=Path(sys.argv[1]).read_text(errors="replace")
+last=-1
+for stage in ("DEAUTH:monitoring:0:0","DEAUTH:processed:6:1",
+              "DEAUTH:alert:6:7","DEAUTH:dismissed:6:1",
+              "DEAUTH:radio-off:6:1"):
+    last=log.find(stage,last+1)
+    assert last>=0, f"missing/out-of-order deauth spike {stage}: {log[-1200:]}"
+frames=[]
+for filename in sys.argv[2:]:
+    data=Path(filename).read_bytes()
+    assert data[:2]==b"BM" and len(data)>1000
+    assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+    frames.append(hashlib.sha256(data).digest())
+assert frames[0]!=frames[1], "dismissal did not leave deauth spike display"
+print("PASS Deauth Detector: 6-frame spike, alert, dismiss, radio off")
+PYDEAUTHSPIKE
+
+# No event should be recorded for empty/invalid fixtures, even via real onPacket().
+for scenario in empty malformed; do
+  log="$out/DEAUTH_DETECTOR_$scenario.log"
+  image="$out/DEAUTH_DETECTOR_$scenario.bmp"
+  if ! env CROSSPLAY_AUTOSTART="DEAUTH DETECTOR" \
+    CROSSPLAY_SIM_DEAUTH_TRACE=1 \
+    CROSSPLAY_SIM_DEAUTH_SCENARIO="$scenario" \
+    CROSSPOINT_SIM_INPUT_SCRIPT="1900:ENTER:100;3900:BACK:100;5400:QUIT" \
+    CROSSPOINT_SIM_SCREENSHOTS="3200:$image" \
+    LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+    timeout 18s "$bin" >"$log" 2>&1; then
+    echo "FAIL Deauth Detector $scenario"; tail -100 "$log"; exit 1
+  fi
+  grep -Fq "DEAUTH:processed:0:0" "$log" || {
+    echo "FAIL Deauth Detector $scenario counts invalid frames"; tail -100 "$log"; exit 1
+  }
+  grep -Fq "DEAUTH:radio-off:0:0" "$log" || {
+    echo "FAIL Deauth Detector $scenario leaks radio"; tail -100 "$log"; exit 1
+  }
+  if grep -Fq "DEAUTH:alert:" "$log"; then
+    echo "FAIL Deauth Detector $scenario phantom alert"; exit 1
+  fi
+  python3 - "$image" <<'PYDEAUTHNEG'
+from pathlib import Path
+import struct,sys
+data=Path(sys.argv[1]).read_bytes()
+assert data[:2]==b"BM" and len(data)>1000
+assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+PYDEAUTHNEG
+done
+echo "PASS biscuit-ui-smoke: 17 activities, Deauth Detector normal/spike/empty/malformed and visual references"
+
 

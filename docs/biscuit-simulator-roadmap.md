@@ -2,22 +2,22 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **16 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **17 echte Biscuit-Activities** aus:
 
 | Gruppe | Activities |
 | --- | --- |
 | Offline/System | CLOCK, DEVICE INFO, OTP GENERATOR |
-| WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT |
+| WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT, DEAUTH DETECTOR |
 | BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT |
 
-Die ursprünglichen No-op-VTables der sechzehn Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der siebzehn Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
 Letzte erfolgreich bestätigte Pipeline:
-[CI #39994795735](https://github.com/0b-ivan/inx-4x-pro/actions/runs/39994795735)
-(15 Activities inklusive nativer BMP-Previews und sechs visueller Referenzen).
-Device Fingerprinter benötigt eine neue CI-Bestätigung.
+[CI #39997824179](https://github.com/0b-ivan/inx-4x-pro/actions/runs/39997824179)
+(16 Activities inklusive nativer BMP-Previews und sechs visueller Referenzen).
+Die Erweiterung Deauth Detector benötigt eine neue CI-Bestätigung.
 
 ## Deterministische Fixtures – kein Zugriff auf Funkhardware
 
@@ -53,7 +53,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller sechzehn Apps
+- Autostart und nichtleere Screenshots aller siebzehn Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -174,3 +174,19 @@ Ressourcenfreigabe. **OS-Erkennung aus Probe-Häufigkeit und OUI ist lediglich
 eine unzuverlässige Heuristik**, keine Identifizierung des Geräts oder Users.
 Keine WLAN-Hardware oder fremden Netze werden im Simulator untersucht.
 Der neue Stand gilt erst nach grüner CI als bestätigt.
+
+## Deauth Detector – passiv und vollständig synthetisch
+
+Die echte `DeauthDetectorActivity` führt ihren bestehenden `onPacket()`-
+Handler mit ausschließlich im Arbeitsspeicher konstruierten 802.11-
+Management-Frames aus. `CROSSPLAY_SIM_DEAUTH_SCENARIO=normal|spike|empty|malformed`
+prüft Deauthentication-/Disassociation-Zähler, Ereignisringpuffer,
+einen simulierten Alarm mit sechs Deauth-Frames, leere Scans,
+ungültige Pakete und die Freigabe der simulierten Radio-Ressourcen.
+
+Die SDL-Suite startet die Activity, prüft den Monitor-Bildschirm, Alarm,
+Quittierung und Rücknavigation. Alle realen `esp_wifi`-Zugriffe sind im
+Simulator ausgeschlossen. **Kein echtes Aussenden von Deauth-Paketen,
+keine Überwachung fremder WLAN-Netze.** Die Heuristik erkennt lediglich
+eine Häufung solcher Frames; sie belegt für sich genommen keinen Angriff.
+Der neue Stand bedarf noch der vollständigen CI-Bestätigung.
