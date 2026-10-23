@@ -38,7 +38,7 @@ void SampleActivity::render(RenderLock&&) {
                                    "Local app seam works. Copy src/apps_local/sample/ to start a real one.", 4);
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }
