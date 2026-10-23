@@ -695,7 +695,7 @@ void BattleshipLocalPlayActivity::drawBrowserWaiting() {
   y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
   renderer.drawCenteredText(SMALL_FONT_ID, y, ipUrl.c_str(), true);
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
 
