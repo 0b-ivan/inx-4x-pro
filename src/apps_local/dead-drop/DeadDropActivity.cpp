@@ -55,11 +55,12 @@ void DeadDropActivity::onEnter() {
 }
 
 void DeadDropActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
+  // Release AP + HTTP server before Developer Mode retakes the WiFi radio.
   if (state == ACTIVE) {
     stopDrop();
   }
+  devmode::resume();
+  Activity::onExit();
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +78,12 @@ void DeadDropActivity::startDrop() {
 
   RADIO.ensureWifi();
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssidName.c_str());
+  if (!WiFi.softAP(ssidName.c_str())) {
+    LOG_ERR("DEAD", "Failed to start local AP: %s", ssidName.c_str());
+    RADIO.shutdown();
+    requestUpdate();
+    return;
+  }
 
   setupWebServer();
 
