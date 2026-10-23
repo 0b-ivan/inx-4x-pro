@@ -221,12 +221,15 @@ void CrowdDensityActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  // Unlike ordinary touch themes, this Biscuit activity ALWAYS paints the
+  // 40px touch footer. Reserve its actual height, not the touch metric (0).
+  const int footerHeight = BaseMetrics::values.buttonHintsHeight;
 
   if (state == READY) {
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
                    "Crowd Density");
     const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-    const int centerY = contentTop + (pageHeight - contentTop - metrics.buttonHintsHeight) / 2;
+    const int centerY = contentTop + (pageHeight - contentTop - footerHeight) / 2;
     renderer.drawCenteredText(UI_10_FONT_ID, centerY - 30, "Estimate nearby people via");
     renderer.drawCenteredText(UI_10_FONT_ID, centerY, "WiFi probe request counting.");
     renderer.drawCenteredText(SMALL_FONT_ID, centerY + 40, "Press Confirm to start capture.");
@@ -278,7 +281,7 @@ void CrowdDensityActivity::render(RenderLock&&) {
   // Bar chart of history
   if (historyCount > 0) {
     const int chartTop = countY;
-    const int chartBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - 30;
+    const int chartBottom = pageHeight - footerHeight - metrics.verticalSpacing - 30;
     const int chartHeight = chartBottom - chartTop;
 
     if (chartHeight > 20) {
@@ -313,10 +316,13 @@ void CrowdDensityActivity::render(RenderLock&&) {
     }
   }
 
-  // Disclaimer
-  renderer.drawCenteredText(SMALL_FONT_ID,
-                            pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - 16,
-                            "Estimate only — MAC randomization reduces accuracy");
+  // Keep the disclaimer fully above the always-visible touch footer. Split it
+  // into short lines rather than centering a clipped sentence across 480px.
+  const int noteLineHeight = renderer.getTextHeight(SMALL_FONT_ID);
+  const int noteY = pageHeight - footerHeight - metrics.verticalSpacing - 2 * noteLineHeight - 12;
+  renderer.drawCenteredText(SMALL_FONT_ID, noteY, "Estimate only; not a person count.");
+  renderer.drawCenteredText(SMALL_FONT_ID, noteY + noteLineHeight + 4,
+                            "MAC randomization reduces accuracy.");
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
   GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
