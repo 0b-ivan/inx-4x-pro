@@ -64,11 +64,12 @@ void BulletinBoardActivity::onEnter() {
 }
 
 void BulletinBoardActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
+  // Release AP + HTTP server before Developer Mode retakes the WiFi radio.
   if (state == ACTIVE) {
     stopBoard();
   }
+  devmode::resume();
+  Activity::onExit();
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +86,12 @@ void BulletinBoardActivity::startBoard() {
 
   RADIO.ensureWifi();
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssidName.c_str());
+  if (!WiFi.softAP(ssidName.c_str())) {
+    LOG_ERR("BOARD", "Failed to start local AP: %s", ssidName.c_str());
+    RADIO.shutdown();
+    requestUpdate();
+    return;
+  }
 
   setupWebServer();
 
