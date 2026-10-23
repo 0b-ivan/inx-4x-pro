@@ -307,3 +307,26 @@ Activities sind weiterhin 24 im nativen Simulator integriert.
 `FIRE` und `MESH CHAT` bleiben separat als Hardware-gebundene
 Activities aus dem nativen Build ausgeschlossen. Dieser
 Touch-Fix erweitert keine echte Funkübertragung oder Angriffslogik.
+
+### Testverschärfung: Touch-Listenauswahl
+
+Der Probe-Sniffer-Touchtest tippt ausdrücklich **Zeile 2** (die
+Broadcast-SSID) statt der zunächst markierten ersten Zeile und verlangt
+den Zustandsmarker `PROBE:touch-row:1`. Damit wird nicht nur irgendein
+Touch-Ereignis, sondern die Änderung der tatsächlichen Listenauswahl
+geprüft. Danach folgen die Touch-Schaltflächen für Detail, Zurück und Exit.
+
+### Clock-Golden: Zustände strikt trennen
+
+Ein früherer Screenshot-Golden-Test erwartete die Uhr **nach** einer
+simulierten 650-ms-`ENTER`-Betätigung. Seit der Korrektur der
+Tastendruckdauer wird dieser Druck richtig als langer Confirm erkannt
+und wechselt tatsächlich zur Stoppuhr. Die Pixelabweichung ist also
+eine echte **Zustandsänderung**, kein Uhren- oder Grafikfehler.
+
+`CLOCK.bmp` wird deshalb bei 1600 ms **vor** dem geplanten langen
+Tastendruck aufgenommen und bleibt mit der vorhandenen freigegebenen
+Uhr-Referenz vergleichbar. `CLOCK_stopwatch.bmp` dokumentiert
+die Stoppuhr bei 4300 ms. Der E2E-Test verlangt unterschiedliche Bilder
+und den expliziten Activity-Zustandsmarker `CLOCK:mode:stopwatch`.
+Die Golden-Referenz wird nicht unkontrolliert neu berechnet.

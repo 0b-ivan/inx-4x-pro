@@ -8,6 +8,7 @@
 #include <time.h>
 #ifdef SIMULATOR
 #include "platform/sim_biscuit_clock.h"
+#include <cstdio>
 #endif
 
 #include "MappedInputManager.h"
@@ -176,6 +177,11 @@ void ClockActivity::loop() {
       case STOPWATCH_MODE: clockMode = POMODORO_MODE;  break;
       case POMODORO_MODE:  clockMode = NTP_CLOCK;       break;
     }
+#ifdef SIMULATOR
+    const char* mode = clockMode == STOPWATCH_MODE ? "stopwatch" :
+                       clockMode == POMODORO_MODE ? "pomodoro" : "clock";
+    std::fprintf(stderr, "[BISCUIT_SIM] CLOCK:mode:%s\n", mode);
+#endif
     requestUpdate();
     return;
   }

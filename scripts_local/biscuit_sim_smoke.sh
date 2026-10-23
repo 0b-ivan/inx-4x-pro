@@ -55,7 +55,11 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "BLE KEYBOARD" ]; then
+  if [ "$app" = "CLOCK" ]; then
+    # Freeze the pixel golden BEFORE the intentional long-confirm mode switch.
+    # The real Stopwatch state is checked separately below.
+    shots="1600:$frame;4300:$out/${name}_stopwatch.bmp"
+  elif [ "$app" = "BLE KEYBOARD" ]; then
     shots="1600:$out/${name}_scripts.bmp;2200:$out/${name}_preview.bmp;2950:$out/${name}_paired.bmp;4900:$out/${name}_executed.bmp;6800:$out/${name}_reset.bmp;8000:$frame"
   elif [ "$app" = "BLE SPAM" ]; then
     shots="1700:$out/${name}_disclaimer.bmp;2200:$out/${name}_menu.bmp;3700:$out/${name}_active.bmp;4900:$out/${name}_stopped.bmp;6000:$frame"
@@ -888,7 +892,7 @@ PYKEYBOARD
 touch_log="$out/PROBE_SNIFFER_touch.log"
 if ! env CROSSPLAY_AUTOSTART="PROBE SNIFFER" \
   CROSSPLAY_SIM_PROBE_TRACE=1 \
-  CROSSPOINT_SIM_INPUT_SCRIPT="2100:TAP:100,150,120;2900:TAP:180,780,120;3850:TAP:60,780,120;4750:TAP:60,780,120;6100:QUIT" \
+  CROSSPOINT_SIM_INPUT_SCRIPT="2100:TAP:100,210,120;2900:TAP:180,780,120;3850:TAP:60,780,120;4750:TAP:60,780,120;6100:QUIT" \
   CROSSPOINT_SIM_SCREENSHOTS="1800:$out/PROBE_SNIFFER_touch_before.bmp;3350:$out/PROBE_SNIFFER_touch_detail.bmp;4300:$out/PROBE_SNIFFER_touch_back.bmp;5450:$out/PROBE_SNIFFER_touch_exit.bmp" \
   LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
   timeout 18s "$bin" >"$touch_log" 2>&1; then
@@ -912,7 +916,7 @@ for name in sys.argv[2:]:
 assert screens[0]!=screens[1], "touching hint Select did not enter detail"
 assert screens[1]!=screens[2], "touching hint Back did not return to list"
 assert screens[2]!=screens[3], "touching hint Exit did not leave Activity"
-assert re.search(r"PROBE:touch-row:[0-9]+",log), "X4 Pro list-row tap ignored"
+assert "PROBE:touch-row:1" in log, "X4 Pro second-row tap ignored or selected wrong item"
 position=-1
 for event in ("PROBE:touch-detail:3","PROBE:touch-back:3",
               "PROBE:touch-exit:3","PROBE:radio-off:3"):
@@ -957,6 +961,26 @@ for state in ("NETWORK:monitoring:0:0","NETWORK:processed:4:3",
     assert pos>=0, f"Network Monitor touch missing {state}: {log[-1400:]}"
 print("PASS X4 Pro touch: Network Monitor event/detail/back/exit, cleanup")
 PYNETTOUCH
+# A long Confirm must ACTUALLY change Clock -> Stopwatch. Clock.bmp is
+# captured before the interaction, so its golden always describes Clock.
+python3 - <<'PYCLOCK'
+from pathlib import Path
+import hashlib, struct
+root=Path(".pio/biscuit-ui-smoke")
+a=root/"CLOCK.bmp"
+b=root/"CLOCK_stopwatch.bmp"
+fingerprints=[]
+for p in (a,b):
+    data=p.read_bytes()
+    assert data[:2]==b"BM" and len(data)>1000, f"Clock BMP missing: {p}"
+    assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+    fingerprints.append(hashlib.sha256(data).digest())
+assert fingerprints[0]!=fingerprints[1], "Long Confirm did not change Clock -> Stopwatch"
+log=(root/"CLOCK.log").read_text(errors="replace")
+assert "[BISCUIT_SIM] CLOCK:mode:stopwatch" in log, (
+    "Long Confirm was ignored: Clock -> Stopwatch state transition missing")
+print("PASS Clock: stable initial golden, genuine long-press switches to Stopwatch")
+PYCLOCK
 echo "PASS biscuit-ui-smoke: 24 activities, virtual BLE Keyboard script and prior regressions"
 
 
