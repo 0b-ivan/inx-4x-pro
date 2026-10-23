@@ -841,6 +841,6 @@ void TotpActivity::render(RenderLock&&) {
   interactionsReady_ = true;
   toybox::reportOverflow(interactions_, "Authenticator");
   const auto labels = mappedInput.mapLabels("Back", "", "Up", "Down");
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
