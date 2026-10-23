@@ -11,7 +11,6 @@
 #include "../apps_local/ble-contact/BleContactExchangeActivity.h"
 #include "../apps_local/ble-proximity/BleProximityActivity.h"
 #include "../apps_local/ble-scanner/BleScannerActivity.h"
-#include "../apps_local/fire/FireActivity.h"
 #include "../apps_local/host-scanner/HostScannerActivity.h"
 #include "../apps_local/http-client/HttpClientActivity.h"
 #include "../apps_local/mdns-browser/MdnsBrowserActivity.h"
@@ -22,7 +21,6 @@
   void cls::loop() {}                                     \
   void cls::render(RenderLock&&) {}
 
-HWSTUB_ACTIVITY(FireActivity)
 
 #undef HWSTUB_ACTIVITY
 

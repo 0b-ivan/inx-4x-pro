@@ -2,7 +2,7 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **25 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **25 Original-Activities und 1 sichere UI-Preview** aus:
 
 | Gruppe | Activities |
 | --- | --- |
@@ -10,8 +10,9 @@ Der native X4-Pro-Simulator führt **25 echte Biscuit-Activities** aus:
 | WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT, DEAUTH DETECTOR, PACKET MONITOR, NETWORK MONITOR, WIFI DEAUTH |
 | BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT, BLE BEACON, AIRTAG SPOOF, BLE SPAM, BLE KEYBOARD |
 | ESP-NOW | MESH CHAT (rein virtueller Transport) |
+| UI-only, keine Angriffslogik | FIRE (separater nativer Preview-Adapter) |
 
-Die ursprünglichen No-op-VTables der fünfundzwanzig Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der fünfundzwanzig Original-Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
@@ -54,7 +55,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller fünfundzwanzig Apps
+- Autostart und nichtleere Screenshots aller 26 Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -302,11 +303,11 @@ Trefferzonen-Verwendung, aber noch **keinen jeweils eigenen
 vollständigen Touch-E2E-Test**. Besonders BLE-GATT-Untermenüs und
 spezielle Gesten benötigen weiterhin separate Tests.
 
-Von den ursprünglich 26 betrachteten Biscuit-Activities werden nach
-der Mesh-Chat-Integration 25 im nativen Simulator ausgeführt.
-`FIRE` bleibt wegen seiner aktiven Funkangriffs- und Capture-Pfade
-weiterhin ausgeschlossen. Auch Mesh Chat verwendet ausschließlich
-synthetische lokale ESP-NOW-Pakete und keinerlei Funkhardware.
+Von den ursprünglich 26 betrachteten Biscuit-Activities werden
+25 mit ihrer ursprünglichen Implementierung ausgeführt. `FIRE` erhält
+auf dem nativen Host lediglich eine separat kompilierte, sichere
+UI-Preview; seine Hardware- und Angriffsausführung bleibt ausgeschlossen.
+Mesh Chat nutzt ausschließlich virtuelle ESP-NOW-Pakete.
 
 ### Testverschärfung: Touch-Listenauswahl
 
@@ -350,3 +351,22 @@ Host-Tests kontrollieren ausschließlich virtuelle
 ESP-NOW-Zustellung, virtuelle Sendezählung und Deinitialisierung.
 Eine erfolgreich grüne Pipeline ist für die Abnahme noch erforderlich.
 Keine echten MACs, keine Funkübertragung und keine Host-Sockets.
+
+## FIRE: UI-Abnahme ohne Funk- oder Angriffs-Backend
+
+`FIRE` nutzt unter `SIMULATOR` eine gesonderte
+`src/apps_local/fire/FireSimActivity.cpp`-Implementierung **derselben**
+`FireActivity`-Klasse für die Menüzustände, Bestätigung, Vorschau,
+Abbruch, Ergebnisse und Touch-/Tastenbedienung. Jede angezeigte Funktion
+ist als **SIMULATION** gekennzeichnet. Der Paket-Sendezähler bleibt immer
+**0** und es gibt keine Verbindung zu Host-WLAN, Bluetooth, Live-Targets,
+EAPOL/PMKID-Capture oder einem ESP32-Transmitter. Die Firmware baut
+weiterhin das originale `FireActivity.cpp`.
+
+**Wichtig:** Die Fire-UI-Preview ist keine Ausführung oder Validierung
+der echten Funkangriffs-, Relay-, Portal- und Capture-Engines. In der
+26er-Abdeckungszahl bedeutet `FIRE` ausdrücklich nur UI/Lifecycle;
+alle anderen 25 behalten ihre reale Activity-Logik mit synthetischen
+Ein-/Ausgaben. Echte RF-Funktion ist von dieser CI grundsätzlich nicht
+abgedeckt. Die neue Firewall-Isolation wird durch Host-Wiring und SDL-
+Smoke-Tests mit Zustandsprotokoll, BMPs, Touch und `no-radio` geprüft.

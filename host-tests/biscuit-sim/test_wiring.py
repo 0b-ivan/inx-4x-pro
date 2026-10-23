@@ -36,6 +36,7 @@ for name, cls, path in (
     ("BLE SPAM", "BleSpamActivity", "ble-spam/BleSpamActivity.cpp"),
     ("BLE KEYBOARD", "BleKeyboardActivity", "ble-keyboard/BleKeyboardActivity.cpp"),
     ("MESH CHAT", "MeshChatActivity", "mesh-chat/MeshChatActivity.cpp"),
+    ("FIRE", "FireActivity", "fire/FireSimActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -177,3 +178,10 @@ assert "esp_now_sim_deliver" in mesh and "esp_now_sim_deliver" in mesh_sim, "mes
 assert "meshSimTrace" in mesh and "radio-off" in mesh, "mesh lifecycle trace missing"
 assert "-<apps_local/mesh-chat/MeshChatActivity.cpp>" not in ini, "real Mesh Chat excluded"
 assert "HWSTUB_ACTIVITY(MeshChatActivity)" not in noops, "Mesh Chat must not be a vtable stub"
+
+fire_sim = (root / "src/apps_local/fire/FireSimActivity.cpp").read_text()
+assert "-<apps_local/fire/FireActivity.cpp>" in ini, "hardware Fire code must remain excluded natively"
+assert "FIRE - SIMULATION" in fire_sim, "Fire must clearly indicate UI-only preview"
+assert "packetsSent = 0" in fire_sim and "No packets transmitted" in fire_sim, "Fire native simulation must never transmit"
+assert "HWSTUB_ACTIVITY(FireActivity)" not in noops, "Fire must execute a real simulator-specific UI"
+assert "esp_wifi_80211_tx" not in fire_sim and "esp_now_send" not in fire_sim, "Fire preview must contain no TX APIs"

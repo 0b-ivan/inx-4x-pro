@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR" "BLE BEACON" "AIRTAG SPOOF" "WIFI DEAUTH" "BLE SPAM" "BLE KEYBOARD" "MESH CHAT")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR" "BLE BEACON" "AIRTAG SPOOF" "WIFI DEAUTH" "BLE SPAM" "BLE KEYBOARD" "MESH CHAT" "FIRE")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "FIRE" ]; then
+    script="2800:ENTER:100;3900:ENTER:100;6900:BACK:100;7900:BACK:100;8900:QUIT"
   elif [ "$app" = "MESH CHAT" ]; then
     script="3500:RIGHT:100;5200:BACK:100;6900:BACK:100;8200:QUIT"
   elif [ "$app" = "BLE KEYBOARD" ]; then
@@ -59,7 +61,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "MESH CHAT" ]; then
+  if [ "$app" = "FIRE" ]; then
+    shots="2300:$out/${name}_menu.bmp;3500:$out/${name}_confirm.bmp;5100:$out/${name}_preview.bmp;6500:$out/${name}_results.bmp;8500:$frame"
+  elif [ "$app" = "MESH CHAT" ]; then
     shots="3000:$out/${name}_messages.bmp;4500:$out/${name}_peers.bmp;6100:$out/${name}_chat.bmp;7700:$frame"
   elif [ "$app" = "CLOCK" ]; then
     # Preserve the previously validated Clock.bmp pixel reference at 4300 ms.
@@ -100,6 +104,7 @@ for app in "${apps[@]}"; do
   if ! env CROSSPLAY_AUTOSTART="$app" \
     CROSSPLAY_SIM_BLE_TRACE=1 \
     CROSSPLAY_SIM_MESH_TRACE=1 \
+    CROSSPLAY_SIM_FIRE_TRACE=1 \
     CROSSPLAY_SIM_PROBE_TRACE=1 \
     CROSSPLAY_SIM_CROWD_TRACE=1 \
     CROSSPLAY_SIM_FINGERPRINT_TRACE=1 \
@@ -1069,6 +1074,58 @@ for state in ("MESH:touch-peers:2:2","MESH:touch-relay:2:2",
     assert idx>=0, f"Missing Mesh touch event {state}: {log[-1400:]}"
 print("PASS X4 Pro Mesh Chat: touch peers/relay/chat/exit and radio cleanup")
 PYMESHTOUCH
-echo "PASS biscuit-ui-smoke: 25 activities incl Mesh Chat (normal/empty/malformed), touch, BLE and network"
+python3 - <<'PYFIRE'
+from pathlib import Path
+import struct,hashlib
+root=Path(".pio/biscuit-ui-smoke")
+frames=[root/"FIRE_menu.bmp",root/"FIRE_confirm.bmp",root/"FIRE_preview.bmp",
+        root/"FIRE_results.bmp",root/"FIRE.bmp"]
+hashes=[]
+for p in frames:
+    data=p.read_bytes()
+    assert data[:2]==b"BM" and len(data)>1000
+    assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+    hashes.append(hashlib.sha256(data).digest())
+assert all(a!=b for a,b in zip(hashes,hashes[1:])), "safe Fire UI state unchanged"
+log=(root/"FIRE.log").read_text(errors="replace")
+pos=-1
+for stage in ("menu:0:0","confirm:0:0","preview:0:0","results:0:0",
+              "back-menu:0:0","no-radio:0:0"):
+    pos=log.find("[BISCUIT_SIM] FIRE:"+stage,pos+1)
+    assert pos>=0, f"Missing Fire safe UI event {stage}: {log[-900:]}"
+print("PASS Fire UI-only: menu, confirm, simulated preview, results, zero TX")
+PYFIRE
+
+fire_touch_log="$out/FIRE_touch.log"
+if ! env CROSSPLAY_AUTOSTART="FIRE" \
+  CROSSPLAY_SIM_FIRE_TRACE=1 \
+  CROSSPOINT_SIM_INPUT_SCRIPT="2800:TAP:180,780,120;3900:TAP:180,780,120;5400:TAP:60,780,120;6800:TAP:60,780,120;8000:TAP:60,780,120;9100:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="2300:$out/FIRE_touch_menu.bmp;3500:$out/FIRE_touch_confirm.bmp;4850:$out/FIRE_touch_preview.bmp;6000:$out/FIRE_touch_results.bmp;7350:$out/FIRE_touch_return.bmp;8600:$out/FIRE_touch_exit.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$fire_touch_log" 2>&1; then
+  echo "FAIL Fire UI-only touch flow"; tail -100 "$fire_touch_log"; exit 1
+fi
+python3 - "$fire_touch_log" \
+  "$out/FIRE_touch_menu.bmp" "$out/FIRE_touch_confirm.bmp" \
+  "$out/FIRE_touch_preview.bmp" "$out/FIRE_touch_results.bmp" \
+  "$out/FIRE_touch_return.bmp" "$out/FIRE_touch_exit.bmp" <<'PYFIRETOUCH'
+from pathlib import Path
+import struct,hashlib,sys
+log=Path(sys.argv[1]).read_text(errors="replace")
+images=[]
+for path in sys.argv[2:]:
+    bmp=Path(path).read_bytes()
+    assert bmp[:2]==b"BM" and len(bmp)>1000
+    assert tuple(map(abs,struct.unpack_from("<ii",bmp,18)))==(480,800)
+    images.append(hashlib.sha256(bmp).digest())
+assert all(a!=b for a,b in zip(images,images[1:])), "Fire touch transitions failed"
+pos=-1
+for stage in ("confirm:0:0","preview:0:0","results:0:0",
+              "back-menu:0:0","no-radio:0:0"):
+    pos=log.find("FIRE:"+stage,pos+1)
+    assert pos>=0, f"Missing Fire touch event {stage}: {log[-1200:]}"
+print("PASS Fire X4 Pro touch: safe preview, zero RF transmissions")
+PYFIRETOUCH
+echo "PASS biscuit-ui-smoke: 26 Biscuit UIs, including virtual Mesh Chat and Fire UI-only safe preview"
 
 
