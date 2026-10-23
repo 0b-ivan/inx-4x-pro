@@ -80,7 +80,7 @@ void HostScannerActivity::scanNextHost() {
 #ifdef SIMULATOR
   // IPs are stored in the same little-endian representation as WiFi.localIP().
   const uint32_t localIp = 0x0A0200C0U;  // 192.0.2.10
-  const uint32_t targetIp = 0x000200C0U | (static_cast<uint32_t>(scanProgress) << 24);
+  const uint32_t targetIp = biscuit_sim::hostScanIp(scanProgress);
 #else
   uint32_t localIp = WiFi.localIP();
   uint32_t mask = WiFi.subnetMask();
@@ -93,7 +93,7 @@ void HostScannerActivity::scanNextHost() {
 
   // Try TCP connect to port 80 with short timeout
 #ifdef SIMULATOR
-  const bool reachable = scanProgress == 1 || scanProgress == 20;
+  const bool reachable = biscuit_sim::hostScanPortOpen(targetIp, 80);
 #else
   WiFiClient client;
   client.setTimeout(200);
@@ -131,8 +131,7 @@ void HostScannerActivity::scanNextPort() {
   portScanProgress++;
 
 #ifdef SIMULATOR
-  const bool open = port == 80 && (hosts[selectedHost].ip == 0x010200C0U ||
-                                   hosts[selectedHost].ip == 0x140200C0U);
+  const bool open = biscuit_sim::hostScanPortOpen(hosts[selectedHost].ip, port);
 #else
   WiFiClient client;
   client.setTimeout(1000);
