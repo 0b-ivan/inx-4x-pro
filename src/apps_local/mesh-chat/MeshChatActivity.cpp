@@ -88,8 +88,11 @@ void MeshChatActivity::initEspNow() {
   WiFi.disconnect();
 #endif
 
-  // Set channel
+  // Set channel on hardware only. The native ESP-NOW transport has no radio
+  // and therefore no RF channel to configure.
+#ifndef SIMULATOR
   esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+#endif
 
   if (esp_now_init() != ESP_OK) {
     LOG_ERR("MESH", "ESP-NOW init failed");
