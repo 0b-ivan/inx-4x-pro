@@ -2,22 +2,23 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **17 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **18 echte Biscuit-Activities** aus:
 
 | Gruppe | Activities |
 | --- | --- |
 | Offline/System | CLOCK, DEVICE INFO, OTP GENERATOR |
-| WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT, DEAUTH DETECTOR |
+| WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT, DEAUTH DETECTOR, PACKET MONITOR |
 | BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT |
 
-Die ursprünglichen No-op-VTables der siebzehn Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der achtzehn Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
 Letzte erfolgreich bestätigte Pipeline:
-[CI #39997824179](https://github.com/0b-ivan/inx-4x-pro/actions/runs/39997824179)
-(16 Activities inklusive nativer BMP-Previews und sechs visueller Referenzen).
-Die Erweiterung Deauth Detector benötigt eine neue CI-Bestätigung.
+[CI #40004735241](https://github.com/0b-ivan/inx-4x-pro/actions/runs/40004735241)
+(Deauth Detector nach nativer ISR-Critical-Section-Korrektur, Ergebnis beim
+Erstellen noch ausstehend). Die Packet-Monitor-Erweiterung benötigt eine
+weitere CI-Bestätigung.
 
 ## Deterministische Fixtures – kein Zugriff auf Funkhardware
 
@@ -53,7 +54,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller siebzehn Apps
+- Autostart und nichtleere Screenshots aller achtzehn Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -190,3 +191,19 @@ Simulator ausgeschlossen. **Kein echtes Aussenden von Deauth-Paketen,
 keine Überwachung fremder WLAN-Netze.** Die Heuristik erkennt lediglich
 eine Häufung solcher Frames; sie belegt für sich genommen keinen Angriff.
 Der neue Stand bedarf noch der vollständigen CI-Bestätigung.
+
+## Packet Monitor – synthetische Frame-Statistik
+
+Die echte `PacketMonitorActivity` wertet ausschließlich synthetische
+802.11-Management-Frames aus. Die vorhandenen Zähler, der MAC-Hashspeicher
+und der Kanalverlauf werden über die originale `onPacket()`-Methode
+aktualisiert. `CROSSPLAY_SIM_PACKET_SCENARIO=normal|empty|malformed` erzeugt
+fünf Pakete mit drei eindeutigen lokalen MAC-Adressen, einen leeren Lauf
+oder nur ein kurzes Paket ohne gültige Quell-MAC. SDL prüft Live-Zähler,
+Kanaleingaben und ordnungsgemäßes Radio-Cleanup.
+
+Die Aufnahmefunktion bleibt im Quellcode vorhanden; ihre persistente
+PCAP-Schreibstrecke benötigt noch eine eigene isolierte Abnahme. Im
+Simulator wird **keine Funkhardware aktiviert**, kein fremdes Paket
+aufgezeichnet und kein WLAN-Paket gesendet. Auch die neue Packet-Monitor-
+Integration muss erst den Firmware-/Host-/SDL-CI-Lauf bestehen.

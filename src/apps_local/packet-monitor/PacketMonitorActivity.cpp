@@ -5,8 +5,14 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#ifndef SIMULATOR
 #include <WiFi.h>
 #include <esp_wifi.h>
+#else
+#include "platform/sim_biscuit_wifi_frames.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 
 #include "../radio/RadioManager.h"
 
@@ -17,6 +23,7 @@
 #include "fontIds.h"
 
 // Static instance pointer for C callback
+#ifndef SIMULATOR
 static PacketMonitorActivity* activeMonitor = nullptr;
 
 static void promiscuousCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
@@ -25,7 +32,17 @@ static void promiscuousCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
   activeMonitor->onPacket(pkt->payload, pkt->rx_ctrl.sig_len, pkt->rx_ctrl.rssi);
 }
 
+#else
+static void packetSimTrace(const char* event, uint32_t total, uint32_t unique) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_PACKET_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0')
+    std::fprintf(stderr, "[BISCUIT_SIM] PACKET:%s:%u:%u\n",
+                 event, total, unique);
+}
+#endif
+
 void PacketMonitorActivity::onPacket(const uint8_t* buf, uint16_t len, int rssi) {
+  if (!buf || len == 0) return; // malformed native fixture must never dereference null
   portENTER_CRITICAL(&statsMux);
   totalPackets = totalPackets + 1;
   intervalPackets = intervalPackets + 1;
@@ -88,44 +105,63 @@ void PacketMonitorActivity::onEnter() {
   pcapFileSize = 0;
   eapolFound = false;
 
+#ifdef SIMULATOR
+  simInjected = false;
+  simStarted = millis();
+#endif
   startMonitor();
   requestUpdate();
 }
 
 void PacketMonitorActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   stopPcapRecording();
   stopMonitor();
   if (fileMux) {
     vSemaphoreDelete(fileMux);
     fileMux = nullptr;
   }
+  Activity::onExit();
+  devmode::resume();
 }
 
 void PacketMonitorActivity::startMonitor() {
   RADIO.ensureWifi();
+#ifndef SIMULATOR
   WiFi.disconnect();
 
   activeMonitor = this;
   esp_wifi_set_promiscuous(true);
   esp_wifi_set_promiscuous_rx_cb(promiscuousCallback);
+#endif
   setChannel(currentChannel);
   monitoring = true;
+#ifdef SIMULATOR
+  packetSimTrace("monitoring", 0, 0);
+#endif
 }
 
 void PacketMonitorActivity::stopMonitor() {
+  if (!monitoring) return;
   monitoring = false;
+#ifndef SIMULATOR
   esp_wifi_set_promiscuous(false);
   activeMonitor = nullptr;
+#endif
   RADIO.shutdown();
+#ifdef SIMULATOR
+  packetSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                     ? "radio-off" : "radio-leak",
+                 totalPackets, uniqueMacCount);
+#endif
 }
 
 void PacketMonitorActivity::setChannel(uint8_t ch) {
   if (ch < 1) ch = 1;
   if (ch > 13) ch = 13;
   currentChannel = ch;
+#ifndef SIMULATOR
   esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+#endif
 }
 
 void PacketMonitorActivity::saveToCsv() {
@@ -158,6 +194,9 @@ void PacketMonitorActivity::startPcapRecording() {
   eapolFound = false;
   writePcapHeader();
   pcapRecording = true;
+#ifdef SIMULATOR
+  packetSimTrace("recording", packetsSaved, pcapFileSize);
+#endif
 }
 
 void PacketMonitorActivity::stopPcapRecording() {
@@ -204,6 +243,9 @@ void PacketMonitorActivity::writePcapPacket(const uint8_t* data, uint16_t len) {
   pcapFile.write(data, len);
   pcapFileSize = pcapFileSize + sizeof(pktHeader) + len;
   packetsSaved = packetsSaved + 1;
+#ifdef SIMULATOR
+  packetSimTrace("recorded", packetsSaved, pcapFileSize);
+#endif
 }
 
 bool PacketMonitorActivity::isEapolPacket(const uint8_t* data, uint16_t len) const {
@@ -220,6 +262,17 @@ void PacketMonitorActivity::loop() {
   if (!monitoring) return;
 
   unsigned long now = millis();
+#ifdef SIMULATOR
+  // Feed artificial management frames into real MAC dedup/channel statistics.
+  if (!simInjected && now - simStarted >= 1050) {
+    simInjected = true;
+    for (const auto& frame : biscuit_sim::packetMonitorFrames())
+      onPacket(frame.bytes.data(), static_cast<uint16_t>(frame.bytes.size()),
+               frame.rssi);
+    packetSimTrace("processed", totalPackets, uniqueMacCount);
+    requestUpdate();
+  }
+#endif
 
   // Channel hopping
   if (autoHop && (now - lastHopTime >= HOP_INTERVAL_MS)) {
@@ -239,6 +292,9 @@ void PacketMonitorActivity::loop() {
   // Manual channel control
   if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
     autoHop = false;
+#ifdef SIMULATOR
+    packetSimTrace("manual", currentChannel, 0);
+#endif
     if (currentChannel > 1) setChannel(currentChannel - 1);
     requestUpdate();
   }
@@ -258,6 +314,9 @@ void PacketMonitorActivity::loop() {
       }
     } else {
       autoHop = !autoHop;
+#ifdef SIMULATOR
+      packetSimTrace("auto-toggle", currentChannel, autoHop ? 1 : 0);
+#endif
     }
     requestUpdate();
   }

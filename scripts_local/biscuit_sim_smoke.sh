@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "PACKET MONITOR" ]; then
+    script="1900:RIGHT:100;4700:BACK:100;6000:QUIT"
   elif [ "$app" = "DEAUTH DETECTOR" ]; then
     script="1900:ENTER:100;4500:BACK:100;6000:QUIT"
   elif [ "$app" = "DEV FINGERPRINT" ]; then
@@ -41,7 +43,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "DEAUTH DETECTOR" ]; then
+  if [ "$app" = "PACKET MONITOR" ]; then
+    shots="1600:$out/${name}_initial.bmp;3500:$out/${name}_stats.bmp;5200:$frame"
+  elif [ "$app" = "DEAUTH DETECTOR" ]; then
     shots="1600:$out/${name}_idle.bmp;3600:$out/${name}_monitor.bmp;5100:$frame"
   elif [ "$app" = "DEV FINGERPRINT" ]; then
     shots="1600:$out/${name}_ready.bmp;3600:$out/${name}_capturing.bmp;5000:$frame"
@@ -65,6 +69,7 @@ for app in "${apps[@]}"; do
     CROSSPLAY_SIM_CROWD_TRACE=1 \
     CROSSPLAY_SIM_FINGERPRINT_TRACE=1 \
     CROSSPLAY_SIM_DEAUTH_TRACE=1 \
+    CROSSPLAY_SIM_PACKET_TRACE=1 \
     CROSSPLAY_SIM_EPOCH=1704067200 \
     CROSSPLAY_SIM_WIFI_CONNECTED=1 \
     CROSSPOINT_SIM_INPUT_SCRIPT="$script" \
@@ -610,6 +615,60 @@ assert data[:2]==b"BM" and len(data)>1000
 assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
 PYDEAUTHNEG
 done
-echo "PASS biscuit-ui-smoke: 17 activities, Deauth Detector normal/spike/empty/malformed and visual references"
+# Real Packet Monitor statistics with synthetic 802.11 management packets.
+python3 - <<'PYPACKET'
+from pathlib import Path
+import hashlib,struct
+root=Path(".pio/biscuit-ui-smoke")
+files=[root/"PACKET_MONITOR_initial.bmp",root/"PACKET_MONITOR_stats.bmp",
+       root/"PACKET_MONITOR.bmp"]
+hashes=[]
+for p in files:
+    data=p.read_bytes()
+    assert data[:2]==b"BM" and len(data)>1000, f"invalid Packet Monitor screenshot {p}"
+    assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+    hashes.append(hashlib.sha256(data).digest())
+assert hashes[0]!=hashes[1], "manual channel mode did not alter UI"
+log=(root/"PACKET_MONITOR.log").read_text(errors="replace")
+position=-1
+for state in ("PACKET:monitoring:0:0","PACKET:processed:5:3",
+              "PACKET:radio-off:5:3"):
+    position=log.find(state,position+1)
+    assert position>=0, f"Packet Monitor missing/ordering {state}: {log[-1200:]}"
+print("PASS Packet Monitor: five virtual frames, 3 unique MACs, exit cleans radio")
+PYPACKET
+
+# Empty frames and a truncated frame must not fabricate a valid MAC.
+for scenario in empty malformed; do
+  log="$out/PACKET_MONITOR_$scenario.log"
+  frame="$out/PACKET_MONITOR_$scenario.bmp"
+  if ! env CROSSPLAY_AUTOSTART="PACKET MONITOR" \
+    CROSSPLAY_SIM_PACKET_TRACE=1 \
+    CROSSPLAY_SIM_PACKET_SCENARIO="$scenario" \
+    CROSSPOINT_SIM_INPUT_SCRIPT="3400:BACK:100;4700:QUIT" \
+    CROSSPOINT_SIM_SCREENSHOTS="2800:$frame" \
+    LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+    timeout 18s "$bin" >"$log" 2>&1; then
+    echo "FAIL Packet Monitor $scenario"; tail -100 "$log"; exit 1
+  fi
+  case "$scenario" in
+    empty) expected="PACKET:processed:0:0"; stopped="PACKET:radio-off:0:0";;
+    malformed) expected="PACKET:processed:1:0"; stopped="PACKET:radio-off:1:0";;
+  esac
+  grep -Fq "$expected" "$log" || {
+    echo "FAIL Packet Monitor $scenario: expected $expected"; tail -100 "$log"; exit 1
+  }
+  grep -Fq "$stopped" "$log" || {
+    echo "FAIL Packet Monitor $scenario: expected $stopped"; tail -100 "$log"; exit 1
+  }
+  python3 - "$frame" <<'PYPACKETNEG'
+from pathlib import Path
+import struct,sys
+data=Path(sys.argv[1]).read_bytes()
+assert data[:2]==b"BM" and len(data)>1000
+assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+PYPACKETNEG
+done
+echo "PASS biscuit-ui-smoke: 18 activities; Packet Monitor normal/empty/malformed; Deauth spike and GATT"
 
 

@@ -33,6 +33,10 @@ class PacketMonitorActivity final : public Activity {
 
  private:
   bool monitoring = false;
+#ifdef SIMULATOR
+  bool simInjected = false;
+  unsigned long simStarted = 0;
+#endif
   uint8_t currentChannel = 1;
   bool autoHop = true;
 

@@ -28,6 +28,7 @@ for name, cls, path in (
     ("CROWD DENSITY", "CrowdDensityActivity", "crowd-density/CrowdDensityActivity.cpp"),
     ("DEV FINGERPRINT", "DeviceFingerprinterActivity", "device-fingerprinter/DeviceFingerprinterActivity.cpp"),
     ("DEAUTH DETECTOR", "DeauthDetectorActivity", "deauth-detector/DeauthDetectorActivity.cpp"),
+    ("PACKET MONITOR", "PacketMonitorActivity", "packet-monitor/PacketMonitorActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -84,6 +85,10 @@ assert "biscuit_sim::deauthMonitorFrames()" in deauth, "Deauth Detector must con
 assert "onPacket(frame.bytes.data()" in deauth, "real event ring-buffer handler must be executed"
 assert "deauthSimTrace" in deauth and "#ifndef SIMULATOR" in deauth, "physical radio must be guarded"
 assert "esp_wifi_set_promiscuous" in deauth, "hardware build must keep existing radio behavior"
+packet = (root / "src/apps_local/packet-monitor/PacketMonitorActivity.cpp").read_text()
+assert "biscuit_sim::packetMonitorFrames()" in packet, "Packet Monitor must consume synthetic 802.11 frames"
+assert "onPacket(frame.bytes.data()" in packet, "real Packet Monitor counters must be exercised"
+assert "#ifndef SIMULATOR" in packet and "packetSimTrace" in packet, "native radio isolation and test traces required"
 smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
 assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
 assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"

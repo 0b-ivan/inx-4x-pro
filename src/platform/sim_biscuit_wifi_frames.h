@@ -115,5 +115,21 @@ inline std::vector<ProbeFrame> deauthMonitorFrames() {
           managementFrame(0x80, 4, -75), // beacon: counted as management, not deauth
           truncated, managementFrame(0x08, 5, -80)};
 }
+
+// Passive Packet Monitor input (never read from, or transmitted by, host radio).
+// Includes a repeated source MAC and a deliberately truncated frame.
+inline std::vector<ProbeFrame> packetMonitorFrames() {
+  const char* raw = std::getenv("CROSSPLAY_SIM_PACKET_SCENARIO");
+  const std::string scenario = raw ? raw : "normal";
+  if (scenario == "empty") return {};
+  ProbeFrame malformed{std::vector<uint8_t>(8, 0), -90};
+  if (scenario == "malformed") return {malformed};
+  const uint8_t a[6] = {0x02,0,0,0,0,0x61};
+  const uint8_t b[6] = {0x02,0,0,0,0,0x62};
+  const uint8_t c[6] = {0x02,0,0,0,0,0x63};
+  return {makeProbe(a, "Lab-A", -45), makeProbe(b, "Lab-B", -65),
+          makeProbe(a, "Lab-A", -43), makeProbe(c, "", -80),
+          malformed};
+}
 }  // namespace biscuit_sim
 #endif

@@ -250,5 +250,22 @@ int main() {
         ((invalidMgmt[1].bytes[0] >> 2) & 3) != 0,
         "malformed management fixtures cannot count as deauth");
   unsetenv("CROSSPLAY_SIM_DEAUTH_SCENARIO");
+  unsetenv("CROSSPLAY_SIM_PACKET_SCENARIO");
+  auto monitorFrames = biscuit_sim::packetMonitorFrames();
+  check(monitorFrames.size() == 5, "packet monitor normal stream includes duplicates and truncated frame");
+  std::set<std::string> packetSources;
+  for (const auto& frame : monitorFrames) {
+    if (frame.bytes.size() >= 16)
+      packetSources.insert(std::string(reinterpret_cast<const char*>(frame.bytes.data()+10),6));
+  }
+  check(packetSources.size() == 3, "packet monitor synthetic source-MAC dedup");
+  check(monitorFrames[4].bytes.size() < 16, "packet monitor truncated frame");
+  setenv("CROSSPLAY_SIM_PACKET_SCENARIO", "empty", 1);
+  check(biscuit_sim::packetMonitorFrames().empty(), "packet monitor empty scan");
+  setenv("CROSSPLAY_SIM_PACKET_SCENARIO", "malformed", 1);
+  auto malformedMonitor = biscuit_sim::packetMonitorFrames();
+  check(malformedMonitor.size()==1 && malformedMonitor[0].bytes.size() < 16,
+        "malformed frame must not supply source MAC");
+  unsetenv("CROSSPLAY_SIM_PACKET_SCENARIO");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }
