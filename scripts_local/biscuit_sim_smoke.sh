@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "PROBE SNIFFER" ]; then
+    script="1900:ENTER:100;3200:BACK:100;4300:BACK:100;5800:QUIT"
   elif [ "$app" = "TRACKER DETECT" ]; then
     script="1900:ENTER:100;5300:BACK:100;6600:QUIT"
   elif [ "$app" = "BLE CONTACT" ]; then
@@ -33,7 +35,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "TRACKER DETECT" ]; then
+  if [ "$app" = "PROBE SNIFFER" ]; then
+    shots="1600:$out/${name}_list.bmp;2800:$out/${name}_detail.bmp;3800:$out/${name}_back.bmp;5200:$frame"
+  elif [ "$app" = "TRACKER DETECT" ]; then
     shots="1600:$out/${name}_before.bmp;4200:$out/${name}_monitoring.bmp;6100:$frame"
   elif [ "$app" = "BLE CONTACT" ]; then
     shots="1600:$out/${name}_before.bmp;3200:$out/${name}_exchange.bmp;4000:$out/${name}_found.bmp;5000:$out/${name}_received.bmp;6100:$frame"
@@ -45,6 +49,7 @@ for app in "${apps[@]}"; do
   echo "[biscuit-ui-smoke] $app"
   if ! env CROSSPLAY_AUTOSTART="$app" \
     CROSSPLAY_SIM_BLE_TRACE=1 \
+    CROSSPLAY_SIM_PROBE_TRACE=1 \
     CROSSPLAY_SIM_EPOCH=1704067200 \
     CROSSPLAY_SIM_WIFI_CONNECTED=1 \
     CROSSPOINT_SIM_INPUT_SCRIPT="$script" \
@@ -361,4 +366,53 @@ grep -Fq "TRACKER:radio-off:0:" "$empty_log" || {
 if grep -Fq "TRACKER:alert:" "$empty_log"; then
   echo "FAIL Tracker Detector empty scan raised a false alarm"; exit 1
 fi
-echo "PASS biscuit-ui-smoke: 13 activities, passive tracker normal/follower/empty and BLE cleanup"
+python3 - <<'PYPROBE'
+from pathlib import Path
+import hashlib, struct
+root=Path(".pio/biscuit-ui-smoke")
+names=("list","detail","back",None)
+frames=[root/(f"PROBE_SNIFFER_{name}.bmp" if name else "PROBE_SNIFFER.bmp") for name in names]
+digests=[]
+for p in frames:
+    data=p.read_bytes()
+    assert data[:2]==b"BM" and len(data)>1000, f"invalid probe frame: {p}"
+    assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+    digests.append(hashlib.sha256(data).digest())
+assert digests[0]!=digests[1] and digests[1]!=digests[2], "probe list/detail/back unchanged"
+log=(root/"PROBE_SNIFFER.log").read_text(errors="replace")
+pos=-1
+for state in ("PROBE:scan:3","PROBE:detail:3","PROBE:back-list:3","PROBE:radio-off:3"):
+    pos=log.find(state,pos+1)
+    assert pos>=0, f"Probe Sniffer missing {state}: {log[-1000:]}"
+print("PASS Probe Sniffer: list -> detail -> back -> radio off")
+PYPROBE
+for scenario in empty malformed; do
+  log="$out/PROBE_SNIFFER_${scenario}.log"
+  frame="$out/PROBE_SNIFFER_${scenario}.bmp"
+  if ! env CROSSPLAY_AUTOSTART="PROBE SNIFFER" \
+    CROSSPLAY_SIM_PROBE_TRACE=1 \
+    CROSSPLAY_SIM_PROBE_SCENARIO="$scenario" \
+    CROSSPOINT_SIM_INPUT_SCRIPT="2100:BACK:100;4200:QUIT" \
+    CROSSPOINT_SIM_SCREENSHOTS="3200:$frame" \
+    LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+    timeout 18s "$bin" >"$log" 2>&1; then
+    echo "FAIL Probe Sniffer $scenario"; tail -100 "$log"; exit 1
+  fi
+  grep -Fq "PROBE:scan:0" "$log" || {
+    echo "FAIL Probe Sniffer $scenario did not scan"; exit 1
+  }
+  grep -Fq "PROBE:radio-off:0" "$log" || {
+    echo "FAIL Probe Sniffer $scenario radio leak"; exit 1
+  }
+  if grep -Fq "PROBE:detail:" "$log"; then
+    echo "FAIL Probe Sniffer $scenario false detail"; exit 1
+  fi
+  python3 - "$frame" <<'PYPROBEEMPTY'
+from pathlib import Path
+import struct, sys
+data=Path(sys.argv[1]).read_bytes()
+assert data[:2]==b"BM" and len(data)>1000
+assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+PYPROBEEMPTY
+done
+echo "PASS biscuit-ui-smoke: 14 activities, probe normal/empty/malformed, tracker and BLE cleanup"

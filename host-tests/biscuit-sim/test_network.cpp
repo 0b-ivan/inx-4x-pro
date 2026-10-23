@@ -1,5 +1,6 @@
 #include "platform/sim_biscuit_network.h"
 #include "platform/sim_biscuit_ble.h"
+#include "platform/sim_biscuit_wifi_frames.h"
 #include <cstdio>
 #include <cstdlib>
 static int checks = 0;
@@ -128,5 +129,38 @@ int main() {
   setenv("CROSSPLAY_SIM_TRACKER_SCENARIO", "timeout", 1);
   check(biscuit_sim::bleTrackerFrames().empty(), "tracker timeout scan");
   unsetenv("CROSSPLAY_SIM_TRACKER_SCENARIO");
+  unsetenv("CROSSPLAY_SIM_PROBE_SCENARIO");
+  auto probes = biscuit_sim::probeFrames();
+  check(probes.size() == 6, "six synthetic management frame samples");
+  biscuit_sim::ParsedProbe parsed;
+  check(biscuit_sim::parseProbe(probes[0].bytes.data(),probes[0].bytes.size(),parsed),
+        "parse valid directed probe");
+  check(parsed.ssid == "LabNetwork" && parsed.mac[0] == 0x02 && parsed.mac[5] == 0x31,
+        "extract real SSID and local MAC");
+  check(biscuit_sim::parseProbe(probes[1].bytes.data(),probes[1].bytes.size(),parsed)
+        && parsed.ssid.empty(), "broadcast probe has empty SSID");
+  check(biscuit_sim::parseProbe(probes[2].bytes.data(),probes[2].bytes.size(),parsed)
+        && parsed.ssid == "GuestLab", "second directed probe");
+  check(probes[0].bytes == probes[3].bytes, "duplicate probe fixture");
+  check(!biscuit_sim::parseProbe(probes[4].bytes.data(),probes[4].bytes.size(),parsed),
+        "beacon frame cannot be counted as probe");
+  check(!biscuit_sim::parseProbe(probes[5].bytes.data(),probes[5].bytes.size(),parsed),
+        "truncated tagged parameter rejected");
+  check(!biscuit_sim::parseProbe(nullptr,0,parsed), "null packet rejected");
+  auto invalid = probes[0].bytes;
+  invalid[25] = 33;
+  check(!biscuit_sim::parseProbe(invalid.data(),invalid.size(),parsed), "SSID length limited");
+  invalid = probes[0].bytes;
+  invalid[24] = 42;
+  check(!biscuit_sim::parseProbe(invalid.data(),invalid.size(),parsed), "unknown tag rejected");
+  setenv("CROSSPLAY_SIM_PROBE_SCENARIO","malformed",1);
+  auto malformed = biscuit_sim::probeFrames();
+  check(malformed.size()==2 &&
+        !biscuit_sim::parseProbe(malformed[0].bytes.data(),malformed[0].bytes.size(),parsed) &&
+        !biscuit_sim::parseProbe(malformed[1].bytes.data(),malformed[1].bytes.size(),parsed),
+        "malformed-only scenario never produces a probe");
+  setenv("CROSSPLAY_SIM_PROBE_SCENARIO","empty",1);
+  check(biscuit_sim::probeFrames().empty(), "empty probe scenario");
+  unsetenv("CROSSPLAY_SIM_PROBE_SCENARIO");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }

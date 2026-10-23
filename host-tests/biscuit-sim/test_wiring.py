@@ -24,6 +24,7 @@ for name, cls, path in (
     ("BLE SCANNER", "BleScannerActivity", "ble-scanner/BleScannerActivity.cpp"),
     ("BLE CONTACT", "BleContactExchangeActivity", "ble-contact/BleContactExchangeActivity.cpp"),
     ("TRACKER DETECT", "TrackerDetectorActivity", "tracker-detector/TrackerDetectorActivity.cpp"),
+    ("PROBE SNIFFER", "ProbeSnifferActivity", "probe-sniffer/ProbeSnifferActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -61,6 +62,11 @@ tracker = (root / "src/apps_local/tracker-detector/TrackerDetectorActivity.cpp")
 assert "biscuit_sim::bleTrackerFrames()" in tracker, "tracker must consume isolated advertisements"
 assert "trackerSimTrace" in tracker and "identifyTracker(" in tracker, "tracker must execute real classification"
 assert "#ifndef SIMULATOR" in tracker, "real BLE hardware must be disabled natively"
+probe = (root / "src/apps_local/probe-sniffer/ProbeSnifferActivity.cpp").read_text()
+assert "biscuit_sim::probeFrames()" in probe and "biscuit_sim::parseProbe" in probe, "probe sniffer must use isolated frames"
+assert "onProbeRequest(parsed.mac" in probe, "native frames must use real dedup handler"
+assert "#ifndef SIMULATOR" in probe, "hardware-only raw packet callback missing guard"
+assert (root / "src/platform/sim_biscuit_wifi_frames.h").exists(), "virtual 802.11 fixtures missing"
 smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
 assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
 assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"

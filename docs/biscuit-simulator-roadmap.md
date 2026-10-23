@@ -2,15 +2,15 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **13 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **14 echte Biscuit-Activities** aus:
 
 | Gruppe | Activities |
 | --- | --- |
 | Offline/System | CLOCK, DEVICE INFO, OTP GENERATOR |
 | WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER |
-| BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT |
+| BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT, PROBE SNIFFER |
 
-Die ursprünglichen No-op-VTables der dreizehn Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der vierzehn Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
@@ -52,7 +52,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller dreizehn Apps
+- Autostart und nichtleere Screenshots aller vierzehn Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -99,3 +99,15 @@ den realen Schwellenwert ohne 30 Minuten Wartezeit auslösen. Dabei entstehen
 Neue SDL-Regressionen prüfen normalen Scan, leeren Scan, synthetischen
 Verfolger-Alarm, UI-Übergänge und Ressourcenfreigabe. Die neue Pipeline muss
 diese noch bestätigen. Physische Radio-Interoperabilität ist nicht abgedeckt.
+
+## Passiver Probe Sniffer – isolierte 802.11-Frames
+
+Die echte Probe-Sniffer-Activity verarbeitet synthetische Probe Requests über
+ihren vorhandenen `onProbeRequest`-Handler (SSID, MAC, RSSI, Duplikate).
+Die In-Memory-Fixtures enthalten gezielte SSIDs, Broadcast-SSID, mehrfach
+gesendete Frames und ungültige Management-Frames. Szenarien:
+`CROSSPLAY_SIM_PROBE_SCENARIO=normal|empty|malformed`.
+SDL testet Geräteliste, Detailansicht, Rücknavigation und Radio-Cleanup.
+Der neue Stand ist erst nach grüner CI vollständig bestätigt.
+
+**Keine realen WLAN-Scans, Monitor-Mode-Aufrufe oder fremde Gerätedaten.**
