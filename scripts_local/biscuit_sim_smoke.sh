@@ -18,8 +18,8 @@ for app in "${apps[@]}"; do
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
   elif [ "$app" = "BLE SCANNER" ]; then
-    # Short Confirm on first fixture device: open its synthetic GATT service list.
-    script="1900:ENTER:100;6000:QUIT"
+    # Scan -> Services -> Characteristics -> Value -> Back all the way to scan.
+    script="1900:ENTER:100;2800:ENTER:100;3700:ENTER:100;4600:BACK:100;5500:BACK:100;6400:BACK:100;8000:QUIT"
   elif [ "$app" = "HTTP CLIENT" ] || [ "$app" = "MDNS BROWSER" ]; then
     # Confirm toggles the HTTP method or starts mDNS discovery.
     script="1900:ENTER:650;6000:QUIT"
@@ -29,11 +29,14 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "OTP GENERATOR" ] || [ "$app" = "HTTP CLIENT" ] || [ "$app" = "MDNS BROWSER" ] || [ "$app" = "BLE SCANNER" ]; then
+  if [ "$app" = "BLE SCANNER" ]; then
+    shots="1600:$out/${name}_before.bmp;2500:$out/${name}_services.bmp;3400:$out/${name}_characteristics.bmp;4300:$out/${name}_value.bmp;5200:$out/${name}_back_characteristics.bmp;6100:$out/${name}_back_services.bmp;7000:$frame"
+  elif [ "$app" = "OTP GENERATOR" ] || [ "$app" = "HTTP CLIENT" ] || [ "$app" = "MDNS BROWSER" ]; then
     shots="1600:$out/${name}_before.bmp;4300:$frame"
   fi
   echo "[biscuit-ui-smoke] $app"
   if ! env CROSSPLAY_AUTOSTART="$app" \
+    CROSSPLAY_SIM_BLE_TRACE=1 \
     CROSSPLAY_SIM_EPOCH=1704067200 \
     CROSSPLAY_SIM_WIFI_CONNECTED=1 \
     CROSSPOINT_SIM_INPUT_SCRIPT="$script" \
@@ -161,12 +164,36 @@ PYBLE
 python3 - <<'PYSCANNER'
 from pathlib import Path
 import hashlib
+import struct
+
 root = Path(".pio/biscuit-ui-smoke")
-before, after = root / "BLE_SCANNER_before.bmp", root / "BLE_SCANNER.bmp"
-assert before.is_file() and after.is_file(), "BLE Scanner screenshots missing"
-assert hashlib.sha256(before.read_bytes()).digest() != hashlib.sha256(after.read_bytes()).digest(), (
-    "BLE Scanner Confirm did not change rendered screen"
-)
-print("PASS BLE Scanner: device selection changes GATT screen")
+stages = [
+    "before", "services", "characteristics", "value",
+    "back_characteristics", "back_services", None,
+]
+frames = [root / (f"BLE_SCANNER_{stage}.bmp" if stage else "BLE_SCANNER.bmp")
+          for stage in stages]
+for frame in frames:
+    assert frame.is_file(), f"BLE GATT stage screenshot missing: {frame}"
+    content = frame.read_bytes()
+    assert content[:2] == b"BM" and len(content) > 1000, f"invalid GATT frame: {frame}"
+    assert tuple(map(abs, struct.unpack_from("<ii", content, 18))) == (480, 800), (
+        f"unexpected GATT frame dimensions: {frame}"
+    )
+digests = [hashlib.sha256(frame.read_bytes()).digest() for frame in frames]
+for stage, first, second in zip(stages[1:], digests, digests[1:]):
+    assert first != second, f"BLE GATT view did not change at {stage!r}"
+
+log = (root / "BLE_SCANNER.log").read_text(errors="replace")
+states = [
+    "services", "characteristics", "value",
+    "back-characteristics", "back-services", "back-scanning",
+]
+pos = -1
+for state in states:
+    marker = "[BISCUIT_SIM] BLE_SCANNER:" + state
+    pos = log.find(marker, pos + 1)
+    assert pos >= 0, f"GATT navigation did not reach {state!r}; log: {log[-1000:]}"
+print("PASS BLE Scanner: scan -> GATT services -> characteristics -> value -> back to scan")
 PYSCANNER
-echo "PASS biscuit-ui-smoke: 11 activities, 17 screenshots, 4 interactions, BLE empty and Host Scanner offline states"
+echo "PASS biscuit-ui-smoke: 11 activities, 22 screenshots, full BLE GATT roundtrip, BLE empty and Host Scanner offline states"

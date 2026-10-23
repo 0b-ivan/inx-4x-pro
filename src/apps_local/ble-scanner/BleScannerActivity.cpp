@@ -22,6 +22,19 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+#ifdef SIMULATOR
+#include <cstdio>
+#include <cstdlib>
+
+// Emitted only for explicit UI regression runs; never available on hardware.
+static void traceSimGatt(const char* state) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_BLE_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0') {
+    std::fprintf(stderr, "[BISCUIT_SIM] BLE_SCANNER:%s\n", state);
+  }
+}
+#endif
+
 #ifndef SIMULATOR
 // Only real hardware uses asynchronous radio callbacks.
 static BleScannerActivity* activeScanner = nullptr;
@@ -129,7 +142,13 @@ void BleScannerActivity::connectToDevice(int index) {
     enumerateServices();
     state = SERVICES;
     selectorIndex = 0;
+#ifdef SIMULATOR
+    traceSimGatt("services");
+#endif
   } else {
+#ifdef SIMULATOR
+    traceSimGatt("connect-failed");
+#endif
 #ifndef SIMULATOR
     delete pClient;
 #endif
@@ -446,6 +465,9 @@ void BleScannerActivity::loop() {
         enumerateCharacteristics(selectorIndex);
         state = CHARACTERISTICS;
         selectorIndex = 0;
+#ifdef SIMULATOR
+        traceSimGatt("characteristics");
+#endif
         requestUpdate();
       }
       return;
@@ -455,6 +477,9 @@ void BleScannerActivity::loop() {
       state = SCANNING_VIEW;
       selectorIndex = selectedDevice >= 0 ? selectedDevice : 0;
       startBleScan();
+#ifdef SIMULATOR
+      traceSimGatt("back-scanning");
+#endif
       requestUpdate();
     }
     return;
@@ -480,6 +505,9 @@ void BleScannerActivity::loop() {
           }
         }
         state = CHAR_VALUE;
+#ifdef SIMULATOR
+        traceSimGatt("value");
+#endif
         requestUpdate();
       }
       return;
@@ -487,6 +515,9 @@ void BleScannerActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       state = SERVICES;
       selectorIndex = selectedService >= 0 ? selectedService : 0;
+#ifdef SIMULATOR
+      traceSimGatt("back-services");
+#endif
       requestUpdate();
     }
     return;
@@ -506,6 +537,9 @@ void BleScannerActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       state = CHARACTERISTICS;
       selectorIndex = selectedChar >= 0 ? selectedChar : 0;
+#ifdef SIMULATOR
+      traceSimGatt("back-characteristics");
+#endif
       requestUpdate();
     }
     return;
