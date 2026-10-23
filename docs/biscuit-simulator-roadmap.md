@@ -2,23 +2,23 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **24 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **25 echte Biscuit-Activities** aus:
 
 | Gruppe | Activities |
 | --- | --- |
 | Offline/System | CLOCK, DEVICE INFO, OTP GENERATOR |
 | WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER, PROBE SNIFFER, CROWD DENSITY, DEV FINGERPRINT, DEAUTH DETECTOR, PACKET MONITOR, NETWORK MONITOR, WIFI DEAUTH |
 | BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT, BLE BEACON, AIRTAG SPOOF, BLE SPAM, BLE KEYBOARD |
+| ESP-NOW | MESH CHAT (rein virtueller Transport) |
 
-Die ursprünglichen No-op-VTables der vierundzwanzig Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der fünfundzwanzig Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
-Letzte erfolgreich bestätigte Pipeline:
-[CI #40004735241](https://github.com/0b-ivan/inx-4x-pro/actions/runs/40004735241)
-(Deauth Detector nach nativer ISR-Critical-Section-Korrektur, Ergebnis beim
-Erstellen noch ausstehend). Die Packet-Monitor-Erweiterung benötigt eine
-weitere CI-Bestätigung.
+Letzte vollständig grüne Pipeline:
+[CI #40014408650](https://github.com/0b-ivan/inx-4x-pro/actions/runs/40014408650)
+(24 Activities, einschließlich Touch-E2E und visueller Regression).
+Der neue Clock-Zeitplan und Mesh Chat benötigen jeweils neue CI-Bestätigung.
 
 ## Deterministische Fixtures – kein Zugriff auf Funkhardware
 
@@ -54,7 +54,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller vierundzwanzig Apps
+- Autostart und nichtleere Screenshots aller fünfundzwanzig Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -302,11 +302,11 @@ Trefferzonen-Verwendung, aber noch **keinen jeweils eigenen
 vollständigen Touch-E2E-Test**. Besonders BLE-GATT-Untermenüs und
 spezielle Gesten benötigen weiterhin separate Tests.
 
-Von den ursprünglich 26 für diese Ausbaustufe betrachteten Biscuit-
-Activities sind weiterhin 24 im nativen Simulator integriert.
-`FIRE` und `MESH CHAT` bleiben separat als Hardware-gebundene
-Activities aus dem nativen Build ausgeschlossen. Dieser
-Touch-Fix erweitert keine echte Funkübertragung oder Angriffslogik.
+Von den ursprünglich 26 betrachteten Biscuit-Activities werden nach
+der Mesh-Chat-Integration 25 im nativen Simulator ausgeführt.
+`FIRE` bleibt wegen seiner aktiven Funkangriffs- und Capture-Pfade
+weiterhin ausgeschlossen. Auch Mesh Chat verwendet ausschließlich
+synthetische lokale ESP-NOW-Pakete und keinerlei Funkhardware.
 
 ### Testverschärfung: Touch-Listenauswahl
 
@@ -324,9 +324,29 @@ Tastendruckdauer wird dieser Druck richtig als langer Confirm erkannt
 und wechselt tatsächlich zur Stoppuhr. Die Pixelabweichung ist also
 eine echte **Zustandsänderung**, kein Uhren- oder Grafikfehler.
 
-`CLOCK.bmp` wird deshalb bei 1600 ms **vor** dem geplanten langen
-Tastendruck aufgenommen und bleibt mit der vorhandenen freigegebenen
-Uhr-Referenz vergleichbar. `CLOCK_stopwatch.bmp` dokumentiert
-die Stoppuhr bei 4300 ms. Der E2E-Test verlangt unterschiedliche Bilder
+Der ursprünglich gewählte Aufnahmezeitpunkt von 1600 ms lag jedoch
+noch innerhalb des CrossPoint-Bootbildschirms (CI #40018588442).
+Daher wird `CLOCK.bmp` nun bei 4300 ms **nach dem Boot**, aber **vor**
+dem auf 5300 ms verlegten langen Tastendruck aufgenommen. Die bereits
+freigegebene Clock-Pixelreferenz wird nicht ersetzt.
+`CLOCK_stopwatch.bmp` dokumentiert den zweiten Zustand bei 7200 ms. Der E2E-Test verlangt unterschiedliche Bilder
 und den expliziten Activity-Zustandsmarker `CLOCK:mode:stopwatch`.
 Die Golden-Referenz wird nicht unkontrolliert neu berechnet.
+
+## Mesh Chat: virtueller ESP-NOW-Transport (Simulator-only)
+
+`MESH CHAT` verwendet den originalen `MeshChatActivity`-Code mit
+synthetischem ESP-NOW-Transport aus `sim-stubs/esp_now.h`.
+Die Simulation liefert zwei Präsenz-Beacons und Chat-Nachrichten über
+den registrierten Empfangs-Callback. Die originale Peer-Liste und der
+Nachrichtenringpuffer bleiben aktiv. Ausgehende Pakete werden nur
+gezählt, niemals versendet. Szenarien:
+`CROSSPLAY_SIM_MESH_SCENARIO=normal|empty|malformed`.
+
+Die SDL-Abnahme prüft Chat- und Peer-Ansichten, Rücknavigation sowie
+Radio-Shutdown. Ein zusätzlicher X4-Pro-Touch-E2E-Test bedient die
+On-Screen-Flächen Peers, Relay, Back und Exit, inklusive Radio-Cleanup.
+Host-Tests kontrollieren ausschließlich virtuelle
+ESP-NOW-Zustellung, virtuelle Sendezählung und Deinitialisierung.
+Eine erfolgreich grüne Pipeline ist für die Abnahme noch erforderlich.
+Keine echten MACs, keine Funkübertragung und keine Host-Sockets.

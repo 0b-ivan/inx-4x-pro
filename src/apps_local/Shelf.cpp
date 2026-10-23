@@ -65,12 +65,12 @@
 #include "wifi-test/WifiTestActivity.h"
 #include "ble-spam/BleSpamActivity.h"
 #include "ble-keyboard/BleKeyboardActivity.h"
+#include "mesh-chat/MeshChatActivity.h"
 #include "host-scanner/HostScannerActivity.h"
 #include "http-client/HttpClientActivity.h"
 #include "mdns-browser/MdnsBrowserActivity.h"
 #if !defined(SIMULATOR)  // Requires raw 802.11 promiscuous mode, BLE stack, or ESP-NOW
 #include "fire/FireActivity.h"
-#include "mesh-chat/MeshChatActivity.h"
 #endif  // !SIMULATOR
 #include "calculator/CalculatorActivity.h"
 #include "cipher/CipherActivity.h"
@@ -170,7 +170,6 @@ constexpr shelf::Item kApps[] = {
     {"USB HID", &icon_study_32, &UsbHidActivity::create},
 #if !defined(SIMULATOR)  // Requires raw 802.11 promiscuous mode or BLE/ESP-NOW hardware
     {"FIRE", &icon_minesweeper_32, &FireActivity::create},
-    {"MESH CHAT", &icon_study_32, &MeshChatActivity::create},
 #endif  // !SIMULATOR
     {"BLE PROXIMITY",  &icon_nearby_32, &BleProximityActivity::create},
     {"BLE SCANNER",    &icon_nearby_32, &BleScannerActivity::create},
@@ -187,6 +186,7 @@ constexpr shelf::Item kApps[] = {
     {"WIFI DEAUTH", &icon_minesweeper_32, &WifiTestActivity::create},
     {"BLE SPAM", &icon_nearby_32, &BleSpamActivity::create},
     {"BLE KEYBOARD", &icon_nearby_32, &BleKeyboardActivity::create},
+    {"MESH CHAT", &icon_study_32, &MeshChatActivity::create},
     {"HOST SCANNER",   &icon_study_32,  &HostScannerActivity::create},
     {"HTTP CLIENT",    &icon_study_32,  &HttpClientActivity::create},
     {"MDNS BROWSER",   &icon_study_32,  &MdnsBrowserActivity::create},

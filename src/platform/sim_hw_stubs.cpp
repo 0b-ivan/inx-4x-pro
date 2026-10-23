@@ -15,7 +15,6 @@
 #include "../apps_local/host-scanner/HostScannerActivity.h"
 #include "../apps_local/http-client/HttpClientActivity.h"
 #include "../apps_local/mdns-browser/MdnsBrowserActivity.h"
-#include "../apps_local/mesh-chat/MeshChatActivity.h"
 
 #define HWSTUB_ACTIVITY(cls)                              \
   void cls::onEnter() {}                                  \
@@ -24,7 +23,6 @@
   void cls::render(RenderLock&&) {}
 
 HWSTUB_ACTIVITY(FireActivity)
-HWSTUB_ACTIVITY(MeshChatActivity)
 
 #undef HWSTUB_ACTIVITY
 

@@ -35,6 +35,7 @@ for name, cls, path in (
     ("WIFI DEAUTH", "WifiTestActivity", "wifi-test/WifiTestActivity.cpp"),
     ("BLE SPAM", "BleSpamActivity", "ble-spam/BleSpamActivity.cpp"),
     ("BLE KEYBOARD", "BleKeyboardActivity", "ble-keyboard/BleKeyboardActivity.cpp"),
+    ("MESH CHAT", "MeshChatActivity", "mesh-chat/MeshChatActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -125,7 +126,9 @@ assert 'CROSSPOINT_SIM_INPUT_SCRIPT' in smoke_script, "CI smoke must inject inpu
 assert 'TAP:100,210,120' in smoke_script, "X4 Pro native touch row hit test must be covered"
 assert 'TAP:180,780,120' in smoke_script, "X4 Pro on-screen Select hint must be tested"
 assert 'PROBE:touch-detail:3' in smoke_script, "X4 Pro touch path must prove real Activity navigation"
-assert '1600:$frame;4300:$out/${name}_stopwatch.bmp' in smoke_script, "Clock golden must precede mode-switch input"
+assert 'script="5300:ENTER:650;8500:QUIT"' in smoke_script, "Clock mode-switch must happen after stable golden"
+assert 'shots="4300:$frame;7200:$out/${name}_stopwatch.bmp"' in smoke_script, "Clock golden must show actual Clock after boot, before Stopwatch"
+assert 'TAP:420,780,120' in smoke_script and 'MESH:touch-relay:2:2' in smoke_script, "Mesh Chat X4 Pro touch E2E missing"
 assert 'CLOCK:mode:stopwatch' in smoke_script, "Clock long-hold mode transition must be checked"
 
 assert 'NETWORK_MONITOR_touch_detail.bmp' in smoke_script, "X4 Pro Network Monitor touch E2E missing"
@@ -167,3 +170,10 @@ assert (root / "host-tests/biscuit-preview/BitmapRenderer.h").exists(), "Biscuit
 assert (root / "host-tests/biscuit-preview/run.sh").exists(), "Biscuit native preview suite missing"
 checks += 9
 print(f"biscuit-sim wiring: {checks} checks, 0 failed")
+
+mesh = (root / "src/apps_local/mesh-chat/MeshChatActivity.cpp").read_text()
+mesh_sim = (root / "sim-stubs/esp_now.h").read_text()
+assert "esp_now_sim_deliver" in mesh and "esp_now_sim_deliver" in mesh_sim, "mesh transport must stay synthetic"
+assert "meshSimTrace" in mesh and "radio-off" in mesh, "mesh lifecycle trace missing"
+assert "-<apps_local/mesh-chat/MeshChatActivity.cpp>" not in ini, "real Mesh Chat excluded"
+assert "HWSTUB_ACTIVITY(MeshChatActivity)" not in noops, "Mesh Chat must not be a vtable stub"

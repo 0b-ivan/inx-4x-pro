@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR" "BLE BEACON" "AIRTAG SPOOF" "WIFI DEAUTH" "BLE SPAM" "BLE KEYBOARD")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT" "PROBE SNIFFER" "CROWD DENSITY" "DEV FINGERPRINT" "DEAUTH DETECTOR" "PACKET MONITOR" "NETWORK MONITOR" "BLE BEACON" "AIRTAG SPOOF" "WIFI DEAUTH" "BLE SPAM" "BLE KEYBOARD" "MESH CHAT")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "MESH CHAT" ]; then
+    script="3500:RIGHT:100;5200:BACK:100;6900:BACK:100;8200:QUIT"
   elif [ "$app" = "BLE KEYBOARD" ]; then
     script="1900:ENTER:100;2500:ENTER:100;3200:ENTER:100;6400:BACK:100;7300:BACK:100;8500:QUIT"
   elif [ "$app" = "BLE SPAM" ]; then
@@ -57,7 +59,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "CLOCK" ]; then
+  if [ "$app" = "MESH CHAT" ]; then
+    shots="3000:$out/${name}_messages.bmp;4500:$out/${name}_peers.bmp;6100:$out/${name}_chat.bmp;7700:$frame"
+  elif [ "$app" = "CLOCK" ]; then
     # Preserve the previously validated Clock.bmp pixel reference at 4300 ms.
     # The Stopwatch must render separately after the delayed long press.
     shots="4300:$frame;7200:$out/${name}_stopwatch.bmp"
@@ -95,6 +99,7 @@ for app in "${apps[@]}"; do
   echo "[biscuit-ui-smoke] $app"
   if ! env CROSSPLAY_AUTOSTART="$app" \
     CROSSPLAY_SIM_BLE_TRACE=1 \
+    CROSSPLAY_SIM_MESH_TRACE=1 \
     CROSSPLAY_SIM_PROBE_TRACE=1 \
     CROSSPLAY_SIM_CROWD_TRACE=1 \
     CROSSPLAY_SIM_FINGERPRINT_TRACE=1 \
@@ -984,6 +989,86 @@ assert "[BISCUIT_SIM] CLOCK:mode:stopwatch" in log, (
     "Long Confirm was ignored: Clock -> Stopwatch state transition missing")
 print("PASS Clock: stable initial golden, genuine long-press switches to Stopwatch")
 PYCLOCK
-echo "PASS biscuit-ui-smoke: 24 activities, virtual BLE Keyboard script and prior regressions"
+# Mesh Chat: virtual ESP-NOW peer discovery and received message ring buffer.
+python3 - <<'PYMESH'
+from pathlib import Path
+import struct,hashlib
+root=Path(".pio/biscuit-ui-smoke")
+files=[root/"MESH_CHAT_messages.bmp",root/"MESH_CHAT_peers.bmp",
+       root/"MESH_CHAT_chat.bmp",root/"MESH_CHAT.bmp"]
+hashes=[]
+for p in files:
+    bmp=p.read_bytes()
+    assert bmp[:2]==b"BM" and len(bmp)>1000, f"bad Mesh Chat screenshot: {p}"
+    assert tuple(map(abs,struct.unpack_from("<ii",bmp,18)))==(480,800)
+    hashes.append(hashlib.sha256(bmp).digest())
+assert hashes[0]!=hashes[1] and hashes[1]!=hashes[2], "Mesh Chat state transitions missing"
+log=(root/"MESH_CHAT.log").read_text(errors="replace")
+position=-1
+for state in ("ready:0:0","injected:2:2","peers:2:2",
+              "back-chat:2:2","radio-off:2:2"):
+    position=log.find("[BISCUIT_SIM] MESH:"+state,position+1)
+    assert position>=0, f"Mesh Chat missed/out-of-order {state}: {log[-1200:]}"
+print("PASS Mesh Chat: 2 synthetic peers and messages, navigation, radio cleanup")
+PYMESH
+
+for scenario in empty malformed; do
+  log="$out/MESH_CHAT_$scenario.log"
+  image="$out/MESH_CHAT_$scenario.bmp"
+  if ! env CROSSPLAY_AUTOSTART="MESH CHAT" \
+    CROSSPLAY_SIM_MESH_TRACE=1 \
+    CROSSPLAY_SIM_MESH_SCENARIO="$scenario" \
+    CROSSPOINT_SIM_INPUT_SCRIPT="3600:RIGHT:100;4800:BACK:100;5900:BACK:100;7200:QUIT" \
+    CROSSPOINT_SIM_SCREENSHOTS="4500:$image" \
+    LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+    timeout 18s "$bin" >"$log" 2>&1; then
+    echo "FAIL Mesh Chat $scenario"; tail -100 "$log"; exit 1
+  fi
+  for stage in "MESH:injected:0:0" "MESH:peers:0:0" "MESH:radio-off:0:0"; do
+    grep -Fq "$stage" "$log" || {
+      echo "FAIL Mesh Chat $scenario state $stage"; tail -100 "$log"; exit 1
+    }
+  done
+  python3 - "$image" <<'PYMESHNEG'
+from pathlib import Path
+import struct,sys
+bmp=Path(sys.argv[1]).read_bytes()
+assert bmp[:2]==b"BM" and len(bmp)>1000
+assert tuple(map(abs,struct.unpack_from("<ii",bmp,18)))==(480,800)
+PYMESHNEG
+done
+# X4 Pro capacitive touch: exercise Mesh Chat's "Peers", "Relay" and "Back"
+# footer buttons with actual native TOUCH events, not keyboard shortcuts.
+mesh_touch_log="$out/MESH_CHAT_touch.log"
+if ! env CROSSPLAY_AUTOSTART="MESH CHAT" \
+  CROSSPLAY_SIM_MESH_TRACE=1 \
+  CROSSPOINT_SIM_INPUT_SCRIPT="3200:TAP:420,780,120;4300:TAP:180,780,120;5300:TAP:60,780,120;6500:TAP:60,780,120;7800:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="2900:$out/MESH_CHAT_touch_chat.bmp;3800:$out/MESH_CHAT_touch_peers.bmp;4850:$out/MESH_CHAT_touch_relay.bmp;5900:$out/MESH_CHAT_touch_back.bmp;7000:$out/MESH_CHAT_touch_exit.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$mesh_touch_log" 2>&1; then
+  echo "FAIL X4 Pro Mesh Chat touch flow"; tail -100 "$mesh_touch_log"; exit 1
+fi
+python3 - "$mesh_touch_log" \
+  "$out/MESH_CHAT_touch_chat.bmp" "$out/MESH_CHAT_touch_peers.bmp" \
+  "$out/MESH_CHAT_touch_relay.bmp" "$out/MESH_CHAT_touch_back.bmp" \
+  "$out/MESH_CHAT_touch_exit.bmp" <<'PYMESHTOUCH'
+from pathlib import Path
+import struct,hashlib,sys
+log=Path(sys.argv[1]).read_text(errors="replace")
+frames=[]
+for name in sys.argv[2:]:
+    bmp=Path(name).read_bytes()
+    assert bmp[:2]==b"BM" and len(bmp)>1000
+    assert tuple(map(abs,struct.unpack_from("<ii",bmp,18)))==(480,800)
+    frames.append(hashlib.sha256(bmp).digest())
+assert all(a!=b for a,b in zip(frames,frames[1:])), "Mesh touch state did not change"
+idx=-1
+for state in ("MESH:touch-peers:2:2","MESH:touch-relay:2:2",
+              "MESH:touch-chat:2:2","MESH:radio-off:2:2"):
+    idx=log.find(state,idx+1)
+    assert idx>=0, f"Missing Mesh touch event {state}: {log[-1400:]}"
+print("PASS X4 Pro Mesh Chat: touch peers/relay/chat/exit and radio cleanup")
+PYMESHTOUCH
+echo "PASS biscuit-ui-smoke: 25 activities incl Mesh Chat (normal/empty/malformed), touch, BLE and network"
 
 

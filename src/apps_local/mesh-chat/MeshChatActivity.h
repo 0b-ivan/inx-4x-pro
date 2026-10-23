@@ -70,6 +70,10 @@ class MeshChatActivity final : public Activity {
 
   // ESP-NOW state
   bool espnowInitialized = false;
+#ifdef SIMULATOR
+  bool simInjected = false;
+  unsigned long simStarted = 0;
+#endif
   static constexpr uint8_t ESPNOW_CHANNEL = 1;
   unsigned long lastPresenceTime = 0;
   static constexpr unsigned long PRESENCE_INTERVAL_MS = 10000;

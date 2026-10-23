@@ -7,7 +7,7 @@ trap 'rm -rf "$work"' EXIT
 c++ -std=c++17 -DSIMULATOR -Wall -Wextra -Werror -I"$repo/src" \
   "$here/test_clock.cpp" -o "$work/test_clock"
 "$work/test_clock"
-c++ -std=c++17 -DSIMULATOR -Wall -Wextra -Werror -I"$repo/src" \
+c++ -std=c++17 -DSIMULATOR -Wall -Wextra -Werror -I"$repo/src" -I"$repo/sim-stubs" \
   "$here/test_network.cpp" -o "$work/test_network"
 "$work/test_network"
 python3 "$here/test_wiring.py" "$repo"

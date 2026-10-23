@@ -1,6 +1,7 @@
 #include "platform/sim_biscuit_network.h"
 #include "platform/sim_biscuit_ble.h"
 #include "platform/sim_biscuit_wifi_frames.h"
+#include <esp_now.h>
 #include <cstdio>
 #include <cstdlib>
 #include <set>
@@ -310,5 +311,27 @@ int main() {
     check(preview.bytes.find("OFFLINE-SIM:") == 0,
           "BLE Spam previews cannot be actual advertisements");
   }
+  check(esp_now_init() == ESP_OK, "mesh native mock initializes");
+  struct MeshCounter {
+    static unsigned& value() { static unsigned n = 0; return n; }
+    static void callback(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
+      if (info && data && len >= 23 && info->src_addr[0] == 0x02) ++value();
+    }
+  };
+  MeshCounter::value() = 0;
+  esp_now_register_recv_cb(&MeshCounter::callback);
+  esp_now_peer_info_t peer{};
+  peer.peer_addr[0] = 0x02;
+  peer.peer_addr[5] = 0x21;
+  check(esp_now_add_peer(&peer) == ESP_OK, "mesh virtual peer registration");
+  uint8_t mac[6] = {0x02,0,0,0,0,0x21};
+  uint8_t presence[23] = {2};
+  check(esp_now_sim_deliver(mac, presence, 23), "mesh virtual inbound");
+  check(esp_now_sim_deliver(mac, presence, 23), "mesh repeated inbound");
+  check(MeshCounter::value() == 2, "mesh registered callback sees frames");
+  check(esp_now_send(mac, presence, 23) == ESP_OK &&
+        biscuit_sim::esp_now_sent == 1, "mesh outgoing frames counted only");
+  check(esp_now_deinit() == ESP_OK, "mesh shutdown");
+  check(!esp_now_sim_deliver(mac, presence, 23), "mesh cannot receive when off");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }

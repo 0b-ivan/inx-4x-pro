@@ -10,6 +10,18 @@
 
 #include <algorithm>
 #include <cstring>
+#ifdef SIMULATOR
+#include <cstdio>
+#include <cstdlib>
+#ifndef pdMS_TO_TICKS
+#define pdMS_TO_TICKS(ms) (ms)
+#endif
+static void meshSimTrace(const char* state, size_t peers, int messages) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_MESH_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0')
+    std::fprintf(stderr, "[BISCUIT_SIM] MESH:%s:%zu:%d\n", state, peers, messages);
+}
+#endif
 
 #include "MappedInputManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -30,6 +42,10 @@ void MeshChatActivity::onEnter() {
   peerSelectorIndex = 0;
   espnowInitialized = false;
   lastPresenceTime = 0;
+#ifdef SIMULATOR
+  simInjected = false;
+  simStarted = millis();
+#endif
   // MESH-002: reset pending render flag
   pendingRender = false;
   // MESH-003: reset dedup ring
@@ -42,21 +58,35 @@ void MeshChatActivity::onEnter() {
   if (!peersMux) peersMux = xSemaphoreCreateMutex();
 
   initEspNow();
+#ifdef SIMULATOR
+  meshSimTrace("ready", peers.size(), messageCount);
+#endif
   requestUpdate();
 }
 
 void MeshChatActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   deinitEspNow();
   activeInstance = nullptr;
-  if (peersMux) { vSemaphoreDelete(peersMux); peersMux = nullptr; }
+  if (peersMux) {
+#ifndef SIMULATOR
+    vSemaphoreDelete(peersMux);
+#endif
+    peersMux = nullptr;
+  }
+#ifdef SIMULATOR
+  meshSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                   ? "radio-off" : "radio-leak", peers.size(), messageCount);
+#endif
+  Activity::onExit();
+  devmode::resume();
 }
 
 void MeshChatActivity::initEspNow() {
   RADIO.ensureWifi();
+#ifndef SIMULATOR
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
+#endif
 
   // Set channel
   esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
@@ -77,7 +107,12 @@ void MeshChatActivity::initEspNow() {
     LOG_ERR("MESH", "Failed to add broadcast peer");
   }
 
+#ifdef SIMULATOR
+  const uint8_t testMac[6] = {0x02,0,0,0,0,0x20};
+  memcpy(localMac, testMac, 6);
+#else
   WiFi.macAddress(localMac);
+#endif
   espnowInitialized = true;
   LOG_DBG("MESH", "ESP-NOW initialized on channel %d", ESPNOW_CHANNEL);
 }
@@ -241,6 +276,39 @@ void MeshChatActivity::addMessage(const uint8_t* senderMac, const char* senderNa
 }
 
 void MeshChatActivity::loop() {
+#ifdef SIMULATOR
+  if (espnowInitialized && !simInjected && millis() - simStarted >= 850) {
+    simInjected = true;
+    const char* scenarioRaw = std::getenv("CROSSPLAY_SIM_MESH_SCENARIO");
+    const std::string scenario = scenarioRaw ? scenarioRaw : "normal";
+    if (scenario == "malformed") {
+      const uint8_t mac[6] = {0x02,0,0,0,0,0x21};
+      uint8_t truncated[5] = {FRAME_CHAT,0,0,0,0};
+      esp_now_sim_deliver(mac, truncated, 5);
+    } else if (scenario != "empty") {
+      const uint8_t macA[6] = {0x02,0,0,0,0,0x21};
+      const uint8_t macB[6] = {0x02,0,0,0,0,0x22};
+      auto deliverPeer = [](const uint8_t* mac, const char* name,
+                            const char* content) {
+        uint8_t presence[23] = {};
+        presence[0] = FRAME_PRESENCE;
+        memcpy(presence + 1, mac, 6);
+        strncpy(reinterpret_cast<char*>(presence + 7), name, 15);
+        esp_now_sim_deliver(mac, presence, sizeof(presence));
+        uint8_t chat[FRAME_CHAT_SIZE] = {};
+        chat[0] = FRAME_CHAT;
+        memcpy(chat + 1, mac, 6);
+        strncpy(reinterpret_cast<char*>(chat + 7), name, 15);
+        strncpy(reinterpret_cast<char*>(chat + 23), content, 199);
+        esp_now_sim_deliver(mac, chat, sizeof(chat));
+      };
+      deliverPeer(macA, "Sim Alice", "Local mesh test A");
+      deliverPeer(macB, "Sim Bob", "Local mesh test B");
+    }
+    meshSimTrace("injected", peers.size(), messageCount);
+    requestUpdate();
+  }
+#endif
   // MESH-002: drain the render request flag set by the WiFi-task callback
   if (pendingRender) {
     pendingRender = false;
@@ -307,6 +375,9 @@ void MeshChatActivity::loop() {
       if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
         state = PEERS;
         peerSelectorIndex = 0;
+#ifdef SIMULATOR
+        meshSimTrace("peers", peers.size(), messageCount);
+#endif
         requestUpdate();
       }
 
@@ -316,8 +387,16 @@ void MeshChatActivity::loop() {
       {
         int tx_ = 0, ty_ = 0;
         if (mappedInput.wasScreenTapped(tx_, ty_)) {
-          const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+          const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
           if (btn == 1) { shelf::leave(renderer, mappedInput); }
+          if (btn == 4) {
+            state = PEERS;
+            peerSelectorIndex = 0;
+#ifdef SIMULATOR
+            meshSimTrace("touch-peers", peers.size(), messageCount);
+#endif
+            requestUpdate();
+          }
           if (btn == 2) {
             startActivityForResult(
                 std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "Message", "", 199),
@@ -350,7 +429,11 @@ void MeshChatActivity::loop() {
       }
 
       if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-        state = CHAT_VIEW; requestUpdate();
+        state = CHAT_VIEW;
+#ifdef SIMULATOR
+        meshSimTrace("back-chat", peers.size(), messageCount);
+#endif
+        requestUpdate();
       }
 
       if (mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
@@ -359,7 +442,20 @@ void MeshChatActivity::loop() {
       {
         int tx_ = 0, ty_ = 0;
         if (mappedInput.wasScreenTapped(tx_, ty_)) {
-          if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = CHAT_VIEW; requestUpdate(); }
+          const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
+          if (btn == 1) {
+            state = CHAT_VIEW;
+#ifdef SIMULATOR
+            meshSimTrace("touch-chat", peers.size(), messageCount);
+#endif
+            requestUpdate();
+          } else if (btn == 2) {
+            relayMode = !relayMode;
+#ifdef SIMULATOR
+            meshSimTrace("touch-relay", peers.size(), messageCount);
+#endif
+            requestUpdate();
+          }
         }
       }
       break;
