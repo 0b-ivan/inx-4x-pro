@@ -19,6 +19,7 @@ for name, cls, path in (
     ("PING", "PingActivity", "ping/PingActivity.cpp"),
     ("HOST SCANNER", "HostScannerActivity", "host-scanner/HostScannerActivity.cpp"),
     ("HTTP CLIENT", "HttpClientActivity", "http-client/HttpClientActivity.cpp"),
+    ("MDNS BROWSER", "MdnsBrowserActivity", "mdns-browser/MdnsBrowserActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
