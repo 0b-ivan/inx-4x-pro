@@ -384,7 +384,7 @@ void NetworkMonitorActivity::loop() {
     }
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = MONITORING; requestUpdate(); }
+      if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { state = MONITORING; requestUpdate(); }
     }
     return;
   }
@@ -401,7 +401,7 @@ void NetworkMonitorActivity::loop() {
     }
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) {
+      if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) {
         WiFi.scanDelete(); monitorMode = FRAME_DETECTION;
         state = MONITORING; startMonitoring(); requestUpdate();
       }
@@ -417,7 +417,7 @@ void NetworkMonitorActivity::loop() {
     }
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = ROGUE_RESULTS; requestUpdate(); }
+      if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { state = ROGUE_RESULTS; requestUpdate(); }
     }
     return;
   }
@@ -458,7 +458,7 @@ void NetworkMonitorActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
         if (btn == 2 && !ssidGroups.empty()) {
           rogueDetailGroupIndex = rogueSelectorIndex; state = ROGUE_DETAIL; requestUpdate(); return;
@@ -612,7 +612,7 @@ void NetworkMonitorActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
       if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
       if (btn == 2) {
         if (mappedInput.getHeldTime() >= 500) {

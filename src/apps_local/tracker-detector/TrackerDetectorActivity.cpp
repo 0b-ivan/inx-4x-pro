@@ -251,7 +251,7 @@ void TrackerDetectorActivity::loop() {
       {
         int tx_ = 0, ty_ = 0;
         if (mappedInput.wasScreenTapped(tx_, ty_)) {
-          const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+          const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
           if (btn == 1) { shelf::leave(renderer, mappedInput); }
           if (btn == 2) { startMonitoring(); }
         }
@@ -316,7 +316,7 @@ void TrackerDetectorActivity::loop() {
       {
         int tx_ = 0, ty_ = 0;
         if (mappedInput.wasScreenTapped(tx_, ty_)) {
-          if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopMonitoring(); }
+          if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { stopMonitoring(); }
         }
       }
       break;
@@ -348,7 +348,7 @@ void TrackerDetectorActivity::loop() {
       {
         int tx_ = 0, ty_ = 0;
         if (mappedInput.wasScreenTapped(tx_, ty_)) {
-          const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+          const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
           if (btn == 1) { stopMonitoring(); }
           if (btn == 2) { state = MONITORING; requestUpdate(); }
         }

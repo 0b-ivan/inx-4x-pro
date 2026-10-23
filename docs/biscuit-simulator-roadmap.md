@@ -284,3 +284,26 @@ Die Touch- und Tastensimulation laufen über denselben
 Tasten-Smoke-Test ersetzt den Touch-Test daher nicht. Wischgesten,
 Orientierungswechsel und weitere Activities brauchen separat erweiterte
 Abdeckung. Das ersetzt keinen Test am realen GT911-Digitizer.
+
+## Übergreifender Touch-Footer-Fix
+
+Der X4 Pro setzt die normale reservierte Höhe für Tastenhinweise in
+`UITheme::getMetrics()` auf null. Biscuit-Activities verwenden aber
+`drawButtonHintsAlways()` und zeichnen damit eine sichtbare Touch-Leiste
+mit 40 Pixeln Höhe. Für diese Fälle ist nun durchgängig
+`GUI.tappedAlwaysHintButton()` erforderlich. Der Wiring-Test kontrolliert
+die Nutzung in 19 Activities. Offline-Activities ohne diese Touch-Hitbox
+bleiben davon unberührt.
+
+Die SDL-Abnahme überprüft echte Touch-Events in **Probe Sniffer** und
+**Network Monitor** inklusive Detailansicht, Zurück, Verlassen, BMPs
+und Radio-Cleanup. Die übrigen Activities haben die korrekte
+Trefferzonen-Verwendung, aber noch **keinen jeweils eigenen
+vollständigen Touch-E2E-Test**. Besonders BLE-GATT-Untermenüs und
+spezielle Gesten benötigen weiterhin separate Tests.
+
+Von den ursprünglich 26 für diese Ausbaustufe betrachteten Biscuit-
+Activities sind weiterhin 24 im nativen Simulator integriert.
+`FIRE` und `MESH CHAT` bleiben separat als Hardware-gebundene
+Activities aus dem nativen Build ausgeschlossen. Dieser
+Touch-Fix erweitert keine echte Funkübertragung oder Angriffslogik.

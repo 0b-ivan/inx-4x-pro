@@ -258,7 +258,7 @@ void BleContactExchangeActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
         if (btn == 2) {
           if (idleMenuIndex == 0) { editName(); }
@@ -299,7 +299,7 @@ void BleContactExchangeActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) {
+        if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) {
           stopExchange();
           if (!received.empty()) { contactIndex = 0; state = RECEIVED; } else { state = IDLE; }
           requestUpdate();
@@ -336,7 +336,7 @@ void BleContactExchangeActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { state = IDLE; idleMenuIndex = 0; requestUpdate(); return; }
         if (btn == 2 && !received.empty()) {
           saveContact(received[contactIndex]);

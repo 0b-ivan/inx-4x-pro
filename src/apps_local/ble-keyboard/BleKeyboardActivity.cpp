@@ -449,7 +449,7 @@ void BleKeyboardActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
         if (btn == 2 && !scriptFiles.empty()) {
           selectedScript = scriptFiles[selectedIndex];
@@ -478,7 +478,7 @@ void BleKeyboardActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { state = SELECT_SCRIPT; requestUpdate(); return; }
         if (btn == 2) { state = ADVERTISING; startAdvertising(); requestUpdate(); return; }
       }
@@ -491,7 +491,7 @@ void BleKeyboardActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopAdvertising(); state = SELECT_SCRIPT; requestUpdate(); return; }
+        if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { stopAdvertising(); state = SELECT_SCRIPT; requestUpdate(); return; }
       }
     }
     return;
@@ -509,7 +509,7 @@ void BleKeyboardActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { stopAdvertising(); state = SELECT_SCRIPT; requestUpdate(); return; }
         if (btn == 2) { state = EXECUTING; currentLine = 0; repeatCount = 0; delayUntil = 0; lastCommand.clear(); requestUpdate(); return; }
       }
@@ -532,7 +532,7 @@ void BleKeyboardActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1 || btn == 2) { stopAdvertising(); state = SELECT_SCRIPT; requestUpdate(); return; }
       }
     }

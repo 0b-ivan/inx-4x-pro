@@ -125,6 +125,36 @@ assert 'CROSSPOINT_SIM_INPUT_SCRIPT' in smoke_script, "CI smoke must inject inpu
 assert 'TAP:100,150,120' in smoke_script, "X4 Pro native touch row hit test must be covered"
 assert 'TAP:180,780,120' in smoke_script, "X4 Pro on-screen Select hint must be tested"
 assert 'PROBE:touch-detail:3' in smoke_script, "X4 Pro touch path must prove real Activity navigation"
+assert 'NETWORK_MONITOR_touch_detail.bmp' in smoke_script, "X4 Pro Network Monitor touch E2E missing"
+# Activities using drawButtonHintsAlways() must not hit-test using the
+# touch-theme's intentionally zero-height normal button bar.
+touch_footer_activities = (
+    "wifi-connect/WifiConnectActivity.cpp",
+    "dns-lookup/DnsLookupActivity.cpp",
+    "host-scanner/HostScannerActivity.cpp",
+    "http-client/HttpClientActivity.cpp",
+    "mdns-browser/MdnsBrowserActivity.cpp",
+    "ble-proximity/BleProximityActivity.cpp",
+    "ble-scanner/BleScannerActivity.cpp",
+    "ble-contact/BleContactExchangeActivity.cpp",
+    "tracker-detector/TrackerDetectorActivity.cpp",
+    "probe-sniffer/ProbeSnifferActivity.cpp",
+    "crowd-density/CrowdDensityActivity.cpp",
+    "deauth-detector/DeauthDetectorActivity.cpp",
+    "packet-monitor/PacketMonitorActivity.cpp",
+    "network-monitor/NetworkMonitorActivity.cpp",
+    "ble-beacon/BleBeaconActivity.cpp",
+    "airtag-test/AirTagTestActivity.cpp",
+    "wifi-test/WifiTestActivity.cpp",
+    "ble-spam/BleSpamActivity.cpp",
+    "ble-keyboard/BleKeyboardActivity.cpp",
+)
+for rel in touch_footer_activities:
+    content = (root / "src/apps_local" / rel).read_text()
+    assert "GUI.drawButtonHintsAlways(" in content, f"{rel}: touch footer not actually drawn"
+    assert "GUI.tappedAlwaysHintButton(" in content, f"{rel}: touch footer hit testing missing"
+    assert "GUI.tappedHintButton(" not in content, f"{rel}: still using zero-height touch hitbox"
+
 
 workflow = (root / ".github/workflows/crossplay-ci.yml").read_text()
 assert 'bash scripts_local/biscuit_sim_smoke.sh' in workflow, "smoke test not gated by CI"

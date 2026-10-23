@@ -920,6 +920,43 @@ for event in ("PROBE:touch-detail:3","PROBE:touch-back:3",
     assert position>=0, f"X4 Pro touch flow missing {event}: {log[-1300:]}"
 print("PASS X4 Pro touch: row tap, Select/Back/Exit hints and radio cleanup")
 PYTOUCH
+# A second X4 Pro touch path using real Network Monitor event navigation.
+# This guards against apps continuing to use the touch-theme's zero-height
+# ordinary hint bar instead of their own always-drawn footer.
+network_touch_log="$out/NETWORK_MONITOR_touch.log"
+if ! env CROSSPLAY_AUTOSTART="NETWORK MONITOR" \
+  CROSSPLAY_SIM_NETWORK_TRACE=1 \
+  CROSSPOINT_SIM_INPUT_SCRIPT="2200:TAP:180,780,120;3250:TAP:60,780,120;4350:TAP:60,780,120;6100:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="1750:$out/NETWORK_MONITOR_touch_events.bmp;2800:$out/NETWORK_MONITOR_touch_detail.bmp;3800:$out/NETWORK_MONITOR_touch_return.bmp;5350:$out/NETWORK_MONITOR_touch_exit.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$network_touch_log" 2>&1; then
+  echo "FAIL X4 Pro touch: Network Monitor TAP navigation"
+  tail -100 "$network_touch_log"; exit 1
+fi
+python3 - "$network_touch_log" \
+  "$out/NETWORK_MONITOR_touch_events.bmp" \
+  "$out/NETWORK_MONITOR_touch_detail.bmp" \
+  "$out/NETWORK_MONITOR_touch_return.bmp" \
+  "$out/NETWORK_MONITOR_touch_exit.bmp" <<'PYNETTOUCH'
+from pathlib import Path
+import hashlib, struct, sys
+log=Path(sys.argv[1]).read_text(errors="replace")
+screens=[]
+for name in sys.argv[2:]:
+    bmp=Path(name).read_bytes()
+    assert bmp[:2]==b"BM" and len(bmp)>1000, f"network touch frame missing: {name}"
+    assert tuple(map(abs,struct.unpack_from("<ii",bmp,18)))==(480,800)
+    screens.append(hashlib.sha256(bmp).digest())
+assert screens[0]!=screens[1], "touch Select did not open network-event detail"
+assert screens[1]!=screens[2], "touch Back did not return to network-event list"
+assert screens[2]!=screens[3], "touch Exit did not leave Network Monitor"
+pos=-1
+for state in ("NETWORK:monitoring:0:0","NETWORK:processed:4:3",
+              "NETWORK:radio-off:4:3"):
+    pos=log.find(state,pos+1)
+    assert pos>=0, f"Network Monitor touch missing {state}: {log[-1400:]}"
+print("PASS X4 Pro touch: Network Monitor event/detail/back/exit, cleanup")
+PYNETTOUCH
 echo "PASS biscuit-ui-smoke: 24 activities, virtual BLE Keyboard script and prior regressions"
 
 
