@@ -37,6 +37,7 @@ void WardrivingActivity::onExit() {
 }
 
 void WardrivingActivity::startLogging() {
+  Storage.mkdir("/crossplay");
   Storage.mkdir("/crossplay/logs");
 
   char buf[64];
@@ -52,6 +53,7 @@ void WardrivingActivity::startLogging() {
 
   WiFi.scanDelete();
   WiFi.scanNetworks(true);  // async
+  scanPending = true;
   lastScanTime = millis();
 
   LOG_DBG("WARD", "Started logging to %s", filename.c_str());
@@ -60,6 +62,7 @@ void WardrivingActivity::startLogging() {
 void WardrivingActivity::stopLogging() {
   if (!logging) return;
   WiFi.scanDelete();
+  scanPending = false;
   logging = false;
   LOG_DBG("WARD", "Stopped logging. %zu unique networks.", networks.size());
 }
@@ -76,8 +79,10 @@ void WardrivingActivity::appendNetworkToCsv(const SeenNetwork& net) {
 }
 
 void WardrivingActivity::processScanResults() {
+  if (!scanPending) return;
   int16_t result = WiFi.scanComplete();
   if (result == WIFI_SCAN_RUNNING) return;
+  scanPending = false;
 
   int newThisScan = 0;
 
@@ -151,9 +156,10 @@ void WardrivingActivity::loop() {
     }
 
     // Start next async scan after interval, but only if the previous one finished
-    if (WiFi.scanComplete() != WIFI_SCAN_RUNNING &&
-        millis() - lastScanTime >= SCAN_INTERVAL_MS) {
+    if (!scanPending && millis() - lastScanTime >= SCAN_INTERVAL_MS) {
       WiFi.scanNetworks(true);
+      scanPending = true;
+      lastScanTime = millis();
     }
   }
 
@@ -192,17 +198,19 @@ void WardrivingActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
       if (btn == 1) { if (logging) stopLogging(); shelf::leave(renderer, mappedInput); return; }
       if (btn == 2) {
         if (logging) { stopLogging(); } else { networks.clear(); selectorIndex = 0; startLogging(); }
         requestUpdate(); return;
       }
+      // On GT911 the two side keys do not provide a Confirm action; the
+      // always-visible action bar is the explicit Start/Stop touch control.
       if (count > 0) {
         int touchRow = -1;
         const auto& m = UITheme::getInstance().getMetrics();
         const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
-        const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+        const int contentH = renderer.getScreenHeight() - contentTop - BaseMetrics::values.buttonHintsHeight - m.verticalSpacing;
         const int rowStep = GUI.getListRowStep(true);
         const int pageItems = std::max(1, contentH / rowStep);
         const int pageStart = (selectorIndex / pageItems) * pageItems;
@@ -236,7 +244,7 @@ void WardrivingActivity::render(RenderLock&&) {
                  "Wardriving", subtitleBuf);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - metrics.verticalSpacing;
 
   if (networks.empty()) {
     if (logging) {
