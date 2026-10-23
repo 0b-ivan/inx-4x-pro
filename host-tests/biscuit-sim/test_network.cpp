@@ -41,5 +41,14 @@ int main() {
   check(!biscuit_sim::tcpProbe("example.test", 443), "HTTPS port not open by default");
   check(!biscuit_sim::tcpProbe("example.test", 0), "invalid port unavailable");
   check(!biscuit_sim::tcpProbe("EXAMPLE.TEST", 80), "TCP fixture case does not widen access");
+  check(biscuit_sim::hostScanIp(1) == 0x010200C0U, "fixture first host IP");
+  check(biscuit_sim::hostScanIp(20) == 0x140200C0U, "fixture second host IP");
+  check(biscuit_sim::hostScanIp(0) == 0, "network address excluded");
+  check(biscuit_sim::hostScanIp(31) == 0, "broadcast address excluded");
+  check(biscuit_sim::hostScanPortOpen(biscuit_sim::hostScanIp(1), 80), "first fixture host reachable");
+  check(biscuit_sim::hostScanPortOpen(biscuit_sim::hostScanIp(20), 80), "second fixture host reachable");
+  check(!biscuit_sim::hostScanPortOpen(biscuit_sim::hostScanIp(2), 80), "unknown fixture host unreachable");
+  check(!biscuit_sim::hostScanPortOpen(biscuit_sim::hostScanIp(1), 22), "SSH port closed");
+  check(!biscuit_sim::hostScanPortOpen(0x08080808U, 80), "public IPv4 never reachable");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }
