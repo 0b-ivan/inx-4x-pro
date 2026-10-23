@@ -15,6 +15,8 @@ Integration auf **feature/biscuit-simulator-hardware** (kein zusätzlicher Branc
 | AP-Startfehler und Kanal validieren | Unvollständig | Ja |
 | AP nach Exit freigeben | Ja | Ja, zusätzlich Developer-Mode-Radio-Lifecycle |
 
+Zusätzlich steht jetzt der **lokale Test-AP \`X4PRO-LAB-LOCAL\` auf Kanal 6** direkt in der Liste zur Verfügung. So kann der AP ohne ein bereits vorhandenes Testnetz gestartet werden. Eine gescannte fremde SSID bleibt nur lesbar. Die gemeinsame Arduino-freie Prüfung in \`LabApRules.h\` validiert den erlaubten Präfix und Kanal 1–13; \`test_ap_lab.cpp\` läuft in den Host-Tests mit.
+
 Die Lab-Whitelist ist absichtlich nicht entfernt. Fremde Infrastruktur
 darf über passive Scans angezeigt, aber nicht als täuschend ähnlich benannter
 Access Point nachgebildet werden.
@@ -67,3 +69,11 @@ Funktion bestätigen.
 Der bestehende Satz von 26 Simulator-Smokes wurde in diesem Schritt nicht
 in eine Hardware-Paritätsbescheinigung umgewandelt. Eine Activity für Activity
 dokumentierte Differenzliste und Funktions-E2E-Tests sind weiterhin erforderlich.
+
+## Nightly-Freigabe und Hardware-Regression
+
+Die CI führt den Firmware-Build inklusive Stackbudget, Host-Tests, echten SDL-Activity-Smokes und pixelgenauen Referenzbildvergleich aus. Ein mit \`release(nightly):\` beginnender Commit löst nach **allen drei erfolgreich abgeschlossenen CI-Jobs** den bereits bestehenden geschützten GitHub-Prerelease-Job aus. Das Release ist ausschließlich ein **OTA-Testimage**, kein Stable-Release.
+
+Die auf echter Hardware noch nachzuweisenden Szenarien umfassen: Start und Stop des lokalen AP, Scanliste und Touch-Footer, SoftAP-Client-Verbindung sowie DHCP/IP, Captive-DNS auf Port 53, HTTP GET/POST inklusive negativer Formularfälle, AP/Portal-Wechsel ohne Resource-Leak, Bulletin Board mit zwei Clients, Dead Drop über SD-I/O und Wardriving CSV mit mehrfachen Scans. Dazu gehören jeweils Timeout, Speicherfehler, mehrfache Navigation und Reboot-Rückkehr.
+
+**Wichtig:** Simulator-Smokes bedeuten nicht, dass die vollständigen 26 Originalfunktionen und die zusätzlichen fünf Anwendungen bereits auf realer X4-Pro-Hardware abgenommen sind. Ein tatsächlicher Test mit Gerät und isoliertem Client ist für diese Freigabe weiter Voraussetzung einer Stable-Promotion.
