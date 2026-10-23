@@ -59,6 +59,42 @@ assert len(set(pixels)) > 1, f"blank screenshot: {p}"
 print(f"PASS screenshot {p.name} {w}x{h}")
 PY
 done
+# Regression: connected and disconnected Host Scanner must render different states.
+# This only validates an actual visible state difference, not full scan semantics.
+offline="$out/HOST_SCANNER_offline.bmp"
+offline_log="$out/HOST_SCANNER_offline.log"
+if ! env CROSSPLAY_AUTOSTART="HOST SCANNER" \
+  CROSSPLAY_SIM_EPOCH=1704067200 \
+  CROSSPLAY_SIM_WIFI_CONNECTED=0 \
+  CROSSPOINT_SIM_INPUT_SCRIPT="6000:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="4300:$offline" \
+  LIBGL_ALWAYS_SOFTWARE=1 \
+  xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$offline_log" 2>&1; then
+  echo "FAIL biscuit-ui-smoke: offline Host Scanner crashed"
+  tail -100 "$offline_log"
+  exit 1
+fi
+if ! grep -Fq "Autostart into HOST SCANNER" "$offline_log"; then
+  echo "FAIL biscuit-ui-smoke: offline Host Scanner not started"
+  exit 1
+fi
+python3 - "$out/HOST_SCANNER.bmp" "$offline" <<'PYOFF'
+from pathlib import Path
+import hashlib
+import struct
+import sys
+online, offline = (Path(p) for p in sys.argv[1:])
+assert online.is_file() and offline.is_file(), "Host Scanner state screenshots missing"
+for shot in (online, offline):
+    data = shot.read_bytes()
+    assert data[:2] == b"BM" and len(data) > 1000, f"invalid BMP: {shot}"
+    width, height = struct.unpack_from("<ii", data, 18)
+    assert (abs(width), abs(height)) == (480, 800), f"unexpected dimensions: {shot}"
+assert hashlib.sha256(online.read_bytes()).digest() != hashlib.sha256(offline.read_bytes()).digest(), \
+    "Host Scanner online/offline screenshots identical"
+print("PASS Host Scanner connected/disconnected UI differs")
+PYOFF
 python3 - <<'PY'
 from pathlib import Path
 import hashlib
@@ -70,4 +106,4 @@ digest = lambda p: hashlib.sha256(p.read_bytes()).digest()
 assert digest(before) != digest(after), "OTP RIGHT action did not change the rendered screen"
 print("PASS OTP page interaction: screen changed after RIGHT")
 PY
-echo "PASS biscuit-ui-smoke: 9 activities, 10 screenshots, 1 interaction"
+echo "PASS biscuit-ui-smoke: 9 activities, 11 screenshots, OTP interaction and Host Scanner offline state"
