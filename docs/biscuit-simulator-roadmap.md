@@ -130,3 +130,31 @@ verursachen teils erhebliche Abweichungen. Es werden keine realen Pakete
 aufgezeichnet und kein WLAN-Monitor-Modus aktiviert.
 
 Diese Erweiterung gilt erst nach erfolgreicher CI als validiert.
+
+## Native BMP-Previews und pixelgenaue SDL-Referenzbilder
+
+Aus dem Original-Repository `0b-ivan/biscuit_x3` wurde der native
+`BitmapRenderer`-Mock übernommen. Die zusätzliche Host-Test-Suite
+`host-tests/biscuit-preview/run.sh` kompiliert C++17, testet 1-Bit-BMPs,
+Framebuffer-Leerzustand, zwei Vorschau-Szenen und Determinismus. Die
+Mock-Previews sind **keine echten Activity-Render-Tests** und werden
+in der CI ausdrücklich von den SDL-End-to-End-Screenshots unterschieden.
+
+`host-tests/biscuit-sim/test_visual_goldens.py` gleicht echte SDL-BMPs mit
+**sechs genehmigten pixelgenauen Baselines** ab: CLOCK, DEVICE INFO,
+BLE Scanner/GATT-Wert, mDNS Browser, Host Scanner offline und Probe Sniffer.
+Die Referenzen entstanden aus zwei erfolgreichen unabhängigen CI-Läufen
+[#39984886630](https://github.com/0b-ivan/inx-4x-pro/actions/runs/39984886630)
+und [#39988874651](https://github.com/0b-ivan/inx-4x-pro/actions/runs/39988874651).
+Beide Durchläufe zeigten für diese Screenshots identische Pixel.
+
+Der Test normiert den tatsächlichen 480 × 800 BGRA-Framebuffer auf Schwarz/
+Weiß und vergleicht SHA-256, Gesamtzahl dunkler Pixel und die Verteilung
+auf vier Quadranten. Bei Abweichungen scheitert CI; die vollständigen
+Original-BMPs bleiben im Screenshot-Artefakt zur visuellen Analyse erhalten.
+Screens mit nachweisbar zeitabhängigem Inhalt (z. B. OTP) sind noch nicht
+als exakte Baselines zugelassen. Eine neue Referenz muss explizit geprüft
+und eingecheckt werden; CI aktualisiert sie **niemals automatisch**.
+
+**Lokal:** `bash host-tests/biscuit-preview/run.sh` sowie nach dem SDL-Lauf
+`python3 host-tests/biscuit-sim/test_visual_goldens.py .pio/biscuit-ui-smoke`.

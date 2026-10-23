@@ -11,3 +11,4 @@ c++ -std=c++17 -DSIMULATOR -Wall -Wextra -Werror -I"$repo/src" \
   "$here/test_network.cpp" -o "$work/test_network"
 "$work/test_network"
 python3 "$here/test_wiring.py" "$repo"
+python3 "$here/test_visual_goldens.py" --self-test

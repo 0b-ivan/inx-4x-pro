@@ -79,5 +79,9 @@ assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixe
 assert 'CROSSPOINT_SIM_INPUT_SCRIPT' in smoke_script, "CI smoke must inject input"
 workflow = (root / ".github/workflows/crossplay-ci.yml").read_text()
 assert 'bash scripts_local/biscuit_sim_smoke.sh' in workflow, "smoke test not gated by CI"
+assert 'test_visual_goldens.py .pio/biscuit-ui-smoke' in workflow, "real screenshot goldens must gate CI"
+assert (root / "host-tests/biscuit-sim/visual_goldens.json").exists(), "visual baselines missing"
+assert (root / "host-tests/biscuit-preview/BitmapRenderer.h").exists(), "Biscuit X3 preview renderer missing"
+assert (root / "host-tests/biscuit-preview/run.sh").exists(), "Biscuit native preview suite missing"
 checks += 9
 print(f"biscuit-sim wiring: {checks} checks, 0 failed")
