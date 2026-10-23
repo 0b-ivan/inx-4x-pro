@@ -34,6 +34,7 @@ class WardrivingActivity final : public Activity {
   };
 
   bool logging = false;
+  bool scanPending = false;
   std::vector<SeenNetwork> networks;
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
