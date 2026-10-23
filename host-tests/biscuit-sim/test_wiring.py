@@ -247,6 +247,30 @@ for secret in ("creds.csv", "handleLogin(", "lastPassword", 'name="password"'):
     assert secret not in portal, f"Portal must not collect credentials: {secret}"
 
 
+# AP selection remains lab-only, while the scan UI must show every network.
+assert 'aps.push_back(std::move(ap));' in ap_lab, "AP Lab must show all passive scan results"
+assert '"view only"' in ap_lab, "AP Lab must label non-laboratory results"
+assert 'WiFi.softAP(clonedSsid.c_str()' in ap_lab, "AP Lab must reach hardware SoftAP"
+assert 'btn == 3 && count > 0' in ap_lab and 'btn == 4 && count > 0' in ap_lab, (
+    "AP Lab GT911 up/down footer actions are not wired"
+)
+# The portal is a live lab HTTP service, not just a rendered menu, and it
+# must never enable production-credential collection.
+assert 'portal_lab::validSuffix(suffix)' in portal, "Portal needs labelled lab SSIDs"
+assert 'std::get<KeyboardResult>(result.data)' in portal, "Portal SSID keyboard missing"
+assert 'webServer->on("/check", HTTP_POST' in portal, "Portal synthetic form route missing"
+assert 'portal_lab::validTestId(testId)' in portal, "Portal form requires synthetic-only validation"
+assert 'webServer->on("/status", HTTP_GET' in portal, "Portal diagnostics endpoint missing"
+assert 'WiFi.softAP(apSsid.c_str())' in portal and 'dnsServer->start(53' in portal, (
+    "Portal must initialize real AP and DNS servers"
+)
+assert 'GUI.tappedAlwaysHintButton(' in portal and 'mappedInput.rowTouch(' in portal, (
+    "Portal template selection needs GT911 touch handling"
+)
+assert 'handleTestSubmission()' in portal and 'webServer->send(400' in portal, (
+    "Portal must reject malformed or unexpected form input"
+)
+
 workflow = (root / ".github/workflows/crossplay-ci.yml").read_text()
 assert 'bash scripts_local/biscuit_sim_smoke.sh' in workflow, "smoke test not gated by CI"
 assert 'test_visual_goldens.py .pio/biscuit-ui-smoke' in workflow, "real screenshot goldens must gate CI"
