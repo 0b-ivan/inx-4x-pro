@@ -75,3 +75,15 @@ prüft der vollständige BLE-GATT-Rundgang zusätzlich den Zustandsverlauf.
    risikolos und ohne Zugriff auf fremde Funknetze.
 4. Kontrolliertes Testen von Lifecycle, Ressourcenfreigabe und UI-Navigation.
 5. Hardware-Abnahme für alle Radiofunktionen auf autorisierter Testhardware.
+
+## Testergänzung: BLE-Abbruch und Radio-Cleanup
+
+Die BLE-Contact-Activity beendet die Funknutzung jetzt **vor** der Rückgabe
+an Developer Mode. Der Cleanup ist idempotent und wird im Simulator durch
+`BLE_CONTACT:radio-off` protokolliert. Die Headless-CI testet den regulären
+Austausch, einen leeren Scan sowie einen Abbruch vor dem ersten Scanzyklus.
+Zusätzlich wird beim BLE Scanner ein fehlgeschlagener GATT-Verbindungsaufbau
+mit `CROSSPLAY_SIM_BLE_SCENARIO=disconnect` geprüft. Alle Szenarien sind
+lokale Fixtures ohne BLE-Hostzugriff.
+
+Die Abdeckung dieser neuen Tests ist erst nach erfolgreichem CI-Lauf bestätigt.

@@ -215,7 +215,7 @@ for p in frames:
 assert all(a!=b for a,b in zip(hashes,hashes[1:])), "Contact screen did not transition"
 log=(root/"BLE_CONTACT.log").read_text(errors="replace")
 pos=-1
-for name in ("exchange:0","found:2","received:2","idle:2"):
+for name in ("exchange:0","found:2","radio-off:2","received:2","idle:2"):
     pos=log.find("[BISCUIT_SIM] BLE_CONTACT:"+name,pos+1)
     assert pos>=0, f"BLE contact lifecycle missing {name}: {log[-800:]}"
 print("PASS BLE Contact: two valid remote contacts and lifecycle")
@@ -232,9 +232,69 @@ if ! env CROSSPLAY_AUTOSTART="BLE CONTACT" \
   tail -100 "$empty_log"
   exit 1
 fi
-grep -Fq "BLE_CONTACT:idle:0" "$empty_log" || {
-  echo "FAIL BLE Contact empty scan must return to idle"
-  tail -100 "$empty_log"
+for marker in "BLE_CONTACT:radio-off:0" "BLE_CONTACT:idle:0"; do
+  grep -Fq "$marker" "$empty_log" || {
+    echo "FAIL BLE Contact empty scan missing $marker"
+    tail -100 "$empty_log"
+    exit 1
+  }
+done
+
+# Cancellation before the first poll must not leave the simulated BLE radio on.
+cancel_log="$out/BLE_CONTACT_cancel.log"
+if ! env CROSSPLAY_AUTOSTART="BLE CONTACT" \
+  CROSSPLAY_SIM_BLE_TRACE=1 \
+  CROSSPOINT_SIM_INPUT_SCRIPT="1900:DOWN:100;2400:ENTER:100;2850:BACK:100;4800:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="3800:$out/BLE_CONTACT_cancel.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$cancel_log" 2>&1; then
+  echo "FAIL biscuit-ui-smoke: contact early cancel"
+  tail -100 "$cancel_log"
+  exit 1
+fi
+python3 - "$cancel_log" "$out/BLE_CONTACT_cancel.bmp" <<'PYCANCEL'
+from pathlib import Path
+import struct
+import sys
+log=Path(sys.argv[1]).read_text(errors="replace")
+p=Path(sys.argv[2])
+data=p.read_bytes()
+assert data[:2]==b"BM" and len(data)>1000
+assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+states=["BLE_CONTACT:exchange:0","BLE_CONTACT:radio-off:0","BLE_CONTACT:idle:0"]
+last=-1
+for state in states:
+    last=log.find(state,last+1)
+    assert last>=0, f"early cancel missing {state}"
+assert "BLE_CONTACT:found:2" not in log, "unexpected contact discovery before cancel"
+print("PASS BLE Contact: early cancel, radio off, no contacts")
+PYCANCEL
+
+# An unavailable simulated BLE peripheral must never create a real host connection.
+disconnect_log="$out/BLE_SCANNER_disconnect.log"
+if ! env CROSSPLAY_AUTOSTART="BLE SCANNER" \
+  CROSSPLAY_SIM_BLE_TRACE=1 \
+  CROSSPLAY_SIM_BLE_SCENARIO=disconnect \
+  CROSSPOINT_SIM_INPUT_SCRIPT="1900:ENTER:100;4800:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="3800:$out/BLE_SCANNER_disconnect.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$disconnect_log" 2>&1; then
+  echo "FAIL biscuit-ui-smoke: BLE Scanner disconnected scenario"
+  tail -100 "$disconnect_log"
+  exit 1
+fi
+grep -Fq "BLE_SCANNER:connect-failed" "$disconnect_log" || {
+  echo "FAIL BLE Scanner: virtual connection error was not exercised"
+  tail -100 "$disconnect_log"
   exit 1
 }
-echo "PASS biscuit-ui-smoke: 12 activities, 28 screenshots, BLE contact and GATT"
+python3 - "$out/BLE_SCANNER_disconnect.bmp" <<'PYFAIL'
+from pathlib import Path
+import struct
+import sys
+data=Path(sys.argv[1]).read_bytes()
+assert data[:2]==b"BM" and len(data)>1000
+assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+print("PASS BLE Scanner: synthetic connect failure")
+PYFAIL
+echo "PASS biscuit-ui-smoke: 12 activities, 30 screenshots, BLE cancel/disconnect and GATT"

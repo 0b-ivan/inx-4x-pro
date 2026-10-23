@@ -53,11 +53,10 @@ void BleContactExchangeActivity::onEnter() {
 }
 
 void BleContactExchangeActivity::onExit() {
-  devmode::resume();
+  // Shut the radio down before returning control to the developer-mode owner.
+  if (bleInitialized) stopExchange();
   Activity::onExit();
-  if (bleInitialized) {
-    stopExchange();
-  }
+  devmode::resume();
 }
 
 // ---------------------------------------------------------------------------
@@ -139,12 +138,17 @@ void BleContactExchangeActivity::startExchange() {
 }
 
 void BleContactExchangeActivity::stopExchange() {
+  if (!bleInitialized) return; // Idempotent cleanup on cancel, timeout or exit.
 #ifndef SIMULATOR
   BLEDevice::getAdvertising()->stop();
   BLEDevice::getScan()->stop();
 #endif
   RADIO.shutdown();
   bleInitialized = false;
+#ifdef SIMULATOR
+  simContactTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                    ? "radio-off" : "radio-leak", received.size());
+#endif
 }
 
 void BleContactExchangeActivity::pollScanResults() {
