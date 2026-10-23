@@ -41,15 +41,17 @@ for name, cls, path in (
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
     assert f'{{"{name}"' in shelf, f"{name} missing from the app list"
-    assert f'#include "{path.replace(".cpp", ".h")}"' in shelf, f"{cls} header unavailable in simulator"
-    assert (root / "src/apps_local" / path).exists(), f"real {cls} missing"
+    header = "fire/FireActivity.h" if cls == "FireActivity" else path.replace(".cpp", ".h")
+    assert f'#include "{header}"' in shelf, f"{cls} header unavailable in simulator"
+    assert (root / "src/apps_local" / path).exists(), f"Activity implementation missing: {cls}"
+    # Once all 26 entries are simulator-visible, no hardware-only Shelf
+    # sections are required. If one exists, it must not hide an enabled app.
     blocked_sections = [
         chunk.split("#endif  // !SIMULATOR", 1)[0]
         for chunk in shelf.split("#if !defined(SIMULATOR)")[1:]
     ]
-    assert len(blocked_sections) >= 2, "missing hardware-only include/shelf guards"
     assert not any(
-        f'#include "{path.replace(".cpp", ".h")}"' in section
+        f'#include "{header}"' in section
         or f'{{"{name}"' in section
         for section in blocked_sections
     ), f"{cls} remains hidden behind !SIMULATOR guard"
