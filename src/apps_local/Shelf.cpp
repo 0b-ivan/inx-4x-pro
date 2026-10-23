@@ -53,6 +53,7 @@
 #include "ble-proximity/BleProximityActivity.h"
 #include "ble-scanner/BleScannerActivity.h"
 #include "ble-contact/BleContactExchangeActivity.h"
+#include "tracker-detector/TrackerDetectorActivity.h"
 #include "host-scanner/HostScannerActivity.h"
 #include "http-client/HttpClientActivity.h"
 #include "mdns-browser/MdnsBrowserActivity.h"
@@ -63,7 +64,6 @@
 #include "packet-monitor/PacketMonitorActivity.h"
 #include "network-monitor/NetworkMonitorActivity.h"
 #include "device-fingerprinter/DeviceFingerprinterActivity.h"
-#include "tracker-detector/TrackerDetectorActivity.h"
 #include "ble-spam/BleSpamActivity.h"
 #include "wifi-test/WifiTestActivity.h"
 #include "fire/FireActivity.h"
@@ -175,7 +175,6 @@ constexpr shelf::Item kApps[] = {
     {"PACKET MONITOR", &icon_study_32, &PacketMonitorActivity::create},
     {"NETWORK MONITOR", &icon_study_32, &NetworkMonitorActivity::create},
     {"DEV FINGERPRINT", &icon_nearby_32, &DeviceFingerprinterActivity::create},
-    {"TRACKER DETECT", &icon_minesweeper_32, &TrackerDetectorActivity::create},
     {"BLE SPAM", &icon_nearby_32, &BleSpamActivity::create},
     {"WIFI DEAUTH", &icon_minesweeper_32, &WifiTestActivity::create},
     {"FIRE", &icon_minesweeper_32, &FireActivity::create},
@@ -187,6 +186,7 @@ constexpr shelf::Item kApps[] = {
     {"BLE PROXIMITY",  &icon_nearby_32, &BleProximityActivity::create},
     {"BLE SCANNER",    &icon_nearby_32, &BleScannerActivity::create},
     {"BLE CONTACT",    &icon_nearby_32, &BleContactExchangeActivity::create},
+    {"TRACKER DETECT", &icon_minesweeper_32, &TrackerDetectorActivity::create},
     {"HOST SCANNER",   &icon_study_32,  &HostScannerActivity::create},
     {"HTTP CLIENT",    &icon_study_32,  &HttpClientActivity::create},
     {"MDNS BROWSER",   &icon_study_32,  &MdnsBrowserActivity::create},

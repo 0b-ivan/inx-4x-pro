@@ -106,5 +106,27 @@ int main() {
   setenv("CROSSPLAY_SIM_BLE_SCENARIO", "empty", 1);
   check(biscuit_sim::bleContactPackets().empty(), "BLE Contact empty scan");
   unsetenv("CROSSPLAY_SIM_BLE_SCENARIO");
+  unsetenv("CROSSPLAY_SIM_TRACKER_SCENARIO");
+  auto trackers = biscuit_sim::bleTrackerFrames();
+  check(trackers.size() == 4, "tracker four synthetic advertisements");
+  check(trackers[0].manufacturer.size() == 5 &&
+        static_cast<uint8_t>(trackers[0].manufacturer[0]) == 0x4c &&
+        static_cast<uint8_t>(trackers[0].manufacturer[2]) == 0x12,
+        "tracker synthetic Apple frame");
+  check(trackers[1].manufacturer.size() == 2 &&
+        static_cast<uint8_t>(trackers[1].manufacturer[0]) == 0x75,
+        "tracker synthetic Samsung frame");
+  check(std::string(trackers[2].serviceUuid).find("feed") != std::string::npos,
+        "tracker synthetic Tile service");
+  check(!biscuit_sim::bleTrackerFollowerScenario(), "normal scan has no forced follower");
+  setenv("CROSSPLAY_SIM_TRACKER_SCENARIO", "follower", 1);
+  trackers = biscuit_sim::bleTrackerFrames();
+  check(trackers.size() == 1 && biscuit_sim::bleTrackerFollowerScenario(),
+        "virtual follower duration scenario");
+  setenv("CROSSPLAY_SIM_TRACKER_SCENARIO", "empty", 1);
+  check(biscuit_sim::bleTrackerFrames().empty(), "tracker empty scan");
+  setenv("CROSSPLAY_SIM_TRACKER_SCENARIO", "timeout", 1);
+  check(biscuit_sim::bleTrackerFrames().empty(), "tracker timeout scan");
+  unsetenv("CROSSPLAY_SIM_TRACKER_SCENARIO");
   std::printf("biscuit-sim network: %d checks, 0 failed\n", checks);
 }

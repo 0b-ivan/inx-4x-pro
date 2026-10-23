@@ -90,5 +90,31 @@ inline std::vector<std::string> bleContactPackets() {
     std::string("short")
   };
 }
+
+struct BleTrackerFrame {
+  const char* mac;
+  int rssi;
+  std::string manufacturer;
+  const char* serviceUuid;
+};
+inline bool bleTrackerFollowerScenario() {
+  const char* value = std::getenv("CROSSPLAY_SIM_TRACKER_SCENARIO");
+  return value && std::string(value) == "follower";
+}
+inline std::vector<BleTrackerFrame> bleTrackerFrames() {
+  const char* value = std::getenv("CROSSPLAY_SIM_TRACKER_SCENARIO");
+  const std::string scenario = value ? value : "normal";
+  if (scenario == "empty" || scenario == "timeout") return {};
+  const BleTrackerFrame simulatedTag{
+      "02:00:00:00:00:51", -51,
+      std::string("\x4c\x00\x12\x19\x01", 5), ""};
+  if (scenario == "follower") return {simulatedTag};
+  return {
+    simulatedTag,
+    {"02:00:00:00:00:52", -64, std::string("\x75\x00", 2), ""},
+    {"02:00:00:00:00:53", -73, "", "0000feed-0000-1000-8000-00805f9b34fb"},
+    {"02:00:00:00:00:54", -90, std::string("\x01\x00", 2), ""} // ignored
+  };
+}
 }  // namespace biscuit_sim
 #endif

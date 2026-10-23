@@ -2,22 +2,21 @@
 
 ## Aktueller Integrationsstand (23.10.2026)
 
-Der native X4-Pro-Simulator führt **11 echte Biscuit-Activities** aus:
+Der native X4-Pro-Simulator führt **13 echte Biscuit-Activities** aus:
 
 | Gruppe | Activities |
 | --- | --- |
 | Offline/System | CLOCK, DEVICE INFO, OTP GENERATOR |
 | WLAN/Netzwerk | WIFI CONNECT, DNS LOOKUP, PING, HOST SCANNER, HTTP CLIENT, MDNS BROWSER |
-| BLE | BLE PROXIMITY, BLE SCANNER |
+| BLE | BLE PROXIMITY, BLE SCANNER, BLE CONTACT, TRACKER DETECT |
 
-Die ursprünglichen No-op-VTables der elf Activities wurden entfernt.
+Die ursprünglichen No-op-VTables der dreizehn Activities wurden entfernt.
 Ihre realen Implementierungen und Shelf-Einträge werden auf dem Simulator
 kompiliert. Hardwarepfade bleiben für das Firmware-Build erhalten.
 
-Letzte vollständig bestätigte Pipeline vor dem BLE Scanner:
-[CI #39952022091](https://github.com/0b-ivan/inx-4x-pro/actions/runs/39952022091)
-(10 Activities). Die BLE-Scanner-Erweiterung benötigt die CI-Bestätigung
-für Firmware und den vertieften GATT-Rundgang.
+Letzte erfolgreich bestätigte Pipeline:
+[CI #39965661782](https://github.com/0b-ivan/inx-4x-pro/actions/runs/39965661782)
+(12 Activities). Die neue Tracker-Erweiterung benötigt eine eigene CI-Bestätigung.
 
 ## Deterministische Fixtures – kein Zugriff auf Funkhardware
 
@@ -53,7 +52,7 @@ ausgeblendet wird.
 `CROSSPOINT_SIM_INPUT_SCRIPT` vor und sichert BMPs über
 `CROSSPOINT_SIM_SCREENSHOTS`. Geprüft werden:
 
-- Autostart und nichtleere Screenshots aller elf Apps
+- Autostart und nichtleere Screenshots aller dreizehn Apps
 - OTP-Wechsel, HTTP-Menüänderung und mDNS-Discovery-Darstellung
 - Host-Scanner-Darstellung bei verbundenem/getrenntem WLAN
 - BLE Proximity mit virtuellen Geräten gegenüber leerem Scan
@@ -87,3 +86,16 @@ mit `CROSSPLAY_SIM_BLE_SCENARIO=disconnect` geprüft. Alle Szenarien sind
 lokale Fixtures ohne BLE-Hostzugriff.
 
 Die Abdeckung dieser neuen Tests ist erst nach erfolgreichem CI-Lauf bestätigt.
+
+## Passiver Tracker Detector – virtuelle BLE-Werbepakete
+
+\`TRACKER DETECT\` verarbeitet ausschließlich synthetische Pakete mit
+Testkennungen für Apple, Samsung und Tile; ein unbekanntes Paket wird
+ignoriert. Szenarien: \`CROSSPLAY_SIM_TRACKER_SCENARIO=normal|empty|timeout|follower\`.
+Das \`follower\`-Szenario simuliert eine längere Beobachtung und kann so
+den realen Schwellenwert ohne 30 Minuten Wartezeit auslösen. Dabei entstehen
+**weder BLE-Scans noch Funkübertragungen oder Verbindungen** auf dem Host.
+
+Neue SDL-Regressionen prüfen normalen Scan, leeren Scan, synthetischen
+Verfolger-Alarm, UI-Übergänge und Ressourcenfreigabe. Die neue Pipeline muss
+diese noch bestätigen. Physische Radio-Interoperabilität ist nicht abgedeckt.

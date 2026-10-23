@@ -9,7 +9,7 @@ out=".pio/biscuit-ui-smoke"
 test -x "$bin" || { echo "FAIL biscuit-ui-smoke: missing simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL biscuit-ui-smoke: xvfb-run missing"; exit 1; }
 mkdir -p "$out"
-apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT")
+apps=("CLOCK" "DEVICE INFO" "OTP GENERATOR" "WIFI CONNECT" "DNS LOOKUP" "PING" "HOST SCANNER" "HTTP CLIENT" "MDNS BROWSER" "BLE PROXIMITY" "BLE SCANNER" "BLE CONTACT" "TRACKER DETECT")
 for app in "${apps[@]}"; do
   name="${app// /_}"
   log="$out/$name.log"
@@ -17,6 +17,8 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "TRACKER DETECT" ]; then
+    script="1900:ENTER:100;5300:BACK:100;6600:QUIT"
   elif [ "$app" = "BLE CONTACT" ]; then
     script="1900:DOWN:100;2400:ENTER:100;4400:BACK:100;5400:BACK:100;6800:QUIT"
   elif [ "$app" = "BLE SCANNER" ]; then
@@ -31,7 +33,9 @@ for app in "${apps[@]}"; do
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "BLE CONTACT" ]; then
+  if [ "$app" = "TRACKER DETECT" ]; then
+    shots="1600:$out/${name}_before.bmp;4200:$out/${name}_monitoring.bmp;6100:$frame"
+  elif [ "$app" = "BLE CONTACT" ]; then
     shots="1600:$out/${name}_before.bmp;3200:$out/${name}_exchange.bmp;4000:$out/${name}_found.bmp;5000:$out/${name}_received.bmp;6100:$frame"
   elif [ "$app" = "BLE SCANNER" ]; then
     shots="1600:$out/${name}_before.bmp;2500:$out/${name}_services.bmp;3400:$out/${name}_characteristics.bmp;4300:$out/${name}_value.bmp;5200:$out/${name}_back_characteristics.bmp;6100:$out/${name}_back_services.bmp;7000:$frame"
@@ -297,4 +301,64 @@ assert data[:2]==b"BM" and len(data)>1000
 assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
 print("PASS BLE Scanner: synthetic connect failure")
 PYFAIL
-echo "PASS biscuit-ui-smoke: 12 activities, 30 screenshots, BLE cancel/disconnect and GATT"
+python3 - <<'PYTRACKER'
+from pathlib import Path
+import hashlib, struct
+root=Path(".pio/biscuit-ui-smoke")
+frames=[root/"TRACKER_DETECT_before.bmp",root/"TRACKER_DETECT_monitoring.bmp",root/"TRACKER_DETECT.bmp"]
+digests=[]
+for p in frames:
+    data=p.read_bytes()
+    assert data[:2]==b"BM" and len(data)>1000, f"invalid tracker screenshot: {p}"
+    assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+    digests.append(hashlib.sha256(data).digest())
+assert digests[0]!=digests[1] and digests[1]!=digests[2], "tracker must enter and exit monitoring"
+log=(root/"TRACKER_DETECT.log").read_text(errors="replace")
+for state in ("TRACKER:monitoring:0:0", "TRACKER:scan:3:", "TRACKER:radio-off:3:"):
+    assert state in log, f"tracker normal path missing {state}: {log[-900:]}"
+assert "TRACKER:alert:" not in log, "normal tracker scenario raised spurious alert"
+print("PASS Tracker Detector: synthetic classification, monitoring and cleanup")
+PYTRACKER
+follower_log="$out/TRACKER_DETECT_follower.log"
+if ! env CROSSPLAY_AUTOSTART="TRACKER DETECT" \
+  CROSSPLAY_SIM_BLE_TRACE=1 \
+  CROSSPLAY_SIM_TRACKER_SCENARIO=follower \
+  CROSSPOINT_SIM_INPUT_SCRIPT="1900:ENTER:100;5600:BACK:100;6900:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="1600:$out/TRACKER_DETECT_follower_before.bmp;5200:$out/TRACKER_DETECT_follower_alert.bmp;6400:$out/TRACKER_DETECT_follower_idle.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$follower_log" 2>&1; then
+  echo "FAIL biscuit-ui-smoke: Tracker Detector follower scenario"
+  tail -100 "$follower_log"; exit 1
+fi
+python3 - "$follower_log" "$out/TRACKER_DETECT_follower_alert.bmp" <<'PYFOLLOW'
+from pathlib import Path
+import struct,sys
+log=Path(sys.argv[1]).read_text(errors="replace")
+last=-1
+for token in ("TRACKER:scan:1:3","TRACKER:alert:1:3","TRACKER:radio-off:1:3"):
+    last=log.find(token,last+1)
+    assert last>=0, f"missing follower state {token}: {log[-900:]}"
+data=Path(sys.argv[2]).read_bytes()
+assert data[:2]==b"BM" and len(data)>1000
+assert tuple(map(abs,struct.unpack_from("<ii",data,18)))==(480,800)
+print("PASS Tracker Detector: synthetic follower alert, clean stop")
+PYFOLLOW
+empty_log="$out/TRACKER_DETECT_empty.log"
+if ! env CROSSPLAY_AUTOSTART="TRACKER DETECT" \
+  CROSSPLAY_SIM_BLE_TRACE=1 \
+  CROSSPLAY_SIM_TRACKER_SCENARIO=empty \
+  CROSSPOINT_SIM_INPUT_SCRIPT="1900:ENTER:100;4400:BACK:100;6000:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="5300:$out/TRACKER_DETECT_empty.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$empty_log" 2>&1; then
+  echo "FAIL biscuit-ui-smoke: Tracker Detector empty scan"
+  tail -100 "$empty_log"; exit 1
+fi
+grep -Fq "TRACKER:radio-off:0:" "$empty_log" || {
+  echo "FAIL Tracker Detector empty scan leaked radio"
+  tail -100 "$empty_log"; exit 1
+}
+if grep -Fq "TRACKER:alert:" "$empty_log"; then
+  echo "FAIL Tracker Detector empty scan raised a false alarm"; exit 1
+fi
+echo "PASS biscuit-ui-smoke: 13 activities, passive tracker normal/follower/empty and BLE cleanup"

@@ -23,6 +23,7 @@ for name, cls, path in (
     ("BLE PROXIMITY", "BleProximityActivity", "ble-proximity/BleProximityActivity.cpp"),
     ("BLE SCANNER", "BleScannerActivity", "ble-scanner/BleScannerActivity.cpp"),
     ("BLE CONTACT", "BleContactExchangeActivity", "ble-contact/BleContactExchangeActivity.cpp"),
+    ("TRACKER DETECT", "TrackerDetectorActivity", "tracker-detector/TrackerDetectorActivity.cpp"),
 ):
     assert f"-<apps_local/{path}>" not in ini, f"{cls} excluded from native build"
     assert f"HWSTUB_ACTIVITY({cls})" not in noops, f"{cls} still a no-op"
@@ -56,6 +57,10 @@ assert "biscuit_sim::bleGattCharacteristics" in scanner and "biscuit_sim::bleCon
 contact = (root / "src/apps_local/ble-contact/BleContactExchangeActivity.cpp").read_text()
 assert "biscuit_sim::bleContactPackets()" in contact, "BLE Contact must use isolated frames"
 assert "simContactTrace" in contact, "BLE Contact needs state evidence"
+tracker = (root / "src/apps_local/tracker-detector/TrackerDetectorActivity.cpp").read_text()
+assert "biscuit_sim::bleTrackerFrames()" in tracker, "tracker must consume isolated advertisements"
+assert "trackerSimTrace" in tracker and "identifyTracker(" in tracker, "tracker must execute real classification"
+assert "#ifndef SIMULATOR" in tracker, "real BLE hardware must be disabled natively"
 smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
 assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
 assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"
