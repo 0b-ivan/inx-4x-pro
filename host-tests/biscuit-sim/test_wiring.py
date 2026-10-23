@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Guard against a green simulator that silently swaps the new apps back to no-ops."""
 from pathlib import Path
+import re
 import sys
 
 root = Path(sys.argv[1])
@@ -26,6 +27,15 @@ for name, cls, path in (
     assert f'{{"{name}"' in shelf, f"{name} missing from the app list"
     assert f'#include "{path.replace(".cpp", ".h")}"' in shelf, f"{cls} header unavailable in simulator"
     assert (root / "src/apps_local" / path).exists(), f"real {cls} missing"
+    blocked_sections = re.findall(
+        r"(?ms)^#if !defined\\(SIMULATOR\\).*?^#endif  // !SIMULATOR", shelf
+    )
+    assert len(blocked_sections) >= 2, "missing hardware-only include/shelf guards"
+    assert not any(
+        f'#include "{path.replace(".cpp", ".h")}"' in section
+        or f'{{"{name}"' in section
+        for section in blocked_sections
+    ), f"{cls} remains hidden behind !SIMULATOR guard"
     checks += 5
 assert "biscuit_sim::readClockUtc" in clock, "clock does not use simulated time"
 assert "simulated X4 Pro" in info, "device info reports false ESP metrics"

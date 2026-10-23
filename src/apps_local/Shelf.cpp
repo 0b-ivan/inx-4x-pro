@@ -50,6 +50,9 @@
 #include "ping/PingActivity.h"
 #include "dns-lookup/DnsLookupActivity.h"
 #include "wifi-connect/WifiConnectActivity.h"
+#include "host-scanner/HostScannerActivity.h"
+#include "http-client/HttpClientActivity.h"
+#include "mdns-browser/MdnsBrowserActivity.h"
 #if !defined(SIMULATOR)  // Requires raw 802.11 promiscuous mode, BLE stack, or ESP-NOW
 #include "probe-sniffer/ProbeSnifferActivity.h"
 #include "crowd-density/CrowdDensityActivity.h"
@@ -68,9 +71,6 @@
 #include "ble-scanner/BleScannerActivity.h"
 #include "ble-proximity/BleProximityActivity.h"
 #include "ble-contact/BleContactExchangeActivity.h"
-#include "host-scanner/HostScannerActivity.h"
-#include "http-client/HttpClientActivity.h"
-#include "mdns-browser/MdnsBrowserActivity.h"
 #endif  // !SIMULATOR
 #include "calculator/CalculatorActivity.h"
 #include "cipher/CipherActivity.h"

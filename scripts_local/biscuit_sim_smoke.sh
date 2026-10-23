@@ -17,14 +17,17 @@ for app in "${apps[@]}"; do
   script="6000:QUIT"
   if [ "$app" = "OTP GENERATOR" ]; then
     script="1900:RIGHT;6000:QUIT"
+  elif [ "$app" = "HTTP CLIENT" ] || [ "$app" = "MDNS BROWSER" ]; then
+    # Confirm toggles the HTTP method or starts mDNS discovery.
+    script="1900:ENTER:650;6000:QUIT"
   elif [ "$app" = "CLOCK" ]; then
     script="1900:ENTER:650;6000:QUIT"
   elif [ "$app" = "DEVICE INFO" ] || [ "$app" = "WIFI CONNECT" ]; then
     script="1900:DOWN;6000:QUIT"
   fi
   shots="4300:$frame"
-  if [ "$app" = "OTP GENERATOR" ]; then
-    shots="1600:$out/OTP_GENERATOR_before.bmp;4300:$frame"
+  if [ "$app" = "OTP GENERATOR" ] || [ "$app" = "HTTP CLIENT" ] || [ "$app" = "MDNS BROWSER" ]; then
+    shots="1600:$out/${name}_before.bmp;4300:$frame"
   fi
   echo "[biscuit-ui-smoke] $app"
   if ! env CROSSPLAY_AUTOSTART="$app" \
@@ -106,4 +109,17 @@ digest = lambda p: hashlib.sha256(p.read_bytes()).digest()
 assert digest(before) != digest(after), "OTP RIGHT action did not change the rendered screen"
 print("PASS OTP page interaction: screen changed after RIGHT")
 PY
-echo "PASS biscuit-ui-smoke: 9 activities, 11 screenshots, OTP interaction and Host Scanner offline state"
+python3 - <<'PYUI'
+from pathlib import Path
+import hashlib
+
+root = Path(".pio/biscuit-ui-smoke")
+for app in ("HTTP_CLIENT", "MDNS_BROWSER"):
+    before, after = root / f"{app}_before.bmp", root / f"{app}.bmp"
+    assert before.is_file() and after.is_file(), f"{app}: screenshots missing"
+    assert hashlib.sha256(before.read_bytes()).digest() != hashlib.sha256(after.read_bytes()).digest(), (
+        f"{app}: Confirm action did not change the rendered screen"
+    )
+    print(f"PASS {app}: Confirm changes rendered screen")
+PYUI
+echo "PASS biscuit-ui-smoke: 9 activities, 13 screenshots, 3 interactions and Host Scanner offline state"
