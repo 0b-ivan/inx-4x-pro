@@ -43,3 +43,17 @@ Hardwareeffekte und Funkinteroperabilität bleiben Device-Abnahmetests.
   ESP32 **TCP-Port 80, nicht ICMP**; im Simulator werden allein
   `example.test`, `gateway.test` und `localhost` als erreichbar gemeldet.
   Alle anderen Ziele liefern Timeout, ohne ein Netzwerkpaket zu versenden.
+
+## Headless-End-to-End-Smoke-Test
+
+`scripts_local/biscuit_sim_smoke.sh` startet nach dem Simulator-Build
+alle sechs derzeit simulierten Aktivitäten mit `CROSSPLAY_AUTOSTART`.
+Der gepinnte CrossPoint-Simulator liefert automatische Tasten-Ereignisse
+(`CROSSPOINT_SIM_INPUT_SCRIPT`) und BMP-Screenshots
+(`CROSSPOINT_SIM_SCREENSHOTS`).
+Die CI prüft Prozessende, Autostart-Log, BMP-Format und nichtleere Pixel.
+Für OTP Generator wird zusätzlich ein Screenshot vor und nach `RIGHT`
+verglichen. Screenshots werden als CI-Artefakt abgelegt.
+
+Dieser Smoke-Test kontrolliert echte UI-Ausführung und einfache
+Interaktionen, aber **nicht** komplette Feature-, BLE- oder RF-Interoperabilität.

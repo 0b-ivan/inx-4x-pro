@@ -30,5 +30,11 @@ assert "snprintf(ipBuf" in info, "native String must not require toCharArray"
 dns = (root / "src/apps_local/dns-lookup/DnsLookupActivity.cpp").read_text()
 assert "biscuit_sim::resolveHost" in dns, "DNS must use isolated host resolver"
 assert "biscuit_sim::tcpProbe" in (root / "src/apps_local/ping/PingActivity.cpp").read_text(), "Ping must remain isolated"
-checks += 5
+smoke_script = (root / "scripts_local/biscuit_sim_smoke.sh").read_text()
+assert 'CROSSPLAY_AUTOSTART' in smoke_script, "CI smoke must open real apps"
+assert 'CROSSPOINT_SIM_SCREENSHOTS' in smoke_script, "CI smoke must capture pixels"
+assert 'CROSSPOINT_SIM_INPUT_SCRIPT' in smoke_script, "CI smoke must inject input"
+workflow = (root / ".github/workflows/crossplay-ci.yml").read_text()
+assert 'bash scripts_local/biscuit_sim_smoke.sh' in workflow, "smoke test not gated by CI"
+checks += 9
 print(f"biscuit-sim wiring: {checks} checks, 0 failed")

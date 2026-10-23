@@ -120,10 +120,21 @@ jobs:
             pio-build-${{ runner.os }}-simulator_x4_pro-
 
       - name: Install simulator host libraries
-        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libssl-dev libwolfssl-dev libmbedtls-dev
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libssl-dev libwolfssl-dev libmbedtls-dev xvfb xauth
 
       - name: Build simulator
         run: python3 -m platformio run -e simulator_x4_pro
+
+      - name: Biscuit app UI smoke (headless X4 Pro)
+        run: bash scripts_local/biscuit_sim_smoke.sh
+
+      - name: Upload Biscuit UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: biscuit-simulator-smoke
+          path: .pio/biscuit-ui-smoke/
+          if-no-files-found: ignore
 
   host-tests:
     name: host tests
