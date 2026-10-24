@@ -1,8 +1,10 @@
 #include "DeadDropActivity.h"
+#include "../util/LocalWebText.h"
 #include "DevMode.h"
 #include "../Shelf.h"
 
 #include <GfxRenderer.h>
+#include <algorithm>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <WiFi.h>
@@ -24,10 +26,13 @@ static const char DROP_HTML[] PROGMEM =
     "<form method=\"POST\" action=\"/upload\" enctype=\"multipart/form-data\">"
     "<input type=\"file\" name=\"file\"><button type=\"submit\">Upload</button></form>"
     "<h2>Files</h2><div class=\"files\" id=\"fl\">Loading...</div>"
-    "<script>fetch('/list').then(r=>r.json()).then(f=>{"
-    "let h='';f.forEach(n=>{h+='<a href=\"/download?file='+encodeURIComponent(n)+'\">'+"
-    "n+'</a>'});"
-    "document.getElementById('fl').innerHTML=h||'No files yet'})</script>"
+    "<script>fetch('/list').then(r=>{if(!r.ok)throw Error('list');return r.json()})"
+    ".then(f=>{const root=document.getElementById('fl');root.replaceChildren();"
+    "f.forEach(n=>{const a=document.createElement('a');"
+    "a.href='/download?file='+encodeURIComponent(n);a.textContent=n;root.appendChild(a)});"
+    "if(!f.length)root.textContent='No files yet';})"
+    ".catch(()=>{document.getElementById('fl').textContent='Could not load files';})"
+    "</script>"
     "</body></html>";
 
 // Static instance pointer for web handler lambdas
@@ -49,16 +54,22 @@ void DeadDropActivity::onEnter() {
   timerMinutes = TIMER_OPTIONS[timerIndex];
   filesReceived = 0;
   connectedClients = 0;
+  uploadInProgress = false;
+  uploadComplete = false;
+  uploadHttpError = 0;
+  uploadPath.clear();
+  uploadTempPath.clear();
   ssidName.clear();
   requestUpdate();
 }
 
 void DeadDropActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
+  // Release AP + HTTP server before Developer Mode retakes the WiFi radio.
   if (state == ACTIVE) {
     stopDrop();
   }
+  devmode::resume();
+  Activity::onExit();
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +77,7 @@ void DeadDropActivity::onExit() {
 // ---------------------------------------------------------------------------
 
 void DeadDropActivity::startDrop() {
+  Storage.mkdir("/crossplay");
   Storage.mkdir(DROP_DIR);
 
   // Generate random SSID suffix
@@ -75,7 +87,12 @@ void DeadDropActivity::startDrop() {
 
   RADIO.ensureWifi();
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssidName.c_str());
+  if (!WiFi.softAP(ssidName.c_str())) {
+    LOG_ERR("DEAD", "Failed to start local AP: %s", ssidName.c_str());
+    RADIO.shutdown();
+    requestUpdate();
+    return;
+  }
 
   setupWebServer();
 
@@ -92,11 +109,14 @@ void DeadDropActivity::stopDrop() {
     delete server;
     server = nullptr;
   }
-  // Close any file left open from an interrupted upload
+  // Interrupted uploads must never appear as downloadable files.
   if (uploadInProgress) {
     uploadFile.close();
     uploadInProgress = false;
   }
+  if (!uploadTempPath.empty()) Storage.remove(uploadTempPath.c_str());
+  uploadTempPath.clear();
+  uploadPath.clear();
   WiFi.softAPdisconnect(true);
   RADIO.shutdown();
   activeInstance = nullptr;
@@ -133,89 +153,138 @@ void DeadDropActivity::handleRoot() {
 
 void DeadDropActivity::handleUploadData() {
   if (!server) return;
-
   HTTPUpload& upload = server->upload();
 
   if (upload.status == UPLOAD_FILE_START) {
-    // Sanitize filename: strip any path separators
-    String fname = upload.filename;
-    int lastSlash = fname.lastIndexOf('/');
-    if (lastSlash >= 0) fname = fname.substring(lastSlash + 1);
-    if (fname.isEmpty()) fname = "unnamed";
-
-    String filePath = DROP_DIR + fname;
-
-    // Remove existing file if present
-    if (Storage.exists(filePath.c_str())) {
-      Storage.remove(filePath.c_str());
+    if (uploadInProgress) uploadFile.close();
+    if (!uploadTempPath.empty()) Storage.remove(uploadTempPath.c_str());
+    uploadInProgress = false;
+    uploadComplete = false;
+    uploadHttpError = 0;
+    uploadPath.clear();
+    uploadTempPath.clear();
+    const std::string fname = upload.filename.c_str();
+    if (!local_web::validFileName(fname) ||
+        fname.compare(0, 11, ".x4-upload-") == 0) {
+      uploadHttpError = 400;
+      return;
     }
-
-    uploadFile = Storage.open(filePath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
-    uploadInProgress = uploadFile ? true : false;
-
-    LOG_DBG("DEAD", "Upload start: %s (open=%d)", filePath.c_str(), (int)uploadInProgress);
-
+    uploadPath = std::string(DROP_DIR) + fname;
+    // Reject duplicates: never destroy a previously saved file on a failure.
+    if (Storage.exists(uploadPath.c_str())) {
+      uploadHttpError = 409;
+      return;
+    }
+    char tempName[48];
+    bool freeName = false;
+    for (int attempt = 0; attempt < 8; ++attempt) {
+      snprintf(tempName, sizeof(tempName), ".x4-upload-%08lX.part",
+               static_cast<unsigned long>(esp_random()));
+      uploadTempPath = std::string(DROP_DIR) + tempName;
+      if (!Storage.exists(uploadTempPath.c_str())) {
+        freeName = true;
+        break;
+      }
+    }
+    if (!freeName) {
+      uploadTempPath.clear();
+      uploadHttpError = 507;
+      return;
+    }
+    uploadFile = Storage.open(uploadTempPath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
+    uploadInProgress = static_cast<bool>(uploadFile);
+    if (!uploadInProgress) {
+      uploadHttpError = 507;
+      Storage.remove(uploadTempPath.c_str());
+      uploadTempPath.clear();
+    }
   } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (uploadInProgress && uploadFile) {
-      uploadFile.write(upload.buf, upload.currentSize);
-    }
-
-  } else if (upload.status == UPLOAD_FILE_END) {
-    if (uploadInProgress && uploadFile) {
-      uploadFile.close();
+    if (uploadHttpError) return;
+    if (!uploadInProgress || !uploadFile ||
+        uploadFile.write(upload.buf, upload.currentSize) != upload.currentSize) {
+      uploadHttpError = 507;
+      if (uploadInProgress) uploadFile.close();
       uploadInProgress = false;
-      filesReceived++;
-      LOG_DBG("DEAD", "Upload complete, total=%d", filesReceived);
+      if (!uploadTempPath.empty()) Storage.remove(uploadTempPath.c_str());
+      uploadTempPath.clear();
     }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (uploadHttpError) return;
+    if (!uploadInProgress || !uploadFile) {
+      uploadHttpError = 507;
+      return;
+    }
+    const bool closed = uploadFile.close();
+    uploadInProgress = false;
+    const bool conflict = Storage.exists(uploadPath.c_str());
+    if (!closed || conflict || uploadTempPath.empty() ||
+        !Storage.rename(uploadTempPath.c_str(), uploadPath.c_str())) {
+      uploadHttpError = conflict ? 409 : 507;
+      if (!uploadTempPath.empty()) Storage.remove(uploadTempPath.c_str());
+      uploadTempPath.clear();
+      return;
+    }
+    uploadTempPath.clear();
+    uploadComplete = true;
+    ++filesReceived;
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    if (uploadInProgress) uploadFile.close();
+    uploadInProgress = false;
+    if (!uploadTempPath.empty()) Storage.remove(uploadTempPath.c_str());
+    uploadTempPath.clear();
+    uploadHttpError = 400;
   }
 }
 
 void DeadDropActivity::handleUpload() {
   if (!server) return;
+  if (uploadHttpError || !uploadComplete) {
+    server->send(uploadHttpError ? uploadHttpError : 400,
+                 "text/plain", "Upload failed");
+    return;
+  }
   server->send(200, "text/plain", "OK");
 }
 
 void DeadDropActivity::handleFileList() {
   if (!server) return;
-
-  // Build a JSON array of filenames in DROP_DIR
-  // Use a fixed-size buffer to avoid heap fragmentation — 2KB is ample for ~20 filenames
-  char buf[2048];
-  int pos = 0;
-  buf[pos++] = '[';
-
+  constexpr size_t MAX_JSON_BYTES = 4096;
+  std::string json = "[";
+  bool tooLarge = false;
   HalFile dir = Storage.open(DROP_DIR, O_RDONLY);
-  if (dir) {
-    bool first = true;
-    HalFile entry;
-    while ((entry = dir.openNextFile())) {
-      if (!entry.isDirectory()) {
-        char name[256];
-        entry.getName(name, sizeof(name));
-        if (!first) {
-          if (pos < static_cast<int>(sizeof(buf)) - 4) buf[pos++] = ',';
-        }
-        first = false;
-        // Append quoted name, escaping backslash and double-quote
-        if (pos < static_cast<int>(sizeof(buf)) - 4) buf[pos++] = '"';
-        for (int i = 0; name[i] && pos < static_cast<int>(sizeof(buf)) - 4; i++) {
-          char c = name[i];
-          if (c == '"' || c == '\\') {
-            buf[pos++] = '\\';
-          }
-          buf[pos++] = c;
-        }
-        if (pos < static_cast<int>(sizeof(buf)) - 4) buf[pos++] = '"';
-      }
-      entry.close();
-    }
-    dir.close();
+  if (!dir) {
+    server->send(503, "text/plain", "File storage unavailable");
+    return;
   }
-
-  if (pos < static_cast<int>(sizeof(buf)) - 2) buf[pos++] = ']';
-  buf[pos] = '\0';
-
-  server->send(200, "application/json", buf);
+  bool first = true;
+  HalFile entry;
+  while ((entry = dir.openNextFile())) {
+    if (!entry.isDirectory()) {
+      char name[256] = {};
+      entry.getName(name, sizeof(name));
+      if (local_web::validFileName(name) &&
+          std::string(name).compare(0, 11, ".x4-upload-") != 0) {
+        std::string quoted;
+        local_web::appendJsonQuoted(quoted, name);
+        if (json.size() + quoted.size() + (first ? 0 : 1) + 1 > MAX_JSON_BYTES) {
+          tooLarge = true;
+          entry.close();
+          break;
+        }
+        if (!first) json.push_back(',');
+        json += quoted;
+        first = false;
+      }
+    }
+    entry.close();
+  }
+  dir.close();
+  if (tooLarge) {
+    server->send(507, "text/plain", "File listing exceeds size limit");
+    return;
+  }
+  json.push_back(']');
+  server->send(200, "application/json; charset=utf-8", json.c_str());
 }
 
 void DeadDropActivity::handleDownload() {
@@ -226,12 +295,13 @@ void DeadDropActivity::handleDownload() {
     return;
   }
 
-  String fname = server->arg("file");
-  // Strip path separators for safety
-  int lastSlash = fname.lastIndexOf('/');
-  if (lastSlash >= 0) fname = fname.substring(lastSlash + 1);
-
-  String filePath = DROP_DIR + fname;
+  const std::string fname = server->arg("file").c_str();
+  if (!local_web::validFileName(fname) ||
+      fname.compare(0, 11, ".x4-upload-") == 0) {
+    server->send(400, "text/plain", "Invalid file name");
+    return;
+  }
+  const String filePath = String(DROP_DIR) + fname.c_str();
 
   if (!Storage.exists(filePath.c_str())) {
     server->send(404, "text/plain", "Not found");
@@ -244,7 +314,8 @@ void DeadDropActivity::handleDownload() {
     return;
   }
 
-  String contentDisp = "attachment; filename=\"" + fname + "\"";
+  const std::string encoded = local_web::encodeHeaderFileName(fname);
+  const String contentDisp = String("attachment; filename=\"download.bin\"; filename*=UTF-8''") + encoded.c_str();
   server->sendHeader("Content-Disposition", contentDisp);
 
   // HalFile doesn't support streamFile() — stream manually
@@ -288,12 +359,35 @@ void DeadDropActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
-        if (btn == 2) {
-          if (configIndex == 0) { timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT); timerMinutes = TIMER_OPTIONS[timerIndex]; requestUpdate(); }
-          else { startDrop(); requestUpdate(); }
+        int tappedRow = -1;
+        const auto& m = UITheme::getInstance().getMetrics();
+        const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+        // The always-visible Biscuit footer occupies 40 pixels on touch screens.
+        const int pageHeight = renderer.getScreenHeight();
+        const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - m.verticalSpacing;
+        const int rowStep = GUI.getListRowStep(false);
+        const int rowCount = std::min(2, std::max(1, contentHeight / rowStep));
+        const auto touch = mappedInput.rowTouch(tappedRow, contentTop, rowStep, rowCount, 0,
+                                                renderer.getScreenWidth(), m.listRowHeight);
+        if (touch != MappedInputManager::RowTouch::None && tappedRow >= 0 && tappedRow < 2) {
+          configIndex = tappedRow;
+          if (touch == MappedInputManager::RowTouch::Tap || btn == 2) {
+            if (configIndex == 0) {
+              timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT);
+              timerMinutes = TIMER_OPTIONS[timerIndex];
+            } else { startDrop(); }
+          }
+          requestUpdate();
           return;
+        }
+        if (btn == 2) {
+          if (configIndex == 0) {
+            timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT);
+            timerMinutes = TIMER_OPTIONS[timerIndex];
+          } else { startDrop(); }
+          requestUpdate();
         }
       }
     }
@@ -315,7 +409,7 @@ void DeadDropActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopDrop(); state = DONE; requestUpdate(); return; }
+        if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { stopDrop(); state = DONE; requestUpdate(); return; }
       }
     }
 
@@ -372,7 +466,7 @@ void DeadDropActivity::renderConfig() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - metrics.verticalSpacing;
 
   // Build timer label inline
   char timerLabel[32];

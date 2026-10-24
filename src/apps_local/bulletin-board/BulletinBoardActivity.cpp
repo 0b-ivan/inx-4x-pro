@@ -1,8 +1,10 @@
 #include "BulletinBoardActivity.h"
+#include "../util/LocalWebText.h"
 #include "DevMode.h"
 #include "../Shelf.h"
 
 #include <GfxRenderer.h>
+#include <algorithm>
 #include <Logging.h>
 #include <WiFi.h>
 #include <esp_random.h>
@@ -31,11 +33,15 @@ static const char BOARD_HTML[] PROGMEM =
     "<button type=\"submit\">Post</button></form>"
     "<div id=\"board\">Loading...</div>"
     "<script>"
-    "function load(){fetch('/posts').then(r=>r.json()).then(posts=>{"
-    "let h='';posts.forEach(p=>{"
-    "let d=new Date(p.t*1000);let ts=d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');"
-    "h+='<div class=\"post\">'+p.m+'<div class=\"time\">'+ts+'</div></div>'});"
-    "document.getElementById('board').innerHTML=h||'<p>No messages yet. Be the first!</p>'})}"
+    "function load(){fetch('/posts').then(r=>{if(!r.ok)throw Error('posts');return r.json()})"
+    ".then(posts=>{const board=document.getElementById('board');board.replaceChildren();"
+    "posts.forEach(p=>{const card=document.createElement('div');card.className='post';"
+    "const message=document.createElement('span');message.textContent=p.m;card.appendChild(message);"
+    "const time=document.createElement('div');time.className='time';"
+    "const d=new Date(p.t*1000);time.textContent=d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');"
+    "card.appendChild(time);board.appendChild(card)});"
+    "if(!posts.length)board.textContent='No messages yet. Be the first!';})"
+    ".catch(()=>{document.getElementById('board').textContent='Could not load messages';})}"
     "load();setInterval(load,3000);"
     "</script></body></html>";
 
@@ -63,11 +69,12 @@ void BulletinBoardActivity::onEnter() {
 }
 
 void BulletinBoardActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
+  // Release AP + HTTP server before Developer Mode retakes the WiFi radio.
   if (state == ACTIVE) {
     stopBoard();
   }
+  devmode::resume();
+  Activity::onExit();
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +91,12 @@ void BulletinBoardActivity::startBoard() {
 
   RADIO.ensureWifi();
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssidName.c_str());
+  if (!WiFi.softAP(ssidName.c_str())) {
+    LOG_ERR("BOARD", "Failed to start local AP: %s", ssidName.c_str());
+    RADIO.shutdown();
+    requestUpdate();
+    return;
+  }
 
   setupWebServer();
 
@@ -145,16 +157,9 @@ void BulletinBoardActivity::setupWebServer() {
     std::string json = "[";
     for (size_t i = 0; i < posts.size(); i++) {
       if (i > 0) json += ",";
-      json += "{\"m\":\"";
-      for (const char* p = posts[i].text; *p; p++) {
-        if (*p == '"')       json += "\\\"";
-        else if (*p == '\\') json += "\\\\";
-        else if (*p == '\n') json += "\\n";
-        else if (*p == '<')  json += "&lt;";
-        else if (*p == '>')  json += "&gt;";
-        else                 json += *p;
-      }
-      json += "\",\"t\":";
+      json += "{\"m\":";
+      local_web::appendJsonQuoted(json, posts[i].text);
+      json += ",\"t\":";
       char tsBuf[16];
       snprintf(tsBuf, sizeof(tsBuf), "%lu", posts[i].timestamp);
       json += tsBuf;
@@ -193,12 +198,35 @@ void BulletinBoardActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
-        if (btn == 2) {
-          if (configIndex == 0) { timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT); timerMinutes = TIMER_OPTIONS[timerIndex]; requestUpdate(); }
-          else { startBoard(); requestUpdate(); }
+        int tappedRow = -1;
+        const auto& m = UITheme::getInstance().getMetrics();
+        const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+        // The always-visible Biscuit footer occupies 40 pixels on touch screens.
+        const int pageHeight = renderer.getScreenHeight();
+        const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - m.verticalSpacing;
+        const int rowStep = GUI.getListRowStep(false);
+        const int rowCount = std::min(2, std::max(1, contentHeight / rowStep));
+        const auto touch = mappedInput.rowTouch(tappedRow, contentTop, rowStep, rowCount, 0,
+                                                renderer.getScreenWidth(), m.listRowHeight);
+        if (touch != MappedInputManager::RowTouch::None && tappedRow >= 0 && tappedRow < 2) {
+          configIndex = tappedRow;
+          if (touch == MappedInputManager::RowTouch::Tap || btn == 2) {
+            if (configIndex == 0) {
+              timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT);
+              timerMinutes = TIMER_OPTIONS[timerIndex];
+            } else { startBoard(); }
+          }
+          requestUpdate();
           return;
+        }
+        if (btn == 2) {
+          if (configIndex == 0) {
+            timerIndex = ButtonNavigator::nextIndex(timerIndex, TIMER_COUNT);
+            timerMinutes = TIMER_OPTIONS[timerIndex];
+          } else { startBoard(); }
+          requestUpdate();
         }
       }
     }
@@ -219,7 +247,7 @@ void BulletinBoardActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopBoard(); state = DONE; requestUpdate(); return; }
+        if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { stopBoard(); state = DONE; requestUpdate(); return; }
       }
     }
 
@@ -276,7 +304,7 @@ void BulletinBoardActivity::renderConfig() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - metrics.verticalSpacing;
 
   char timerLabel[32];
   snprintf(timerLabel, sizeof(timerLabel), "Timer: %d min", timerMinutes);

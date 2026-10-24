@@ -4,9 +4,11 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <WiFi.h>
+#ifndef SIMULATOR
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <Esp.h>
+#endif
 
 #include "MappedInputManager.h"
 #include "../../components/UITheme.h"
@@ -72,14 +74,26 @@ void DeviceInfoActivity::render(RenderLock&&) {
   int n = 0;
 
   snprintf(lines[n++], 80, "Firmware:  %s", CROSSPOINT_VERSION);
+#ifdef SIMULATOR
+  // Explicitly virtual values: never pretend that host telemetry is ESP32 telemetry.
+  snprintf(lines[n++], 80, "Chip:      simulated X4 Pro");
+  snprintf(lines[n++], 80, "CPU:       virtual host");
+  snprintf(lines[n++], 80, "Flash:     virtual card");
+  snprintf(lines[n++], 80, "Free Heap: simulated");
+#else
   snprintf(lines[n++], 80, "Chip:      %s  Rev %u", ESP.getChipModel(), (unsigned)ESP.getChipRevision());
   snprintf(lines[n++], 80, "CPU:       %u MHz", (unsigned)ESP.getCpuFreqMHz());
   snprintf(lines[n++], 80, "Flash:     %lu MB", (unsigned long)(ESP.getFlashChipSize() / (1024UL * 1024UL)));
   snprintf(lines[n++], 80, "Free Heap: %lu KB", (unsigned long)(esp_get_free_heap_size() / 1024));
+#endif
 
   {
+#ifdef SIMULATOR
+    unsigned long uptimeSec = millis() / 1000UL;
+#else
     int64_t uptimeUs = esp_timer_get_time();
     unsigned long uptimeSec = static_cast<unsigned long>(uptimeUs / 1000000LL);
+#endif
     unsigned int h = uptimeSec / 3600;
     unsigned int m = (uptimeSec % 3600) / 60;
     unsigned int s = uptimeSec % 60;
@@ -89,7 +103,7 @@ void DeviceInfoActivity::render(RenderLock&&) {
   {
     if (WiFi.status() == WL_CONNECTED) {
       char ipBuf[20];
-      WiFi.localIP().toString().toCharArray(ipBuf, sizeof(ipBuf));
+      snprintf(ipBuf, sizeof(ipBuf), "%s", WiFi.localIP().toString().c_str());
       snprintf(lines[n++], 80, "WiFi:      %s  %s", WiFi.SSID().c_str(), ipBuf);
     } else {
       snprintf(lines[n++], 80, "WiFi:      Off");

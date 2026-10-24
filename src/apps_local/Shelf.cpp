@@ -46,44 +46,37 @@
 #include "dead-drop/DeadDropActivity.h"
 #include "bulletin-board/BulletinBoardActivity.h"
 #include "vehicle-finder/VehicleFinderActivity.h"
-#if !defined(SIMULATOR)  // Requires raw 802.11 promiscuous mode, BLE stack, or ESP-NOW
+// Real network app bodies share virtual WiFi and deterministic fixtures.
+#include "ping/PingActivity.h"
+#include "dns-lookup/DnsLookupActivity.h"
+#include "wifi-connect/WifiConnectActivity.h"
+#include "ble-proximity/BleProximityActivity.h"
+#include "ble-scanner/BleScannerActivity.h"
+#include "ble-contact/BleContactExchangeActivity.h"
+#include "tracker-detector/TrackerDetectorActivity.h"
 #include "probe-sniffer/ProbeSnifferActivity.h"
 #include "crowd-density/CrowdDensityActivity.h"
+#include "device-fingerprinter/DeviceFingerprinterActivity.h"
 #include "deauth-detector/DeauthDetectorActivity.h"
 #include "packet-monitor/PacketMonitorActivity.h"
 #include "network-monitor/NetworkMonitorActivity.h"
-#include "device-fingerprinter/DeviceFingerprinterActivity.h"
-#include "tracker-detector/TrackerDetectorActivity.h"
-#include "ble-spam/BleSpamActivity.h"
-#include "wifi-test/WifiTestActivity.h"
-#include "fire/FireActivity.h"
-#include "airtag-test/AirTagTestActivity.h"
 #include "ble-beacon/BleBeaconActivity.h"
+#include "airtag-test/AirTagTestActivity.h"
+#include "wifi-test/WifiTestActivity.h"
+#include "ble-spam/BleSpamActivity.h"
 #include "ble-keyboard/BleKeyboardActivity.h"
 #include "mesh-chat/MeshChatActivity.h"
-#include "ble-scanner/BleScannerActivity.h"
-#include "ble-proximity/BleProximityActivity.h"
-#include "ble-contact/BleContactExchangeActivity.h"
-#include "dns-lookup/DnsLookupActivity.h"
+#include "fire/FireActivity.h"
 #include "host-scanner/HostScannerActivity.h"
 #include "http-client/HttpClientActivity.h"
 #include "mdns-browser/MdnsBrowserActivity.h"
-#include "ping/PingActivity.h"
-#include "wifi-connect/WifiConnectActivity.h"
-#endif  // !SIMULATOR
 #include "calculator/CalculatorActivity.h"
 #include "cipher/CipherActivity.h"
-#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
 #include "clock/ClockActivity.h"
-#endif  // !SIMULATOR
 #include "countdown/CountdownActivity.h"
-#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
 #include "device-info/DeviceInfoActivity.h"
-#endif  // !SIMULATOR
 #include "morse-code/MorseCodeActivity.h"
-#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
 #include "otp-generator/OtpGeneratorActivity.h"
-#endif  // !SIMULATOR
 #include "password-manager/PasswordManagerActivity.h"
 #include "qr-generator/QrGeneratorActivity.h"
 #include "sd-file-browser/SdFileBrowserActivity.h"
@@ -173,44 +166,36 @@ constexpr shelf::Item kApps[] = {
     {"BARCODE GEN", &icon_study_32, &BarcodeActivity::create},
     {"KEY COPIER", &icon_study_32, &KeyCopierActivity::create},
     {"USB HID", &icon_study_32, &UsbHidActivity::create},
-#if !defined(SIMULATOR)  // Requires raw 802.11 promiscuous mode or BLE/ESP-NOW hardware
+    {"BLE PROXIMITY",  &icon_nearby_32, &BleProximityActivity::create},
+    {"BLE SCANNER",    &icon_nearby_32, &BleScannerActivity::create},
+    {"BLE CONTACT",    &icon_nearby_32, &BleContactExchangeActivity::create},
+    {"TRACKER DETECT", &icon_minesweeper_32, &TrackerDetectorActivity::create},
     {"PROBE SNIFFER", &icon_nearby_32, &ProbeSnifferActivity::create},
     {"CROWD DENSITY", &icon_nearby_32, &CrowdDensityActivity::create},
+    {"DEV FINGERPRINT", &icon_nearby_32, &DeviceFingerprinterActivity::create},
     {"DEAUTH DETECTOR", &icon_minesweeper_32, &DeauthDetectorActivity::create},
     {"PACKET MONITOR", &icon_study_32, &PacketMonitorActivity::create},
     {"NETWORK MONITOR", &icon_study_32, &NetworkMonitorActivity::create},
-    {"DEV FINGERPRINT", &icon_nearby_32, &DeviceFingerprinterActivity::create},
-    {"TRACKER DETECT", &icon_minesweeper_32, &TrackerDetectorActivity::create},
-    {"BLE SPAM", &icon_nearby_32, &BleSpamActivity::create},
-    {"WIFI DEAUTH", &icon_minesweeper_32, &WifiTestActivity::create},
-    {"FIRE", &icon_minesweeper_32, &FireActivity::create},
-    {"AIRTAG SPOOF", &icon_nearby_32, &AirTagTestActivity::create},
     {"BLE BEACON", &icon_nearby_32, &BleBeaconActivity::create},
+    {"AIRTAG SPOOF", &icon_nearby_32, &AirTagTestActivity::create},
+    {"WIFI DEAUTH", &icon_minesweeper_32, &WifiTestActivity::create},
+    {"BLE SPAM", &icon_nearby_32, &BleSpamActivity::create},
     {"BLE KEYBOARD", &icon_nearby_32, &BleKeyboardActivity::create},
     {"MESH CHAT", &icon_study_32, &MeshChatActivity::create},
-    {"BLE SCANNER",    &icon_nearby_32, &BleScannerActivity::create},
-    {"BLE PROXIMITY",  &icon_nearby_32, &BleProximityActivity::create},
-    {"BLE CONTACT",    &icon_nearby_32, &BleContactExchangeActivity::create},
-    {"DNS LOOKUP",     &icon_study_32,  &DnsLookupActivity::create},
+    {"FIRE", &icon_minesweeper_32, &FireActivity::create},
     {"HOST SCANNER",   &icon_study_32,  &HostScannerActivity::create},
     {"HTTP CLIENT",    &icon_study_32,  &HttpClientActivity::create},
     {"MDNS BROWSER",   &icon_study_32,  &MdnsBrowserActivity::create},
-    {"PING",           &icon_study_32,  &PingActivity::create},
-    {"WIFI CONNECT",   &icon_study_32,  &WifiConnectActivity::create},
-#endif  // !SIMULATOR
+    {"DNS LOOKUP", &icon_study_32, &DnsLookupActivity::create},
+    {"WIFI CONNECT", &icon_study_32, &WifiConnectActivity::create},
+    {"PING", &icon_study_32, &PingActivity::create},
     {"CALCULATOR",     &icon_study_32,  &CalculatorActivity::create},
     {"CIPHER TOOLS",   &icon_study_32,  &CipherActivity::create},
-#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
     {"CLOCK",          &icon_study_32,  &ClockActivity::create},
-#endif  // !SIMULATOR
     {"COUNTDOWN",      &icon_study_32,  &CountdownActivity::create},
-#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
     {"DEVICE INFO",    &icon_study_32,  &DeviceInfoActivity::create},
-#endif  // !SIMULATOR
     {"MORSE CODE",     &icon_study_32,  &MorseCodeActivity::create},
-#if !defined(SIMULATOR)  // No native implementation for hardware-only apps
     {"OTP GENERATOR",  &icon_study_32,  &OtpGeneratorActivity::create},
-#endif  // !SIMULATOR
     {"PASSWORD MANAGER", &icon_study_32, &PasswordManagerActivity::create},
     {"QR GENERATOR",   &icon_study_32,  &QrGeneratorActivity::create},
     {"SD FILE BROWSER", &icon_study_32, &SdFileBrowserActivity::create},

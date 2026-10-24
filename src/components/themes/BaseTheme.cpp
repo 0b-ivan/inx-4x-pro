@@ -260,7 +260,8 @@ void BaseTheme::drawButtonHintsAlways(GfxRenderer& renderer, const char* btn1, c
   renderer.setOrientation(orig_orientation);
 }
 
-int BaseTheme::tappedHintButton(int tapX, int tapY, const GfxRenderer& renderer) const {
+namespace {
+int hitButtonHints(int tapX, int tapY, const GfxRenderer& renderer, int hintHeight) {
   using Ori = GfxRenderer::Orientation;
   const int sw = renderer.getScreenWidth();
   const int sh = renderer.getScreenHeight();
@@ -292,13 +293,23 @@ int BaseTheme::tappedHintButton(int tapX, int tapY, const GfxRenderer& renderer)
   const int portraitW = (ori == Ori::Portrait || ori == Ori::PortraitInverted) ? sw : sh;
   const int portraitH = (ori == Ori::Portrait || ori == Ori::PortraitInverted) ? sh : sw;
 
-  if (py < portraitH - UITheme::getInstance().getMetrics().buttonHintsHeight) return 0;
+  if (hintHeight <= 0 || py < portraitH - hintHeight) return 0;
 
   const int zoneW = portraitW / 4;
   if (px < zoneW)     return 1;
   if (px < zoneW * 2) return 2;
   if (px < zoneW * 3) return 3;
   return 4;
+}
+}  // namespace
+
+int BaseTheme::tappedHintButton(int tapX, int tapY, const GfxRenderer& renderer) const {
+  return hitButtonHints(tapX, tapY, renderer,
+                        UITheme::getInstance().getMetrics().buttonHintsHeight);
+}
+
+int BaseTheme::tappedAlwaysHintButton(int tapX, int tapY, const GfxRenderer& renderer) const {
+  return hitButtonHints(tapX, tapY, renderer, BaseMetrics::values.buttonHintsHeight);
 }
 
 void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {

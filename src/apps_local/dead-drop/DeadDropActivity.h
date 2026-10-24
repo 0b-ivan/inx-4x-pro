@@ -44,6 +44,10 @@ class DeadDropActivity final : public Activity {
   // Upload state
   HalFile uploadFile;
   bool uploadInProgress = false;
+  bool uploadComplete = false;
+  int uploadHttpError = 0;
+  std::string uploadPath;
+  std::string uploadTempPath;
 
   void startDrop();
   void stopDrop();

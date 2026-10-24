@@ -4,8 +4,14 @@
 
 #include <I18n.h>
 #include <Logging.h>
+#ifndef SIMULATOR
 #include <WiFi.h>
 #include <esp_wifi.h>
+#else
+#include "platform/sim_biscuit_wifi_frames.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 
 #include <algorithm>
 #include <string>
@@ -15,6 +21,13 @@
 #include "fontIds.h"
 #include "../util/RadioManager.h"
 
+#ifdef SIMULATOR
+static void wifiDeauthSimTrace(const char* state, unsigned frames, unsigned targets) {
+  const char* env = std::getenv("CROSSPLAY_SIM_DEAUTH_TRACE");
+  if (env && env[0] == '1' && env[1] == '\0')
+    std::fprintf(stderr,"[BISCUIT_SIM] WIFI_DEAUTH:%s:%u:%u\n",state,frames,targets);
+}
+#else
 // Deauth frame template (26 bytes)
 static uint8_t deauthFrame[26] = {
     0xC0, 0x00,                          // Frame control: deauth
@@ -26,6 +39,8 @@ static uint8_t deauthFrame[26] = {
     0x01, 0x00                           // Reason: unspecified
 };
 
+#endif
+
 void WifiTestActivity::onEnter() {
   devmode::pause();
   Activity::onEnter();
@@ -35,6 +50,10 @@ void WifiTestActivity::onEnter() {
   selectorIndex = 0;
   packetsSent = 0;
 
+  // The simulator supports only a non-transmitting preview.
+#ifdef SIMULATOR
+  rawTxAvailable = true;
+#else
   // Check if raw TX is available
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
@@ -46,27 +65,50 @@ void WifiTestActivity::onEnter() {
   } else {
     rawTxAvailable = false;
   }
+#endif
 
   startScan();
   requestUpdate();
 }
 
 void WifiTestActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
+#ifndef SIMULATOR
   esp_wifi_set_promiscuous(false);
   WiFi.mode(WIFI_OFF);
+#endif
   RADIO.shutdown();
+#ifdef SIMULATOR
+  wifiDeauthSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                        ? "radio-off" : "radio-leak", packetsSent, aps.size());
+#endif
+  Activity::onExit();
+  devmode::resume();
 }
 
 void WifiTestActivity::startScan() {
   state = SCANNING;
   aps.clear();
+#ifdef SIMULATOR
+  for (const auto& fixture : biscuit_sim::deauthPreviewAps()) {
+    AP ap{};
+    ap.ssid = fixture.ssid;
+    ap.rssi = fixture.rssi;
+    ap.channel = fixture.channel;
+    memcpy(ap.bssid, fixture.bssid, 6);
+    aps.push_back(std::move(ap));
+  }
+  state = SELECT_TARGET;
+  wifiDeauthSimTrace("scan", 0, aps.size());
+#else
   WiFi.scanDelete();
   WiFi.scanNetworks(true);
+#endif
 }
 
 void WifiTestActivity::processScanResults() {
+#ifdef SIMULATOR
+  return;
+#else
   int16_t result = WiFi.scanComplete();
   if (result == WIFI_SCAN_RUNNING) return;
 
@@ -87,9 +129,16 @@ void WifiTestActivity::processScanResults() {
   WiFi.scanDelete();
   state = SELECT_TARGET;
   requestUpdate();
+#endif
 }
 
 bool WifiTestActivity::sendDeauthFrame(const uint8_t* bssid, uint8_t channel) {
+#ifdef SIMULATOR
+  // Strictly in-memory counter simulation. No 802.11 transmit call.
+  const bool valid = bssid && bssid[0] == 0x02 && channel >= 1 && channel <= 13;
+  if (valid) wifiDeauthSimTrace("preview", packetsSent + 1, channel);
+  return valid;
+#else
   // Set channel
   esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
 
@@ -99,6 +148,7 @@ bool WifiTestActivity::sendDeauthFrame(const uint8_t* bssid, uint8_t channel) {
 
   esp_err_t err = esp_wifi_80211_tx(WIFI_IF_STA, deauthFrame, sizeof(deauthFrame), false);
   return err == ESP_OK;
+#endif
 }
 
 void WifiTestActivity::loop() {
@@ -113,7 +163,7 @@ void WifiTestActivity::loop() {
     }
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) shelf::leave(renderer, mappedInput);
+      if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) shelf::leave(renderer, mappedInput);
     }
     return;
   }
@@ -130,14 +180,21 @@ void WifiTestActivity::loop() {
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+#ifndef SIMULATOR
       esp_wifi_set_promiscuous(false);
+#endif
       state = SELECT_TARGET;
+#ifdef SIMULATOR
+      wifiDeauthSimTrace("stopped", packetsSent, aps.size());
+#endif
       requestUpdate();
     }
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) {
+      if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) {
+#ifndef SIMULATOR
         esp_wifi_set_promiscuous(false);
+#endif
         state = SELECT_TARGET;
         requestUpdate();
       }
@@ -151,14 +208,21 @@ void WifiTestActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
       if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
       if (btn == 2) {
         if (!rawTxAvailable) { state = NOT_SUPPORTED; requestUpdate(); return; }
         if (!aps.empty()) {
           targetIndex = selectorIndex; packetsSent = 0;
           startTime = millis(); lastSendTime = 0;
-          esp_wifi_set_promiscuous(true); state = DEAUTHING; requestUpdate();
+#ifndef SIMULATOR
+          esp_wifi_set_promiscuous(true);
+#endif
+          state = DEAUTHING;
+#ifdef SIMULATOR
+          wifiDeauthSimTrace("started", 0, aps.size());
+#endif
+          requestUpdate();
         }
         return;
       }
@@ -205,8 +269,13 @@ void WifiTestActivity::loop() {
       packetsSent = 0;
       startTime = millis();
       lastSendTime = 0;
+#ifndef SIMULATOR
       esp_wifi_set_promiscuous(true);
+#endif
       state = DEAUTHING;
+#ifdef SIMULATOR
+      wifiDeauthSimTrace("started", 0, aps.size());
+#endif
       requestUpdate();
     }
   }
@@ -224,6 +293,10 @@ void WifiTestActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "WiFi Deauther");
+#ifdef SIMULATOR
+  renderer.drawCenteredText(SMALL_FONT_ID, metrics.topPadding + metrics.headerHeight + 2,
+                            "OFFLINE SIMULATION - NO TX");
+#endif
 
   if (state == SCANNING) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Scanning...");
@@ -251,7 +324,11 @@ void WifiTestActivity::render(RenderLock&&) {
     y += 60;
 
     std::string pktStr = std::to_string(packetsSent);
+#ifdef SIMULATOR
+    renderer.drawCenteredText(UI_10_FONT_ID, y, "Simulated Frames", true, EpdFontFamily::BOLD);
+#else
     renderer.drawCenteredText(UI_10_FONT_ID, y, "Packets Sent", true, EpdFontFamily::BOLD);
+#endif
     y += 40;
     renderer.drawCenteredText(UI_10_FONT_ID, y, pktStr.c_str(), true, EpdFontFamily::BOLD);
     y += 60;

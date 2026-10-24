@@ -2,9 +2,13 @@
 #include "DevMode.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <BLEAdvertisedDevice.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>
+#else
+#include "platform/sim_biscuit_ble.h"
+#endif
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -18,7 +22,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-// Static pointer for callback context
+#ifndef SIMULATOR
+// Radio callbacks must never run in the native SDL simulator.
 static BleProximityActivity* activeProximity = nullptr;
 
 class BleProximityCallback : public BLEAdvertisedDeviceCallbacks {
@@ -27,6 +32,8 @@ class BleProximityCallback : public BLEAdvertisedDeviceCallbacks {
     // Results are handled in the main loop via BLEScan results
   }
 };
+
+#endif  // !SIMULATOR
 
 void BleProximityActivity::onEnter() {
   devmode::pause();
@@ -43,11 +50,15 @@ void BleProximityActivity::onExit() {
   devmode::resume();
   Activity::onExit();
   if (scanInitialized) {
+#ifndef SIMULATOR
     BLEScan* scan = BLEDevice::getScan();
     scan->stop();
+#endif
     scanning = false;
   }
+#ifndef SIMULATOR
   activeProximity = nullptr;
+#endif
   if (scanInitialized) {
     RADIO.shutdown();
     scanInitialized = false;
@@ -59,12 +70,14 @@ void BleProximityActivity::startBleScan() {
   scanning = true;
   lastScanTime = millis();
 
+#ifndef SIMULATOR
   BLEScan* scan = BLEDevice::getScan();
   scan->setActiveScan(true);
   scan->setInterval(100);
   scan->setWindow(99);
   scan->clearResults();
   scan->start(0, nullptr, true);  // non-blocking
+#endif
 }
 
 void BleProximityActivity::pruneStale() {
@@ -86,13 +99,47 @@ void BleProximityActivity::loop() {
     needsInit = false;
     RADIO.ensureBle();
     scanInitialized = true;
+#ifndef SIMULATOR
     activeProximity = this;
+#endif
     startBleScan();
     requestUpdate();
     return;
   }
 
   if (scanning && scanInitialized) {
+#ifdef SIMULATOR
+    // In-memory BLE advertisements drive the real view, ordering and stale logic.
+    // Polling cadence is synthetic; real controller timing needs device testing.
+    if (millis() - lastScanTime >= 900) {
+      const auto advertisements = biscuit_sim::bleAdvertisements();
+      const unsigned long now = millis();
+      for (auto& item : devices) item.active = false;
+      for (const auto& advertisement : advertisements) {
+        auto it = std::find_if(devices.begin(), devices.end(),
+                               [&advertisement](const BleTarget& d) {
+                                 return d.mac == advertisement.mac;
+                               });
+        if (it != devices.end()) {
+          it->name = advertisement.name;
+          it->rssi = advertisement.rssi;
+          it->lastSeen = now;
+          it->active = true;
+        } else if (static_cast<int>(devices.size()) < MAX_DEVICES) {
+          devices.push_back({advertisement.name, advertisement.mac,
+                             advertisement.rssi, now, true});
+        }
+      }
+      pruneStale();
+      std::sort(devices.begin(), devices.end(),
+                [](const BleTarget& a, const BleTarget& b) { return a.rssi > b.rssi; });
+      if (!devices.empty() && selectorIndex >= static_cast<int>(devices.size())) {
+        selectorIndex = static_cast<int>(devices.size()) - 1;
+      }
+      lastScanTime = now;
+      requestUpdate();
+    }
+#else
     BLEScan* scan = BLEDevice::getScan();
     BLEScanResults* results = scan->getResults();
     const int count = results ? results->getCount() : 0;
@@ -150,6 +197,7 @@ void BleProximityActivity::loop() {
       lastScanTime = millis();
       scan->start(0, nullptr, true);
     }
+#endif  // SIMULATOR
   }
 
   // Navigation
@@ -175,7 +223,7 @@ void BleProximityActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { shelf::leave(renderer, mappedInput); }
+      if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { shelf::leave(renderer, mappedInput); }
     }
   }
 }

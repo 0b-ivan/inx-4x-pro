@@ -54,6 +54,9 @@ class BleKeyboardActivity final : public Activity {
   BLEHIDDevice* pHid = nullptr;
   BLECharacteristic* pInputChar = nullptr;
   bool deviceConnected = false;
+#ifdef SIMULATOR
+  int simKeys = 0; // virtual HID events, never OS input
+#endif
 
   // Execution
   unsigned long delayUntil = 0;

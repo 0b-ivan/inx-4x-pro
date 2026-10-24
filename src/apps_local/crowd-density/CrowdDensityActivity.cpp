@@ -2,8 +2,14 @@
 #include "DevMode.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <WiFi.h>
 #include <esp_wifi.h>
+#else
+#include "platform/sim_biscuit_wifi_frames.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 #include <string.h>
 
 #include "MappedInputManager.h"
@@ -15,6 +21,7 @@
 // Static instance
 // ---------------------------------------------------------------------------
 
+#ifndef SIMULATOR
 CrowdDensityActivity* CrowdDensityActivity::activeInstance = nullptr;
 
 void CrowdDensityActivity::promiscuousCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
@@ -33,6 +40,14 @@ void CrowdDensityActivity::promiscuousCallback(void* buf, wifi_promiscuous_pkt_t
   // Source MAC at offset 10
   activeInstance->addMac(payload + 10);
 }
+
+#else
+static void crowdSimTrace(const char* event, int count, int windows) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_CROWD_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0')
+    std::fprintf(stderr, "[BISCUIT_SIM] CROWD:%s:%d:%d\n", event, count, windows);
+}
+#endif
 
 void CrowdDensityActivity::addMac(const uint8_t* mac) {
   portENTER_CRITICAL(&dataMux);
@@ -64,6 +79,9 @@ void CrowdDensityActivity::onEnter() {
   memset(seenMacs, 0, sizeof(seenMacs));
   seenMacCount = 0;
   promiscuousActive = false;
+#ifdef SIMULATOR
+  simFedWindow = false;
+#endif
   requestUpdate();
 }
 
@@ -73,6 +91,7 @@ void CrowdDensityActivity::startCapture() {
   windowStart = millis();
 
   RADIO.ensureWifi();
+#ifndef SIMULATOR
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
@@ -83,21 +102,35 @@ void CrowdDensityActivity::startCapture() {
   wifi_promiscuous_filter_t filter{};
   filter.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT;
   esp_wifi_set_promiscuous_filter(&filter);
+#else
+  simFedWindow = false;
+#endif
 
   promiscuousActive = true;
   state = CAPTURING;
+#ifdef SIMULATOR
+  crowdSimTrace("started", 0, 0);
+#endif
   requestUpdate();
 }
 
 void CrowdDensityActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   if (promiscuousActive) {
+#ifndef SIMULATOR
     esp_wifi_set_promiscuous(false);
+#endif
     promiscuousActive = false;
   }
+#ifndef SIMULATOR
   activeInstance = nullptr;
+#endif
   RADIO.shutdown();
+#ifdef SIMULATOR
+  crowdSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                    ? "radio-off" : "radio-leak", seenMacCount, historyCount);
+#endif
+  Activity::onExit();
+  devmode::resume();
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +147,7 @@ void CrowdDensityActivity::loop() {
     }
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
       if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
       if (btn == 2) { startCapture(); return; }
     }
@@ -122,6 +155,20 @@ void CrowdDensityActivity::loop() {
   }
 
   const unsigned long now = millis();
+#ifdef SIMULATOR
+  // Fake 802.11 frames only. Reuse the real addMac() dedup mechanism and
+  // never access host WiFi, sockets or physical 802.11 promiscuous mode.
+  if (promiscuousActive && !simFedWindow && now - windowStart >= 350) {
+    for (const auto& frame : biscuit_sim::probeFrames()) {
+      biscuit_sim::ParsedProbe parsed;
+      if (biscuit_sim::parseProbe(frame.bytes.data(), frame.bytes.size(), parsed))
+        addMac(parsed.mac);
+    }
+    simFedWindow = true;
+    crowdSimTrace("observed", seenMacCount, historyCount);
+    requestUpdate();
+  }
+#endif
 
   // Sample into history ring buffer every SAMPLE_INTERVAL_MS
   if (now - lastSample >= SAMPLE_INTERVAL_MS) {
@@ -141,6 +188,10 @@ void CrowdDensityActivity::loop() {
 
     windowStart = now;
     lastSample = now;
+#ifdef SIMULATOR
+    simFedWindow = false;
+    crowdSimTrace("sample", currentCount, historyCount);
+#endif
     requestUpdate();
   }
 
@@ -156,7 +207,7 @@ void CrowdDensityActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) shelf::leave(renderer, mappedInput);
+      if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) shelf::leave(renderer, mappedInput);
     }
   }
 }
@@ -170,12 +221,17 @@ void CrowdDensityActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  // Unlike ordinary touch themes, this Biscuit activity ALWAYS paints the
+  // 40px touch footer. Reserve its actual height, not the touch metric (0).
+  const int footerHeight = BaseMetrics::values.buttonHintsHeight;
+  const int noteLineHeight = renderer.getTextHeight(SMALL_FONT_ID);
+  const int noteY = pageHeight - footerHeight - metrics.verticalSpacing - 2 * noteLineHeight - 12;
 
   if (state == READY) {
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
                    "Crowd Density");
     const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-    const int centerY = contentTop + (pageHeight - contentTop - metrics.buttonHintsHeight) / 2;
+    const int centerY = contentTop + (pageHeight - contentTop - footerHeight) / 2;
     renderer.drawCenteredText(UI_10_FONT_ID, centerY - 30, "Estimate nearby people via");
     renderer.drawCenteredText(UI_10_FONT_ID, centerY, "WiFi probe request counting.");
     renderer.drawCenteredText(SMALL_FONT_ID, centerY + 40, "Press Confirm to start capture.");
@@ -191,7 +247,11 @@ void CrowdDensityActivity::render(RenderLock&&) {
   portEXIT_CRITICAL(&dataMux);
 
   char subtitle[24];
+#ifdef SIMULATOR
+  snprintf(subtitle, sizeof(subtitle), "%d seen (simulated window)", liveCount);
+#else
   snprintf(subtitle, sizeof(subtitle), "%d seen (30s window)", liveCount);
+#endif
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
                  "Crowd Density", subtitle);
 
@@ -211,7 +271,11 @@ void CrowdDensityActivity::render(RenderLock&&) {
   {
     unsigned long elapsed = (millis() - windowStart) / 1000UL;
     char sampBuf[32];
+#ifdef SIMULATOR
+    snprintf(sampBuf, sizeof(sampBuf), "simulated window: %lus / 3s", elapsed);
+#else
     snprintf(sampBuf, sizeof(sampBuf), "sampling... %lus / 30s", elapsed);
+#endif
     renderer.drawCenteredText(SMALL_FONT_ID, countY, sampBuf);
     countY += renderer.getTextHeight(SMALL_FONT_ID) + 14;
   }
@@ -219,7 +283,7 @@ void CrowdDensityActivity::render(RenderLock&&) {
   // Bar chart of history
   if (historyCount > 0) {
     const int chartTop = countY;
-    const int chartBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - 30;
+    const int chartBottom = noteY - 12;
     const int chartHeight = chartBottom - chartTop;
 
     if (chartHeight > 20) {
@@ -254,10 +318,11 @@ void CrowdDensityActivity::render(RenderLock&&) {
     }
   }
 
-  // Disclaimer
-  renderer.drawCenteredText(SMALL_FONT_ID,
-                            pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - 16,
-                            "Estimate only — MAC randomization reduces accuracy");
+  // Keep the disclaimer fully above the always-visible touch footer. Split it
+  // into short lines rather than centering a clipped sentence across 480px.
+  renderer.drawCenteredText(SMALL_FONT_ID, noteY, "Estimate only; not a person count.");
+  renderer.drawCenteredText(SMALL_FONT_ID, noteY + noteLineHeight + 4,
+                            "MAC randomization reduces accuracy.");
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
   GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

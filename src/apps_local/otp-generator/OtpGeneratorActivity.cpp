@@ -61,7 +61,7 @@ void OtpGeneratorActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
 
-  char title[24];
+  char title[40];
   snprintf(title, sizeof(title), "OTP Pad - Page %d", pageNumber + 1);
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, title);
 

@@ -48,6 +48,9 @@ class ProbeSnifferActivity final : public Activity {
   int detailIndex = 0;
   bool sniffing = false;
   unsigned long lastUpdateTime = 0;
+#ifdef SIMULATOR
+  unsigned long simLastInjection = 0;
+#endif
   int spinnerFrame = 0;
   unsigned long lastSpinnerUpdate = 0;
   unsigned long lastHopTime = 0;

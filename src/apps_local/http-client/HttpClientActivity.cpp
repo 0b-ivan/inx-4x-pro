@@ -1,7 +1,11 @@
 #include "HttpClientActivity.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <HTTPClient.h>
+#else
+#include "platform/sim_biscuit_network.h"
+#endif
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
@@ -101,7 +105,7 @@ void HttpClientActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
         if (btn == 2 && !url.empty()) { performRequest(); return; }
       }
@@ -151,7 +155,7 @@ void HttpClientActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) {
+        if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) {
           state = MENU; responseBody.clear(); scrollOffset = 0; totalLines = 0; requestUpdate();
         }
       }
@@ -165,7 +169,11 @@ void HttpClientActivity::loop() {
 // ---- performRequest ----
 
 void HttpClientActivity::performRequest() {
+  #ifdef SIMULATOR
+  if (!biscuit_sim::wifiConnected(WiFi.status() == WL_CONNECTED)) {
+#else
   if (WiFi.status() != WL_CONNECTED) {
+#endif
     RADIO.ensureWifi();
     startActivityForResult(
         std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
@@ -183,6 +191,13 @@ void HttpClientActivity::performRequest() {
   state = CONNECTING;
   requestUpdate(true);  // immediate update to show "Connecting..."
 
+#ifdef SIMULATOR
+  const auto response = biscuit_sim::httpRequest(method == GET ? "GET" : "POST", url, postBody);
+  responseCode = response.status;
+  responseTimeMs = response.latencyMs;
+  responseBody = responseCode > 0 ? response.body
+                                  : "Connection failed (error " + std::to_string(responseCode) + ")";
+#else
   HTTPClient http;
   http.begin(url.c_str());
   http.setTimeout(5000);
@@ -202,6 +217,7 @@ void HttpClientActivity::performRequest() {
     responseBody = "Connection failed (error " + std::to_string(responseCode) + ")";
   }
   http.end();
+#endif
 
   state = RESULT;
   scrollOffset = 0;

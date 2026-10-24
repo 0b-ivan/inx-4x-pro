@@ -20,7 +20,7 @@ class WardrivingActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override { return true; }
+  bool preventAutoSleep() override { return logging; }
 
  private:
   struct SeenNetwork {
@@ -34,6 +34,8 @@ class WardrivingActivity final : public Activity {
   };
 
   bool logging = false;
+  bool scanPending = false;
+  bool storageError = false;
   std::vector<SeenNetwork> networks;
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
@@ -51,6 +53,6 @@ class WardrivingActivity final : public Activity {
   void startLogging();
   void stopLogging();
   void processScanResults();
-  void appendNetworkToCsv(const SeenNetwork& net);
+  bool appendNetworkToCsv(const SeenNetwork& net);
   static const char* encryptionString(uint8_t type);
 };

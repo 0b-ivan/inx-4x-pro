@@ -569,7 +569,7 @@ void MurdleActivity::render(RenderLock&&) {
   toybox::reportOverflow(interactions, "Murdle");
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // A new case and a verdict are page turns; a mark is not. Spend the full
   // refresh on meaning rather than on frames.

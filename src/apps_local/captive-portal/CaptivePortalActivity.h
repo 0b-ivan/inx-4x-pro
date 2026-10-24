@@ -1,16 +1,16 @@
 #pragma once
+
 #include <memory>
 #include <Memory.h>
 #include <DNSServer.h>
 #include <WebServer.h>
-
-#include <cstdint>
 #include <string>
-#include <vector>
 
 #include "../../activities/Activity.h"
 #include "../../util/ButtonNavigator.h"
 
+// A fully functional AP/DNS/HTTP lab portal with conspicuous test labelling.
+// It never impersonates production WiFi or accepts credential submissions.
 class CaptivePortalActivity final : public Activity {
  public:
   explicit CaptivePortalActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -18,35 +18,31 @@ class CaptivePortalActivity final : public Activity {
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<CaptivePortalActivity>(r, m);
   }
-
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override { return true; }
+  bool preventAutoSleep() override { return state == RUNNING; }
   bool skipLoopDelay() override { return state == RUNNING; }
 
  private:
   enum State { SELECT_TEMPLATE, ENTER_SSID, RUNNING, STOPPED };
-
+  enum Template { LANDING, FORM_TEST, DIAGNOSTICS, TEMPLATE_COUNT };
   State state = SELECT_TEMPLATE;
-  std::vector<std::string> templates;
-  ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
-  std::string selectedTemplate;
-  std::string apSsid;
-  int capturedCount = 0;
-  std::string lastUsername;
-  std::string lastPassword;
-
+  Template selectedTemplate = LANDING;
+  ButtonNavigator buttonNavigator;
+  std::string apSsid = "X4PRO-PORTAL";
+  int pageViews = 0;
+  int testSubmissions = 0;
   std::unique_ptr<WebServer> webServer;
   std::unique_ptr<DNSServer> dnsServer;
 
-  void loadTemplates();
+  void chooseTemplate();
   void startPortal();
   void stopPortal();
   void handleRoot();
-  void handleLogin();
+  void handleTestSubmission();
+  void handleStatus();
   void handleNotFound();
-  void logCredentials(const std::string& username, const std::string& password);
 };

@@ -6,7 +6,11 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
+#ifndef SIMULATOR
 #include <WiFiClient.h>
+#else
+#include "platform/sim_biscuit_network.h"
+#endif
 
 #include <string>
 
@@ -32,7 +36,11 @@ void HostScannerActivity::onEnter() {
   scanProgress = 0;
   selectedHost = -1;
 
+  #ifdef SIMULATOR
+  if (biscuit_sim::wifiConnected(WiFi.status() == WL_CONNECTED)) {
+#else
   if (WiFi.isConnected()) {
+#endif
     RADIO.ensureWifi();  // Sync RadioManager state with actual radio
     startHostScan();
   }
@@ -50,11 +58,15 @@ void HostScannerActivity::startHostScan() {
   hosts.clear();
   scanProgress = 0;
 
+#ifdef SIMULATOR
+  // A bounded isolated /27 fixture; do not inspect the host network.
+  scanTotal = 30;
+#else
   uint32_t localIp = WiFi.localIP();
   uint32_t mask = WiFi.subnetMask();
-  uint32_t network = localIp & mask;
   scanTotal = (~mask & 0xFF) - 1;  // Number of host addresses
   if (scanTotal > 254) scanTotal = 254;
+#endif
 }
 
 void HostScannerActivity::scanNextHost() {
@@ -65,21 +77,33 @@ void HostScannerActivity::scanNextHost() {
   }
 
   scanProgress++;
+#ifdef SIMULATOR
+  // IPs are stored in the same little-endian representation as WiFi.localIP().
+  const uint32_t localIp = 0x0A0200C0U;  // 192.0.2.10
+  const uint32_t targetIp = biscuit_sim::hostScanIp(scanProgress);
+#else
   uint32_t localIp = WiFi.localIP();
   uint32_t mask = WiFi.subnetMask();
   uint32_t network = localIp & mask;
   uint32_t targetIp = network | (scanProgress & 0xFF);
+#endif
 
   // Skip own IP
   if (targetIp == localIp) return;
 
   // Try TCP connect to port 80 with short timeout
+#ifdef SIMULATOR
+  const bool reachable = biscuit_sim::hostScanPortOpen(targetIp, 80);
+#else
   WiFiClient client;
   client.setTimeout(200);
   IPAddress addr(targetIp);
-
-  if (client.connect(addr, 80)) {
+  const bool reachable = client.connect(addr, 80);
+#endif
+  if (reachable) {
+#ifndef SIMULATOR
     client.stop();
+#endif
     Host host;
     host.ip = targetIp;
     hosts.push_back(host);
@@ -106,12 +130,18 @@ void HostScannerActivity::scanNextPort() {
   uint16_t port = COMMON_PORTS[portScanProgress];
   portScanProgress++;
 
+#ifdef SIMULATOR
+  const bool open = biscuit_sim::hostScanPortOpen(hosts[selectedHost].ip, port);
+#else
   WiFiClient client;
   client.setTimeout(1000);
   IPAddress addr(hosts[selectedHost].ip);
-
-  if (client.connect(addr, port)) {
+  const bool open = client.connect(addr, port);
+#endif
+  if (open) {
+#ifndef SIMULATOR
     client.stop();
+#endif
     hosts[selectedHost].openPorts.push_back(port);
   }
 
@@ -139,7 +169,11 @@ void HostScannerActivity::saveToCsv() {
 
 void HostScannerActivity::loop() {
   if (state == CHECKING_WIFI) {
+#ifdef SIMULATOR
+    if (!biscuit_sim::wifiConnected(WiFi.status() == WL_CONNECTED)) {
+#else
     if (!WiFi.isConnected()) {
+#endif
       if (mappedInput.wasReleased(MappedInputManager::Button::Back)) shelf::leave(renderer, mappedInput);
     } else {
       startHostScan();
@@ -205,7 +239,7 @@ void HostScannerActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
       if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
       if (btn == 2 && !hosts.empty()) { startPortScan(selectorIndex); requestUpdate(); return; }
       if (count > 0) {

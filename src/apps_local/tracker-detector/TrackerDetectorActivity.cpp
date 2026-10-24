@@ -2,9 +2,15 @@
 #include "DevMode.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <BLEAdvertisedDevice.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>
+#else
+#include "platform/sim_biscuit_ble.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 #include <I18n.h>
 #include <Logging.h>
 
@@ -15,12 +21,22 @@
 #include "fontIds.h"
 #include "../radio/RadioManager.h"
 
+#ifdef SIMULATOR
+static void trackerSimTrace(const char* event, size_t count, unsigned cycles) {
+  const char* env = std::getenv("CROSSPLAY_SIM_BLE_TRACE");
+  if (env && env[0] == '1' && env[1] == '\0')
+    std::fprintf(stderr, "[BISCUIT_SIM] TRACKER:%s:%zu:%u\n",
+                 event, count, cycles);
+}
+#endif
+
 void TrackerDetectorActivity::onEnter() {
   devmode::pause();
   Activity::onEnter();
   state = IDLE;
   monitoring = false;
   scanInitialized = false;
+  needsBleInit = false;
   devices.clear();
   scanCycleCount = 0;
   alertCount = 0;
@@ -29,15 +45,18 @@ void TrackerDetectorActivity::onEnter() {
 }
 
 void TrackerDetectorActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   if (scanInitialized) {
+#ifndef SIMULATOR
     BLEScan* scan = BLEDevice::getScan();
     scan->stop();
+#endif
     RADIO.shutdown();
     scanInitialized = false;
   }
   monitoring = false;
+  needsBleInit = false;
+  Activity::onExit();
+  devmode::resume();
 }
 
 void TrackerDetectorActivity::startMonitoring() {
@@ -48,33 +67,69 @@ void TrackerDetectorActivity::startMonitoring() {
   alertCount = 0;
   lastScanTime = 0;
   needsBleInit = true;
+#ifdef SIMULATOR
+  trackerSimTrace("monitoring", devices.size(), scanCycleCount);
+#endif
   requestUpdate();
 }
 
 void TrackerDetectorActivity::stopMonitoring() {
   if (scanInitialized) {
+#ifndef SIMULATOR
     BLEScan* scan = BLEDevice::getScan();
     scan->stop();
+#endif
     RADIO.shutdown();
     scanInitialized = false;
+#ifdef SIMULATOR
+    trackerSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                        ? "radio-off" : "radio-leak", devices.size(), scanCycleCount);
+#endif
   }
   monitoring = false;
+  needsBleInit = false;
   state = IDLE;
   requestUpdate();
 }
 
 void TrackerDetectorActivity::runScan() {
   if (!scanInitialized) return;
+#ifndef SIMULATOR
   BLEScan* scan = BLEDevice::getScan();
   scan->setActiveScan(true);
   scan->setInterval(100);
   scan->setWindow(99);
   scan->clearResults();
   scan->start(0, nullptr, true);  // non-blocking
+#endif
   lastScanTime = millis();
 }
 
 void TrackerDetectorActivity::processScanResults() {
+#ifdef SIMULATOR
+  const unsigned long now = millis();
+  for (const auto& frame : biscuit_sim::bleTrackerFrames()) {
+    const TrackerType type = identifyTracker(
+        reinterpret_cast<const uint8_t*>(frame.manufacturer.data()),
+        frame.manufacturer.size(), frame.serviceUuid);
+    if (type == UNKNOWN_TRACKER) continue;
+    auto it = std::find_if(devices.begin(), devices.end(),
+        [&frame](const TrackedDevice& dev) { return dev.mac == frame.mac; });
+    if (it != devices.end()) {
+      it->rssi = static_cast<int8_t>(frame.rssi);
+      it->lastSeen = now;
+      if (it->seenCount < UINT8_MAX) ++it->seenCount;
+    } else if (static_cast<int>(devices.size()) < MAX_TRACKED) {
+      // The follower scenario accelerates simulated observation time only.
+      const unsigned long first = biscuit_sim::bleTrackerFollowerScenario()
+          ? now - FOLLOW_TIME_MS : now;
+      devices.push_back({frame.mac, type, static_cast<int8_t>(frame.rssi),
+                         1, first, now, false});
+    }
+  }
+  ++scanCycleCount;
+  trackerSimTrace("scan", devices.size(), scanCycleCount);
+#else
   BLEScan* scan = BLEDevice::getScan();
   BLEScanResults* results = scan->getResults();
   if (!results) return;
@@ -110,6 +165,7 @@ void TrackerDetectorActivity::processScanResults() {
 
   scan->clearResults();
   scanCycleCount++;
+#endif
 }
 
 void TrackerDetectorActivity::checkForFollowers() {
@@ -123,6 +179,9 @@ void TrackerDetectorActivity::checkForFollowers() {
   }
   if (alertCount > 0 && state != ALERT) {
     state = ALERT;
+#ifdef SIMULATOR
+    trackerSimTrace("alert", alertCount, scanCycleCount);
+#endif
   }
 }
 
@@ -192,7 +251,7 @@ void TrackerDetectorActivity::loop() {
       {
         int tx_ = 0, ty_ = 0;
         if (mappedInput.wasScreenTapped(tx_, ty_)) {
-          const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+          const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
           if (btn == 1) { shelf::leave(renderer, mappedInput); }
           if (btn == 2) { startMonitoring(); }
         }
@@ -214,6 +273,16 @@ void TrackerDetectorActivity::loop() {
         return;
       }
 
+#ifdef SIMULATOR
+      // One isolated advertisement batch per virtual scan, not every UI frame.
+      if (millis() - lastScanTime >= 900) {
+        processScanResults();
+        checkForFollowers();
+        pruneStale();
+        runScan();
+        requestUpdate();
+      }
+#else
       // Process any available scan results each loop iteration
       processScanResults();
 
@@ -224,6 +293,7 @@ void TrackerDetectorActivity::loop() {
         pruneStale();
         requestUpdate();
       }
+#endif
 
       // Navigation through device list
       const int devCount = static_cast<int>(devices.size());
@@ -246,7 +316,7 @@ void TrackerDetectorActivity::loop() {
       {
         int tx_ = 0, ty_ = 0;
         if (mappedInput.wasScreenTapped(tx_, ty_)) {
-          if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopMonitoring(); }
+          if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { stopMonitoring(); }
         }
       }
       break;
@@ -278,7 +348,7 @@ void TrackerDetectorActivity::loop() {
       {
         int tx_ = 0, ty_ = 0;
         if (mappedInput.wasScreenTapped(tx_, ty_)) {
-          const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+          const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
           if (btn == 1) { stopMonitoring(); }
           if (btn == 2) { state = MONITORING; requestUpdate(); }
         }

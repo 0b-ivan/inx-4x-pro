@@ -5,8 +5,14 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#ifndef SIMULATOR
 #include <WiFi.h>
 #include <esp_wifi.h>
+#else
+#include "platform/sim_biscuit_wifi_frames.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 
 #include <algorithm>
 #include <string>
@@ -16,6 +22,7 @@
 #include "fontIds.h"
 #include "../radio/RadioManager.h"
 
+#ifndef SIMULATOR
 static ProbeSnifferActivity* activeSniffer = nullptr;
 
 static void probeSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
@@ -48,6 +55,14 @@ static void probeSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
 
   activeSniffer->onProbeRequest(srcMac, ssid, pkt->rx_ctrl.rssi);
 }
+
+#else
+static void probeSimTrace(const char* event, size_t count) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_PROBE_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0')
+    std::fprintf(stderr, "[BISCUIT_SIM] PROBE:%s:%zu\n", event, count);
+}
+#endif
 
 void ProbeSnifferActivity::onProbeRequest(const uint8_t* srcMac, const char* ssid, int rssi) {
   portENTER_CRITICAL(&dataMux);
@@ -89,27 +104,40 @@ void ProbeSnifferActivity::onEnter() {
   sniffing = false;
   lastUpdateTime = 0;
   lastHopTime = 0;
+#ifdef SIMULATOR
+  simLastInjection = millis();
+#endif
   currentChannel = 1;
 
   RADIO.ensureWifi();
+#ifndef SIMULATOR
   activeSniffer = this;
+#endif
   startSniffing();
   requestUpdate();
 }
 
 void ProbeSnifferActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   stopSniffing();
+#ifndef SIMULATOR
   activeSniffer = nullptr;
+#endif
   RADIO.shutdown();
+#ifdef SIMULATOR
+  probeSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                   ? "radio-off" : "radio-leak", entries.size());
+#endif
+  Activity::onExit();
+  devmode::resume();
 }
 
 void ProbeSnifferActivity::startSniffing() {
+#ifndef SIMULATOR
   WiFi.disconnect();
   esp_wifi_set_promiscuous(true);
   esp_wifi_set_promiscuous_rx_cb(probeSnifferCallback);
   esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+#endif
   currentChannel = 1;
   sniffing = true;
   lastHopTime = millis();
@@ -118,7 +146,9 @@ void ProbeSnifferActivity::startSniffing() {
 }
 
 void ProbeSnifferActivity::stopSniffing() {
+#ifndef SIMULATOR
   esp_wifi_set_promiscuous(false);
+#endif
   sniffing = false;
   LOG_DBG("PROBE", "Sniffing stopped, %zu entries", entries.size());
 }
@@ -127,11 +157,20 @@ void ProbeSnifferActivity::loop() {
   if (state == DETAIL) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       state = SNIFFING_VIEW;
+#ifdef SIMULATOR
+      probeSimTrace("back-list", entries.size());
+#endif
       requestUpdate();
     }
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = SNIFFING_VIEW; requestUpdate(); }
+      if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) {
+        state = SNIFFING_VIEW;
+#ifdef SIMULATOR
+        probeSimTrace("touch-back", entries.size());
+#endif
+        requestUpdate();
+      }
     }
     return;
   }
@@ -148,11 +187,29 @@ void ProbeSnifferActivity::loop() {
     }
   }
 
+#ifdef SIMULATOR
+  // Feed well-formed and intentionally malformed synthetic 802.11 frames into
+  // the real onProbeRequest dedup/RSSI/list logic, never host WiFi.
+  if (sniffing && now - simLastInjection >= 950) {
+    simLastInjection = now;
+    for (const auto& packet : biscuit_sim::probeFrames()) {
+      biscuit_sim::ParsedProbe parsed;
+      if (biscuit_sim::parseProbe(packet.bytes.data(), packet.bytes.size(), parsed)) {
+        onProbeRequest(parsed.mac, parsed.ssid.c_str(), packet.rssi);
+      }
+    }
+    probeSimTrace("scan", entries.size());
+    requestUpdate();
+  }
+#endif
+
   // Channel hop
   if (sniffing && (now - lastHopTime >= HOP_INTERVAL_MS)) {
     lastHopTime = now;
     currentChannel = static_cast<uint8_t>((currentChannel % 13) + 1);
+#ifndef SIMULATOR
     esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+#endif
   }
 
   // Periodic display refresh: sort by lastSeen descending
@@ -190,6 +247,9 @@ void ProbeSnifferActivity::loop() {
     } else if (!entries.empty()) {
       detailIndex = selectorIndex;
       state = DETAIL;
+#ifdef SIMULATOR
+      probeSimTrace("detail", entries.size());
+#endif
     }
     requestUpdate();
   }
@@ -201,10 +261,20 @@ void ProbeSnifferActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
-      if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+      const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
+      if (btn == 1) {
+#ifdef SIMULATOR
+        probeSimTrace("touch-exit", entries.size());
+#endif
+        shelf::leave(renderer, mappedInput);
+        return;
+      }
       if (btn == 2 && !entries.empty()) {
-        detailIndex = selectorIndex; state = DETAIL; requestUpdate(); return;
+        detailIndex = selectorIndex; state = DETAIL;
+#ifdef SIMULATOR
+        probeSimTrace("touch-detail", entries.size());
+#endif
+        requestUpdate(); return;
       }
       const int cnt = static_cast<int>(entries.size());
       if (cnt > 0) {
@@ -219,7 +289,11 @@ void ProbeSnifferActivity::loop() {
         const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
                                               renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
         if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
-          selectorIndex = pageStart + touchRow; requestUpdate();
+          selectorIndex = pageStart + touchRow;
+#ifdef SIMULATOR
+          probeSimTrace("touch-row", selectorIndex);
+#endif
+          requestUpdate();
         }
       }
     }

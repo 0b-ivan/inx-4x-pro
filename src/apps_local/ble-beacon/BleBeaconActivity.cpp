@@ -2,10 +2,16 @@
 #include "DevMode.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <BLEDevice.h>
+#include <esp_random.h>
+#else
+#include "platform/sim_biscuit_ble.h"
+#include <cstdlib>
+#include <cstdio>
+#endif
 #include <GfxRenderer.h>
 #include <Logging.h>
-#include <esp_random.h>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -13,6 +19,14 @@
 #include "../util/RadioManager.h"
 
 constexpr const char* BleBeaconActivity::MODE_NAMES[];
+
+#ifdef SIMULATOR
+static void beaconSimTrace(const char* event, unsigned count, int mode) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_BLE_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0')
+    std::fprintf(stderr,"[BISCUIT_SIM] BLE_BEACON:%s:%u:%d\n",event,count,mode);
+}
+#endif
 
 // Apple device type bytes (little-endian)
 static const uint8_t APPLE_DEVICE_TYPES[][2] = {
@@ -51,10 +65,14 @@ void BleBeaconActivity::onEnter() {
 }
 
 void BleBeaconActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   stopSpam();
   RADIO.shutdown();
+#ifdef SIMULATOR
+  beaconSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                     ? "radio-off" : "radio-leak", packetsSent, activeMode);
+#endif
+  Activity::onExit();
+  devmode::resume();
 }
 
 void BleBeaconActivity::startSpam(SpamMode mode) {
@@ -66,20 +84,28 @@ void BleBeaconActivity::startSpam(SpamMode mode) {
   deviceTypeIndex = 0;
   platformIndex = 0;
 
+#ifndef SIMULATOR
   pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->stop();
-
+#else
+  beaconSimTrace("start", 0, activeMode);
+#endif
   requestUpdate();
 }
 
 void BleBeaconActivity::stopSpam() {
+#ifndef SIMULATOR
   if (pAdvertising) {
     pAdvertising->stop();
     pAdvertising = nullptr;
   }
+#else
+  if (state == SPAMMING) beaconSimTrace("stop", packetsSent, activeMode);
+#endif
   state = MODE_SELECT;
 }
 
+#ifndef SIMULATOR
 void BleBeaconActivity::randomizeBleAddress() {
   uint8_t addr[6];
   for (int i = 0; i < 6; i++) {
@@ -220,6 +246,35 @@ void BleBeaconActivity::sendWindowsSwiftPairPacket() {
   packetsSent++;
 }
 
+#else
+// Exercise the real app's selection, cadence, cycling and display, but never
+// generate a BLE radio frame (nor real brand-impersonating advertisements).
+void BleBeaconActivity::randomizeBleAddress() {}
+void BleBeaconActivity::sendAppleJuicePacket() {
+  auto frame = biscuit_sim::blePreview(0, packetsSent++);
+  beaconSimTrace("adv", packetsSent, frame.family);
+  deviceTypeIndex = (deviceTypeIndex + 1) % APPLE_DEVICE_COUNT;
+}
+void BleBeaconActivity::sendSourApplePacket() {
+  auto frame = biscuit_sim::blePreview(1, packetsSent++);
+  beaconSimTrace("adv", packetsSent, frame.family);
+  deviceTypeIndex = (deviceTypeIndex + 1) % APPLE_DEVICE_COUNT;
+}
+void BleBeaconActivity::sendSamsungPacket() {
+  auto frame = biscuit_sim::blePreview(2, packetsSent++);
+  beaconSimTrace("adv", packetsSent, frame.family);
+}
+void BleBeaconActivity::sendGoogleFastPairPacket() {
+  auto frame = biscuit_sim::blePreview(3, packetsSent++);
+  beaconSimTrace("adv", packetsSent, frame.family);
+  deviceTypeIndex = (deviceTypeIndex + 1) % GOOGLE_MODEL_COUNT;
+}
+void BleBeaconActivity::sendWindowsSwiftPairPacket() {
+  auto frame = biscuit_sim::blePreview(4, packetsSent++);
+  beaconSimTrace("adv", packetsSent, frame.family);
+}
+#endif
+
 void BleBeaconActivity::cycleSpamAll() {
   switch (platformIndex) {
     case 0:
@@ -261,7 +316,7 @@ void BleBeaconActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
         if (btn == 2) {
           if (modeIndex == STOP) { shelf::leave(renderer, mappedInput); return; }
@@ -290,7 +345,7 @@ void BleBeaconActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopSpam(); requestUpdate(); return; }
+      if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { stopSpam(); requestUpdate(); return; }
     }
   }
 
@@ -358,6 +413,10 @@ void BleBeaconActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "BLE Spam");
+#ifdef SIMULATOR
+  renderer.drawCenteredText(SMALL_FONT_ID, metrics.topPadding + metrics.headerHeight + 2,
+                            "OFFLINE SIMULATION - NO RADIO");
+#endif
 
   if (state == MODE_SELECT) {
     const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;

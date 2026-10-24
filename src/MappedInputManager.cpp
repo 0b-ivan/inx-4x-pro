@@ -13,6 +13,21 @@
 
 namespace fui = freeink::ui;
 
+void MappedInputManager::update() const {
+  gpio.update();
+#ifdef SIMULATOR
+  const unsigned long now = millis();
+  if (gpio.wasAnyPressed()) {
+    simButtonPressedAt = now;
+    simButtonDown = true;
+  }
+  if (gpio.wasAnyReleased()) {
+    simCompletedHeldMs = simButtonDown ? now - simButtonPressedAt : 0;
+    simButtonDown = false;
+  }
+#endif
+}
+
 bool MappedInputManager::isNavDirectionSwapped() const {
   // Key the swap on the orientation the screen is *actually* rendered at, not the persisted reader
   // setting. The reader (and its modal menus) render rotated, so navigation/labels flip there; the
@@ -327,6 +342,12 @@ unsigned long MappedInputManager::getHeldTime() const {
     return touchHeldOverrideMs;
   }
   touchHeldOverrideValid = false;
+#ifdef SIMULATOR
+  // FreeInk InputManager returns the completed press duration after release.
+  // The upstream SDL HalGPIO implementation instead checks ONLY buttons that
+  // remain down, returning 0 on release. Honor the hardware contract here.
+  if (gpio.wasAnyReleased()) return simCompletedHeldMs;
+#endif
   return gpio.getHeldTime();
 }
 

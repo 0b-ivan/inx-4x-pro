@@ -2,9 +2,16 @@
 #include "DevMode.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <WiFi.h>
 #include <esp_wifi.h>
+#else
+#include "platform/sim_biscuit_wifi_frames.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 #include <string.h>
+#include <algorithm>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -15,6 +22,7 @@
 // Static instance
 // ---------------------------------------------------------------------------
 
+#ifndef SIMULATOR
 DeviceFingerprinterActivity* DeviceFingerprinterActivity::activeInstance = nullptr;
 
 void DeviceFingerprinterActivity::promiscuousCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
@@ -32,6 +40,15 @@ void DeviceFingerprinterActivity::promiscuousCallback(void* buf, wifi_promiscuou
 
   activeInstance->onProbePacket(payload, sig_len, pkt->rx_ctrl.rssi);
 }
+
+#else
+static void fingerprintSimTrace(const char* state, int devices, int probes) {
+  const char* env = std::getenv("CROSSPLAY_SIM_FINGERPRINT_TRACE");
+  if (env && env[0] == '1' && env[1] == '\0')
+    std::fprintf(stderr, "[BISCUIT_SIM] FINGERPRINT:%s:%d:%d\n",
+                 state, devices, probes);
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // OS fingerprint heuristic
@@ -75,7 +92,7 @@ const char* DeviceFingerprinterActivity::estimateOs(const uint8_t* mac, int prob
 // ---------------------------------------------------------------------------
 
 void DeviceFingerprinterActivity::onProbePacket(const uint8_t* payload, uint16_t len, int rssi) {
-  (void)len;
+  if (!payload || len < 16) return;
   const uint8_t* srcMac = payload + 10;
 
   portENTER_CRITICAL(&dataMux);
@@ -123,6 +140,10 @@ void DeviceFingerprinterActivity::onEnter() {
   devices.reserve(MAX_DEVICES);
   deviceIndex = 0;
   promiscuousActive = false;
+#ifdef SIMULATOR
+  simInjected = false;
+  fingerprintSimTrace("ready", 0, 0);
+#endif
   requestUpdate();
 }
 
@@ -130,6 +151,7 @@ void DeviceFingerprinterActivity::startCapture() {
   lastDisplay = millis();
 
   RADIO.ensureWifi();
+#ifndef SIMULATOR
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
@@ -140,21 +162,37 @@ void DeviceFingerprinterActivity::startCapture() {
   wifi_promiscuous_filter_t filter{};
   filter.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT;
   esp_wifi_set_promiscuous_filter(&filter);
+#else
+  simInjected = false;
+  simStarted = millis();
+#endif
 
   promiscuousActive = true;
   state = CAPTURING;
+#ifdef SIMULATOR
+  fingerprintSimTrace("capturing", 0, 0);
+#endif
   requestUpdate();
 }
 
 void DeviceFingerprinterActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   if (promiscuousActive) {
+#ifndef SIMULATOR
     esp_wifi_set_promiscuous(false);
+#endif
     promiscuousActive = false;
   }
+#ifndef SIMULATOR
   activeInstance = nullptr;
+#endif
   RADIO.shutdown();
+#ifdef SIMULATOR
+  fingerprintSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                          ? "radio-off" : "radio-leak",
+                       static_cast<int>(devices.size()), 0);
+#endif
+  Activity::onExit();
+  devmode::resume();
 }
 
 // ---------------------------------------------------------------------------
@@ -165,14 +203,42 @@ void DeviceFingerprinterActivity::loop() {
   if (state == READY) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       startCapture();
+      return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       shelf::leave(renderer, mappedInput);
+      return;
+    }
+    int x = 0, y = 0;
+    if (mappedInput.wasScreenTapped(x, y)) {
+      const int button = GUI.tappedAlwaysHintButton(x, y, renderer);
+      if (button == 1) shelf::leave(renderer, mappedInput);
+      else if (button == 2) startCapture();
     }
     return;
   }
 
   const unsigned long now = millis();
+#ifdef SIMULATOR
+  if (state == CAPTURING && promiscuousActive && !simInjected &&
+      now - simStarted >= 750) {
+    simInjected = true;
+    int validProbes = 0;
+    for (const auto& frame : biscuit_sim::fingerprintFrames()) {
+      biscuit_sim::ParsedProbe parsed;
+      if (biscuit_sim::parseProbe(frame.bytes.data(), frame.bytes.size(), parsed)) {
+        onProbePacket(frame.bytes.data(), static_cast<uint16_t>(frame.bytes.size()),
+                      frame.rssi);
+        ++validProbes;
+      }
+    }
+    fingerprintSimTrace("scan", static_cast<int>(devices.size()), validProbes);
+    // Assert the ORIGINAL heuristic, not a parallel simulator classifier.
+    for (const auto& device : devices)
+      fingerprintSimTrace(device.estimatedOs, device.probeCount, device.rssi);
+    requestUpdate();
+  }
+#endif
 
   if (now - lastDisplay >= DISPLAY_INTERVAL_MS) {
     lastDisplay = now;
@@ -198,6 +264,41 @@ void DeviceFingerprinterActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     shelf::leave(renderer, mappedInput);
+    return;
+  }
+  int x = 0, y = 0;
+  if (!mappedInput.wasScreenTapped(x, y)) return;
+  const int button = GUI.tappedAlwaysHintButton(x, y, renderer);
+  if (button == 1) {
+    shelf::leave(renderer, mappedInput);
+    return;
+  }
+  if (button == 3 || button == 4) {
+    if (count > 0) {
+      deviceIndex = button == 3
+          ? ButtonNavigator::previousIndex(deviceIndex, count)
+          : ButtonNavigator::nextIndex(deviceIndex, count);
+      requestUpdate();
+    }
+    return;
+  }
+  if (count <= 0) return;
+  const auto& m = UITheme::getInstance().getMetrics();
+  const int top = m.topPadding + m.headerHeight + m.verticalSpacing;
+  const int available = renderer.getScreenHeight() - top -
+                        BaseMetrics::values.buttonHintsHeight - m.verticalSpacing;
+  const int step = GUI.getListRowStep(true);
+  const int perPage = std::max(1, available / step);
+  const int start = (deviceIndex / perPage) * perPage;
+  const int pageCount = std::min(perPage, count - start);
+  int row = -1;
+  const auto result = mappedInput.rowTouch(
+      row, top, step, pageCount, 0,
+      renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+  if (result != MappedInputManager::RowTouch::None &&
+      row >= 0 && row < pageCount) {
+    deviceIndex = start + row;
+    requestUpdate();
   }
 }
 
@@ -215,7 +316,7 @@ void DeviceFingerprinterActivity::render(RenderLock&&) {
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
                    "Device Fingerprinter");
     const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-    const int centerY = contentTop + (pageHeight - contentTop - metrics.buttonHintsHeight) / 2;
+    const int centerY = contentTop + (pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight) / 2;
     renderer.drawCenteredText(UI_10_FONT_ID, centerY - 30, "Identify nearby device types");
     renderer.drawCenteredText(UI_10_FONT_ID, centerY, "by analyzing WiFi probe requests.");
     renderer.drawCenteredText(SMALL_FONT_ID, centerY + 40, "Press Confirm to start capture.");
@@ -236,7 +337,7 @@ void DeviceFingerprinterActivity::render(RenderLock&&) {
                  "Device Fingerprinter", subtitle);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - metrics.verticalSpacing;
 
   if (devCount == 0) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Listening for probe requests...");

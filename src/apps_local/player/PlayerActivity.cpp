@@ -393,6 +393,6 @@ void PlayerActivity::render(RenderLock&&) {
   toybox::reportOverflow(interactions, "Player");
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

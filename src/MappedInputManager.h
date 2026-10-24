@@ -39,7 +39,7 @@ class MappedInputManager {
 
   MappedInputManager(HalGPIO& gpio, const GfxRenderer& renderer) : gpio(gpio), renderer(renderer) {}
 
-  void update() const { gpio.update(); }
+  void update() const;
 #if FREEINK_CAP_TOUCH
   // X4 Pro delays a single power click until its frontlight double-click window
   // expires. The main loop supplies that one-frame event here.
@@ -116,6 +116,13 @@ class MappedInputManager {
   [[nodiscard]] bool isNavDirectionSwapped() const;
 
  private:
+#ifdef SIMULATOR
+  // Unlike FreeInk hardware, SDL HalGPIO reports no held duration on release.
+  // Cache the completed press time so native UI gets the same semantics.
+  mutable bool simButtonDown = false;
+  mutable unsigned long simButtonPressedAt = 0;
+  mutable unsigned long simCompletedHeldMs = 0;
+#endif
   HalGPIO& gpio;
   // Logical-to-physical button mapping depends on what the user is actually looking at: when the
   // screen is rendered rotated, the directional buttons must flip to match. The renderer is the only

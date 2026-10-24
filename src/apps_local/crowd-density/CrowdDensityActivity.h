@@ -34,7 +34,12 @@ class CrowdDensityActivity final : public Activity {
   void startCapture();
   static constexpr int HISTORY_SIZE = 60;   // 30 minutes at 30 s intervals
   static constexpr int MAX_MACS = 256;
+#ifdef SIMULATOR
+  static constexpr unsigned long SAMPLE_INTERVAL_MS = 3000UL; // accelerated test clock
+  bool simFedWindow = false;
+#else
   static constexpr unsigned long SAMPLE_INTERVAL_MS = 30000UL;
+#endif
   static constexpr unsigned long DISPLAY_INTERVAL_MS = 2000UL;
 
   int history[HISTORY_SIZE] = {};
@@ -54,5 +59,7 @@ class CrowdDensityActivity final : public Activity {
   portMUX_TYPE dataMux = portMUX_INITIALIZER_UNLOCKED;
 
   static CrowdDensityActivity* activeInstance;
+#ifndef SIMULATOR
   static void promiscuousCallback(void* buf, wifi_promiscuous_pkt_type_t type);
+#endif
 };

@@ -1,0 +1,73 @@
+{
+  "$schema": "biscuit-sdl-visual-goldens-v1",
+  "description": "Normalized 1-bit image references from REAL SDL screenshots; stable across two independent green CI runs. Do not auto-rebaseline.",
+  "source_runs": [
+    39984886630,
+    39988874651
+  ],
+  "width": 480,
+  "height": 800,
+  "threshold": 128,
+  "screenshots": {
+    "CLOCK.bmp": {
+      "sha256": "32b26eee75495ebd0e4d53187a1f4bd31b878cb4016b13ea748000af3a5b0c07",
+      "black_pixels": 5236,
+      "quadrants": [
+        1807,
+        1613,
+        1218,
+        598
+      ]
+    },
+    "DEVICE_INFO.bmp": {
+      "sha256": "76e0b32f732a641da670af51ac1cc510c0d6a07560e8220a35af62a647f92893",
+      "black_pixels": 13927,
+      "quadrants": [
+        11520,
+        1295,
+        462,
+        650
+      ]
+    },
+    "BLE_SCANNER_value.bmp": {
+      "sha256": "021f5780c47c92c1a1cdcbce8e220bc3dade7825db3f22b5cea048c4b843df23",
+      "black_pixels": 9957,
+      "quadrants": [
+        6522,
+        2411,
+        832,
+        192
+      ]
+    },
+    "MDNS_BROWSER.bmp": {
+      "sha256": "0a509951988c0738d03f8cf9ee9d6e9f32aa06a7b62559b44384e748b5bf6a1b",
+      "black_pixels": 15641,
+      "quadrants": [
+        9713,
+        4687,
+        882,
+        359
+      ]
+    },
+    "HOST_SCANNER_offline.bmp": {
+      "sha256": "b5b6337fc84469ce236ae7e47828c4a0494a7e0ee604dc8e7999e8b811059abd",
+      "black_pixels": 4722,
+      "quadrants": [
+        2049,
+        1098,
+        921,
+        654
+      ]
+    },
+    "PROBE_SNIFFER_list.bmp": {
+      "sha256": "0182124c4ff19ea5d2347ceb4ec966eae6e2248cd43f25074f7129208b75d486",
+      "black_pixels": 16505,
+      "quadrants": [
+        10350,
+        4942,
+        854,
+        359
+      ]
+    }
+  }
+}

@@ -1,4 +1,6 @@
 #include "WardrivingActivity.h"
+#include "WardriveCsv.h"
+#include "WardriveWrite.h"
 #include "DevMode.h"
 #include "../Shelf.h"
 
@@ -21,6 +23,8 @@ void WardrivingActivity::onEnter() {
   RADIO.ensureWifi();
   WiFi.disconnect();
   logging = false;
+  scanPending = false;
+  storageError = false;
   networks.clear();
   scanCount = 0;
   totalNewThisScan = 0;
@@ -30,20 +34,30 @@ void WardrivingActivity::onEnter() {
 }
 
 void WardrivingActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   stopLogging();
   RADIO.shutdown();
+  devmode::resume();
+  Activity::onExit();
 }
 
 void WardrivingActivity::startLogging() {
+  storageError = false;
+  Storage.mkdir("/crossplay");
   Storage.mkdir("/crossplay/logs");
 
   char buf[64];
   snprintf(buf, sizeof(buf), "/crossplay/logs/wardrive_%lu.csv", millis());
   filename = buf;
 
-  Storage.writeFile(filename.c_str(), "SSID,BSSID,RSSI,Channel,Encryption,FirstSeen_ms\n");
+  if (!Storage.writeFile(filename.c_str(), "SSID,BSSID,RSSI,Channel,Encryption,FirstSeen_ms\n")) {
+    storageError = true;
+    filename.clear();
+    logging = false;
+    scanPending = false;
+    LOG_ERR("WARD", "Cannot create CSV; no scan data will be recorded");
+    requestUpdate();
+    return;
+  }
 
   startTime = millis();
   logging = true;
@@ -52,6 +66,7 @@ void WardrivingActivity::startLogging() {
 
   WiFi.scanDelete();
   WiFi.scanNetworks(true);  // async
+  scanPending = true;
   lastScanTime = millis();
 
   LOG_DBG("WARD", "Started logging to %s", filename.c_str());
@@ -60,30 +75,34 @@ void WardrivingActivity::startLogging() {
 void WardrivingActivity::stopLogging() {
   if (!logging) return;
   WiFi.scanDelete();
+  scanPending = false;
   logging = false;
   LOG_DBG("WARD", "Stopped logging. %zu unique networks.", networks.size());
 }
 
-void WardrivingActivity::appendNetworkToCsv(const SeenNetwork& net) {
-  if (filename.empty()) return;
+bool WardrivingActivity::appendNetworkToCsv(const SeenNetwork& net) {
+  if (filename.empty()) return false;
   HalFile f = Storage.open(filename.c_str(), O_WRITE | O_CREAT | O_APPEND);
-  if (f) {
-    String line = String(net.ssid.c_str()) + "," + net.bssid.c_str() + "," + String(net.rssi) + "," +
-                  String(net.channel) + "," + encryptionString(net.encType) + "," + String(net.firstSeen) + "\n";
-    f.print(line);
-    f.close();
-  }
+  if (!f) return false;
+  const std::string ssid = wardrive_csv::escapeField(net.ssid);
+  const String line = String(ssid.c_str()) + "," + net.bssid.c_str() + "," +
+                      String(net.rssi) + "," + String(net.channel) + "," +
+                      encryptionString(net.encType) + "," + String(net.firstSeen) + "\n";
+  return wardrive_write::writeComplete(f, std::string(line.c_str(), line.length()));
 }
 
 void WardrivingActivity::processScanResults() {
+  if (!scanPending) return;
   int16_t result = WiFi.scanComplete();
   if (result == WIFI_SCAN_RUNNING) return;
+  scanPending = false;
 
   int newThisScan = 0;
 
   if (result > 0) {
     for (int i = 0; i < result; i++) {
       uint8_t* rawBssid = WiFi.BSSID(i);
+      if (!rawBssid) continue;
       char bssidBuf[20];
       snprintf(bssidBuf, sizeof(bssidBuf), "%02X:%02X:%02X:%02X:%02X:%02X",
                rawBssid[0], rawBssid[1], rawBssid[2], rawBssid[3], rawBssid[4], rawBssid[5]);
@@ -110,9 +129,14 @@ void WardrivingActivity::processScanResults() {
         net.firstSeen = millis();
         net.lastSeen = net.firstSeen;
 
-        if (logging) appendNetworkToCsv(net);
+        if (logging && !appendNetworkToCsv(net)) {
+          storageError = true;
+          LOG_ERR("WARD", "SD write failed, recording stopped");
+          stopLogging();
+        }
         networks.push_back(std::move(net));
         newThisScan++;
+        if (storageError) break;
       }
     }
   }
@@ -151,9 +175,10 @@ void WardrivingActivity::loop() {
     }
 
     // Start next async scan after interval, but only if the previous one finished
-    if (WiFi.scanComplete() != WIFI_SCAN_RUNNING &&
-        millis() - lastScanTime >= SCAN_INTERVAL_MS) {
+    if (!scanPending && millis() - lastScanTime >= SCAN_INTERVAL_MS) {
       WiFi.scanNetworks(true);
+      scanPending = true;
+      lastScanTime = millis();
     }
   }
 
@@ -192,17 +217,19 @@ void WardrivingActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
       if (btn == 1) { if (logging) stopLogging(); shelf::leave(renderer, mappedInput); return; }
       if (btn == 2) {
         if (logging) { stopLogging(); } else { networks.clear(); selectorIndex = 0; startLogging(); }
         requestUpdate(); return;
       }
+      // On GT911 the two side keys do not provide a Confirm action; the
+      // always-visible action bar is the explicit Start/Stop touch control.
       if (count > 0) {
         int touchRow = -1;
         const auto& m = UITheme::getInstance().getMetrics();
         const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
-        const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+        const int contentH = renderer.getScreenHeight() - contentTop - BaseMetrics::values.buttonHintsHeight - m.verticalSpacing;
         const int rowStep = GUI.getListRowStep(true);
         const int pageItems = std::max(1, contentH / rowStep);
         const int pageStart = (selectorIndex / pageItems) * pageItems;
@@ -226,7 +253,9 @@ void WardrivingActivity::render(RenderLock&&) {
 
   // Build subtitle: "N unique | scan #M"  or  "N unique"
   char subtitleBuf[48];
-  if (logging) {
+  if (storageError) {
+    snprintf(subtitleBuf, sizeof(subtitleBuf), "SD ERROR | %zu seen", networks.size());
+  } else if (logging) {
     snprintf(subtitleBuf, sizeof(subtitleBuf), "%zu unique | scan #%d", networks.size(), scanCount);
   } else {
     snprintf(subtitleBuf, sizeof(subtitleBuf), "%zu unique", networks.size());
@@ -236,13 +265,14 @@ void WardrivingActivity::render(RenderLock&&) {
                  "Wardriving", subtitleBuf);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - metrics.verticalSpacing;
 
   if (networks.empty()) {
     if (logging) {
       GUI.drawSpinner(renderer, pageWidth / 2, pageHeight / 2, "SCANNING...", spinnerFrame);
     } else {
-      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Press OK to start");
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2,
+                                storageError ? "SD write failed - not recording" : "Press OK to start");
     }
   } else {
     GUI.drawList(

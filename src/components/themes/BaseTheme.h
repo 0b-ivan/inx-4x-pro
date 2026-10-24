@@ -248,6 +248,11 @@ class BaseTheme {
   // bar).  tapX/tapY are logical coordinates in the caller's current orientation
   // as returned by MappedInputManager::wasScreenTapped().
   virtual int tappedHintButton(int tapX, int tapY, const GfxRenderer& renderer) const;
+  // Explicit counterpart to drawButtonHintsAlways(): the normal metrics
+  // intentionally reserve zero footer height on touch devices, but an
+  // explicitly drawn hint bar still occupies BaseMetrics::buttonHintsHeight.
+  // Use this only on screens that actually draw the always-visible bar.
+  int tappedAlwaysHintButton(int tapX, int tapY, const GfxRenderer& renderer) const;
   // Shared by every theme's drawButtonHints(): centres a hint label in its box,
   // wrapping to two lines rather than overflowing when it's too wide to fit.
   static void drawHintLabel(GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,

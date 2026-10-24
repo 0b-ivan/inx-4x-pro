@@ -510,7 +510,7 @@ void WifiScannerActivity::renderSignalView() {
   }
 
   const auto labels = mappedInput.mapLabels("Back", "List View", "", "");
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 // ---- Channel spectrum render ------------------------------------------------
@@ -638,7 +638,7 @@ void WifiScannerActivity::renderChannelSpectrum() {
   // Bounds check: if chart overflows, skip the bottom row
   if (recY + renderer.getTextHeight(UI_10_FONT_ID) < pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing) {
     const auto labels = mappedInput.mapLabels("Back", "Rescan", "Table", "");
-    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 }
 
@@ -721,7 +721,7 @@ void WifiScannerActivity::renderChannelTable() {
   }
 
   const auto labels = mappedInput.mapLabels("Back", "Rescan", "Spectrum", "");
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 // ---- render -----------------------------------------------------------------
@@ -783,7 +783,7 @@ void WifiScannerActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, leftPad, y, encryptionString(net.encType));
 
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
-    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -831,7 +831,7 @@ void WifiScannerActivity::render(RenderLock&&) {
   }
 
   const auto labels = mappedInput.mapLabels("Back", "Select", "Sort", "");
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, "Hold: Views", labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, "Hold: Views", labels.btn3, labels.btn4);
   GUI.drawSideButtonHints(renderer, "^", "v");
 
   renderer.displayBuffer();

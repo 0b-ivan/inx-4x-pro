@@ -2,9 +2,13 @@
 #include "DevMode.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <BLEAdvertisedDevice.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>
+#else
+#include "platform/sim_biscuit_ble.h"
+#endif
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -18,7 +22,21 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-// Static pointer for callback context
+#ifdef SIMULATOR
+#include <cstdio>
+#include <cstdlib>
+
+// Emitted only for explicit UI regression runs; never available on hardware.
+static void traceSimGatt(const char* state) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_BLE_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0') {
+    std::fprintf(stderr, "[BISCUIT_SIM] BLE_SCANNER:%s\n", state);
+  }
+}
+#endif
+
+#ifndef SIMULATOR
+// Only real hardware uses asynchronous radio callbacks.
 static BleScannerActivity* activeScanner = nullptr;
 
 class BleScanCallback : public BLEAdvertisedDeviceCallbacks {
@@ -27,6 +45,8 @@ class BleScanCallback : public BLEAdvertisedDeviceCallbacks {
     // Handled in main loop via BLEScan results
   }
 };
+
+#endif  // !SIMULATOR
 
 // ---- lifecycle ----
 
@@ -54,7 +74,9 @@ void BleScannerActivity::onExit() {
   Activity::onExit();
   disconnect();
   stopBleScan();
+#ifndef SIMULATOR
   activeScanner = nullptr;
+#endif
   if (scanInitialized) {
     RADIO.shutdown();
     scanInitialized = false;
@@ -68,17 +90,21 @@ void BleScannerActivity::startBleScan() {
   scanning = true;
   lastScanTime = millis();
 
+#ifndef SIMULATOR
   BLEScan* scan = BLEDevice::getScan();
   scan->setActiveScan(true);
   scan->setInterval(100);
   scan->setWindow(99);
   scan->clearResults();
   scan->start(0, nullptr, true);  // non-blocking: scan once, return immediately
+#endif
 }
 
 void BleScannerActivity::stopBleScan() {
   if (!scanInitialized) return;
+#ifndef SIMULATOR
   BLEDevice::getScan()->stop();
+#endif
   scanning = false;
 }
 
@@ -105,27 +131,45 @@ void BleScannerActivity::connectToDevice(int index) {
 
   stopBleScan();
 
+#ifdef SIMULATOR
+  connected = biscuit_sim::bleConnects(devices[index].mac);
+#else
   pClient = BLEDevice::createClient();
   connected = pClient->connect(devices[index].address, 0xFF, 5000);  // 5 second timeout instead of default 30
+#endif
 
   if (connected) {
     enumerateServices();
     state = SERVICES;
     selectorIndex = 0;
+#ifdef SIMULATOR
+    traceSimGatt("services");
+#endif
   } else {
+#ifdef SIMULATOR
+    traceSimGatt("connect-failed");
+#endif
+#ifndef SIMULATOR
     delete pClient;
+#endif
     pClient = nullptr;
     state = SCANNING_VIEW;
+#ifdef SIMULATOR
+    startBleScan();
+#endif
   }
   requestUpdate();
 }
 
 void BleScannerActivity::disconnect() {
+#ifndef SIMULATOR
   if (pClient) {
     if (connected) pClient->disconnect();
     delete pClient;
     pClient = nullptr;
   }
+#endif
+  pClient = nullptr;
   connected = false;
   services.clear();
   characteristics.clear();
@@ -134,6 +178,20 @@ void BleScannerActivity::disconnect() {
 // ---- service / characteristic enumeration ----
 
 void BleScannerActivity::enumerateServices() {
+#ifdef SIMULATOR
+  services.clear();
+  if (!connected || selectedDevice < 0 ||
+      selectedDevice >= static_cast<int>(devices.size())) return;
+  const auto& mac = devices[selectedDevice].mac;
+  for (const auto& service : biscuit_sim::bleGattServices(mac)) {
+    ServiceInfo info;
+    info.uuid = service.uuid;
+    const char* resolved = resolveServiceName(info.uuid);
+    info.name = resolved ? resolved : info.uuid;
+    info.charCount = static_cast<int>(biscuit_sim::bleGattCharacteristics(mac, info.uuid).size());
+    services.push_back(std::move(info));
+  }
+#else
   services.clear();
   if (!pClient || !connected) return;
 
@@ -156,9 +214,31 @@ void BleScannerActivity::enumerateServices() {
     services.push_back(std::move(info));
     count++;
   }
+#endif
 }
 
 void BleScannerActivity::enumerateCharacteristics(int serviceIndex) {
+#ifdef SIMULATOR
+  characteristics.clear();
+  if (!connected || selectedDevice < 0 || selectedService < 0 ||
+      serviceIndex < 0 || serviceIndex >= static_cast<int>(services.size())) return;
+  const auto& mac = devices[selectedDevice].mac;
+  for (const auto& value : biscuit_sim::bleGattCharacteristics(mac, services[serviceIndex].uuid)) {
+    CharInfo info;
+    info.uuid = value.uuid;
+    const char* resolved = resolveCharName(info.uuid);
+    info.name = resolved ? resolved : info.uuid;
+    info.properties = 0;
+    info.canRead = value.canRead;
+    info.canWrite = value.canWrite;
+    info.canNotify = value.canNotify;
+    if (info.canRead) info.properties |= 0x02;
+    if (info.canWrite) info.properties |= 0x08;
+    if (info.canNotify) info.properties |= 0x10;
+    info.value = info.canRead ? "(press OK to read)" : "(not readable)";
+    characteristics.push_back(std::move(info));
+  }
+#else
   characteristics.clear();
   if (!pClient || !connected || serviceIndex < 0) return;
 
@@ -196,9 +276,25 @@ void BleScannerActivity::enumerateCharacteristics(int serviceIndex) {
     }
     si++;
   }
+#endif
 }
 
 void BleScannerActivity::readCharacteristic(int charIndex) {
+#ifdef SIMULATOR
+  if (!connected || selectedDevice < 0 || selectedService < 0 ||
+      selectedService >= static_cast<int>(services.size()) ||
+      charIndex < 0 || charIndex >= static_cast<int>(characteristics.size())) return;
+  const auto& mac = devices[selectedDevice].mac;
+  const auto values = biscuit_sim::bleGattCharacteristics(mac, services[selectedService].uuid);
+  if (charIndex >= static_cast<int>(values.size()) || !values[charIndex].canRead) return;
+  const std::string raw = values[charIndex].value;
+  std::string hex = bytesToHex(reinterpret_cast<const uint8_t*>(raw.data()),
+                               static_cast<int>(raw.size()));
+  std::string ascii = bytesToAsciiSafe(reinterpret_cast<const uint8_t*>(raw.data()),
+                                       static_cast<int>(raw.size()));
+  characteristics[charIndex].value = hex.empty() ? "(empty)" : hex;
+  if (!ascii.empty()) characteristics[charIndex].value += " (" + ascii + ")";
+#else
   if (!pClient || !connected || selectedService < 0) return;
   if (charIndex < 0 || charIndex >= static_cast<int>(characteristics.size())) return;
 
@@ -242,6 +338,7 @@ void BleScannerActivity::readCharacteristic(int charIndex) {
     }
     si++;
   }
+#endif
 }
 
 // ---- static helpers ----
@@ -325,7 +422,9 @@ void BleScannerActivity::loop() {
     needsInit = false;
     RADIO.ensureBle();
     scanInitialized = true;
+#ifndef SIMULATOR
     activeScanner = this;
+#endif
     startBleScan();
     requestUpdate();
     return;
@@ -339,7 +438,7 @@ void BleScannerActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = SCANNING_VIEW; requestUpdate(); }
+        if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { state = SCANNING_VIEW; requestUpdate(); }
       }
     }
     return;
@@ -366,6 +465,9 @@ void BleScannerActivity::loop() {
         enumerateCharacteristics(selectorIndex);
         state = CHARACTERISTICS;
         selectorIndex = 0;
+#ifdef SIMULATOR
+        traceSimGatt("characteristics");
+#endif
         requestUpdate();
       }
       return;
@@ -375,6 +477,9 @@ void BleScannerActivity::loop() {
       state = SCANNING_VIEW;
       selectorIndex = selectedDevice >= 0 ? selectedDevice : 0;
       startBleScan();
+#ifdef SIMULATOR
+      traceSimGatt("back-scanning");
+#endif
       requestUpdate();
     }
     return;
@@ -400,6 +505,9 @@ void BleScannerActivity::loop() {
           }
         }
         state = CHAR_VALUE;
+#ifdef SIMULATOR
+        traceSimGatt("value");
+#endif
         requestUpdate();
       }
       return;
@@ -407,6 +515,9 @@ void BleScannerActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       state = SERVICES;
       selectorIndex = selectedService >= 0 ? selectedService : 0;
+#ifdef SIMULATOR
+      traceSimGatt("back-services");
+#endif
       requestUpdate();
     }
     return;
@@ -426,6 +537,9 @@ void BleScannerActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       state = CHARACTERISTICS;
       selectorIndex = selectedChar >= 0 ? selectedChar : 0;
+#ifdef SIMULATOR
+      traceSimGatt("back-characteristics");
+#endif
       requestUpdate();
     }
     return;
@@ -443,6 +557,32 @@ void BleScannerActivity::loop() {
   }
 
   // Check if scan completed and collect results
+#ifdef SIMULATOR
+  if (scanning && scanInitialized && millis() - lastScanTime >= 900) {
+    const auto advertised = biscuit_sim::bleAdvertisements();
+    for (const auto& dev : advertised) {
+      auto it = std::find_if(devices.begin(), devices.end(),
+          [&dev](const BleDevice& existing) { return existing.mac == dev.mac; });
+      if (it != devices.end()) {
+        it->name = dev.name;
+        it->rssi = dev.rssi;
+      } else if (static_cast<int>(devices.size()) < MAX_DEVICES) {
+        BleDevice entry;
+        entry.name = dev.name;
+        entry.mac = dev.mac;
+        entry.rssi = dev.rssi;
+        entry.address = BLEAddress(dev.mac);
+        devices.push_back(std::move(entry));
+      }
+    }
+    std::sort(devices.begin(), devices.end(),
+        [](const BleDevice& a, const BleDevice& b) { return a.rssi > b.rssi; });
+    if (!devices.empty() && selectorIndex >= static_cast<int>(devices.size()))
+      selectorIndex = static_cast<int>(devices.size()) - 1;
+    lastScanTime = millis();
+    requestUpdate();
+  }
+#else
   if (scanning && scanInitialized) {
     BLEScan* scan = BLEDevice::getScan();
     BLEScanResults* results = scan->getResults();
@@ -484,6 +624,8 @@ void BleScannerActivity::loop() {
     }
   }
 
+#endif  // !SIMULATOR
+
   // Navigation
   const int count = static_cast<int>(devices.size());
 
@@ -516,7 +658,7 @@ void BleScannerActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+      const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
       if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
       if (btn == 2 && !devices.empty()) { connectToDevice(selectorIndex); requestUpdate(); return; }
       if (count > 0) {

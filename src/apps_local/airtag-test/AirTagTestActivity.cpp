@@ -2,10 +2,16 @@
 #include "DevMode.h"
 #include "../Shelf.h"
 
+#ifndef SIMULATOR
 #include <BLEDevice.h>
+#include <esp_random.h>
+#else
+#include "platform/sim_biscuit_ble.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 #include <GfxRenderer.h>
 #include <Logging.h>
-#include <esp_random.h>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -13,6 +19,14 @@
 #include "../util/RadioManager.h"
 
 constexpr const char* AirTagTestActivity::MODE_NAMES[];
+
+#ifdef SIMULATOR
+static void airtagSimTrace(const char* event, unsigned count, unsigned mode) {
+  const char* enabled = std::getenv("CROSSPLAY_SIM_BLE_TRACE");
+  if (enabled && enabled[0] == '1' && enabled[1] == '\0')
+    std::fprintf(stderr,"[BISCUIT_SIM] AIRTAG:%s:%u:%u\n",event,count,mode);
+}
+#endif
 
 void AirTagTestActivity::onEnter() {
   devmode::pause();
@@ -32,15 +46,23 @@ void AirTagTestActivity::onEnter() {
 }
 
 void AirTagTestActivity::onExit() {
-  devmode::resume();
-  Activity::onExit();
   stopSpoofing();
   RADIO.shutdown();
+#ifdef SIMULATOR
+  airtagSimTrace(RADIO.getState() == RadioManager::RadioState::OFF
+                    ? "radio-off" : "radio-leak",advCount,macMode);
+#endif
+  Activity::onExit();
+  devmode::resume();
 }
 
 void AirTagTestActivity::generateRandomMac() {
   for (int i = 0; i < 6; i++) {
+#ifdef SIMULATOR
+    currentMac[i] = static_cast<uint8_t>((advCount + 13u * i) & 0xff);
+#else
     currentMac[i] = esp_random() & 0xFF;
+#endif
   }
   // Set top two bits for random static address
   currentMac[0] |= 0xC0;
@@ -62,22 +84,35 @@ void AirTagTestActivity::startSpoofing(MacMode mode) {
   lastRotateTime = millis();
   lastAdvTime = 0;
 
+#ifndef SIMULATOR
   pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->stop();
-
+#else
+  airtagSimTrace("start", 0, macMode);
+#endif
   generateRandomMac();
   requestUpdate();
 }
 
 void AirTagTestActivity::stopSpoofing() {
+#ifndef SIMULATOR
   if (pAdvertising) {
     pAdvertising->stop();
     pAdvertising = nullptr;
   }
+#else
+  if (state == SPOOFING) airtagSimTrace("stop",advCount,macMode);
+#endif
   state = MODE_SELECT;
 }
 
 void AirTagTestActivity::sendAirTagAdvertisement() {
+#ifdef SIMULATOR
+  // An intentionally non-wire-compatible preview, never a real Find My frame.
+  const auto fake = biscuit_sim::blePreview(5, advCount++);
+  airtagSimTrace("adv", advCount, fake.family);
+  return;
+#else
   if (!pAdvertising) return;
 
   pAdvertising->stop();
@@ -112,6 +147,7 @@ void AirTagTestActivity::sendAirTagAdvertisement() {
   pAdvertising->start();
 
   advCount++;
+#endif
 }
 
 void AirTagTestActivity::loop() {
@@ -139,7 +175,7 @@ void AirTagTestActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
         if (btn == 2) { startSpoofing(static_cast<MacMode>(modeIndex)); return; }
         int touchRow = -1;
@@ -166,7 +202,7 @@ void AirTagTestActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopSpoofing(); requestUpdate(); return; }
+      if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { stopSpoofing(); requestUpdate(); return; }
     }
   }
 
@@ -176,6 +212,9 @@ void AirTagTestActivity::loop() {
   if (macMode == ROTATING_MAC && (now - lastRotateTime >= ROTATE_INTERVAL_MS)) {
     lastRotateTime = now;
     generateRandomMac();
+#ifdef SIMULATOR
+    airtagSimTrace("rotated",advCount,macMode);
+#endif
     LOG_DBG("AirTag", "Rotated MAC to %s", formatMac().c_str());
   }
 
@@ -195,6 +234,10 @@ void AirTagTestActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "AirTag Spoofer");
+#ifdef SIMULATOR
+  renderer.drawCenteredText(SMALL_FONT_ID, metrics.topPadding + metrics.headerHeight + 2,
+                            "OFFLINE SIMULATION - NO RADIO");
+#endif
 
   if (state == MODE_SELECT) {
     const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
