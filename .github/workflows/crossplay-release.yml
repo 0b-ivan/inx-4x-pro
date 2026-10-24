@@ -116,6 +116,18 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.7
+
+            Fire app: touch input now works on hardware. All hint-bar
+            buttons and list rows respond to capacitive touch (previously
+            only physical buttons worked on the X4 Pro).
+
+            Captive Portal: new "Credential harvester" template. Serves
+            a fake network-authentication page; submitted passwords are
+            captured in a 6-entry ring buffer and shown live on the
+            device display. Uses POST /harvest endpoint; victim is
+            redirected back after 5 s to look like a failed reconnect.
+
             ### What is new in 1.16.6
 
             Fire app: all six grayed-out [X] attacks now work on fresh boot.
