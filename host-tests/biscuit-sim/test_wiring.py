@@ -295,3 +295,19 @@ assert "FIRE - SIMULATION" in fire_sim, "Fire must clearly indicate UI-only prev
 assert "packetsSent = 0" in fire_sim and "No packets transmitted" in fire_sim, "Fire native simulation must never transmit"
 assert "HWSTUB_ACTIVITY(FireActivity)" not in noops, "Fire must execute a real simulator-specific UI"
 assert "esp_wifi_80211_tx" not in fire_sim and "esp_now_send" not in fire_sim, "Fire preview must contain no TX APIs"
+
+
+# Browser boundaries: never treat untrusted messages or filenames as HTML.
+board = (root / "src/apps_local/bulletin-board/BulletinBoardActivity.cpp").read_text()
+drop = (root / "src/apps_local/dead-drop/DeadDropActivity.cpp").read_text()
+for name, app in (("Bulletin Board", board), ("Dead Drop", drop)):
+    assert ".innerHTML" not in app, f"{name}: untrusted values rendered as HTML"
+    assert "textContent" in app, f"{name}: missing safe browser text rendering"
+    assert "local_web::appendJsonQuoted" in app, f"{name}: manual JSON escaping"
+assert "local_web::validFileName" in drop, "Dead Drop: file name validation missing"
+assert "uploadFile.write(upload.buf, upload.currentSize) != upload.currentSize" in drop, (
+    "Dead Drop: partial file writes must fail"
+)
+assert "File listing exceeds size limit" in drop, "Dead Drop: JSON output needs size bound"
+assert "encodeHeaderFileName" in drop, "Dead Drop: Content-Disposition requires encoding"
+print("local web wiring: 9 checks, 0 failed")

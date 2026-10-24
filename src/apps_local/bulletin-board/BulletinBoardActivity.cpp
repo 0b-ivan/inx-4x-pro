@@ -1,4 +1,5 @@
 #include "BulletinBoardActivity.h"
+#include "../util/LocalWebText.h"
 #include "DevMode.h"
 #include "../Shelf.h"
 
@@ -32,11 +33,15 @@ static const char BOARD_HTML[] PROGMEM =
     "<button type=\"submit\">Post</button></form>"
     "<div id=\"board\">Loading...</div>"
     "<script>"
-    "function load(){fetch('/posts').then(r=>r.json()).then(posts=>{"
-    "let h='';posts.forEach(p=>{"
-    "let d=new Date(p.t*1000);let ts=d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');"
-    "h+='<div class=\"post\">'+p.m+'<div class=\"time\">'+ts+'</div></div>'});"
-    "document.getElementById('board').innerHTML=h||'<p>No messages yet. Be the first!</p>'})}"
+    "function load(){fetch('/posts').then(r=>{if(!r.ok)throw Error('posts');return r.json()})"
+    ".then(posts=>{const board=document.getElementById('board');board.replaceChildren();"
+    "posts.forEach(p=>{const card=document.createElement('div');card.className='post';"
+    "const message=document.createElement('span');message.textContent=p.m;card.appendChild(message);"
+    "const time=document.createElement('div');time.className='time';"
+    "const d=new Date(p.t*1000);time.textContent=d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');"
+    "card.appendChild(time);board.appendChild(card)});"
+    "if(!posts.length)board.textContent='No messages yet. Be the first!';})"
+    ".catch(()=>{document.getElementById('board').textContent='Could not load messages';})}"
     "load();setInterval(load,3000);"
     "</script></body></html>";
 
@@ -152,16 +157,9 @@ void BulletinBoardActivity::setupWebServer() {
     std::string json = "[";
     for (size_t i = 0; i < posts.size(); i++) {
       if (i > 0) json += ",";
-      json += "{\"m\":\"";
-      for (const char* p = posts[i].text; *p; p++) {
-        if (*p == '"')       json += "\\\"";
-        else if (*p == '\\') json += "\\\\";
-        else if (*p == '\n') json += "\\n";
-        else if (*p == '<')  json += "&lt;";
-        else if (*p == '>')  json += "&gt;";
-        else                 json += *p;
-      }
-      json += "\",\"t\":";
+      json += "{\"m\":";
+      local_web::appendJsonQuoted(json, posts[i].text);
+      json += ",\"t\":";
       char tsBuf[16];
       snprintf(tsBuf, sizeof(tsBuf), "%lu", posts[i].timestamp);
       json += tsBuf;

@@ -1,4 +1,5 @@
 #include "DeadDropActivity.h"
+#include "../util/LocalWebText.h"
 #include "DevMode.h"
 #include "../Shelf.h"
 
@@ -25,10 +26,13 @@ static const char DROP_HTML[] PROGMEM =
     "<form method=\"POST\" action=\"/upload\" enctype=\"multipart/form-data\">"
     "<input type=\"file\" name=\"file\"><button type=\"submit\">Upload</button></form>"
     "<h2>Files</h2><div class=\"files\" id=\"fl\">Loading...</div>"
-    "<script>fetch('/list').then(r=>r.json()).then(f=>{"
-    "let h='';f.forEach(n=>{h+='<a href=\"/download?file='+encodeURIComponent(n)+'\">'+"
-    "n+'</a>'});"
-    "document.getElementById('fl').innerHTML=h||'No files yet'})</script>"
+    "<script>fetch('/list').then(r=>{if(!r.ok)throw Error('list');return r.json()})"
+    ".then(f=>{const root=document.getElementById('fl');root.replaceChildren();"
+    "f.forEach(n=>{const a=document.createElement('a');"
+    "a.href='/download?file='+encodeURIComponent(n);a.textContent=n;root.appendChild(a)});"
+    "if(!f.length)root.textContent='No files yet';})"
+    ".catch(()=>{document.getElementById('fl').textContent='Could not load files';})"
+    "</script>"
     "</body></html>";
 
 // Static instance pointer for web handler lambdas
@@ -50,6 +54,10 @@ void DeadDropActivity::onEnter() {
   timerMinutes = TIMER_OPTIONS[timerIndex];
   filesReceived = 0;
   connectedClients = 0;
+  uploadInProgress = false;
+  uploadComplete = false;
+  uploadHttpError = 0;
+  uploadPath.clear();
   ssidName.clear();
   requestUpdate();
 }
@@ -104,7 +112,9 @@ void DeadDropActivity::stopDrop() {
   if (uploadInProgress) {
     uploadFile.close();
     uploadInProgress = false;
+    if (!uploadPath.empty()) Storage.remove(uploadPath.c_str());
   }
+  uploadPath.clear();
   WiFi.softAPdisconnect(true);
   RADIO.shutdown();
   activeInstance = nullptr;
@@ -141,89 +151,104 @@ void DeadDropActivity::handleRoot() {
 
 void DeadDropActivity::handleUploadData() {
   if (!server) return;
-
   HTTPUpload& upload = server->upload();
 
   if (upload.status == UPLOAD_FILE_START) {
-    // Sanitize filename: strip any path separators
-    String fname = upload.filename;
-    int lastSlash = fname.lastIndexOf('/');
-    if (lastSlash >= 0) fname = fname.substring(lastSlash + 1);
-    if (fname.isEmpty()) fname = "unnamed";
-
-    String filePath = DROP_DIR + fname;
-
-    // Remove existing file if present
-    if (Storage.exists(filePath.c_str())) {
-      Storage.remove(filePath.c_str());
-    }
-
-    uploadFile = Storage.open(filePath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
-    uploadInProgress = uploadFile ? true : false;
-
-    LOG_DBG("DEAD", "Upload start: %s (open=%d)", filePath.c_str(), (int)uploadInProgress);
-
-  } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (uploadInProgress && uploadFile) {
-      uploadFile.write(upload.buf, upload.currentSize);
-    }
-
-  } else if (upload.status == UPLOAD_FILE_END) {
-    if (uploadInProgress && uploadFile) {
+    if (uploadInProgress) {
       uploadFile.close();
-      uploadInProgress = false;
-      filesReceived++;
-      LOG_DBG("DEAD", "Upload complete, total=%d", filesReceived);
+      if (!uploadPath.empty()) Storage.remove(uploadPath.c_str());
     }
+    uploadInProgress = false;
+    uploadComplete = false;
+    uploadHttpError = 0;
+    uploadPath.clear();
+    const std::string fname = upload.filename.c_str();
+    if (!local_web::validFileName(fname)) {
+      uploadHttpError = 400;
+      return;
+    }
+    uploadPath = std::string(DROP_DIR) + fname;
+    // Existing file can only be replaced after a validated basename.
+    if (Storage.exists(uploadPath.c_str()))
+      Storage.remove(uploadPath.c_str());
+    uploadFile = Storage.open(uploadPath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
+    uploadInProgress = static_cast<bool>(uploadFile);
+    if (!uploadInProgress) uploadHttpError = 507;
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (uploadHttpError) return;
+    if (!uploadInProgress || !uploadFile ||
+        uploadFile.write(upload.buf, upload.currentSize) != upload.currentSize) {
+      uploadHttpError = 507;
+      if (uploadInProgress) uploadFile.close();
+      uploadInProgress = false;
+      if (!uploadPath.empty()) Storage.remove(uploadPath.c_str());
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (uploadHttpError) return;
+    if (!uploadInProgress || !uploadFile) {
+      uploadHttpError = 507;
+      return;
+    }
+    uploadFile.close();
+    uploadInProgress = false;
+    uploadComplete = true;
+    ++filesReceived;
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    if (uploadInProgress) uploadFile.close();
+    uploadInProgress = false;
+    if (!uploadPath.empty()) Storage.remove(uploadPath.c_str());
+    uploadHttpError = 400;
   }
 }
 
 void DeadDropActivity::handleUpload() {
   if (!server) return;
+  if (uploadHttpError || !uploadComplete) {
+    server->send(uploadHttpError ? uploadHttpError : 400,
+                 "text/plain", "Upload failed");
+    return;
+  }
   server->send(200, "text/plain", "OK");
 }
 
 void DeadDropActivity::handleFileList() {
   if (!server) return;
-
-  // Build a JSON array of filenames in DROP_DIR
-  // Use a fixed-size buffer to avoid heap fragmentation — 2KB is ample for ~20 filenames
-  char buf[2048];
-  int pos = 0;
-  buf[pos++] = '[';
-
+  constexpr size_t MAX_JSON_BYTES = 4096;
+  std::string json = "[";
+  bool tooLarge = false;
   HalFile dir = Storage.open(DROP_DIR, O_RDONLY);
-  if (dir) {
-    bool first = true;
-    HalFile entry;
-    while ((entry = dir.openNextFile())) {
-      if (!entry.isDirectory()) {
-        char name[256];
-        entry.getName(name, sizeof(name));
-        if (!first) {
-          if (pos < static_cast<int>(sizeof(buf)) - 4) buf[pos++] = ',';
-        }
-        first = false;
-        // Append quoted name, escaping backslash and double-quote
-        if (pos < static_cast<int>(sizeof(buf)) - 4) buf[pos++] = '"';
-        for (int i = 0; name[i] && pos < static_cast<int>(sizeof(buf)) - 4; i++) {
-          char c = name[i];
-          if (c == '"' || c == '\\') {
-            buf[pos++] = '\\';
-          }
-          buf[pos++] = c;
-        }
-        if (pos < static_cast<int>(sizeof(buf)) - 4) buf[pos++] = '"';
-      }
-      entry.close();
-    }
-    dir.close();
+  if (!dir) {
+    server->send(503, "text/plain", "File storage unavailable");
+    return;
   }
-
-  if (pos < static_cast<int>(sizeof(buf)) - 2) buf[pos++] = ']';
-  buf[pos] = '\0';
-
-  server->send(200, "application/json", buf);
+  bool first = true;
+  HalFile entry;
+  while ((entry = dir.openNextFile())) {
+    if (!entry.isDirectory()) {
+      char name[256] = {};
+      entry.getName(name, sizeof(name));
+      if (local_web::validFileName(name)) {
+        std::string quoted;
+        local_web::appendJsonQuoted(quoted, name);
+        if (json.size() + quoted.size() + (first ? 0 : 1) + 1 > MAX_JSON_BYTES) {
+          tooLarge = true;
+          entry.close();
+          break;
+        }
+        if (!first) json.push_back(',');
+        json += quoted;
+        first = false;
+      }
+    }
+    entry.close();
+  }
+  dir.close();
+  if (tooLarge) {
+    server->send(507, "text/plain", "File listing exceeds size limit");
+    return;
+  }
+  json.push_back(']');
+  server->send(200, "application/json; charset=utf-8", json.c_str());
 }
 
 void DeadDropActivity::handleDownload() {
@@ -234,12 +259,12 @@ void DeadDropActivity::handleDownload() {
     return;
   }
 
-  String fname = server->arg("file");
-  // Strip path separators for safety
-  int lastSlash = fname.lastIndexOf('/');
-  if (lastSlash >= 0) fname = fname.substring(lastSlash + 1);
-
-  String filePath = DROP_DIR + fname;
+  const std::string fname = server->arg("file").c_str();
+  if (!local_web::validFileName(fname)) {
+    server->send(400, "text/plain", "Invalid file name");
+    return;
+  }
+  const String filePath = String(DROP_DIR) + fname.c_str();
 
   if (!Storage.exists(filePath.c_str())) {
     server->send(404, "text/plain", "Not found");
@@ -252,7 +277,8 @@ void DeadDropActivity::handleDownload() {
     return;
   }
 
-  String contentDisp = "attachment; filename=\"" + fname + "\"";
+  const std::string encoded = local_web::encodeHeaderFileName(fname);
+  const String contentDisp = String("attachment; filename=\"download.bin\"; filename*=UTF-8''") + encoded.c_str();
   server->sendHeader("Content-Disposition", contentDisp);
 
   // HalFile doesn't support streamFile() — stream manually
