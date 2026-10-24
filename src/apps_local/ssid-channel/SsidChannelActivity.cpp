@@ -221,7 +221,7 @@ void SsidChannelActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
         if (btn == 2) {
           if (modeIndex == 0) {
@@ -268,7 +268,7 @@ void SsidChannelActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { stopSending(); state = MODE_SELECT; requestUpdate(); }
+        if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { stopSending(); state = MODE_SELECT; requestUpdate(); }
       }
     }
     return;
@@ -300,7 +300,7 @@ void SsidChannelActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { WiFi.scanDelete(); RADIO.shutdown(); state = MODE_SELECT; requestUpdate(); return; }
+        if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { WiFi.scanDelete(); RADIO.shutdown(); state = MODE_SELECT; requestUpdate(); return; }
       }
     }
     return;

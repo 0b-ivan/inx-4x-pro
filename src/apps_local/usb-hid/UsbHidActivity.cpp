@@ -557,7 +557,7 @@ void UsbHidActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
         if (btn == 2 && count > 0 && fileIndex < count) {
           state = parseScript(duckyFiles[fileIndex].name) ? PREVIEW : ERROR;
@@ -593,7 +593,7 @@ void UsbHidActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { state = FILE_SELECT; requestUpdate(); return; }
         if (btn == 2) { state = CONFIRM_RUN; requestUpdate(); return; }
       }
@@ -609,7 +609,7 @@ void UsbHidActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { state = PREVIEW; requestUpdate(); return; }
         if (btn == 2) { initUsbHid(); totalKeystrokes = 0; currentLine = 0; waiting = false; runStartTime = millis(); state = RUNNING; requestUpdate(); return; }
       }
@@ -624,7 +624,7 @@ void UsbHidActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { releaseAllKeys(); deinitUsbHid(); state = FILE_SELECT; requestUpdate(); return; }
+        if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { releaseAllKeys(); deinitUsbHid(); state = FILE_SELECT; requestUpdate(); return; }
       }
     }
 
@@ -648,7 +648,7 @@ void UsbHidActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { state = FILE_SELECT; requestUpdate(); return; }
         if (btn == 2) {
           if (!duckyFiles.empty() && fileIndex < static_cast<int>(duckyFiles.size())) parseScript(duckyFiles[fileIndex].name);
@@ -664,7 +664,7 @@ void UsbHidActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = FILE_SELECT; requestUpdate(); return; }
+        if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { state = FILE_SELECT; requestUpdate(); return; }
       }
     }
     return;

@@ -116,6 +116,16 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.5
+
+            Biscuit apps: all 11 remaining apps (Network Change, USB HID,
+            Credential Viewer, AP History Logger, Vendor OUI, Vehicle Finder,
+            WiFi Heatmap, Perimeter Watch, Signal Triangulation, SSID Channel,
+            Beacon Test) now use `tappedAlwaysHintButton` so the bottom bar tap
+            zone matches the always-drawn hint bar. Includes simulator
+            hardware stubs and lab-safety rules from the
+            `feature/biscuit-simulator-hardware` branch.
+
             ### What is new in 1.16.4
 
             Fix: button hints no longer appear on reader screens (home,

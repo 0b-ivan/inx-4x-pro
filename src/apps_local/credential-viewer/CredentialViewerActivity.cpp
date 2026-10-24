@@ -98,7 +98,7 @@ void CredentialViewerActivity::loop() {
       {
         int tx_ = 0, ty_ = 0;
         if (mappedInput.wasScreenTapped(tx_, ty_)) {
-          if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { shelf::leave(renderer, mappedInput); }
+          if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { shelf::leave(renderer, mappedInput); }
         }
       }
       break;
@@ -132,7 +132,7 @@ void CredentialViewerActivity::loop() {
       {
         int tx_ = 0, ty_ = 0;
         if (mappedInput.wasScreenTapped(tx_, ty_)) {
-          const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+          const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
           if (btn == 1) { shelf::leave(renderer, mappedInput); break; }
           if (btn == 2 && !creds.empty()) { state = DETAIL_VIEW; requestUpdate(); break; }
           if (count > 0) {
@@ -163,7 +163,7 @@ void CredentialViewerActivity::loop() {
       {
         int tx_ = 0, ty_ = 0;
         if (mappedInput.wasScreenTapped(tx_, ty_)) {
-          if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = LIST_VIEW; requestUpdate(); }
+          if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { state = LIST_VIEW; requestUpdate(); }
         }
       }
       break;
@@ -181,7 +181,7 @@ void CredentialViewerActivity::loop() {
       {
         int tx_ = 0, ty_ = 0;
         if (mappedInput.wasScreenTapped(tx_, ty_)) {
-          const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+          const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
           if (btn == 1) { state = LIST_VIEW; requestUpdate(); }
           if (btn == 2) { deleteAllCredentials(); requestUpdate(); }
         }

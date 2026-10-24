@@ -162,7 +162,7 @@ void VendorOuiActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
         if (btn == 2) { if (menuIndex == 0) startKeyboardEntry(); else startWifiScan(); return; }
         int touchRow = -1;
@@ -208,7 +208,7 @@ void VendorOuiActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { state = MENU; requestUpdate(); return; }
         if (btn == 2 && !scanResults.empty()) {
           const auto& ap = scanResults[scanIndex];
@@ -250,7 +250,7 @@ void VendorOuiActivity::loop() {
   {
     int tx_ = 0, ty_ = 0;
     if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = MENU; lookupDone = false; requestUpdate(); }
+      if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { state = MENU; lookupDone = false; requestUpdate(); }
     }
   }
 }

@@ -152,7 +152,7 @@ void VehicleFinderActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
         if (btn == 2) {
           int n = WiFi.scanNetworks(false, true);
@@ -181,7 +181,7 @@ void VehicleFinderActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        const int btn = GUI.tappedHintButton(tx_, ty_, renderer);
+        const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
         if (btn == 1) { state = IDLE; requestUpdate(); return; }
         if (btn == 2) { currentMatch = 0.0f; prevMatch = 0.0f; lastScan = 0; trendHead = 0; trendCount = 0; state = FINDING; requestUpdate(); }
       }
@@ -194,7 +194,7 @@ void VehicleFinderActivity::loop() {
     {
       int tx_ = 0, ty_ = 0;
       if (mappedInput.wasScreenTapped(tx_, ty_)) {
-        if (GUI.tappedHintButton(tx_, ty_, renderer) == 1) { state = IDLE; requestUpdate(); return; }
+        if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) { state = IDLE; requestUpdate(); return; }
       }
     }
     unsigned long now = millis();
