@@ -54,17 +54,18 @@ void WifiTestActivity::onEnter() {
 #ifdef SIMULATOR
   rawTxAvailable = true;
 #else
-  // Check if raw TX is available
+  // AP interface is required for esp_wifi_80211_tx on ESP32-S3 (STA-only
+  // mode returns ESP_ERR_WIFI_IF when not associated). APSTA keeps the STA
+  // interface alive for scanning while giving us a usable AP TX path.
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP("", nullptr, 1, 1, 1);  // hidden dummy AP, channel 1, ssid hidden, max 1 client
+  esp_err_t err = esp_wifi_set_promiscuous(true);
+  rawTxAvailable = (err == ESP_OK);
+  esp_wifi_set_promiscuous(false);
+  // Switch back to STA for scanning; AP will be re-started when deauth begins.
+  WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
-  esp_err_t err = esp_wifi_set_promiscuous(true);
-  if (err == ESP_OK) {
-    // Test raw TX with a dummy - if function exists, we're good
-    rawTxAvailable = true;
-    esp_wifi_set_promiscuous(false);
-  } else {
-    rawTxAvailable = false;
-  }
 #endif
 
   startScan();
@@ -74,6 +75,7 @@ void WifiTestActivity::onEnter() {
 void WifiTestActivity::onExit() {
 #ifndef SIMULATOR
   esp_wifi_set_promiscuous(false);
+  WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_OFF);
 #endif
   RADIO.shutdown();
@@ -142,11 +144,15 @@ bool WifiTestActivity::sendDeauthFrame(const uint8_t* bssid, uint8_t channel) {
   // Set channel
   esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
 
-  // Fill BSSID into frame
   memcpy(&deauthFrame[10], bssid, 6);  // Source
   memcpy(&deauthFrame[16], bssid, 6);  // BSSID
 
-  esp_err_t err = esp_wifi_80211_tx(WIFI_IF_STA, deauthFrame, sizeof(deauthFrame), false);
+  // WIFI_IF_AP is required on ESP32-S3; STA interface returns
+  // ESP_ERR_WIFI_IF when not associated with a network.
+  esp_err_t err = esp_wifi_80211_tx(WIFI_IF_AP, deauthFrame, sizeof(deauthFrame), false);
+  if (err != ESP_OK)
+    err = esp_wifi_80211_tx(WIFI_IF_STA, deauthFrame, sizeof(deauthFrame), false);
+  LOG_DBG("DEAUTH", "tx ch%d err=%d sent=%u", (int)channel, (int)err, packetsSent);
   return err == ESP_OK;
 #endif
 }
@@ -182,6 +188,8 @@ void WifiTestActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
 #ifndef SIMULATOR
       esp_wifi_set_promiscuous(false);
+      WiFi.softAPdisconnect(true);
+      WiFi.mode(WIFI_STA);
 #endif
       state = SELECT_TARGET;
 #ifdef SIMULATOR
@@ -194,6 +202,8 @@ void WifiTestActivity::loop() {
       if (GUI.tappedAlwaysHintButton(tx_, ty_, renderer) == 1) {
 #ifndef SIMULATOR
         esp_wifi_set_promiscuous(false);
+        WiFi.softAPdisconnect(true);
+        WiFi.mode(WIFI_STA);
 #endif
         state = SELECT_TARGET;
         requestUpdate();
@@ -216,6 +226,8 @@ void WifiTestActivity::loop() {
           targetIndex = selectorIndex; packetsSent = 0;
           startTime = millis(); lastSendTime = 0;
 #ifndef SIMULATOR
+          WiFi.mode(WIFI_AP);
+          WiFi.softAP("", nullptr, aps[selectorIndex].channel, 1, 1);
           esp_wifi_set_promiscuous(true);
 #endif
           state = DEAUTHING;
@@ -270,6 +282,8 @@ void WifiTestActivity::loop() {
       startTime = millis();
       lastSendTime = 0;
 #ifndef SIMULATOR
+      WiFi.mode(WIFI_AP);
+      WiFi.softAP("", nullptr, aps[selectorIndex].channel, 1, 1);
       esp_wifi_set_promiscuous(true);
 #endif
       state = DEAUTHING;
