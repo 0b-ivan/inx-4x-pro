@@ -47,6 +47,7 @@ class DeadDropActivity final : public Activity {
   bool uploadComplete = false;
   int uploadHttpError = 0;
   std::string uploadPath;
+  std::string uploadTempPath;
 
   void startDrop();
   void stopDrop();

@@ -1,5 +1,6 @@
 #include "WardrivingActivity.h"
 #include "WardriveCsv.h"
+#include "WardriveWrite.h"
 #include "DevMode.h"
 #include "../Shelf.h"
 
@@ -22,6 +23,8 @@ void WardrivingActivity::onEnter() {
   RADIO.ensureWifi();
   WiFi.disconnect();
   logging = false;
+  scanPending = false;
+  storageError = false;
   networks.clear();
   scanCount = 0;
   totalNewThisScan = 0;
@@ -38,6 +41,7 @@ void WardrivingActivity::onExit() {
 }
 
 void WardrivingActivity::startLogging() {
+  storageError = false;
   Storage.mkdir("/crossplay");
   Storage.mkdir("/crossplay/logs");
 
@@ -45,7 +49,15 @@ void WardrivingActivity::startLogging() {
   snprintf(buf, sizeof(buf), "/crossplay/logs/wardrive_%lu.csv", millis());
   filename = buf;
 
-  Storage.writeFile(filename.c_str(), "SSID,BSSID,RSSI,Channel,Encryption,FirstSeen_ms\n");
+  if (!Storage.writeFile(filename.c_str(), "SSID,BSSID,RSSI,Channel,Encryption,FirstSeen_ms\n")) {
+    storageError = true;
+    filename.clear();
+    logging = false;
+    scanPending = false;
+    LOG_ERR("WARD", "Cannot create CSV; no scan data will be recorded");
+    requestUpdate();
+    return;
+  }
 
   startTime = millis();
   logging = true;
@@ -68,16 +80,15 @@ void WardrivingActivity::stopLogging() {
   LOG_DBG("WARD", "Stopped logging. %zu unique networks.", networks.size());
 }
 
-void WardrivingActivity::appendNetworkToCsv(const SeenNetwork& net) {
-  if (filename.empty()) return;
+bool WardrivingActivity::appendNetworkToCsv(const SeenNetwork& net) {
+  if (filename.empty()) return false;
   HalFile f = Storage.open(filename.c_str(), O_WRITE | O_CREAT | O_APPEND);
-  if (f) {
-    const std::string ssid = wardrive_csv::escapeField(net.ssid);
-    String line = String(ssid.c_str()) + "," + net.bssid.c_str() + "," + String(net.rssi) + "," +
-                  String(net.channel) + "," + encryptionString(net.encType) + "," + String(net.firstSeen) + "\n";
-    f.print(line);
-    f.close();
-  }
+  if (!f) return false;
+  const std::string ssid = wardrive_csv::escapeField(net.ssid);
+  const String line = String(ssid.c_str()) + "," + net.bssid.c_str() + "," +
+                      String(net.rssi) + "," + String(net.channel) + "," +
+                      encryptionString(net.encType) + "," + String(net.firstSeen) + "\n";
+  return wardrive_write::writeComplete(f, std::string(line.c_str(), line.length()));
 }
 
 void WardrivingActivity::processScanResults() {
@@ -91,6 +102,7 @@ void WardrivingActivity::processScanResults() {
   if (result > 0) {
     for (int i = 0; i < result; i++) {
       uint8_t* rawBssid = WiFi.BSSID(i);
+      if (!rawBssid) continue;
       char bssidBuf[20];
       snprintf(bssidBuf, sizeof(bssidBuf), "%02X:%02X:%02X:%02X:%02X:%02X",
                rawBssid[0], rawBssid[1], rawBssid[2], rawBssid[3], rawBssid[4], rawBssid[5]);
@@ -117,9 +129,14 @@ void WardrivingActivity::processScanResults() {
         net.firstSeen = millis();
         net.lastSeen = net.firstSeen;
 
-        if (logging) appendNetworkToCsv(net);
+        if (logging && !appendNetworkToCsv(net)) {
+          storageError = true;
+          LOG_ERR("WARD", "SD write failed, recording stopped");
+          stopLogging();
+        }
         networks.push_back(std::move(net));
         newThisScan++;
+        if (storageError) break;
       }
     }
   }
@@ -236,7 +253,9 @@ void WardrivingActivity::render(RenderLock&&) {
 
   // Build subtitle: "N unique | scan #M"  or  "N unique"
   char subtitleBuf[48];
-  if (logging) {
+  if (storageError) {
+    snprintf(subtitleBuf, sizeof(subtitleBuf), "SD ERROR | %zu seen", networks.size());
+  } else if (logging) {
     snprintf(subtitleBuf, sizeof(subtitleBuf), "%zu unique | scan #%d", networks.size(), scanCount);
   } else {
     snprintf(subtitleBuf, sizeof(subtitleBuf), "%zu unique", networks.size());
@@ -252,7 +271,8 @@ void WardrivingActivity::render(RenderLock&&) {
     if (logging) {
       GUI.drawSpinner(renderer, pageWidth / 2, pageHeight / 2, "SCANNING...", spinnerFrame);
     } else {
-      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Press OK to start");
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2,
+                                storageError ? "SD write failed - not recording" : "Press OK to start");
     }
   } else {
     GUI.drawList(

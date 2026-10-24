@@ -320,3 +320,17 @@ assert "GUI.tappedAlwaysHintButton(" in finger and "button == 2" in finger, "Fin
 assert "mappedInput.rowTouch(" in finger, "Fingerprinter list touch selection missing"
 assert "BaseMetrics::values.buttonHintsHeight" in finger, "Fingerprinter list overlaps GT911 footer"
 print("biscuit GT911 Ping + Fingerprinter wiring: 4 checks, 0 failed")
+
+# SD regression: uploads are staged, never overwrite existing files on failure.
+drop = (root / "src/apps_local/dead-drop/DeadDropActivity.cpp").read_text()
+ward = (root / "src/apps_local/wardriving/WardrivingActivity.cpp").read_text()
+assert 'Storage.open(uploadTempPath.c_str(), O_WRITE | O_CREAT | O_TRUNC)' in drop
+assert 'Storage.rename(uploadTempPath.c_str(), uploadPath.c_str())' in drop
+assert 'uploadHttpError = 409;' in drop
+assert 'Storage.remove(uploadPath.c_str())' not in drop
+assert 'Storage.remove(uploadTempPath.c_str())' in drop
+assert 'if (!Storage.writeFile(filename.c_str()' in ward
+assert 'wardrive_write::writeComplete' in ward
+assert 'if (storageError) break;' in ward
+assert 'if (!rawBssid) continue;' in ward
+print("storage error paths: 9 checks, 0 failed")

@@ -58,6 +58,7 @@ void DeadDropActivity::onEnter() {
   uploadComplete = false;
   uploadHttpError = 0;
   uploadPath.clear();
+  uploadTempPath.clear();
   ssidName.clear();
   requestUpdate();
 }
@@ -108,12 +109,13 @@ void DeadDropActivity::stopDrop() {
     delete server;
     server = nullptr;
   }
-  // Close any file left open from an interrupted upload
+  // Interrupted uploads must never appear as downloadable files.
   if (uploadInProgress) {
     uploadFile.close();
     uploadInProgress = false;
-    if (!uploadPath.empty()) Storage.remove(uploadPath.c_str());
   }
+  if (!uploadTempPath.empty()) Storage.remove(uploadTempPath.c_str());
+  uploadTempPath.clear();
   uploadPath.clear();
   WiFi.softAPdisconnect(true);
   RADIO.shutdown();
@@ -154,26 +156,48 @@ void DeadDropActivity::handleUploadData() {
   HTTPUpload& upload = server->upload();
 
   if (upload.status == UPLOAD_FILE_START) {
-    if (uploadInProgress) {
-      uploadFile.close();
-      if (!uploadPath.empty()) Storage.remove(uploadPath.c_str());
-    }
+    if (uploadInProgress) uploadFile.close();
+    if (!uploadTempPath.empty()) Storage.remove(uploadTempPath.c_str());
     uploadInProgress = false;
     uploadComplete = false;
     uploadHttpError = 0;
     uploadPath.clear();
+    uploadTempPath.clear();
     const std::string fname = upload.filename.c_str();
-    if (!local_web::validFileName(fname)) {
+    if (!local_web::validFileName(fname) ||
+        fname.compare(0, 11, ".x4-upload-") == 0) {
       uploadHttpError = 400;
       return;
     }
     uploadPath = std::string(DROP_DIR) + fname;
-    // Existing file can only be replaced after a validated basename.
-    if (Storage.exists(uploadPath.c_str()))
-      Storage.remove(uploadPath.c_str());
-    uploadFile = Storage.open(uploadPath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
+    // Reject duplicates: never destroy a previously saved file on a failure.
+    if (Storage.exists(uploadPath.c_str())) {
+      uploadHttpError = 409;
+      return;
+    }
+    char tempName[48];
+    bool freeName = false;
+    for (int attempt = 0; attempt < 8; ++attempt) {
+      snprintf(tempName, sizeof(tempName), ".x4-upload-%08lX.part",
+               static_cast<unsigned long>(esp_random()));
+      uploadTempPath = std::string(DROP_DIR) + tempName;
+      if (!Storage.exists(uploadTempPath.c_str())) {
+        freeName = true;
+        break;
+      }
+    }
+    if (!freeName) {
+      uploadTempPath.clear();
+      uploadHttpError = 507;
+      return;
+    }
+    uploadFile = Storage.open(uploadTempPath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
     uploadInProgress = static_cast<bool>(uploadFile);
-    if (!uploadInProgress) uploadHttpError = 507;
+    if (!uploadInProgress) {
+      uploadHttpError = 507;
+      Storage.remove(uploadTempPath.c_str());
+      uploadTempPath.clear();
+    }
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (uploadHttpError) return;
     if (!uploadInProgress || !uploadFile ||
@@ -181,7 +205,8 @@ void DeadDropActivity::handleUploadData() {
       uploadHttpError = 507;
       if (uploadInProgress) uploadFile.close();
       uploadInProgress = false;
-      if (!uploadPath.empty()) Storage.remove(uploadPath.c_str());
+      if (!uploadTempPath.empty()) Storage.remove(uploadTempPath.c_str());
+      uploadTempPath.clear();
     }
   } else if (upload.status == UPLOAD_FILE_END) {
     if (uploadHttpError) return;
@@ -189,14 +214,24 @@ void DeadDropActivity::handleUploadData() {
       uploadHttpError = 507;
       return;
     }
-    uploadFile.close();
+    const bool closed = uploadFile.close();
     uploadInProgress = false;
+    const bool conflict = Storage.exists(uploadPath.c_str());
+    if (!closed || conflict || uploadTempPath.empty() ||
+        !Storage.rename(uploadTempPath.c_str(), uploadPath.c_str())) {
+      uploadHttpError = conflict ? 409 : 507;
+      if (!uploadTempPath.empty()) Storage.remove(uploadTempPath.c_str());
+      uploadTempPath.clear();
+      return;
+    }
+    uploadTempPath.clear();
     uploadComplete = true;
     ++filesReceived;
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
     if (uploadInProgress) uploadFile.close();
     uploadInProgress = false;
-    if (!uploadPath.empty()) Storage.remove(uploadPath.c_str());
+    if (!uploadTempPath.empty()) Storage.remove(uploadTempPath.c_str());
+    uploadTempPath.clear();
     uploadHttpError = 400;
   }
 }
@@ -227,7 +262,8 @@ void DeadDropActivity::handleFileList() {
     if (!entry.isDirectory()) {
       char name[256] = {};
       entry.getName(name, sizeof(name));
-      if (local_web::validFileName(name)) {
+      if (local_web::validFileName(name) &&
+          std::string(name).compare(0, 11, ".x4-upload-") != 0) {
         std::string quoted;
         local_web::appendJsonQuoted(quoted, name);
         if (json.size() + quoted.size() + (first ? 0 : 1) + 1 > MAX_JSON_BYTES) {
@@ -260,7 +296,8 @@ void DeadDropActivity::handleDownload() {
   }
 
   const std::string fname = server->arg("file").c_str();
-  if (!local_web::validFileName(fname)) {
+  if (!local_web::validFileName(fname) ||
+      fname.compare(0, 11, ".x4-upload-") == 0) {
     server->send(400, "text/plain", "Invalid file name");
     return;
   }

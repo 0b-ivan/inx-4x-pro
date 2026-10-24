@@ -22,5 +22,8 @@ c++ -std=c++17 -Wall -Wextra -Werror -I"$repo/src" \
 c++ -std=c++17 -Wall -Wextra -Werror -I"$repo/src" \
   "$here/test_local_web_text.cpp" -o "$work/test_local_web_text"
 "$work/test_local_web_text"
+c++ -std=c++17 -Wall -Wextra -Werror -I"$repo/src" \
+  "$here/test_wardrive_write.cpp" -o "$work/test_wardrive_write"
+"$work/test_wardrive_write"
 python3 "$here/test_wiring.py" "$repo"
 python3 "$here/test_visual_goldens.py" --self-test

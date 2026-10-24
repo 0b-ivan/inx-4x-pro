@@ -18,6 +18,8 @@ int main() {
     assert(!validFileName(name));
   }
   assert(!validFileName(std::string("ok") + '\0' + "bad"));
+  // Internal names are excluded by the HTTP handlers, not the shared validator.
+  assert(validFileName(".x4-upload-00000000.part"));
   assert(validFileName(std::string(120, 'a')));
   assert(!validFileName(std::string(121, 'a')));
 
