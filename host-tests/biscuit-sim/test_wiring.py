@@ -268,10 +268,11 @@ assert "client.connect(addr, port, 500)" in host_scan, "Port scan TCP connect ti
 assert "RADIO.shutdown()" not in host_scan, "Host Scanner must preserve existing Wi-Fi association"
 assert "const bool back = mappedInput.wasReleased(" in host_scan, "Host Scanner touch Back missing"
 assert "BaseMetrics::values.buttonHintsHeight" in host_scan, "Host Scanner list overlaps touch footer"
+assert "hosts.clear();\n  selectorIndex = 0;" in host_scan, "Rescan must reset the selected host index"
 assert 'if (btn == 3)' in host_scan and 'if (btn == 4)' in host_scan, (
     "Host Scanner touch CSV and rescan actions not wired"
 )
-print("Host Scanner TCP deadlines, radio ownership and GT911 controls: 6 checks, 0 failed")
+print("Host Scanner TCP deadlines, radio ownership and GT911 controls: 7 checks, 0 failed")
 
 workflow = (root / ".github/workflows/crossplay-ci.yml").read_text()
 assert 'bash scripts_local/biscuit_sim_smoke.sh' in workflow, "smoke test not gated by CI"
