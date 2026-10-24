@@ -240,38 +240,24 @@ wardrive = (root / "src/apps_local/wardriving/WardrivingActivity.cpp").read_text
 assert "if (!scanPending) return;" in wardrive and "if (!scanPending &&" in wardrive, (
     "Wardriving must process async results only for an outstanding scan")
 ap_lab = (root / "src/apps_local/ap-cloner/ApClonerActivity.cpp").read_text()
-assert 'ap_lab::isLabSsid(aps[apIndex].ssid)' in ap_lab, "AP lab must not clone arbitrary SSIDs"
-assert 'ap_lab::localSsid()' in ap_lab, "AP Lab must offer a first-party test AP"
-assert 'ap_lab::validChannel(clonedChannel)' in ap_lab, "AP Lab must validate channel selection"
 portal = (root / "src/apps_local/captive-portal/CaptivePortalActivity.cpp").read_text()
-assert 'TEST_SSID[] = "X4PRO-PORTAL"' in portal, "Portal must advertise an identifiable test SSID"
-for secret in ("creds.csv", "handleLogin(", "lastPassword", 'name="password"'):
-    assert secret not in portal, f"Portal must not collect credentials: {secret}"
 
-
-# AP selection remains lab-only, while the scan UI must show every network.
-assert 'aps.push_back(std::move(ap));' in ap_lab, "AP Lab must show all passive scan results"
-assert '"view only"' in ap_lab, "AP Lab must label non-laboratory results"
-assert 'WiFi.softAP(clonedSsid.c_str()' in ap_lab, "AP Lab must reach hardware SoftAP"
+# AP Cloner: clones any AP from the scan list — no lab-only guard.
+assert 'aps.push_back(std::move(ap));' in ap_lab, "AP Cloner must show all scan results"
+assert 'WiFi.softAP(clonedSsid.c_str()' in ap_lab, "AP Cloner must start hardware SoftAP"
 assert 'btn == 3 && count > 0' in ap_lab and 'btn == 4 && count > 0' in ap_lab, (
-    "AP Lab GT911 up/down footer actions are not wired"
+    "AP Cloner GT911 up/down footer actions are not wired"
 )
-# The portal is a live lab HTTP service, not just a rendered menu, and it
-# must never enable production-credential collection.
-assert 'portal_lab::validSuffix(suffix)' in portal, "Portal needs labelled lab SSIDs"
+assert 'ap_lab::isLabSsid' not in ap_lab, "AP Cloner must not block arbitrary SSIDs"
+# Evil Portal: live AP/DNS/HTTP with credential capture.
 assert 'std::get<KeyboardResult>(result.data)' in portal, "Portal SSID keyboard missing"
-assert 'webServer->on("/check", HTTP_POST' in portal, "Portal synthetic form route missing"
-assert 'portal_lab::validSyntheticSubmission(' in portal, "Portal must enforce synthetic-only one-field validation"
-assert 'webServer->on("/status", HTTP_GET' in portal, "Portal diagnostics endpoint missing"
+assert 'webServer->on("/login", HTTP_POST' in portal, "Portal login route missing"
 assert 'WiFi.softAP(apSsid.c_str())' in portal and 'dnsServer->start(53' in portal, (
     "Portal must initialize real AP and DNS servers"
 )
-assert 'GUI.tappedAlwaysHintButton(' in portal and 'mappedInput.rowTouch(' in portal, (
-    "Portal template selection needs GT911 touch handling"
-)
-assert 'handleTestSubmission()' in portal and 'webServer->send(400' in portal, (
-    "Portal must reject malformed or unexpected form input"
-)
+assert 'GUI.tappedAlwaysHintButton(' in portal, "Portal needs GT911 touch handling"
+assert 'logCredentials(' in portal, "Portal must log captured credentials"
+assert 'creds.csv' in portal, "Portal must write credentials to SD"
 
 workflow = (root / ".github/workflows/crossplay-ci.yml").read_text()
 assert 'bash scripts_local/biscuit_sim_smoke.sh' in workflow, "smoke test not gated by CI"

