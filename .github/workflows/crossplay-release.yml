@@ -116,6 +116,19 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.9
+
+            Host Scanner: now finds hosts that refuse the connection (TCP RST)
+            rather than only hosts with port 80 open. Also checks port 443.
+            On a typical LAN this detects routers, NAS boxes and IoT devices
+            that do not serve HTTP.
+
+            Fire — Select BLE device: added live BLE scan fallback. When no
+            BLE targets are in the database, Fire now runs a 3-second BLE
+            scan automatically (same as the WiFi live-scan fallback added in
+            v1.16.6 for AP targets). Discovered devices are added to TargetDB
+            and shown in the list immediately.
+
             ### What is new in 1.16.8
 
             Evil Portal: restored full original Biscuit implementation.

@@ -171,36 +171,84 @@ void FireActivity::loadTargetList() {
 #ifndef SIMULATOR
     if (targetCount == 0 && !liveScanDone) {
         liveScanDone = true;
-        snprintf(statusLine, sizeof(statusLine), "Scanning for networks...");
-        requestUpdate();
 
-        WiFi.mode(WIFI_STA);
-        int n = WiFi.scanNetworks(false, true);
-        for (int i = 0; i < n && targetCount < 25; i++) {
-            Target t = {};
-            t.type = TargetType::AP;
-            uint8_t* bssid = WiFi.BSSID(i);
-            if (bssid) memcpy(t.mac, bssid, 6);
-            String ssid = WiFi.SSID(i);
-            strncpy(t.ssid, ssid.c_str(), 32);
-            t.ssid[32] = '\0';
-            t.rssi = (int8_t)WiFi.RSSI(i);
-            t.channel = (uint8_t)WiFi.channel(i);
-            wifi_auth_mode_t auth = WiFi.encryptionType(i);
-            if (auth == WIFI_AUTH_OPEN)         t.authType = 0;
-            else if (auth == WIFI_AUTH_WEP)     t.authType = 1;
-            else if (auth == WIFI_AUTH_WPA_PSK) t.authType = 2;
-            else if (auth == WIFI_AUTH_WPA3_PSK) t.authType = 4;
-            else                                 t.authType = 3;
-            t.lastSeen = millis() / 1000;
-            TARGETS.addOrUpdate(t);
+        const TargetType needed = (pendingAttack < ATK_COUNT && !isUniversalAttack(pendingAttack))
+                                      ? requiredTargetType(pendingAttack)
+                                      : TargetType::AP;
+
+        if (needed == TargetType::BLE) {
+            snprintf(statusLine, sizeof(statusLine), "Scanning for BLE devices...");
+            requestUpdate();
+
+            BLEDevice::init("");
+            BLEScan* scan = BLEDevice::getScan();
+            if (scan) {
+                scan->setActiveScan(true);
+                BLEScanResults* results = scan->start(3, false); // 3-second scan
+                if (results) {
+                    int count = results->getCount();
+                    for (int i = 0; i < count && i < 25; i++) {
+                        BLEAdvertisedDevice dev = results->getDevice(i);
+                        Target t = {};
+                        t.type = TargetType::BLE;
+                        // Parse MAC
+                        sscanf(dev.getAddress().toString().c_str(),
+                               "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                               &t.mac[0], &t.mac[1], &t.mac[2],
+                               &t.mac[3], &t.mac[4], &t.mac[5]);
+                        if (dev.haveName()) {
+                            strncpy(t.name, dev.getName().c_str(), 32);
+                            t.name[32] = '\0';
+                        } else {
+                            strncpy(t.name, dev.getAddress().toString().c_str(), 32);
+                            t.name[32] = '\0';
+                        }
+                        t.rssi = (int8_t)dev.getRSSI();
+                        t.lastSeen = millis() / 1000;
+                        if (dev.haveManufacturerData()) {
+                            String mfg = dev.getManufacturerData();
+                            uint8_t totalLen = (uint8_t)std::min((int)mfg.length() + 2, 31);
+                            t.bleAdvRaw[0] = totalLen - 1;
+                            t.bleAdvRaw[1] = 0xFF;
+                            memcpy(t.bleAdvRaw + 2, mfg.c_str(), totalLen - 2);
+                            t.bleAdvRawLen = totalLen;
+                        }
+                        TARGETS.addOrUpdate(t);
+                    }
+                }
+                scan->clearResults();
+            }
+        } else {
+            snprintf(statusLine, sizeof(statusLine), "Scanning for networks...");
+            requestUpdate();
+
+            WiFi.mode(WIFI_STA);
+            int n = WiFi.scanNetworks(false, true);
+            for (int i = 0; i < n && targetCount < 25; i++) {
+                Target t = {};
+                t.type = TargetType::AP;
+                uint8_t* bssid = WiFi.BSSID(i);
+                if (bssid) memcpy(t.mac, bssid, 6);
+                String ssid = WiFi.SSID(i);
+                strncpy(t.ssid, ssid.c_str(), 32);
+                t.ssid[32] = '\0';
+                t.rssi = (int8_t)WiFi.RSSI(i);
+                t.channel = (uint8_t)WiFi.channel(i);
+                wifi_auth_mode_t auth = WiFi.encryptionType(i);
+                if (auth == WIFI_AUTH_OPEN)          t.authType = 0;
+                else if (auth == WIFI_AUTH_WEP)      t.authType = 1;
+                else if (auth == WIFI_AUTH_WPA_PSK)  t.authType = 2;
+                else if (auth == WIFI_AUTH_WPA3_PSK) t.authType = 4;
+                else                                  t.authType = 3;
+                t.lastSeen = millis() / 1000;
+                TARGETS.addOrUpdate(t);
+            }
+            WiFi.scanDelete();
         }
-        WiFi.scanDelete();
 
         targetCount = 0;
         if (pendingAttack < ATK_COUNT && !isUniversalAttack(pendingAttack)) {
-            TargetType needed = requiredTargetType(pendingAttack);
-            TARGETS.getSorted(needed, targetList, 50, targetCount, 0);
+            TARGETS.getSorted(requiredTargetType(pendingAttack), targetList, 50, targetCount, 0);
         } else {
             TARGETS.getSorted(TargetType::AP, targetList, 25, targetCount, 0);
         }

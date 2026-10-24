@@ -91,19 +91,28 @@ void HostScannerActivity::scanNextHost() {
   // Skip own IP
   if (targetIp == localIp) return;
 
-  // Try TCP connect to port 80 with short timeout
+  // Try TCP connect to port 80 then 443 with short timeout.
+  // On LAN, a host that is up but has the port closed sends a TCP RST almost
+  // immediately (<10 ms), while a non-existent host never ARP-replies and the
+  // attempt runs to the full timeout.  We use elapsed time to distinguish them.
 #ifdef SIMULATOR
-  const bool reachable = biscuit_sim::hostScanPortOpen(targetIp, 80);
+  const bool reachable = biscuit_sim::hostScanPortOpen(targetIp, 80)
+                      || biscuit_sim::hostScanPortOpen(targetIp, 443);
 #else
-  WiFiClient client;
-  client.setTimeout(200);
   IPAddress addr(targetIp);
-  const bool reachable = client.connect(addr, 80);
+  // Returns true if the host is reachable: either the port is open, or it
+  // sent a TCP RST (fast failure < 100 ms) which also proves it is alive.
+  auto tryPort = [](IPAddress& a, uint16_t port) -> bool {
+    WiFiClient c;
+    c.setTimeout(150);
+    unsigned long t0 = millis();
+    bool ok = c.connect(a, port);
+    if (ok) { c.stop(); return true; }
+    return (millis() - t0) < 100;
+  };
+  const bool reachable = tryPort(addr, 80) || tryPort(addr, 443);
 #endif
   if (reachable) {
-#ifndef SIMULATOR
-    client.stop();
-#endif
     Host host;
     host.ip = targetIp;
     hosts.push_back(host);
