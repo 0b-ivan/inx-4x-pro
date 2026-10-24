@@ -116,6 +116,20 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.8
+
+            Evil Portal: restored full original Biscuit implementation.
+            Credential capture is back — submitted usernames and passwords
+            are logged to `/crossplay/creds.csv` on the SD card and shown
+            live on the display (count + last captured pair). Free SSID
+            input via keyboard (default "Free WiFi"). Custom HTML templates
+            from `/crossplay/portals/*.html` are loaded alongside the
+            built-in fake WiFi Login page.
+
+            AP Cloner: removed lab-only restriction that blocked cloning
+            any AP not named `X4PRO-LAB-*`. Now clones any selected AP
+            from the scan list.
+
             ### What is new in 1.16.7
 
             Fire app: touch input now works on hardware. All hint-bar
