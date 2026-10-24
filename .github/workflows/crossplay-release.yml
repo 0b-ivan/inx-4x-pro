@@ -116,6 +116,23 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.6
+
+            Fire app: all six grayed-out [X] attacks now work on fresh boot.
+            `loadTargetList()` falls back to a live `WiFi.scanNetworks()` scan
+            when the TargetDB cache is empty, so AP-targeted attacks (deauth,
+            rogue AP, handshake capture, PMKID, Evil Twin, auth flood) are
+            selectable without running WiFi Scanner first.
+
+            New attacks added: Evil Twin (DNS wildcard + captive portal on
+            port 80), BLE Clone (captures manufacturer AD payload and
+            replays at ~6 Hz), BLE Enumerate (connects to target BLE device
+            and dumps GATT service UUIDs).
+
+            Fix: removed incorrect `IRAM_ATTR` from `FireActivity::captureCallback`
+            (WiFi promiscuous callbacks run in WiFi task context, not ISR —
+            IRAM_ATTR was consuming IRAM unnecessarily).
+
             ### What is new in 1.16.5
 
             Biscuit apps: all 11 remaining apps (Network Change, USB HID,
