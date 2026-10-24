@@ -30,6 +30,8 @@ struct Target {
     uint8_t bleAssocMac[6] = {};  // correlated BLE/WiFi MAC
     bool hasHandshake = false;    // EAPOL captured
     bool hasPmkid = false;        // PMKID captured
+    uint8_t bleAdvRaw[31] = {};   // raw mfg-specific AD bytes for BLE clone
+    uint8_t bleAdvRawLen = 0;     // 0 = not captured
 
     bool macEquals(const uint8_t other[6]) const {
         return memcmp(mac, other, 6) == 0;

@@ -6,6 +6,11 @@
 #include "../util/TargetDB.h"
 #include "../util/PacketRingBuffer.h"
 #include <esp_wifi.h>
+#ifndef SIMULATOR
+#include <DNSServer.h>
+#include <WebServer.h>
+#include <BLEClient.h>
+#endif
 
 class FireActivity final : public Activity {
 public:
@@ -93,6 +98,17 @@ private:
 
     // Karma
     int karmaIndex = 0;
+
+#ifndef SIMULATOR
+    // Evil Twin portal
+    std::unique_ptr<DNSServer> evilTwinDns;
+    std::unique_ptr<WebServer> evilTwinWeb;
+
+    // BLE Enumerate
+    BLEClient* bleEnumClient = nullptr;
+    bool bleEnumConnected = false;
+    bool bleEnumDone = false;
+#endif
 
     // Promiscuous capture buffer (separate from ScanActivity's)
     static PacketRingBuffer captureBuf;

