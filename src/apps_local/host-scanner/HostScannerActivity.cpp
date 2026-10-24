@@ -252,7 +252,12 @@ void HostScannerActivity::loop() {
       if (btn == 2 && !hosts.empty()) { startPortScan(selectorIndex); requestUpdate(); return; }
       if (btn == 3) { saveToCsv(); requestUpdate(); return; }
       if (btn == 4) {
-        if (WiFi.isConnected()) startHostScan();
+#ifdef SIMULATOR
+        const bool connected = biscuit_sim::wifiConnected(WiFi.status() == WL_CONNECTED);
+#else
+        const bool connected = WiFi.isConnected();
+#endif
+        if (connected) startHostScan();
         else state = CHECKING_WIFI;
         requestUpdate(); return;
       }
