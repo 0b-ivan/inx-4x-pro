@@ -19,10 +19,12 @@ int main() {
   FakeFile ok{};
   assert(wardrive_write::writeComplete(ok, "a,b,c\n"));
   assert(ok.didClose && ok.bytes == "a,b,c\n");
-  FakeFile partial{2, true};
+  FakeFile partial{};
+  partial.capacity = 2;
   assert(!wardrive_write::writeComplete(partial, "hello"));
   assert(partial.didClose && partial.bytes == "he");
-  FakeFile removed{100, false};
+  FakeFile removed{};
+  removed.closes = false;
   assert(!wardrive_write::writeComplete(removed, "hello"));
   assert(removed.didClose);
   FakeFile empty{};
