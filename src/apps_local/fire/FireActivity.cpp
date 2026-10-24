@@ -1146,6 +1146,15 @@ void FireActivity::tickAirtagSwarm() {
 // ---------------------------------------------------------------------------
 
 void FireActivity::loop() {
+    int touchX = 0, touchY = 0;
+    const bool touch = mappedInput.wasScreenTapped(touchX, touchY);
+    const int hint = touch ? GUI.tappedAlwaysHintButton(touchX, touchY, renderer) : 0;
+    const bool touchConfirm = hint == 2;
+    const bool touchBack    = hint == 1;
+
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+
     switch (state) {
         case TARGET_SELECT: {
             buttonNavigator.onNext([this] {
@@ -1160,7 +1169,17 @@ void FireActivity::loop() {
                     requestUpdate();
                 }
             });
-            if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && targetCount > 0) {
+            if (touch && touchY >= contentTop && targetCount > 0) {
+                const int rowStep = GUI.getListRowStep(false);
+                if (rowStep > 0) {
+                    const int row = (touchY - contentTop) / rowStep;
+                    if (row >= 0 && row < targetCount) {
+                        targetIndex = row;
+                        requestUpdate();
+                    }
+                }
+            }
+            if ((mappedInput.wasReleased(MappedInputManager::Button::Confirm) || touchConfirm) && targetCount > 0) {
                 target = targetList[targetIndex];
                 if (target) {
                     memcpy(targetMac, target->mac, 6);
@@ -1184,7 +1203,7 @@ void FireActivity::loop() {
                     requestUpdate();
                 }
             }
-            if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+            if (mappedInput.wasReleased(MappedInputManager::Button::Back) || touchBack) {
                 pendingAttack = ATK_COUNT;
                 state = ATTACK_SELECT;
                 requestUpdate();
@@ -1205,7 +1224,17 @@ void FireActivity::loop() {
                     requestUpdate();
                 }
             });
-            if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && availableCount > 0) {
+            if (touch && touchY >= contentTop && availableCount > 0) {
+                const int rowStep = GUI.getListRowStep(true);
+                if (rowStep > 0) {
+                    const int row = (touchY - contentTop) / rowStep;
+                    if (row >= 0 && row < availableCount) {
+                        attackIndex = row;
+                        requestUpdate();
+                    }
+                }
+            }
+            if ((mappedInput.wasReleased(MappedInputManager::Button::Confirm) || touchConfirm) && availableCount > 0) {
                 if (attacks[attackIndex].available) {
                     state = CONFIRM;
                     requestUpdate();
@@ -1216,14 +1245,14 @@ void FireActivity::loop() {
                     requestUpdate();
                 }
             }
-            if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+            if (mappedInput.wasReleased(MappedInputManager::Button::Back) || touchBack) {
                 shelf::leave(renderer, mappedInput);
             }
             break;
         }
 
         case CONFIRM: {
-            if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+            if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || touchConfirm) {
                 AttackType selectedAttack = attacks[attackIndex].type;
                 // Attacks that are not universal always need a target — refuse to
                 // start if none is selected rather than crashing in the tick function.
@@ -1236,7 +1265,7 @@ void FireActivity::loop() {
                     startAttack();
                 }
             }
-            if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+            if (mappedInput.wasReleased(MappedInputManager::Button::Back) || touchBack) {
                 state = ATTACK_SELECT;
                 requestUpdate();
             }
@@ -1277,7 +1306,7 @@ void FireActivity::loop() {
             }
 
             // Back = stop
-            if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+            if (mappedInput.wasReleased(MappedInputManager::Button::Back) || touchBack) {
                 stopAttack();
                 state = RESULTS;
                 snprintf(resultLine, sizeof(resultLine), "Stopped. %lu packets sent.",
@@ -1288,11 +1317,11 @@ void FireActivity::loop() {
         }
 
         case RESULTS: {
-            if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+            if (mappedInput.wasReleased(MappedInputManager::Button::Back) || touchBack) {
                 state = ATTACK_SELECT;
                 requestUpdate();
             }
-            if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+            if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || touchConfirm) {
                 // Run again
                 state = CONFIRM;
                 requestUpdate();
