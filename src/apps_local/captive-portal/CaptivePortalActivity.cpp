@@ -254,8 +254,9 @@ void CaptivePortalActivity::loop() {
 
   const auto& m = UITheme::getInstance().getMetrics();
   const int top = m.topPadding + m.headerHeight + m.verticalSpacing;
+  const int contentH = renderer.getScreenHeight() - top - BaseMetrics::values.buttonHintsHeight - m.verticalSpacing;
   const int rowStep = GUI.getListRowStep(false);
-  if (rowStep > 0 && y >= top && count > 0) {
+  if (rowStep > 0 && y >= top && y < top + contentH && count > 0) {
     const int row = (y - top) / rowStep;
     if (row >= 0 && row < count) {
       selectorIndex = row;
@@ -304,7 +305,7 @@ void CaptivePortalActivity::render(RenderLock&&) {
     GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == SELECT_TEMPLATE) {
     const int top = m.topPadding + m.headerHeight + m.verticalSpacing;
-    const int bottom = h - m.verticalSpacing - 80;
+    const int bottom = h - BaseMetrics::values.buttonHintsHeight - m.verticalSpacing;
     GUI.drawList(renderer,
                  Rect{0, top, w, bottom - top},
                  static_cast<int>(templates.size()), selectorIndex,
