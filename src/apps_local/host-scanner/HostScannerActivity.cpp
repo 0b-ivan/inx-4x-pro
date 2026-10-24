@@ -17,7 +17,6 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/RadioManager.h"
 
 constexpr uint16_t HostScannerActivity::COMMON_PORTS[];
 
@@ -41,16 +40,16 @@ void HostScannerActivity::onEnter() {
 #else
   if (WiFi.isConnected()) {
 #endif
-    RADIO.ensureWifi();  // Sync RadioManager state with actual radio
+    // This screen borrows an existing STA connection; it does not own the radio.
     startHostScan();
   }
   requestUpdate();
 }
 
 void HostScannerActivity::onExit() {
-  devmode::resume();
+  // Do not disconnect a WLAN session established by WiFi Connect or Developer Mode.
   Activity::onExit();
-  RADIO.shutdown();
+  devmode::resume();
 }
 
 void HostScannerActivity::startHostScan() {
@@ -91,10 +90,9 @@ void HostScannerActivity::scanNextHost() {
   // Skip own IP
   if (targetIp == localIp) return;
 
-  // Try TCP connect to port 80 then 443 with short timeout.
-  // On LAN, a host that is up but has the port closed sends a TCP RST almost
-  // immediately (<10 ms), while a non-existent host never ARP-replies and the
-  // attempt runs to the full timeout.  We use elapsed time to distinguish them.
+  // Try TCP port 80, then 443, with a bounded connection timeout.
+  // A fast refusal can suggest a live host, but duration alone cannot
+  // distinguish TCP RST from all other connection errors.
 #ifdef SIMULATOR
   const bool reachable = biscuit_sim::hostScanPortOpen(targetIp, 80)
                       || biscuit_sim::hostScanPortOpen(targetIp, 443);
@@ -104,11 +102,12 @@ void HostScannerActivity::scanNextHost() {
   // sent a TCP RST (fast failure < 100 ms) which also proves it is alive.
   auto tryPort = [](IPAddress& a, uint16_t port) -> bool {
     WiFiClient c;
-    c.setTimeout(150);
-    unsigned long t0 = millis();
-    bool ok = c.connect(a, port);
-    if (ok) { c.stop(); return true; }
-    return (millis() - t0) < 100;
+    const unsigned long t0 = millis();
+    // setTimeout() affects Stream reads, NOT the TCP connect deadline.
+    const bool ok = c.connect(a, port, 180);
+    const unsigned long elapsed = millis() - t0;
+    c.stop();
+    return ok || (WiFi.isConnected() && elapsed < 100);
   };
   const bool reachable = tryPort(addr, 80) || tryPort(addr, 443);
 #endif
@@ -143,9 +142,8 @@ void HostScannerActivity::scanNextPort() {
   const bool open = biscuit_sim::hostScanPortOpen(hosts[selectedHost].ip, port);
 #else
   WiFiClient client;
-  client.setTimeout(1000);
   IPAddress addr(hosts[selectedHost].ip);
-  const bool open = client.connect(addr, port);
+  const bool open = client.connect(addr, port, 500);
 #endif
   if (open) {
 #ifndef SIMULATOR
@@ -177,13 +175,18 @@ void HostScannerActivity::saveToCsv() {
 }
 
 void HostScannerActivity::loop() {
+  int touchX = 0, touchY = 0;
+  const bool touch = mappedInput.wasScreenTapped(touchX, touchY);
+  const int hint = touch ? GUI.tappedAlwaysHintButton(touchX, touchY, renderer) : 0;
+  const bool back = mappedInput.wasReleased(MappedInputManager::Button::Back) || hint == 1;
+
   if (state == CHECKING_WIFI) {
 #ifdef SIMULATOR
     if (!biscuit_sim::wifiConnected(WiFi.status() == WL_CONNECTED)) {
 #else
     if (!WiFi.isConnected()) {
 #endif
-      if (mappedInput.wasReleased(MappedInputManager::Button::Back)) shelf::leave(renderer, mappedInput);
+      if (back) shelf::leave(renderer, mappedInput);
     } else {
       startHostScan();
     }
@@ -192,7 +195,7 @@ void HostScannerActivity::loop() {
 
   if (state == SCANNING_HOSTS) {
     scanNextHost();
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (back) {
       state = HOST_LIST;
       requestUpdate();
     }
@@ -201,7 +204,7 @@ void HostScannerActivity::loop() {
 
   if (state == PORT_SCANNING) {
     scanNextPort();
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (back) {
       state = HOST_LIST;
       requestUpdate();
     }
@@ -209,7 +212,7 @@ void HostScannerActivity::loop() {
   }
 
   if (state == PORT_RESULTS) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (back) {
       state = HOST_LIST;
       requestUpdate();
     }
@@ -242,20 +245,22 @@ void HostScannerActivity::loop() {
     requestUpdate();
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    shelf::leave(renderer, mappedInput);
-  }
+  if (back) { shelf::leave(renderer, mappedInput); return; }
   {
-    int tx_ = 0, ty_ = 0;
-    if (mappedInput.wasScreenTapped(tx_, ty_)) {
-      const int btn = GUI.tappedAlwaysHintButton(tx_, ty_, renderer);
-      if (btn == 1) { shelf::leave(renderer, mappedInput); return; }
+    if (touch) {
+      const int btn = hint;
       if (btn == 2 && !hosts.empty()) { startPortScan(selectorIndex); requestUpdate(); return; }
+      if (btn == 3) { saveToCsv(); requestUpdate(); return; }
+      if (btn == 4) {
+        if (WiFi.isConnected()) startHostScan();
+        else state = CHECKING_WIFI;
+        requestUpdate(); return;
+      }
       if (count > 0) {
         int touchRow = -1;
         const auto& m = UITheme::getInstance().getMetrics();
         const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
-        const int contentH = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+        const int contentH = renderer.getScreenHeight() - contentTop - BaseMetrics::values.buttonHintsHeight - m.verticalSpacing;
         const int rowStep = GUI.getListRowStep(false);
         const int pageItems = std::max(1, contentH / rowStep);
         const int pageStart = (selectorIndex / pageItems) * pageItems;
@@ -293,6 +298,7 @@ void HostScannerActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, progress.c_str());
     std::string found = std::to_string(hosts.size()) + " hosts found";
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 20, found.c_str());
+    GUI.drawButtonHintsAlways(renderer, tr(STR_BACK), "", "", "");
     renderer.displayBuffer();
     return;
   }
@@ -305,6 +311,7 @@ void HostScannerActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, progress.c_str());
     std::string open = std::to_string(hosts[selectedHost].openPorts.size()) + " open";
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 40, open.c_str());
+    GUI.drawButtonHintsAlways(renderer, tr(STR_BACK), "", "", "");
     renderer.displayBuffer();
     return;
   }
@@ -337,7 +344,7 @@ void HostScannerActivity::render(RenderLock&&) {
 
   // HOST_LIST
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - metrics.verticalSpacing;
 
   if (hosts.empty()) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_NO_HOSTS));
@@ -347,7 +354,7 @@ void HostScannerActivity::render(RenderLock&&) {
         [this](int i) -> std::string { return ipToString(hosts[i].ip); }, nullptr);
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
-  GUI.drawButtonHintsAlways(renderer, labels.btn1, "Hold: CSV", labels.btn3, labels.btn4);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "CSV", "Rescan");
+  GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
