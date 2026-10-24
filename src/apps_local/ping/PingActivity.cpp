@@ -104,7 +104,10 @@ void PingActivity::doPing() {
 
 void PingActivity::loop() {
   if (state == PINGING) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    int x = 0, y = 0;
+    const bool tap = mappedInput.wasScreenTapped(x, y) &&
+        GUI.tappedAlwaysHintButton(x, y, renderer) == 1;
+    if (tap || mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       state = SUMMARY;
       requestUpdate();
       return;
@@ -120,7 +123,10 @@ void PingActivity::loop() {
   }
 
   if (state == SUMMARY) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+    int x = 0, y = 0;
+    const bool tap = mappedInput.wasScreenTapped(x, y) &&
+        GUI.tappedAlwaysHintButton(x, y, renderer) == 1;
+    if (tap || mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       shelf::leave(renderer, mappedInput);
     }

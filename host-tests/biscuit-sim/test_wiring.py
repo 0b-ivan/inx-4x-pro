@@ -311,3 +311,12 @@ assert "uploadFile.write(upload.buf, upload.currentSize) != upload.currentSize" 
 assert "File listing exceeds size limit" in drop, "Dead Drop: JSON output needs size bound"
 assert "encodeHeaderFileName" in drop, "Dead Drop: Content-Disposition requires encoding"
 print("local web wiring: 9 checks, 0 failed")
+
+# GT911 touch footer action regression on X4 Pro, absent from the original X3.
+ping = (root / "src/apps_local/ping/PingActivity.cpp").read_text()
+finger = (root / "src/apps_local/device-fingerprinter/DeviceFingerprinterActivity.cpp").read_text()
+assert ping.count("GUI.tappedAlwaysHintButton(") >= 2, "Ping cannot stop/exit via touch"
+assert "GUI.tappedAlwaysHintButton(" in finger and "button == 2" in finger, "Fingerprinter Start tap missing"
+assert "mappedInput.rowTouch(" in finger, "Fingerprinter list touch selection missing"
+assert "BaseMetrics::values.buttonHintsHeight" in finger, "Fingerprinter list overlaps GT911 footer"
+print("biscuit GT911 Ping + Fingerprinter wiring: 4 checks, 0 failed")

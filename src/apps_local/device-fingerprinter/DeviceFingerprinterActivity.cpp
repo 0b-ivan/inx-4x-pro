@@ -11,6 +11,7 @@
 #include <cstdlib>
 #endif
 #include <string.h>
+#include <algorithm>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -202,9 +203,17 @@ void DeviceFingerprinterActivity::loop() {
   if (state == READY) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       startCapture();
+      return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       shelf::leave(renderer, mappedInput);
+      return;
+    }
+    int x = 0, y = 0;
+    if (mappedInput.wasScreenTapped(x, y)) {
+      const int button = GUI.tappedAlwaysHintButton(x, y, renderer);
+      if (button == 1) shelf::leave(renderer, mappedInput);
+      else if (button == 2) startCapture();
     }
     return;
   }
@@ -255,6 +264,41 @@ void DeviceFingerprinterActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     shelf::leave(renderer, mappedInput);
+    return;
+  }
+  int x = 0, y = 0;
+  if (!mappedInput.wasScreenTapped(x, y)) return;
+  const int button = GUI.tappedAlwaysHintButton(x, y, renderer);
+  if (button == 1) {
+    shelf::leave(renderer, mappedInput);
+    return;
+  }
+  if (button == 3 || button == 4) {
+    if (count > 0) {
+      deviceIndex = button == 3
+          ? ButtonNavigator::previousIndex(deviceIndex, count)
+          : ButtonNavigator::nextIndex(deviceIndex, count);
+      requestUpdate();
+    }
+    return;
+  }
+  if (count <= 0) return;
+  const auto& m = UITheme::getInstance().getMetrics();
+  const int top = m.topPadding + m.headerHeight + m.verticalSpacing;
+  const int available = renderer.getScreenHeight() - top -
+                        BaseMetrics::values.buttonHintsHeight - m.verticalSpacing;
+  const int step = GUI.getListRowStep(true);
+  const int perPage = std::max(1, available / step);
+  const int start = (deviceIndex / perPage) * perPage;
+  const int pageCount = std::min(perPage, count - start);
+  int row = -1;
+  const auto result = mappedInput.rowTouch(
+      row, top, step, pageCount, 0,
+      renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+  if (result != MappedInputManager::RowTouch::None &&
+      row >= 0 && row < pageCount) {
+    deviceIndex = start + row;
+    requestUpdate();
   }
 }
 
@@ -272,7 +316,7 @@ void DeviceFingerprinterActivity::render(RenderLock&&) {
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
                    "Device Fingerprinter");
     const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-    const int centerY = contentTop + (pageHeight - contentTop - metrics.buttonHintsHeight) / 2;
+    const int centerY = contentTop + (pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight) / 2;
     renderer.drawCenteredText(UI_10_FONT_ID, centerY - 30, "Identify nearby device types");
     renderer.drawCenteredText(UI_10_FONT_ID, centerY, "by analyzing WiFi probe requests.");
     renderer.drawCenteredText(SMALL_FONT_ID, centerY + 40, "Press Confirm to start capture.");
@@ -293,7 +337,7 @@ void DeviceFingerprinterActivity::render(RenderLock&&) {
                  "Device Fingerprinter", subtitle);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - BaseMetrics::values.buttonHintsHeight - metrics.verticalSpacing;
 
   if (devCount == 0) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Listening for probe requests...");

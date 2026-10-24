@@ -175,6 +175,34 @@ print("PASS extended Biscuit UI:",app)
 PYEXTBISCUIT
 done
 
+# GT911 regression: touch the Fingerprinter Start footer and require capture,
+# not merely a visible splash or screenshot from the original READY state.
+finger_ready="$out/DEV_FINGERPRINT_touch_ready.bmp"
+finger_active="$out/DEV_FINGERPRINT_touch_active.bmp"
+finger_log="$out/DEV_FINGERPRINT_touch.log"
+if ! env CROSSPLAY_AUTOSTART="DEV FINGERPRINT" \
+  CROSSPLAY_SIM_FINGERPRINT_TRACE=1 \
+  CROSSPLAY_SIM_FINGERPRINT_SCENARIO=normal \
+  CROSSPOINT_SIM_INPUT_SCRIPT="6200:TAP:180,780,120;11300:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="5700:$finger_ready;10000:$finger_active" \
+  LIBGL_ALWAYS_SOFTWARE=1 \
+  xvfb-run -a -s '-screen 0 1280x1024x24' timeout 19s "$bin" >"$finger_log" 2>&1; then
+  echo "FAIL Fingerprinter GT911: simulator crashed"; tail -80 "$finger_log"; exit 1
+fi
+grep -Fq "FINGERPRINT:scan" "$finger_log" || {
+  echo "FAIL Fingerprinter GT911: Start touch did not begin capture"; tail -80 "$finger_log"; exit 1
+}
+python3 - "$finger_ready" "$finger_active" <<'PYTOUCH'
+from pathlib import Path
+import hashlib, sys
+ready, active = (Path(p).read_bytes() for p in sys.argv[1:])
+assert ready.startswith(b"BM") and active.startswith(b"BM")
+assert hashlib.sha256(ready).digest() != hashlib.sha256(active).digest(), (
+    "GT911 touch did not change the Fingerprinter screen"
+)
+print("PASS Fingerprinter GT911 Start -> Capture")
+PYTOUCH
+
 # Guard every Biscuit Activity against a screenshot taken during the boot
 # splash. Merely checking for a nonblank BMP accepted CLOCK.bmp in CI when
 # startup slipped beyond the 4300ms capture. Pick a capture while each app is
