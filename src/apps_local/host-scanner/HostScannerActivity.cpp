@@ -55,6 +55,9 @@ void HostScannerActivity::onExit() {
 void HostScannerActivity::startHostScan() {
   state = SCANNING_HOSTS;
   hosts.clear();
+  selectorIndex = 0;   // Reset stale selection before rebuilding the host list.
+  selectedHost = -1;
+  portScanProgress = 0;
   scanProgress = 0;
 
 #ifdef SIMULATOR
