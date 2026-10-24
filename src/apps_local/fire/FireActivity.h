@@ -109,10 +109,11 @@ private:
     bool bleEnumConnected = false;
     bool bleEnumDone = false;
 #endif
+    bool liveScanDone = false;
 
     // Promiscuous capture buffer (separate from ScanActivity's)
     static PacketRingBuffer captureBuf;
-    static void IRAM_ATTR captureCallback(void* buf, wifi_promiscuous_pkt_type_t type);
+    static void captureCallback(void* buf, wifi_promiscuous_pkt_type_t type);
 
     // Build
     void buildAttackMenu();

@@ -55,7 +55,7 @@ PacketRingBuffer FireActivity::captureBuf;
 // Promiscuous callback — EAPOL filter
 // ---------------------------------------------------------------------------
 
-void IRAM_ATTR FireActivity::captureCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
+void FireActivity::captureCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
     if (type != WIFI_PKT_DATA) return;
     auto* pkt = (const wifi_promiscuous_pkt_t*)buf;
     const uint8_t* d = pkt->payload;
@@ -146,6 +146,7 @@ void FireActivity::onEnter() {
         preselectedAttack = -1;
     }
 
+    liveScanDone = false;
     loadTargetList();
 
     requestUpdate();
@@ -156,11 +157,9 @@ void FireActivity::loadTargetList() {
     targetIndex = 0;
 
     if (pendingAttack < ATK_COUNT && !isUniversalAttack(pendingAttack)) {
-        // Filter to only the type needed by the pending attack
         TargetType needed = requiredTargetType(pendingAttack);
         TARGETS.getSorted(needed, targetList, 50, targetCount, 0);
     } else {
-        // No specific attack context — show APs + BLE (no STAs)
         TARGETS.getSorted(TargetType::AP, targetList, 25, targetCount, 0);
         int bleCount = 0;
         Target* bleList[25] = {};
@@ -168,6 +167,45 @@ void FireActivity::loadTargetList() {
         for (int i = 0; i < bleCount && targetCount < 50; i++)
             targetList[targetCount++] = bleList[i];
     }
+
+#ifndef SIMULATOR
+    if (targetCount == 0 && !liveScanDone) {
+        liveScanDone = true;
+        snprintf(statusLine, sizeof(statusLine), "Scanning for networks...");
+        requestUpdate();
+
+        WiFi.mode(WIFI_STA);
+        int n = WiFi.scanNetworks(false, true);
+        for (int i = 0; i < n && targetCount < 25; i++) {
+            Target t = {};
+            t.type = TargetType::AP;
+            uint8_t* bssid = WiFi.BSSID(i);
+            if (bssid) memcpy(t.mac, bssid, 6);
+            String ssid = WiFi.SSID(i);
+            strncpy(t.ssid, ssid.c_str(), 32);
+            t.ssid[32] = '\0';
+            t.rssi = (int8_t)WiFi.RSSI(i);
+            t.channel = (uint8_t)WiFi.channel(i);
+            wifi_auth_mode_t auth = WiFi.encryptionType(i);
+            if (auth == WIFI_AUTH_OPEN)         t.authType = 0;
+            else if (auth == WIFI_AUTH_WEP)     t.authType = 1;
+            else if (auth == WIFI_AUTH_WPA_PSK) t.authType = 2;
+            else if (auth == WIFI_AUTH_WPA3_PSK) t.authType = 4;
+            else                                 t.authType = 3;
+            t.lastSeen = millis() / 1000;
+            TARGETS.addOrUpdate(t);
+        }
+        WiFi.scanDelete();
+
+        targetCount = 0;
+        if (pendingAttack < ATK_COUNT && !isUniversalAttack(pendingAttack)) {
+            TargetType needed = requiredTargetType(pendingAttack);
+            TARGETS.getSorted(needed, targetList, 50, targetCount, 0);
+        } else {
+            TARGETS.getSorted(TargetType::AP, targetList, 25, targetCount, 0);
+        }
+    }
+#endif
 }
 
 void FireActivity::onExit() {
