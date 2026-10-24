@@ -259,6 +259,20 @@ assert 'GUI.tappedAlwaysHintButton(' in portal, "Portal needs GT911 touch handli
 assert 'logCredentials(' in portal, "Portal must log captured credentials"
 assert 'creds.csv' in portal, "Portal must write credentials to SD"
 
+# Host Scanner regression: TCP connection deadlines must not silently fall
+# back to the Arduino network client's 3-second default, and leaving a
+# scanner must never disconnect the Wi-Fi session it borrowed.
+host_scan = (root / "src/apps_local/host-scanner/HostScannerActivity.cpp").read_text()
+assert "c.connect(a, port, 180)" in host_scan, "Host discovery TCP connect timeout not bounded"
+assert "client.connect(addr, port, 500)" in host_scan, "Port scan TCP connect timeout not bounded"
+assert "RADIO.shutdown()" not in host_scan, "Host Scanner must preserve existing Wi-Fi association"
+assert "const bool back = mappedInput.wasReleased(" in host_scan, "Host Scanner touch Back missing"
+assert "BaseMetrics::values.buttonHintsHeight" in host_scan, "Host Scanner list overlaps touch footer"
+assert 'if (btn == 3)' in host_scan and 'if (btn == 4)' in host_scan, (
+    "Host Scanner touch CSV and rescan actions not wired"
+)
+print("Host Scanner TCP deadlines, radio ownership and GT911 controls: 6 checks, 0 failed")
+
 workflow = (root / ".github/workflows/crossplay-ci.yml").read_text()
 assert 'bash scripts_local/biscuit_sim_smoke.sh' in workflow, "smoke test not gated by CI"
 assert 'test_visual_goldens.py .pio/biscuit-ui-smoke' in workflow, "real screenshot goldens must gate CI"
