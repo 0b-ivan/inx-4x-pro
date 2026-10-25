@@ -4638,3 +4638,8 @@ LOCAL_MURDLE_PLACE_TRAIT_12: "ein Drachen im Baum"
 LOCAL_MURDLE_PLACE_TRAIT_13: "eine Taubenfeder"
 LOCAL_MURDLE_PLACE_TRAIT_14: "eine offene Schublade"
 LOCAL_MURDLE_PLACE_TRAIT_15: "ein langer Schatten"
+
+# Trivia question data is separate from the firmware UI translation.
+LOCAL_ENGLISH_QUESTIONS: "FRAGEN AUF ENGLISCH"
+LOCAL_GET_ENGLISH_QUESTIONS: "ENGLISCHE FRAGEN LADEN"
+LOCAL_GERMAN_QUIZ_PACK_MISSING: "Kein deutsches Fragenpaket vorhanden. Der Download enthaelt englische Fragen."
