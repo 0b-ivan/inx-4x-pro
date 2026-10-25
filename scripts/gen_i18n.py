@@ -954,7 +954,8 @@ def generate_forehead_strings(translations_dir: str, output_path: Optional[str] 
             lines.append(f"    {escaped},")
             index += 1
         lines.append("};")
-        count_name = f"kGerman{ {'Animals': 'Animal', 'Movies': 'Movie', 'Jobs': 'Job', 'Sports': 'Sport', 'Places': 'Place'}.get(name, name) }Count"
+        singular = {"Animals": "Animal", "Movies": "Movie", "Jobs": "Job", "Sports": "Sport", "Places": "Place"}.get(name, name)
+        count_name = f"kGerman{singular}Count"
         lines.append(f"inline constexpr int {count_name} = sizeof({array}) / sizeof({array}[0]);")
         lines.append("")
     lines.append("}  // namespace forehead")
