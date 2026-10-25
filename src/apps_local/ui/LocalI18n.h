@@ -13,6 +13,7 @@
 
 #include <cstdio>
 #include "LocalI18nFormats.h"
+#include "LocalI18nContext.h"
 #include <cstring>
 
 namespace toybox {
@@ -68,42 +69,19 @@ inline const char* localize(const char* text) {
     return std::sscanf(text, format, out...);
   };
   const auto germanShip = [](const char* ship) {
-    if (std::strcmp(ship, "CARRIER") == 0) return "TRAEGER";
-    if (std::strcmp(ship, "BATTLESHIP") == 0) return "SCHLACHTSCHIFF";
-    if (std::strcmp(ship, "CRUISER") == 0) return "KREUZER";
-    if (std::strcmp(ship, "SUBMARINE") == 0) return "U-BOOT";
-    if (std::strcmp(ship, "DESTROYER") == 0) return "ZERSTOERER";
+    for (const auto& entry : kGermanShips) {
+      if (std::strcmp(ship, entry.english) == 0) return entry.german;
+    }
     return ship;
   };
   const auto germanSudokuTerm = [](const char* term) {
-    static constexpr LocalTranslation kTerms[] = {
-        {"EASY", "LEICHT"},
-        {"MEDIUM", "MITTEL"},
-        {"HARD", "SCHWER"},
-        {"EXPERT", "EXPERTE"},
-        {"NOTHING", "NICHTS"},
-        {"ONLY DIGIT", "EINZIGE ZAHL"},
-        {"ONLY CELL", "EINZIGES FELD"},
-        {"LOCKED", "GESPERRT"},
-        {"CELL PAIR", "FELDPAAR"},
-        {"DIGIT PAIR", "ZAHLENPAAR"},
-        {"CELL TRIO", "FELDTRIO"},
-        {"DIGIT TRIO", "ZAHLENTRIO"},
-        {"RECTANGLE", "RECHTECK"},
-        {"Y CHAIN", "Y-KETTE"},
-        {"SWORDFISH", "SCHWERTFISCH"},
-    };
-    for (const auto& entry : kTerms) {
+    for (const auto& entry : kGermanSudokuTerms) {
       if (std::strcmp(term, entry.english) == 0) return entry.german;
     }
     return term;
   };
   const auto germanMonth = [](const char* month) -> const char* {
-    static constexpr LocalTranslation kMonths[] = {
-        {"JAN", "JAN"}, {"FEB", "FEB"}, {"MAR", "MAER"}, {"APR", "APR"}, {"MAY", "MAI"}, {"JUN", "JUN"},
-        {"JUL", "JUL"}, {"AUG", "AUG"}, {"SEP", "SEP"},  {"OCT", "OKT"}, {"NOV", "NOV"}, {"DEC", "DEZ"},
-    };
-    for (const auto& entry : kMonths) {
+    for (const auto& entry : kGermanMonths) {
       if (std::strcmp(month, entry.english) == 0) return entry.german;
     }
     return nullptr;
@@ -134,8 +112,8 @@ inline const char* localize(const char* text) {
     return formatted;
   }
   if (scan("TOTAL  %d %31s  %d %31s%n", &first, word, &second, other, &consumed) == 4 && text[consumed] == '\0') {
-    std::snprintf(formatted, sizeof(formatted), localizedFormat(LocalFormat::LOCAL_FORMAT_TOTAL_D_S_D_S), first, first == 1 ? "RUNDE" : "RUNDEN", second,
-                  second == 1 ? "WORT" : "WOERTER");
+    std::snprintf(formatted, sizeof(formatted), localizedFormat(LocalFormat::LOCAL_FORMAT_TOTAL_D_S_D_S), first, first == 1 ? kGermanRound : kGermanRounds, second,
+                  second == 1 ? kGermanWord : kGermanWords);
     return formatted;
   }
   if (scan("MEDALS %d - %d%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
