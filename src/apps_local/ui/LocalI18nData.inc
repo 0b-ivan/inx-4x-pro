@@ -1216,7 +1216,7 @@
     {"EVERYONE HAS A PLACE", "ALLES HAT SEINEN PLATZ"},
     {"Each suspect carried one weapon and was in one place, and no two of them share. One of them did it.", "Jeder Verdaechtige hatte eine Waffe und war an einem Ort. Nichts kommt doppelt vor. Einer war der Taeter."},
     {"THE GRID IS YOUR PENCIL", "DAS RASTER IST DEIN NOTIZBLOCK"},
-    {"Every pair of things meets in one square. Tap once to rule it out, again to lock it in. Locking one rules out the rest of its row and column in a lighter mark. The grid only ever takes back marks it made itself; yours stay until you clear them.", "Jedes Paar trifft sich in einem Feld. Einmal tippen schliesst es aus, zweimal legt es fest. Eine Festlegung schliesst den Rest der Zeile und Spalte aus."},
+    {"Every pair of things meets in one square. Tap once to rule it out, again to lock it in. Locking one rules out the rest of its row and column in a lighter mark. The grid only ever takes back marks it made itself; yours stay until you clear them.", "Jedes Paar steht in einem Feld. Einmal tippen: ausschliessen, zweimal: festlegen. Eine Festlegung sperrt andere Felder in Zeile und Spalte (heller markiert). Deine Markierungen bleiben, bis du sie loeschst."},
     {"THE CLUES DO THE REST", "DIE HINWEISE HELFEN WEITER"},
     {"Read one, mark what it rules out, tap its number to tick it off. Clues never lie, unless the case says a suspect is speaking.", "Hinweis lesen, Ausgeschlossenes markieren und seine Nummer abhaken. Hinweise luegen nur, wenn ein Verdaechtiger spricht."},
     {"THEN NAME THEM", "DANN BESCHULDIGE SIE"},
