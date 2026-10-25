@@ -67,6 +67,11 @@ int main() {
   expect("YOU SANK THEIR BATTLESHIP", "DU VERSENKTEST IHR SCHLACHTSCHIFF");
   expect("BATTLESHIP", "SCHIFFE VERSENKEN");
   expect("THE GRID IS YOUR PENCIL", "DAS RASTER IST DEIN NOTIZBLOCK");
+  expect("Every pair of things meets in one square. Tap once to rule it out, again to lock it in. Locking one rules out the rest of its row and column in a lighter mark. The grid only ever takes back marks it made itself; yours stay until you clear them.",
+         "Jedes Paar steht in einem Feld. Einmal tippen: ausschliessen, zweimal: festlegen. Eine Festlegung sperrt andere Felder in Zeile und Spalte (heller markiert). Deine Markierungen bleiben, bis du sie loeschst.");
+  expect("The questions need about 20 MB free and the card has 12 MB. Delete something from the card, then try again. Nothing was written.",
+         "Fragen brauchen etwa 20 MB; frei sind 12 MB. Platz schaffen und erneut versuchen. Es wurde nichts geschrieben.");
+
 
   ++checks;
   if (std::strcmp(tarotNameLocalized(0, "The Fool"), "Der Narr") != 0) ++failures;
