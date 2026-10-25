@@ -4636,3 +4636,8 @@ LOCAL_MURDLE_PLACE_TRAIT_12: "a kite in a tree"
 LOCAL_MURDLE_PLACE_TRAIT_13: "a pigeon feather"
 LOCAL_MURDLE_PLACE_TRAIT_14: "an open drawer"
 LOCAL_MURDLE_PLACE_TRAIT_15: "a long shadow"
+
+# Trivia question data is separate from the firmware UI translation.
+LOCAL_ENGLISH_QUESTIONS: "ENGLISH QUESTIONS"
+LOCAL_GET_ENGLISH_QUESTIONS: "GET ENGLISH QUESTIONS"
+LOCAL_GERMAN_QUIZ_PACK_MISSING: "A German question pack is not installed. The available download contains English questions."
