@@ -987,6 +987,41 @@ void testDenialNamesTheRuledOutItem() {
   CHECK(!contains(line, " not "));
 }
 
+// Regression: an Elementary three-suspect mask with two set bits means
+// "NOT the third suspect", not a choice between two suspects. Test all three
+// excluded positions against the actual German clue printed for the player.
+void testGermanThreeSuspectDenials() {
+  static Scratch scratch;
+  Puzzle puzzle;
+  CHECK(makeCase(Tier::Elementary, 4242u, scratch, puzzle));
+  if (puzzle.shape.items != 3) {
+    CHECK(false);
+    return;
+  }
+  Clue clue{};
+  clue.anchor = Anchor::Item;
+  clue.anchorCat = static_cast<uint8_t>(Cat::Weapon);
+  clue.anchorItem = 0;
+  clue.targetCat = static_cast<uint8_t>(Cat::Suspect);
+  clue.speaker = kNobodySpeaks;
+  clue.attr = kNoAttr;
+  puzzle.clueCount = 1;
+
+  char line[murdletext::kLineMax];
+  murdletext::setGerman(true);
+  for (int excluded = 0; excluded < 3; ++excluded) {
+    clue.targetMask = static_cast<uint8_t>(0x07u & ~(1u << excluded));
+    puzzle.clues[0] = clue;
+    murdletext::clueLine(puzzle, 0, line, sizeof(line));
+    CHECK(contains(line, " nicht "));
+    for (int suspect = 0; suspect < 3; ++suspect) {
+      const char* name = murdletext::label(puzzle, static_cast<int>(Cat::Suspect), suspect);
+      CHECK(contains(line, name) == (suspect == excluded));
+    }
+  }
+  murdletext::setGerman(false);
+}
+
 // ---------------------------------------------------------------------------
 // Mutation check
 //
