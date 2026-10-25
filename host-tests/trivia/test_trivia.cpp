@@ -145,6 +145,7 @@ void testFormat() {
   Pack pack;
   CHECK(pack.open(src));
   CHECK(pack.count() == 40);
+  CHECK(pack.flags() == 0);
 
   for (uint32_t i = 0; i < pack.count(); ++i) {
     Question q;
@@ -173,6 +174,19 @@ void testRejectsBadFiles() {
   MemorySource m1(bad);
   Pack p1;
   CHECK(!p1.open(m1));
+
+  bad = buildPack(items);
+  bad[10] = kPackGermanFlag;
+  MemorySource markedGerman(bad);
+  Pack marked;
+  CHECK(marked.open(markedGerman));
+  CHECK(marked.flags() == kPackGermanFlag);
+
+  bad = buildPack(items);
+  bad[10] = 0x02;  // unsupported language marker must not masquerade as English
+  MemorySource unknownLanguage(bad);
+  Pack unknown;
+  CHECK(!unknown.open(unknownLanguage));
 
   bad = buildPack(items);
   bad[8] = 99;  // unsupported version
