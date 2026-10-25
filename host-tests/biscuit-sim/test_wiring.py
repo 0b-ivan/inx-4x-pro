@@ -135,7 +135,9 @@ assert 'Sample: %lu ms' in wifi_diag and 'case 2: refreshSnapshot()' in wifi_dia
 assert "BaseMetrics::values.buttonHintsHeight" in wifi_diag, (
     "WIFI DIAG must reserve the real touch footer"
 )
-assert 'CROSSPLAY_AUTOSTART="WIFI DIAG"' in smoke_script, "WIFI DIAG native smoke is missing"
+assert 'CROSSPLAY_AUTOSTART="WIFI DIAG"' in (root / "scripts_local/biscuit_sim_smoke.sh").read_text(), (
+    "WIFI DIAG native smoke is missing"
+)
 print("WIFI DIAG: status-only API, simulator isolation, touch and refresh: 7 checks, 0 failed")
 
 assert "esp_wifi_80211_tx" in wifi_test and "#ifndef SIMULATOR" in wifi_test, "real transmit must remain hardware-only"
