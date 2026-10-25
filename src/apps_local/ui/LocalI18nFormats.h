@@ -128,7 +128,7 @@ inline constexpr const char* kLocalGermanFormats[] = {
     "%d FRAGEN AUF DER KARTE",
     "%d VON %d GESEHEN",
     "Stufe %d von %d",
-    "Fragen brauchen etwa %d MB; frei sind %d MB. Etwas loeschen und erneut versuchen.",
+    "Fragen brauchen etwa %d MB; frei sind %d MB. Platz schaffen und erneut versuchen. Es wurde nichts geschrieben.",
     "Fragen werden geladen: %d von %d MB. Zurueck bricht ab.",
     "Fragen werden geladen: bisher %d MB. Zurueck bricht ab.",
     "%d Fragen auf der Karte. Bereit, wenn du es bist.",
