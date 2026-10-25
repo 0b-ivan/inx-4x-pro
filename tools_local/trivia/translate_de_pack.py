@@ -81,8 +81,11 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
             for attempt in range(4):
                 try:
                     translated = translate_one(original, model, api_key)
+                    # Accept only content fields. Provider-supplied IDs or
+                    # approval flags may not override our source and review gate.
                     row = {"id": ident, "source_hash": source_hash(original),
-                           **translated, "reviewed": False}
+                           **{k: translated[k] for k in ("q", "a", "alt", "w")},
+                           "reviewed": False}
                     validate_record(original, row, allow_draft=True)
                     break
                 except (urllib.error.URLError, TimeoutError, KeyError,
