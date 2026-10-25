@@ -115,6 +115,19 @@ wifi_test = (root / "src/apps_local/wifi-test/WifiTestActivity.cpp").read_text()
 assert "biscuit_sim::deauthPreviewAps()" in wifi_test, "WiFi Deauth must use virtual AP list"
 assert "OFFLINE SIMULATION - NO TX" in wifi_test and "wifiDeauthSimTrace" in wifi_test, "WiFi Deauth UI must flag dry-run and emit test state"
 assert "esp_wifi_80211_tx" in wifi_test and "#ifndef SIMULATOR" in wifi_test, "real transmit must remain hardware-only"
+# Regression: a successful raw-WiFi API call or an incremented attempt counter
+# does not prove that a deauthentication frame reached the air.
+assert "TX API accepted" in wifi_test and "RF delivery not verified" in wifi_test, (
+    "WiFi Deauth UI must not claim verified over-the-air transmission"
+)
+fire_hw = (root / "src/apps_local/fire/FireActivity.cpp").read_text()
+assert "TX attempts: %lu" in fire_hw and "Total TX attempts: %lu" in fire_hw, (
+    "Fire must report raw TX attempts rather than confirmed packet delivery"
+)
+assert fire_hw.count("RF delivery not verified") >= 2, (
+    "Fire executing and result screens must show verification limits"
+)
+print("Deauth UI transmission-claim regression: 3 checks, 0 failed")
 spam = (root / "src/apps_local/ble-spam/BleSpamActivity.cpp").read_text()
 assert "biscuit_sim::blePreview(" in spam and "spamSimTrace" in spam, "BLE Spam must use isolated preview data"
 assert "#ifndef SIMULATOR" in spam and "Simulated previews" in spam, "BLE Spam must show simulated-only mode"
