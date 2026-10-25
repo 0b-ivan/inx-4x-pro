@@ -1552,6 +1552,7 @@ int runTests() {
   testAxisLettersAreDistinct();
   testEverySentenceReads();
   testDenialNamesTheRuledOutItem();
+  testGermanThreeSuspectDenials();
   testTheSceneClueComesLast();
   testTheMurdererLiesAboutSomebodyElse();
   testStatementsDoNotGiveTheCaseAway();
