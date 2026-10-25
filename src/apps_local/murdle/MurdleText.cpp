@@ -492,12 +492,18 @@ void germanClueLine(const Puzzle& p, const Clue& clue, char* out, const int cap)
     const int second = highestBit(clue.targetMask);
     const char* relation = static_cast<Cat>(clue.anchorCat) == Cat::Weapon ? "trug" :
                            static_cast<Cat>(clue.anchorCat) == Cat::Location ? "war" : "handelte aus";
-    if (set == 2) {
+    // With three suspects a two-bit mask is a DENIAL, not an either/or.
+    // Check the negation first: otherwise the excluded suspect is named as
+    // one of the two supposedly allowed alternatives.
+    if (negative) {
+      std::snprintf(out, static_cast<size_t>(cap), "%s %s nicht %s.", suspectOf(p, first).name, relation,
+                    germanPhraseOf(p, clue.anchorCat, clue.anchorItem));
+    } else if (set == 2) {
       std::snprintf(out, static_cast<size_t>(cap), "%s oder %s %s %s.", suspectOf(p, first).name,
                     suspectOf(p, second).name, relation, germanPhraseOf(p, clue.anchorCat, clue.anchorItem));
     } else {
-      std::snprintf(out, static_cast<size_t>(cap), "%s %s%s %s.", suspectOf(p, first).name, relation,
-                    negative ? " nicht" : "", germanPhraseOf(p, clue.anchorCat, clue.anchorItem));
+      std::snprintf(out, static_cast<size_t>(cap), "%s %s %s.", suspectOf(p, first).name, relation,
+                    germanPhraseOf(p, clue.anchorCat, clue.anchorItem));
     }
     return;
   }
