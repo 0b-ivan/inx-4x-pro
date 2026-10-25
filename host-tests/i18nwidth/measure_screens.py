@@ -327,7 +327,16 @@ def main():
         return survey()
     if "--report" in sys.argv:
         return report()
-    strings = translations()
+    requested = [arg.split("=", 1)[1] for arg in sys.argv if arg.startswith("--language=")]
+    if len(requested) > 1:
+        print("FAIL: specify only one --language=NAME")
+        return 2
+    language = requested[0] if requested else None
+    translation_path = REPO / "lib/I18n/translations" / (language + ".yaml") if language else None
+    if language and not translation_path.exists():
+        print("FAIL unknown language: %s" % language)
+        return 2
+    strings = translations(translation_path)
     faces = {k: load_font(v) for k, v in FACES.items() if v.exists()}
     if not faces:
         print("FAIL no font headers found under %s" % FONTS)
@@ -369,8 +378,8 @@ def main():
         # --all-languages measures it, and a literal written here rots. This
         # comment said 26 while the tool measured 25, hours apart.
         print(
-            "  ok   %d unwrapped strings all fit %dpx -- ENGLISH ONLY"
-            % (total, PANEL_WIDTH)
+            "  ok   %d unwrapped strings all fit %dpx -- %s"
+            % (total, PANEL_WIDTH, language.upper() if language else "ENGLISH ONLY")
         )
         print("       other languages are NOT gated: run with --all-languages")
     print("%d checks, %d failed" % (total, bad))
