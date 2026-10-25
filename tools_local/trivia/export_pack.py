@@ -15,6 +15,9 @@ import pack_format
 
 def export(pack_path, output_path):
     pack = pack_format.open_pack(str(pack_path))
+    if pack["flags"] != 0:
+        pack["f"].close()
+        raise ValueError("expected the released English pack (flags=0)")
     count = pack["count"]
     dest = Path(output_path)
     dest.parent.mkdir(parents=True, exist_ok=True)
