@@ -48,6 +48,9 @@ int main() {
   expect("12 CLUES   HARDEST CELL PAIR   3 EASY SOLVED", "12 VORGABEN   SCHWERSTE FELDPAAR   3 LEICHT GELOEST");
 
   expect("STUDY", "ARBEITSZIMMER");
+  expect("CHECK", "PRUEFEN");
+  expect("IN CHECK", "SCHACH");
+  expect("LEFT", "LINKS");
   expect("THEY WIN", "GEGNER GEWINNT");  // first duplicate previously took precedence
   expect("THE CASE", "DER FALL");
   expect("SECOND", "DANACH");
