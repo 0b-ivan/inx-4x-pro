@@ -1,5 +1,10 @@
 # TRIVIA
 
+**German question contents:** See [trivia-german.md](trivia-german.md)
+for the language-specific SD files, reviewed translations, draft translator,
+pack validator and installation. The existing public 50,000-question download
+is English; changing the firmware language alone does not translate it.
+
 50,000 questions on the card, two ways to play them. The questions and how they
 were chosen are in [../trivia-curation.md](../trivia-curation.md); the on-card
 format is [trivia-pack-format.md](trivia-pack-format.md). This is the app.
