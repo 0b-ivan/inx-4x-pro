@@ -131,7 +131,7 @@ def build(source_path, translation_path, output_path, allow_draft=False):
     destination.parent.mkdir(parents=True, exist_ok=True)
     tmp = destination.with_suffix(destination.suffix + ".part")
     try:
-        written = pack_format.write(out, str(tmp))
+        written = pack_format.write(out, str(tmp), flags=pack_format.GERMAN_FLAG)
         tmp.replace(destination)  # no partial valid pack on failure
     finally:
         if tmp.exists():
