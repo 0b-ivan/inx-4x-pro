@@ -29,7 +29,7 @@ assert len(core) >= 541, f"Core reference keys decreased unexpectedly: {len(core
 assert all(key in german and german[key].strip() for key in core), "German core translation missing"
 assert len(local) >= 1200, f"Local app keys decreased unexpectedly: {len(local)}"
 assert len(formats) >= 80 and all(key in german for key in formats), "Missing German dynamic status formats"
-assert len(context) == 36 and all(key in german for key in context), "Missing German contextual translations"
+assert len(context) == 38 and all(key in german for key in context), "Missing German contextual translations"
 assert len(forehead) == 1874 and all(key in german for key in forehead), "Missing indexed German Forehead cards"
 assert all(key in german and german[key].strip() for key in local), "German app translation missing"
 
