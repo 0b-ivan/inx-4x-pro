@@ -41,6 +41,10 @@ inline constexpr LocalContextTranslation kGermanMonths[] = {
     {"NOV", "NOV"},
     {"DEC", "DEZ"},
 };
+inline constexpr LocalContextTranslation kGermanWavelengthTerms[] = {
+    {"HARD", "HART"},
+    {"ROUND", "RUND"},
+};
 inline constexpr const char* kGermanRound = "RUNDE";
 inline constexpr const char* kGermanRounds = "RUNDEN";
 inline constexpr const char* kGermanWord = "WORT";
