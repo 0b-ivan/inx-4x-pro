@@ -75,6 +75,7 @@
 #include "clock/ClockActivity.h"
 #include "countdown/CountdownActivity.h"
 #include "device-info/DeviceInfoActivity.h"
+#include "wifi-diagnostics/WifiDiagnosticsActivity.h"
 #include "morse-code/MorseCodeActivity.h"
 #include "otp-generator/OtpGeneratorActivity.h"
 #include "password-manager/PasswordManagerActivity.h"
@@ -194,6 +195,7 @@ constexpr shelf::Item kApps[] = {
     {"CLOCK",          &icon_study_32,  &ClockActivity::create},
     {"COUNTDOWN",      &icon_study_32,  &CountdownActivity::create},
     {"DEVICE INFO",    &icon_study_32,  &DeviceInfoActivity::create},
+    {"WIFI DIAG",       &icon_study_32,  &WifiDiagnosticsActivity::create},
     {"MORSE CODE",     &icon_study_32,  &MorseCodeActivity::create},
     {"OTP GENERATOR",  &icon_study_32,  &OtpGeneratorActivity::create},
     {"PASSWORD MANAGER", &icon_study_32, &PasswordManagerActivity::create},
