@@ -770,8 +770,9 @@ else
   # going out together, so by the time CI runs, the newest tag IS this version
   # -- and comparing the notes against themselves skipped the gate in the only
   # run that could have caught anything.
-  PREV_TAG="$(git -C "$ROOT" tag --list --sort=-v:refname |
-    grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "v$NOTES_VERSION" | head -1)"
+  PREV_TAG="$(git -C "$ROOT" tag --list --sort=v:refname |
+    grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+    awk -v cur="v$NOTES_VERSION" '$0 == cur { print prev; exit } { prev=$0 }')"
   if [ -z "$PREV_TAG" ]; then
     skip "no previous tag to compare the notes against"
   elif ! git -C "$ROOT" cat-file -e "$PREV_TAG:.github/workflows/crossplay-release.yml" 2>/dev/null; then
