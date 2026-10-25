@@ -263,6 +263,43 @@ for app, filename in samples.items():
 print("PASS Biscuit 26/26: screenshots contain rendered Activity headers")
 PYACTIVITYSCREENS
 
+# Separate read-only WiFi diagnostics smoke; the Biscuit 26/26 matrix above
+# remains unchanged. This Activity uses only explicit virtual hardware values.
+diag_log="$out/WIFI_DIAG.log"
+diag_initial="$out/WIFI_DIAG_initial.bmp"
+diag_refreshed="$out/WIFI_DIAG_refreshed.bmp"
+if ! env CROSSPLAY_AUTOSTART="WIFI DIAG" \
+  CROSSPOINT_SIM_INPUT_SCRIPT="5400:ENTER:150;7400:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="4300:$diag_initial;6650:$diag_refreshed" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 18s "$bin" >"$diag_log" 2>&1; then
+  echo "FAIL WIFI DIAG: simulator crashed"
+  tail -90 "$diag_log"
+  exit 1
+fi
+grep -Fq "Autostart into WIFI DIAG" "$diag_log" || {
+  echo "FAIL WIFI DIAG: Activity not launched"
+  tail -60 "$diag_log"
+  exit 1
+}
+python3 - "$diag_initial" "$diag_refreshed" <<'PYWIFIDIAG'
+from pathlib import Path
+import hashlib
+import struct
+import sys
+before, after = [Path(p) for p in sys.argv[1:]]
+for shot in (before, after):
+    data = shot.read_bytes()
+    assert data[:2] == b"BM" and len(data) > 1000, f"Invalid WIFI DIAG BMP {shot}"
+    assert tuple(map(abs, struct.unpack_from("<ii", data, 18))) == (480, 800), (
+        f"Wrong WIFI DIAG screenshot geometry: {shot}"
+    )
+assert hashlib.sha256(before.read_bytes()).digest() != hashlib.sha256(after.read_bytes()).digest(), (
+    "WIFI DIAG Refresh did not visibly update the snapshot timestamp"
+)
+print("PASS WIFI DIAG: virtual diagnostics displayed and Refresh changed the screen")
+PYWIFIDIAG
+
 # Regression: connected and disconnected Host Scanner must render different states.
 # This only validates an actual visible state difference, not full scan semantics.
 offline="$out/HOST_SCANNER_offline.bmp"
