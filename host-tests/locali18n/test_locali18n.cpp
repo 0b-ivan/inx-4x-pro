@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "../../src/apps_local/ui/LocalI18n.h"
+#include "../../src/apps_local/tarot/TarotI18n.h"
 
 static int checks = 0;
 static int failures = 0;
@@ -37,9 +38,26 @@ int main() {
   expect("12 CLUES   HARDEST CELL PAIR   3 EASY SOLVED", "12 VORGABEN   SCHWERSTE FELDPAAR   3 LEICHT GELOEST");
 
   expect("STUDY", "LERNEN");
+  expect("THEY WIN", "SIE GEWINNEN");  // first duplicate previously took precedence
+  expect("THE CASE", "DER FALL");
+  expect("BATTLESHIP", "SCHIFFE VERSENKEN");
+  expect("THE GRID IS YOUR PENCIL", "DAS RASTER IST DEIN NOTIZBLOCK");
+
+  ++checks;
+  if (std::strcmp(tarotNameLocalized(0, "The Fool"), "Der Narr") != 0) ++failures;
+  ++checks;
+  if (std::strcmp(tarotNameLocalized(77, "King of Pentacles"), "König der Münzen") != 0) ++failures;
+  ++checks;
+  if (std::strcmp(tarotMeaningLocalized(0, "New beginnings"),
+                  "Neuanfang, Optimismus, Vertrauen ins Leben und der Mut zu einem Sprung ins Ungewisse.") != 0)
+    ++failures;
 
   // English stays English.
   I18N.language = Language::EN;
+  ++checks;
+  if (std::strcmp(tarotNameLocalized(0, "The Fool"), "The Fool") != 0) ++failures;
+  ++checks;
+  if (std::strcmp(tarotMeaningLocalized(0, "New beginnings"), "New beginnings") != 0) ++failures;
   expect("5 POINTS", "5 POINTS");
   expect("STUDY", "STUDY");
 
