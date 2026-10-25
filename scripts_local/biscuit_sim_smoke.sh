@@ -142,6 +142,49 @@ pixels = data[struct.unpack_from("<I", data, 10)[0]:]
 assert len(set(pixels)) > 1, f"blank screenshot: {p}"
 print(f"PASS screenshot {p.name} {w}x{h}")
 PY
+  # Slow CI workers can spend >6.5 s initializing the SDL display. If Clock's
+  # first timed screenshot captured Boot rather than the real Activity, replay
+  # that one test with a later capture; never bless a boot splash as a golden.
+  if [ "$app" = "CLOCK" ]; then
+    if ! python3 - "$frame" <<'PYCLOCKREADY'
+from pathlib import Path
+import struct
+import sys
+data = Path(sys.argv[1]).read_bytes()
+assert data[:2] == b"BM"
+width, height = struct.unpack_from("<ii", data, 18)
+assert (width, height) == (480, 800)
+offset = struct.unpack_from("<I", data, 10)[0]
+raw = memoryview(data)[offset:offset + width * height * 4]
+assert len(raw) == width * height * 4
+top_rows = raw[(height - 110) * width * 4:]
+header_ink = sum(top_rows[i] < 128 for i in range(0, len(top_rows), 4))
+assert header_ink > 150, "Clock screenshot still shows the boot splash"
+PYCLOCKREADY
+    then
+      echo "[biscuit-ui-smoke] CLOCK boot screenshot detected; retry with late Activity capture"
+      if ! env CROSSPLAY_AUTOSTART="CLOCK" \
+        CROSSPLAY_SIM_EPOCH=1704067200 \
+        CROSSPLAY_SIM_WIFI_CONNECTED=1 \
+        CROSSPOINT_SIM_INPUT_SCRIPT="11200:ENTER:650;14500:QUIT" \
+        CROSSPOINT_SIM_SCREENSHOTS="9500:$frame;13300:$out/CLOCK_stopwatch.bmp" \
+        LIBGL_ALWAYS_SOFTWARE=1 \
+        xvfb-run -a -s '-screen 0 1280x1024x24' \
+        timeout 26s "$bin" >"$log" 2>&1; then
+        echo "FAIL CLOCK: late-capture retry crashed"
+        tail -100 "$log"
+        exit 1
+      fi
+      grep -Fq "Autostart into CLOCK" "$log" && \
+      grep -Fq "Entering activity: Clock" "$log" && \
+      grep -Fq "CLOCK:mode:stopwatch" "$log" || {
+        echo "FAIL CLOCK: Activity or Stopwatch transition absent from retry"
+        tail -100 "$log"
+        exit 1
+      }
+      echo "[biscuit-ui-smoke] CLOCK retry complete; Activity-header and pixel-golden checks follow"
+    fi
+  fi
 done
 
 # Additional hardware-report Activities beyond the established 26. Virtual
