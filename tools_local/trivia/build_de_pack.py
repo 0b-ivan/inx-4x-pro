@@ -79,6 +79,20 @@ def validate_record(original, localized, allow_draft=False):
             unsupported = sorted({c for c in field if ord(c) not in glyphs})
             if unsupported:
                 raise TranslationError(f"{ident}: glyphs missing in display font: {unsupported}")
+    # The question uses the reading serif; answer and option labels use the
+    # smaller reading serif for UTF-8 or an ASCII-only Jersey cut otherwise.
+    # Check the actual face selected by TriviaScreens rather than characters.
+    def label_fits(value, ascii_face):
+        face = "reading_serif_14" if any(ord(ch) >= 128 for ch in value) else ascii_face
+        advances, _ = textfit.font(face)
+        return textfit.text_width(value, advances) <= CLUE_WIDTH
+
+    if not label_fits(localized["a"], "toybox_30"):
+        raise TranslationError(f"{ident}: answer too wide for Quizmaster display")
+    for wrong_answer in localized["w"]:
+        if not label_fits(wrong_answer, "toybox_14"):
+            raise TranslationError(f"{ident}: option too wide for multiple-choice button")
+
     result = {key: original[key] for key in ("id", "d", "y") if key in original}
     result.update({key: localized[key] for key in FIELDS})
     size = len(pack_format._rec(result))
