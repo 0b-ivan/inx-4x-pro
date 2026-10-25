@@ -116,6 +116,41 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.10
+
+            **New: WIFI DIAG (read-only WLAN diagnostics)**
+
+            A dedicated Xteink X4 Pro hardware diagnostics screen displays
+            chip and ESP-IDF version, WiFi radio mode, connection status,
+            IP address, RSSI, channel, power-save mode and ESP-IDF API
+            errors with names and hexadecimal codes.
+
+            The screen supports touch navigation, scrolling and Refresh.
+            A timestamp marks each snapshot. The SDL simulator uses
+            explicitly virtual telemetry. WIFI DIAG neither changes
+            radio configuration nor transmits wireless frames.
+
+            **Host Scanner fixes**
+
+            TCP connection attempts now use explicit short deadlines.
+            Leaving the scanner preserves an existing WiFi association.
+            Touch controls cover Back, CSV export and Rescan, and rescanning
+            clears the prior host selection to avoid stale indexes.
+
+            **WiFi Deauth and Fire: accurate status reporting**
+
+            Transmit attempts and accepted API calls are no longer
+            presented as verified over-the-air packet delivery.
+            This is a status-display correction, not a claim that
+            unsupported ESP-IDF frame types now work.
+
+            **Validation**
+
+            Added regression checks for passive-only diagnostics,
+            host scanner behavior, transmission labels and simulator
+            Refresh screenshots. The existing Biscuit 26-app
+            screenshot smoke matrix is retained.
+
             ### What is new in 1.16.9
 
             Host Scanner: now finds hosts that refuse the connection (TCP RST)
