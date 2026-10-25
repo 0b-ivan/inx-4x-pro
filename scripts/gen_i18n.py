@@ -72,7 +72,7 @@ def parse_yaml_file(filepath: str) -> Dict[str, str]:
     Parse a simple YAML file of the form:
         key: "value"
 
-    Only supports flat key-value pairs with quoted string values.
+    Only supports flat key-value pairs with quoted string values and comments.
     Aborts on formatting errors.
     """
     result = {}
@@ -80,7 +80,7 @@ def parse_yaml_file(filepath: str) -> Dict[str, str]:
         for line_num, raw_line in enumerate(f, start=1):
             line = raw_line.rstrip("\n\r")
 
-            if not line.strip():
+            if not line.strip() or line.lstrip().startswith("#"):
                 continue
 
             match = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*"(.*)"$', line)
