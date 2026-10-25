@@ -17,6 +17,17 @@ fui::TextStyle textStyle(const fui::FontId font, const fui::TextAlign align,
   return style;
 }
 
+// The Jersey button/display fonts contain ASCII only. German answers and
+// multiple-choice options may contain UTF-8, so render them in the reading
+// serif face when their bytes are not ASCII.
+bool needsUnicodeFace(const char* text) {
+  if (text == nullptr) return false;
+  for (const unsigned char* p = reinterpret_cast<const unsigned char*>(text); *p; ++p) {
+    if (*p >= 0x80) return true;
+  }
+  return false;
+}
+
 // All-caps chrome: safe to ink-centre, because every glyph sits on the baseline.
 void drawLabel(toybox::Screen& screen, const fui::Rect& box, const char* text, const fui::FontId font,
                const fui::TextAlign align, const toybox::CutMetrics& cut, const fui::Color colour = fui::Color::Black) {
@@ -192,8 +203,10 @@ void questionCard(toybox::Screen& screen, const QuestionModel& model) {
 
   if (model.answer != nullptr) {
     hairline(screen, static_cast<int16_t>(footerTop(screen) - 96));
+    const bool unicodeAnswer = needsUnicodeFace(model.answer);
     drawLabel(screen, fui::Rect{body.x, static_cast<int16_t>(footerTop(screen) - 84), body.width, 64}, model.answer,
-              toybox::kDisplayFont, fui::TextAlign::Center, toybox::kLargeCut);
+              unicodeAnswer ? toybox::kBodyFont : toybox::kDisplayFont, fui::TextAlign::Center,
+              unicodeAnswer ? toybox::kReadingCut : toybox::kLargeCut);
     // FLAG is only offered once the answer is showing: you cannot judge a
     // question bad until you have seen what it claims the answer is.
     // END in both states, and in the same place as solo's. Quizmaster had no
@@ -374,8 +387,11 @@ void buildChoice(toybox::Screen& screen, const ChoiceModel& model) {
       } else {
         screen.target().stroke(box, fui::Paint::solid(fui::Color::Black), static_cast<uint8_t>(isWrongPick ? 3 : 1));
       }
-      drawLabel(screen, box, model.option[i] != nullptr ? model.option[i] : "", toybox::kSmallFont,
-                fui::TextAlign::Center, toybox::kButtonCut, isCorrect ? fui::Color::White : fui::Color::Black);
+      const char* option = model.option[i] != nullptr ? model.option[i] : "";
+      const bool unicodeOption = needsUnicodeFace(option);
+      drawLabel(screen, box, option, unicodeOption ? toybox::kBodyFont : toybox::kSmallFont,
+                fui::TextAlign::Center, unicodeOption ? toybox::kReadingCut : toybox::kButtonCut,
+                isCorrect ? fui::Color::White : fui::Color::Black);
 
         // The player's own pick, marked so it cannot be missed. Until now the only
         // difference was a 3px stroke against a 1px one, and a cold tester read
