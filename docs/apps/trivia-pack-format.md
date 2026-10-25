@@ -26,7 +26,7 @@ card, like study decks and the xkcd archive.
 
     magic    "XTRIVIA\0"                8 bytes
     version  uint16                     format version, currently 1
-    flags    uint8                      reserved, 0
+    flags    uint8                      bit 0: German question text; 0 = English legacy
     resv     uint8                      reserved, 0
     count    uint32                     number of questions
     index    uint32 * (count + 1)       byte offset of each record from `base`,
