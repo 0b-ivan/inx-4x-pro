@@ -107,15 +107,17 @@ void testGermanDeckTranslations() {
       kGermanAnimals, kGermanAct, kGermanSound, kGermanFood,
       kGermanMovies, kGermanPeople, kGermanMusic, kGermanJobs,
       kGermanSports, kGermanHouse, kGermanPlaces, kGermanNature, kGermanScience,
+      kGermanMyths, kGermanStorybook, kGermanKids, kGermanTricky,
   };
   const int counts[] = {
       kGermanAnimalCount, kGermanActCount, kGermanSoundCount, kGermanFoodCount,
       kGermanMovieCount, kGermanPeopleCount, kGermanMusicCount, kGermanJobCount,
       kGermanSportCount, kGermanHouseCount, kGermanPlaceCount, kGermanNatureCount,
-      kGermanScienceCount,
+      kGermanScienceCount, kGermanMythsCount, kGermanStorybookCount,
+      kGermanKidsCount, kGermanTrickyCount,
   };
   constexpr int translatedCategories = sizeof(counts) / sizeof(counts[0]);
-  CHECK(translatedCategories == 13);
+  CHECK(translatedCategories == kCategoryCount);
   int covered = 0;
   for (int category = 0; category < translatedCategories; ++category) {
     CHECK(counts[category] == kCategories[category].count);
@@ -137,7 +139,11 @@ void testGermanDeckTranslations() {
       }
     }
   }
-  CHECK(covered == kCategories[13].first);
+  CHECK(covered == kEntryCount);
+  CHECK(std::strcmp(kGermanMyths[28], "DRACHE") == 0);
+  CHECK(std::strcmp(kGermanStorybook[17], "ASCHENPUTTEL") == 0);
+  CHECK(std::strcmp(kGermanKids[0], "FLUGZEUG") == 0);
+  CHECK(std::strcmp(kGermanTricky[0], "ALGORITHMUS") == 0);
   CHECK(std::strcmp(kEntries[1075], "BARBER") == 0);
   CHECK(std::strcmp(kGermanJobs[13], "BARBIER") == 0);
   CHECK(std::strcmp(kEntries[1243], "FOOTBALL") == 0);
