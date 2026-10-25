@@ -140,6 +140,29 @@ void testGermanDeckTranslations() {
     }
   }
   CHECK(covered == kEntryCount);
+
+  // Test the text delivered to the round UI, not only the compiled tables.
+  // Otherwise a forgotten category in entryText() silently returns English.
+  Deck germanDeck{};
+  Rng germanRng(23917);
+  Round germanRound{};
+  for (int category = 0; category < kCategoryCount; ++category) {
+    for (int sample = 0; sample < 3; ++sample) {
+      setGermanWords(true);
+      germanRound.begin(category, 60, germanDeck, germanRng);
+      CHECK(germanRound.live());
+      const int index = germanRound.cardEntry();
+      CHECK(index >= kCategories[category].first);
+      CHECK(index < kCategories[category].first + kCategories[category].count);
+      if (index < kCategories[category].first ||
+          index >= kCategories[category].first + kCategories[category].count) continue;
+      CHECK(std::strcmp(germanRound.cardText(),
+                        decks[category][index - kCategories[category].first]) == 0);
+      setGermanWords(false);
+      CHECK(std::strcmp(germanRound.cardText(), kEntries[index]) == 0);
+    }
+  }
+  setGermanWords(false);
   CHECK(std::strcmp(kGermanMyths[28], "DRACHE") == 0);
   CHECK(std::strcmp(kGermanStorybook[17], "ASCHENPUTTEL") == 0);
   CHECK(std::strcmp(kGermanKids[0], "FLUGZEUG") == 0);
