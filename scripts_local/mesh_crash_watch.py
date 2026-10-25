@@ -151,6 +151,7 @@ def capture(ip, output_dir, event_number, status):
     print("  panicked:", report.get("panicked"),
           "resetReason:", report.get("resetReason"),
           "previousMeshCheckpoint:", report.get("previousMeshCheckpoint"),
+          "meshRuntime:", report.get("meshRuntime"),
           "logsValid:", report.get("logsValid"), flush=True)
 
 

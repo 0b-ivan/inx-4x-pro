@@ -1,4 +1,5 @@
 #include "MeshChatActivity.h"
+#include "MeshChatRuntimeDiagnostics.h"
 #include "DevMode.h"
 #include "../Shelf.h"
 
@@ -54,6 +55,9 @@ void meshDiagnosticCheckpoint(uint8_t stage, const char* location) {
 }  // namespace
 
 void MeshChatActivity::onEnter() {
+  // Initialize the per-task retained breadcrumbs for this session only after
+  // main.cpp has already captured the prior boot's diagnostic snapshot.
+  for (size_t i = 0; i < meshdiag::COUNT; ++i) meshdiag::rtc[i] = 0;
   meshDiagnosticCheckpoint(1, "before devmode pause");
   devmode::pause();
   meshDiagnosticCheckpoint(2, "after devmode pause");
@@ -180,12 +184,15 @@ static uint32_t computeFrameHash(const uint8_t* mac, const uint8_t* textBytes) {
 }
 
 void MeshChatActivity::onDataRecv(const esp_now_recv_info_t* recvInfo, const uint8_t* data, int len) {
-  if (!activeInstance || !recvInfo || len < 23) return;
+  if (!activeInstance || !recvInfo || !data || len < 23) return;
+  // WiFi task only. One aligned RTC write per phase; no heap operations here.
+  meshdiag::rtc[meshdiag::RECV_PHASE] = 1;
   const uint8_t* mac = recvInfo->src_addr;
 
   uint8_t frameType = data[0];
 
   if (frameType == FRAME_CHAT) {
+    meshdiag::rtc[meshdiag::RECV_PHASE] = 2;
     char senderName[16] = {};
     char text[200] = {};
     memcpy(senderName, data + 7, 15);
@@ -237,6 +244,7 @@ void MeshChatActivity::onDataRecv(const esp_now_recv_info_t* recvInfo, const uin
       }
     }
   } else if (frameType == FRAME_PRESENCE) {
+    meshdiag::rtc[meshdiag::RECV_PHASE] = 3;
     char peerName[16] = {};
     memcpy(peerName, data + 7, 15);
     peerName[15] = '\0';
@@ -262,6 +270,8 @@ void MeshChatActivity::onDataRecv(const esp_now_recv_info_t* recvInfo, const uin
       xSemaphoreGive(activeInstance->peersMux);
     }
   }
+  meshdiag::rtc[meshdiag::RECV_PHASE] = 4;
+  meshdiag::rtc[meshdiag::RECV_DONE] = meshdiag::rtc[meshdiag::RECV_DONE] + 1;
 }
 
 void MeshChatActivity::sendMessage(const char* text) {
@@ -291,6 +301,7 @@ void MeshChatActivity::sendPresenceBeacon() {
 
   uint8_t broadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
   esp_now_send(broadcast, frame, sizeof(frame));
+  meshdiag::rtc[meshdiag::PRESENCE_SENT] = meshdiag::rtc[meshdiag::PRESENCE_SENT] + 1;
   lastPresenceTime = millis();
 }
 
@@ -315,6 +326,7 @@ void MeshChatActivity::addMessage(const uint8_t* senderMac, const char* senderNa
 }
 
 void MeshChatActivity::loop() {
+  meshdiag::rtc[meshdiag::LOOP_PHASE] = 1;  // main task: inside MeshChat loop
 #ifdef SIMULATOR
   if (espnowInitialized && !simInjected && millis() - simStarted >= 850) {
     simInjected = true;
@@ -376,7 +388,9 @@ void MeshChatActivity::loop() {
 
   // Send presence beacon periodically
   if (espnowInitialized && millis() - lastPresenceTime >= PRESENCE_INTERVAL_MS) {
+    meshdiag::rtc[meshdiag::LOOP_PHASE] = 2;  // entering esp_now_send()
     sendPresenceBeacon();
+    meshdiag::rtc[meshdiag::LOOP_PHASE] = 3;  // beacon returned
   }
 
   switch (state) {
@@ -500,15 +514,21 @@ void MeshChatActivity::loop() {
       break;
     }
   }
+  meshdiag::rtc[meshdiag::LOOP_PHASE] = 4;  // main task finished loop
 }
 
 void MeshChatActivity::render(RenderLock&&) {
+  meshdiag::rtc[meshdiag::RENDER_PHASE] = 1;  // render task: start
   renderer.clearScreen();
+  meshdiag::rtc[meshdiag::RENDER_PHASE] = 2;  // rendering activity contents
   switch (state) {
     case CHAT_VIEW: renderChatView(); break;
     case PEERS: renderPeers(); break;
   }
+  meshdiag::rtc[meshdiag::RENDER_PHASE] = 3;  // displaying frame
   renderer.displayBuffer();
+  meshdiag::rtc[meshdiag::RENDER_PHASE] = 4;  // render returned
+  meshdiag::rtc[meshdiag::RENDER_DONE] = meshdiag::rtc[meshdiag::RENDER_DONE] + 1;
 }
 
 void MeshChatActivity::renderChatView() const {

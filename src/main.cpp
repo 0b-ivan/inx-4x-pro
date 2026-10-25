@@ -38,6 +38,7 @@
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "apps_local/Shelf.h"
+#include "apps_local/mesh-chat/MeshChatRuntimeDiagnostics.h"
 #include "apps_local/rss/RssSync.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -143,6 +144,10 @@ RTC_NOINIT_ATTR volatile uint32_t meshChatDiagnosticStage;
 // Decoded once at startup and retained in normal RAM for the developer crash API.
 // Unlike the 16-line RTC log ring, it cannot be overwritten by later UI logs.
 uint32_t previousMeshChatCheckpoint = 0;
+namespace meshdiag {
+RTC_NOINIT_ATTR volatile uint32_t rtc[COUNT];
+uint32_t previous[COUNT] = {};
+}  // namespace meshdiag
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
@@ -384,6 +389,7 @@ void setup() {
   meshChatDiagnosticStage = 0;  // Never mistake an earlier boot for this one.
   if ((priorMeshStage & 0xFFFFFF00u) == 0x4D455300u) {
     previousMeshChatCheckpoint = priorMeshStage & 0xFFu;
+    for (size_t i = 0; i < meshdiag::COUNT; ++i) meshdiag::previous[i] = meshdiag::rtc[i];
     LOG_INF("BOOT", "Previous MeshChat checkpoint before reset: %u",
             static_cast<unsigned>(previousMeshChatCheckpoint));
   }

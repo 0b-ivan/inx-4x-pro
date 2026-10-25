@@ -43,6 +43,7 @@
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
 #include "apps_local/rss/RssWebHandlers.h"
+#include "apps_local/mesh-chat/MeshChatRuntimeDiagnostics.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -2309,6 +2310,13 @@ void CrossPointWebServer::handleDevCrash() {
   doc["resetReason"] = static_cast<int>(esp_reset_reason());
 #endif
   doc["previousMeshCheckpoint"] = previousMeshChatCheckpoint;
+  JsonObject meshRuntime = doc["meshRuntime"].to<JsonObject>();
+  meshRuntime["loopPhase"] = meshdiag::previous[meshdiag::LOOP_PHASE];
+  meshRuntime["renderPhase"] = meshdiag::previous[meshdiag::RENDER_PHASE];
+  meshRuntime["recvPhase"] = meshdiag::previous[meshdiag::RECV_PHASE];
+  meshRuntime["presenceSent"] = meshdiag::previous[meshdiag::PRESENCE_SENT];
+  meshRuntime["renderDone"] = meshdiag::previous[meshdiag::RENDER_DONE];
+  meshRuntime["recvDone"] = meshdiag::previous[meshdiag::RECV_DONE];
   doc["panic"] = HalSystem::getPanicInfo(true);
   // A corrupt ring is reported rather than hidden: an empty "logs" that means
   // "nothing was logged" and one that means "RTC memory was garbage" are
