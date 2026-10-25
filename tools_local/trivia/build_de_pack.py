@@ -76,8 +76,7 @@ def validate_record(original, localized, allow_draft=False):
     for key in FIELDS:
         value = localized[key]
         for field in (value if isinstance(value, list) else [value]):
-            unsupported = sorted({c for c in field if ord(c) not in glyphs
-                                  and c not in "\\n\\r\\t"})
+            unsupported = sorted({c for c in field if ord(c) not in glyphs})
             if unsupported:
                 raise TranslationError(f"{ident}: glyphs missing in display font: {unsupported}")
     result = {key: original[key] for key in ("id", "d", "y") if key in original}
