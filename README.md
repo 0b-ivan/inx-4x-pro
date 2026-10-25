@@ -113,6 +113,7 @@ restyled to match the design language the apps use.
 | **Clock** | NTP-synced clock with stopwatch and pomodoro timer. |
 | **Countdown** | 7-segment countdown timer with configurable duration. |
 | **Device Info** | System diagnostics: chip info, heap, uptime, WiFi MAC, IP. |
+| **WiFi Diag** | Read-only ESP-IDF WiFi diagnostics: radio mode, link, channel, power save, API errors, and simulator-safe refresh. |
 | **Morse Code** | Encode and decode Morse code with reference chart. |
 | **OTP Generator** | Generate cryptographically random one-time passwords. |
 | **Password Manager** | Store and retrieve passwords with obfuscated SD-card storage. |
