@@ -47,3 +47,6 @@ with open(os.path.join(build, 'real.tsv'), 'w', encoding='utf-8') as f:
         f.write(f"{it['d']}\t{it['y']}\t{len(it.get('alt',[]))}\t{len(it.get('w',[]))}\t{it['q']}\t{it['a']}\n")
 PY
 "$BUILD_DIR/test_realpack" "$BUILD_DIR/real.dat" "$BUILD_DIR/real.tsv"
+
+# Python reference writer, translation quality gates and binary round-trip.
+python3 "$TOOLS/test_de_pack.py"
