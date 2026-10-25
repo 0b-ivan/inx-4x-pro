@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <esp_system.h>
 #include <BoardConfig.h>
 #include <Epub.h>
 #include <FontCacheManager.h>
@@ -369,6 +370,7 @@ void setup() {
 #endif
 
   HalSystem::begin();
+  LOG_INF("BOOT", "Reset reason: %d", static_cast<int>(esp_reset_reason()));
   // checkPanic() clears the watchdog capture marker after a successful SD
   // dump, so retain the boot classification for the later activity route.
   const bool rebootedFromPanic = HalSystem::isRebootFromPanic();
