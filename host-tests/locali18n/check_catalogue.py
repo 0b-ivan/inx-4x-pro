@@ -30,7 +30,7 @@ assert all(key in german and german[key].strip() for key in core), "German core 
 assert len(local) >= 1200, f"Local app keys decreased unexpectedly: {len(local)}"
 assert len(formats) >= 80 and all(key in german for key in formats), "Missing German dynamic status formats"
 assert len(context) == 38 and all(key in german for key in context), "Missing German contextual translations"
-assert len(forehead) == 1874 and all(key in german for key in forehead), "Missing indexed German Forehead cards"
+assert len(forehead) == 2460 and all(key in german for key in forehead), "Missing indexed German Forehead cards"
 assert all(key in german and german[key].strip() for key in local), "German app translation missing"
 
 seen = {}
@@ -50,7 +50,7 @@ word_source = (ROOT / "src/apps_local/forehead/ForeheadWords.h").read_text(encod
 word_block = word_source.split("kEntries[kEntryCount] = {", 1)[1].split("};", 1)[0]
 english_words = re.findall(r'"([^"]+)"', word_block)
 assert len(english_words) == 2460, "English Forehead deck changed"
-for index in range(1874):
+for index in range(2460):
     key = f"LOCAL_FOREHEAD_{index:04d}"
     assert english.get(key) == english_words[index], f"Forehead English card index shifted: {key}"
 
