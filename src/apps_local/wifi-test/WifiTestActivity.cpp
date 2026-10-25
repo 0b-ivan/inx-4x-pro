@@ -341,7 +341,9 @@ void WifiTestActivity::render(RenderLock&&) {
 #ifdef SIMULATOR
     renderer.drawCenteredText(UI_10_FONT_ID, y, "Simulated Frames", true, EpdFontFamily::BOLD);
 #else
-    renderer.drawCenteredText(UI_10_FONT_ID, y, "Packets Sent", true, EpdFontFamily::BOLD);
+    // An ESP_OK return only acknowledges the API call; the ESP-IDF driver
+    // does not document support for deauthentication management frames.
+    renderer.drawCenteredText(UI_10_FONT_ID, y, "TX API accepted", true, EpdFontFamily::BOLD);
 #endif
     y += 40;
     renderer.drawCenteredText(UI_10_FONT_ID, y, pktStr.c_str(), true, EpdFontFamily::BOLD);
@@ -350,6 +352,9 @@ void WifiTestActivity::render(RenderLock&&) {
     unsigned long elapsed = (millis() - startTime) / 1000;
     std::string timeStr = std::to_string(elapsed) + "s";
     renderer.drawCenteredText(UI_10_FONT_ID, y, timeStr.c_str());
+#ifndef SIMULATOR
+    renderer.drawCenteredText(SMALL_FONT_ID, y + 27, "RF delivery not verified");
+#endif
 
     const auto labels = mappedInput.mapLabels("Exit", "", "", "");
     GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
