@@ -1542,13 +1542,18 @@ void FireActivity::renderExecuting() const {
     snprintf(timeBuf, sizeof(timeBuf), "%lum %lus", elapsed / 60, elapsed % 60);
     renderer.drawCenteredText(UI_10_FONT_ID, cy, timeBuf);
 
-    // Packets
-    char pktBuf[32];
-    snprintf(pktBuf, sizeof(pktBuf), "Packets: %lu", (unsigned long)packetsSent);
+    // Deauth calls are only attempts; ESP-IDF does not document raw
+    // deauthentication as a supported transmit frame type.
+    const bool deauthMode = activeAttack == ATK_DEAUTH_BROADCAST ||
+                            activeAttack == ATK_DEAUTH_TARGETED;
+    char pktBuf[40];
+    snprintf(pktBuf, sizeof(pktBuf), deauthMode ? "TX attempts: %lu" : "Packets: %lu",
+             (unsigned long)packetsSent);
     renderer.drawCenteredText(UI_10_FONT_ID, cy + 25, pktBuf);
 
-    // Status line
-    if (statusLine[0]) {
+    if (deauthMode) {
+        renderer.drawCenteredText(SMALL_FONT_ID, cy + 55, "RF delivery not verified");
+    } else if (statusLine[0]) {
         renderer.drawCenteredText(SMALL_FONT_ID, cy + 55, statusLine);
     }
 
@@ -1570,12 +1575,16 @@ void FireActivity::renderResults() const {
     renderer.drawCenteredText(UI_12_FONT_ID, cy - 30,
                                attacks[attackIndex].name, true, EpdFontFamily::BOLD);
 
+    const bool deauthMode = activeAttack == ATK_DEAUTH_BROADCAST ||
+                            activeAttack == ATK_DEAUTH_TARGETED;
     char pktBuf[48];
-    snprintf(pktBuf, sizeof(pktBuf), "Total packets: %lu", (unsigned long)packetsSent);
+    snprintf(pktBuf, sizeof(pktBuf), deauthMode ? "Total TX attempts: %lu" : "Total packets: %lu",
+             (unsigned long)packetsSent);
     renderer.drawCenteredText(UI_10_FONT_ID, cy, pktBuf);
 
-    // Result details (may be multi-line, but we draw single for now)
-    if (resultLine[0]) {
+    if (deauthMode) {
+        renderer.drawCenteredText(SMALL_FONT_ID, cy + 30, "RF delivery not verified");
+    } else if (resultLine[0]) {
         renderer.drawCenteredText(SMALL_FONT_ID, cy + 30, resultLine);
     }
 
