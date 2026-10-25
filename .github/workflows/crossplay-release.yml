@@ -149,7 +149,9 @@ jobs:
             Added regression checks for passive-only diagnostics,
             host scanner behavior, transmission labels and simulator
             Refresh screenshots. The existing Biscuit 26-app
-            screenshot smoke matrix is retained.
+            screenshot smoke matrix is retained. The release is tagged
+            only after firmware, simulator and host tests pass on the
+            exact current main commit.
 
             ### What is new in 1.16.9
 
