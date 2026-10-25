@@ -81,7 +81,10 @@ std::unique_ptr<Activity> TriviaActivity::create(GfxRenderer& renderer, MappedIn
 bool TriviaActivity::ensureState(const uint32_t count, const char* statePath) {
   g_stateFile = Storage.open(statePath, O_RDWR);
   if (!g_stateFile.isOpen() || static_cast<uint32_t>(g_stateFile.size()) != count) {
-    // Missing, or shorter than the pack because the pack was replaced under it.
+    // Missing, or sized for a different pack. Close the old handle before
+    // truncating: keeping it open can prevent overwriting on the actual SD HAL.
+    g_stateFile.close();
+    // The pack was replaced under its state or is being installed for the first time.
     // Rewriting loses which questions have been seen, which is the right trade:
     // reading a stale byte for a question it does not describe is worse.
     HalFile fresh;
@@ -131,7 +134,8 @@ bool TriviaActivity::openPack() {
 
   // A German UI must never misidentify the legacy English data as translated.
   // Until an actual German pack is installed, continue to allow English play.
-  if (wantsGerman && tryOpen(trivia::kGermanPackLocation, true)) return true;
+  if (trivia::shouldUseGerman(wantsGerman, Storage.exists(trivia::kGermanPackLocation.packPath)) &&
+      tryOpen(trivia::kGermanPackLocation, true)) return true;
   if (tryOpen(trivia::kEnglishPackLocation, false)) return true;
   LOG_ERR("TRIVIA", "No readable German or English question pack");
   return false;
