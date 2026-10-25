@@ -61,14 +61,14 @@ for index in range(2460):
 # change in MurdleCast.cpp must not quietly attach German words to new items.
 cast = (ROOT / "src/apps_local/murdle/MurdleCast.cpp").read_text(encoding="utf-8")
 def cast_block(type_name, array_name, count_name):
-    pattern = rf"const {type_name} {array_name}\\[{count_name}\\] = \\{{(.*?)\\}};"
+    pattern = rf"const {type_name} {array_name}\[{count_name}\] = \{{(.*?)\}};"
     match = re.search(pattern, cast, re.S)
     assert match, f"Missing Murdle English cast array: {array_name}"
     return match.group(1)
-triples = r'\\{\\s*"([^"]+)",\\s*"([^"]+)",\\s*"([^"]+)",\\s*(?:true|false)\\s*\\}'
+triples = r'\{\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)",\s*(?:true|false)\s*\}'
 weapons = re.findall(triples, cast_block("WeaponEntry", "kWeapons", "kWeaponCount"))
 places = re.findall(triples, cast_block("PlaceEntry", "kPlaces", "kPlaceCount"))
-motives = re.findall(r'\\{\\s*"([^"]+)",\\s*"([^"]+)"\\s*\\}',
+motives = re.findall(r'\{\s*"([^"]+)",\s*"([^"]+)"\s*\}',
                     cast_block("MotiveEntry", "kMotives", "kMotiveCount"))
 assert (len(weapons), len(places), len(motives)) == (20, 16, 12)
 murdle_groups = {
