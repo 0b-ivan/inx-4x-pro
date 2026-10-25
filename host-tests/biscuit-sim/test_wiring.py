@@ -13,6 +13,7 @@ checks = 0
 for name, cls, path in (
     ("CLOCK", "ClockActivity", "clock/ClockActivity.cpp"),
     ("DEVICE INFO", "DeviceInfoActivity", "device-info/DeviceInfoActivity.cpp"),
+    ("WIFI DIAG", "WifiDiagnosticsActivity", "wifi-diagnostics/WifiDiagnosticsActivity.cpp"),
     ("OTP GENERATOR", "OtpGeneratorActivity", "otp-generator/OtpGeneratorActivity.cpp"),
     ("DNS LOOKUP", "DnsLookupActivity", "dns-lookup/DnsLookupActivity.cpp"),
     ("WIFI CONNECT", "WifiConnectActivity", "wifi-connect/WifiConnectActivity.cpp"),
@@ -114,6 +115,29 @@ for filename, trace in (
 wifi_test = (root / "src/apps_local/wifi-test/WifiTestActivity.cpp").read_text()
 assert "biscuit_sim::deauthPreviewAps()" in wifi_test, "WiFi Deauth must use virtual AP list"
 assert "OFFLINE SIMULATION - NO TX" in wifi_test and "wifiDeauthSimTrace" in wifi_test, "WiFi Deauth UI must flag dry-run and emit test state"
+# Hardware diagnostics must never claim that compiling or entering monitor mode
+# proves an over-the-air operation. All radio APIs here are read-only getters.
+wifi_diag = (root / "src/apps_local/wifi-diagnostics/WifiDiagnosticsActivity.cpp").read_text()
+for read_api in ("esp_wifi_get_mode(", "esp_wifi_get_channel(", "esp_wifi_get_ps(",
+                 "esp_wifi_get_mac(", "esp_get_idf_version(", "esp_err_to_name("):
+    assert read_api in wifi_diag, f"WIFI DIAG missing passive hardware read: {read_api}"
+for mutate_api in ("esp_wifi_80211_tx(", "esp_wifi_set_", "WiFi.mode(",
+                   "WiFi.begin(", "WiFi.disconnect(", "WiFi.softAP(",
+                   "WiFi.scanNetworks(", "RADIO.ensureWifi(", "RADIO.shutdown("):
+    assert mutate_api not in wifi_diag, f"WIFI DIAG must not mutate radio state: {mutate_api}"
+assert "SIMULATOR" in wifi_diag and "SIMULATED" in wifi_diag, "virtual UI must not claim hardware telemetry"
+assert "RF delivery" in wifi_diag and "TX: NO FRAMES SENT BY DIAG" in wifi_diag, (
+    "WIFI DIAG must explain TX verification limits"
+)
+assert 'Sample: %lu ms' in wifi_diag and 'case 2: refreshSnapshot()' in wifi_diag, (
+    "WIFI DIAG must show timestamp change on touch Refresh"
+)
+assert "BaseMetrics::values.buttonHintsHeight" in wifi_diag, (
+    "WIFI DIAG must reserve the real touch footer"
+)
+assert 'CROSSPLAY_AUTOSTART="WIFI DIAG"' in smoke_script, "WIFI DIAG native smoke is missing"
+print("WIFI DIAG: status-only API, simulator isolation, touch and refresh: 7 checks, 0 failed")
+
 assert "esp_wifi_80211_tx" in wifi_test and "#ifndef SIMULATOR" in wifi_test, "real transmit must remain hardware-only"
 # Regression: a successful raw-WiFi API call or an incremented attempt counter
 # does not prove that a deauthentication frame reached the air.
@@ -163,6 +187,7 @@ assert 'NETWORK_MONITOR_touch_detail.bmp' in smoke_script, "X4 Pro Network Monit
 # touch-theme's intentionally zero-height normal button bar.
 touch_footer_activities = (
     "wifi-connect/WifiConnectActivity.cpp",
+    "wifi-diagnostics/WifiDiagnosticsActivity.cpp",
     "dns-lookup/DnsLookupActivity.cpp",
     "host-scanner/HostScannerActivity.cpp",
     "http-client/HttpClientActivity.cpp",
