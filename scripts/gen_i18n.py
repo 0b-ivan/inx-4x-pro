@@ -845,6 +845,7 @@ def generate_local_context(translations_dir: str, output_path: Optional[str] = N
         ("LOCAL_CONTEXT_SHIP_", "kGermanShips"),
         ("LOCAL_CONTEXT_SUDOKU_", "kGermanSudokuTerms"),
         ("LOCAL_CONTEXT_MONTH_", "kGermanMonths"),
+        ("LOCAL_CONTEXT_WAVELENGTH_", "kGermanWavelengthTerms"),
     ):
         group(prefix, name, lines)
     for key, symbol in (
