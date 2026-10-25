@@ -117,7 +117,7 @@ bool TriviaActivity::openPack() {
     g_stateFile.close();
     if (!Storage.openFileForRead("TRIVIA", location.packPath, g_packFile)) return false;
     g_packSource.attach(g_packFile);
-    if (!pack_.open(g_packSource)) {
+    if (!pack_.open(g_packSource) || pack_.flags() != (german ? trivia::kPackGermanFlag : 0)) {
       LOG_ERR("TRIVIA", "Unreadable question pack: %s", location.packPath);
       g_packFile.close();
       return false;
