@@ -17,42 +17,8 @@ namespace {
 
 bool german = false;
 
-static constexpr const char* kGermanWeapons[] = {
-    "die Axt",       "den Schlaeger", "den Gehstock", "den Dolch",       "die Gabel",
-    "die Pistole",   "den Hammer",    "das Buegeleisen", "das Glas",     "das Messer",
-    "die Lampe",     "den Becher",    "den Nagel",    "das Ruder",       "die Pfanne",
-    "das Seil",      "den Spaten",    "die Taschenlampe", "die Vase",    "den Draht",
-};
-
-static constexpr const char* kGermanWeaponNames[] = {
-    "AXT", "SCHLAEGER", "GEHSTOCK", "DOLCH", "GABEL", "PISTOLE", "HAMMER", "BUEGELEISEN", "GLAS", "MESSER",
-    "LAMPE", "BECHER", "NAGEL", "RUDER", "PFANNE", "SEIL", "SPATEN", "TASCHENLAMPE", "VASE", "DRAHT",
-};
-
-static constexpr const char* kGermanPlaces[] = {
-    "auf dem Dachboden", "in der Scheune", "in der Hoehle", "am Anleger",
-    "auf dem Bauernhof", "im Garten",       "in der Halle",  "im Gasthaus",
-    "in der Kueche",     "am See",          "in der Muehle",  "im Buero",
-    "im Park",           "auf dem Dach",    "im Arbeitszimmer", "im Turm",
-};
-
-static constexpr const char* kGermanMotives[] = {
-    "Wut", "Schulden", "Neid", "Angst", "Gier", "Hass", "Gerechtigkeit", "Liebe", "Mitleid", "Macht", "Rache", "Scham",
-};
-
-static constexpr const char* kGermanWeaponTraits[] = {
-    "Saegespaene daran", "Band am Griff", "eine silberne Spitze", "Blut daran", "eine verbogene Zinke",
-    "ein abgefeuerter Schuss", "ein lockerer Kopf", "eine Brandspur", "Honig darin", "eine schartige Klinge",
-    "ein ausgefranstes Kabel", "Lippenstift am Rand", "Rost daran", "Sand daran", "Fett daran", "dreizehn Knoten",
-    "getrockneter Schlamm", "eine leere Batterie", "Blattgold daran", "rote Farbe daran",
-};
-
-static constexpr const char* kGermanPlaceTraits[] = {
-    "eine schwingende Luke", "loses Stroh", "ein Echo", "eine knarrende Planke", "ein bellender Hund",
-    "ein summender Bienenstock", "eine stehende Uhr", "eine unbezahlte Rechnung", "eine leere Speisekammer",
-    "aufziehender Nebel", "ein drehendes Rad", "ein verschlossener Tresor", "ein Drachen im Baum",
-    "eine Taubenfeder", "eine offene Schublade", "ein langer Schatten",
-};
+// Vocabulary is authored in english.yaml / german.yaml; indexes match MurdleCast.cpp.
+#include "MurdleI18nData.inc"
 
 int popcount(uint8_t mask) {
   int n = 0;
