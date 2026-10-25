@@ -56,6 +56,22 @@ const char* entryText(const int entry) {
   if (germanWords && entry >= kScienceFirst && entry < kScienceFirst + kGermanScienceCount) {
     return kGermanScience[entry - kScienceFirst];
   }
+  constexpr int kMythsFirst = kScienceFirst + kGermanScienceCount;
+  if (germanWords && entry >= kMythsFirst && entry < kMythsFirst + kGermanMythsCount) {
+    return kGermanMyths[entry - kMythsFirst];
+  }
+  constexpr int kStorybookFirst = kMythsFirst + kGermanMythsCount;
+  if (germanWords && entry >= kStorybookFirst && entry < kStorybookFirst + kGermanStorybookCount) {
+    return kGermanStorybook[entry - kStorybookFirst];
+  }
+  constexpr int kKidsFirst = kStorybookFirst + kGermanStorybookCount;
+  if (germanWords && entry >= kKidsFirst && entry < kKidsFirst + kGermanKidsCount) {
+    return kGermanKids[entry - kKidsFirst];
+  }
+  constexpr int kTrickyFirst = kKidsFirst + kGermanKidsCount;
+  if (germanWords && entry >= kTrickyFirst && entry < kTrickyFirst + kGermanTrickyCount) {
+    return kGermanTricky[entry - kTrickyFirst];
+  }
   return entry < 0 || entry >= kEntryCount ? "" : kEntries[entry];
 }
 }  // namespace
