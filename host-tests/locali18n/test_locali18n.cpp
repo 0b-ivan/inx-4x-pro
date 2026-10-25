@@ -51,6 +51,14 @@ int main() {
   expect("CHECK", "PRUEFEN");
   expect("IN CHECK", "SCHACH");
   expect("LEFT", "LINKS");
+  // Generic HARD/ROUND retain difficulty and game-turn meanings. Wavelength
+  // uses an explicit context table for the material and shape axes.
+  expect("HARD", "SCHWER");
+  expect("ROUND", "RUNDE");
+  ++checks;
+  if (std::strcmp(toybox::kGermanWavelengthTerms[0].german, "HART") != 0) ++failures;
+  ++checks;
+  if (std::strcmp(toybox::kGermanWavelengthTerms[1].german, "RUND") != 0) ++failures;
   expect("THEY WIN", "GEGNER GEWINNT");  // first duplicate previously took precedence
   expect("THE CASE", "DER FALL");
   expect("SECOND", "DANACH");
