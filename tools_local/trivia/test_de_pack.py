@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 import build_de_pack
+import export_pack
 import pack_format
 
 
@@ -89,6 +90,22 @@ class GermanTriviaPackTests(unittest.TestCase):
         self.translated.write_text("", encoding="utf-8")
         with self.assertRaisesRegex(build_de_pack.TranslationError, "missing German"):
             build_de_pack.build(self.src, self.translated, self.output)
+
+    def test_export_published_binary_can_be_translation_source(self):
+        original_pack = self.root / "pack.dat"
+        pack_format.write([self.original], original_pack)
+        exported = self.root / "exported.jsonl"
+        self.assertEqual(export_pack.export(original_pack, exported), 1)
+        rows = list(build_de_pack.load_jsonl(exported))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["q"], self.original["q"])
+        self.assertEqual(rows[0]["a"], self.original["a"])
+        self.assertEqual(rows[0]["w"], self.original["w"])
+        self.assertEqual(len(rows[0]["id"]), 16)
+        # Stable export: same inputs produce the same ID.
+        again = self.root / "again.jsonl"
+        export_pack.export(original_pack, again)
+        self.assertEqual(exported.read_bytes(), again.read_bytes())
 
     def test_draft_only_with_explicit_override(self):
         self.trans["reviewed"] = False
