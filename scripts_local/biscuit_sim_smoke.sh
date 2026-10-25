@@ -159,7 +159,8 @@ raw = memoryview(data)[offset:offset + width * height * 4]
 assert len(raw) == width * height * 4
 top_rows = raw[(height - 110) * width * 4:]
 header_ink = sum(top_rows[i] < 128 for i in range(0, len(top_rows), 4))
-assert header_ink > 150, "Clock screenshot still shows the boot splash"
+if header_ink <= 150:
+    raise SystemExit(1)  # expected retry condition; no Python traceback in CI
 PYCLOCKREADY
     then
       echo "[biscuit-ui-smoke] CLOCK boot screenshot detected; retry with late Activity capture"
