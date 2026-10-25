@@ -845,7 +845,7 @@ def generate_local_formats(translations_dir: str, output_path: Optional[str] = N
         "}",
         "}  // namespace toybox",
     ]
-    destination = Path(output_path) if output_path else Path(__file__).resolve().parent.parent / "src/apps_local/ui/LocalI18nFormats.h"
+    destination = Path(output_path) if output_path else Path(translations_dir).resolve().parents[2] / "src/apps_local/ui/LocalI18nFormats.h"
     _write_file(str(destination), lines)
 
 
@@ -871,7 +871,7 @@ def generate_tarot_strings(translations_dir: str, output_path: Optional[str] = N
             lines.append("    " + literal(german[key]) + ",")
         lines.append("};")
     lines.append("}  // namespace tarot_i18n")
-    destination = Path(output_path) if output_path else Path(__file__).resolve().parent.parent / "src/apps_local/tarot/TarotI18nData.h"
+    destination = Path(output_path) if output_path else Path(translations_dir).resolve().parents[2] / "src/apps_local/tarot/TarotI18nData.h"
     _write_file(str(destination), lines)
 
 
@@ -904,7 +904,7 @@ def generate_local_app_strings(translations_dir: str, output_path: Optional[str]
         source = english[key]
         localized = german.get(key) or source
         lines.append("    {" + literal(source) + ", " + literal(localized) + "},")
-    destination = Path(output_path) if output_path else Path(__file__).resolve().parent.parent / "src/apps_local/ui/LocalI18nData.inc"
+    destination = Path(output_path) if output_path else Path(translations_dir).resolve().parents[2] / "src/apps_local/ui/LocalI18nData.inc"
     _write_file(str(destination), lines)
 
 
