@@ -372,7 +372,11 @@ void setup() {
 #endif
 
   HalSystem::begin();
+  // Only ESP32 hardware exposes esp_reset_reason(). The desktop simulator
+  // cannot report an ESP32 reset cause, but still records MeshChat checkpoints.
+#ifndef SIMULATOR
   LOG_INF("BOOT", "Reset reason: %d", static_cast<int>(esp_reset_reason()));
+#endif
   const uint32_t priorMeshStage = meshChatDiagnosticStage;
   meshChatDiagnosticStage = 0;  // Never mistake an earlier boot for this one.
   if ((priorMeshStage & 0xFFFFFF00u) == 0x4D455300u) {
