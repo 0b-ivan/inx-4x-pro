@@ -79,6 +79,11 @@ def validate_record(original, localized, allow_draft=False):
             unsupported = sorted({c for c in field if ord(c) not in glyphs})
             if unsupported:
                 raise TranslationError(f"{ident}: glyphs missing in display font: {unsupported}")
+    result = {key: original[key] for key in ("id", "d", "y") if key in original}
+    result.update({key: localized[key] for key in FIELDS})
+    size = len(pack_format._rec(result))
+    if size > MAX_RECORD:
+        raise TranslationError(f"{ident}: German binary record is {size}/{MAX_RECORD} bytes")
     # The question uses the reading serif; answer and option labels use the
     # smaller reading serif for UTF-8 or an ASCII-only Jersey cut otherwise.
     # Check the actual face selected by TriviaScreens rather than characters.
@@ -93,11 +98,6 @@ def validate_record(original, localized, allow_draft=False):
         if not label_fits(wrong_answer, "toybox_14"):
             raise TranslationError(f"{ident}: option too wide for multiple-choice button")
 
-    result = {key: original[key] for key in ("id", "d", "y") if key in original}
-    result.update({key: localized[key] for key in FIELDS})
-    size = len(pack_format._rec(result))
-    if size > MAX_RECORD:
-        raise TranslationError(f"{ident}: German binary record is {size}/{MAX_RECORD} bytes")
     return result
 
 
