@@ -138,6 +138,8 @@ unsigned long t2 = 0;
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 RTC_NOINIT_ATTR uint32_t silentRebootTarget;
+// MeshChat checkpoint survives a warm reset, including a panic before logs flush.
+RTC_NOINIT_ATTR volatile uint32_t meshChatDiagnosticStage;
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
@@ -371,6 +373,12 @@ void setup() {
 
   HalSystem::begin();
   LOG_INF("BOOT", "Reset reason: %d", static_cast<int>(esp_reset_reason()));
+  const uint32_t priorMeshStage = meshChatDiagnosticStage;
+  meshChatDiagnosticStage = 0;  // Never mistake an earlier boot for this one.
+  if ((priorMeshStage & 0xFFFFFF00u) == 0x4D455300u) {
+    LOG_INF("BOOT", "Previous MeshChat checkpoint before reset: %u",
+            static_cast<unsigned>(priorMeshStage & 0xFFu));
+  }
   // checkPanic() clears the watchdog capture marker after a successful SD
   // dump, so retain the boot classification for the later activity route.
   const bool rebootedFromPanic = HalSystem::isRebootFromPanic();

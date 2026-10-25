@@ -7,6 +7,9 @@
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
+#ifndef SIMULATOR
+#include <esp_heap_caps.h>
+#endif
 
 #include <algorithm>
 #include <cstring>
@@ -31,8 +34,29 @@ static void meshSimTrace(const char* state, size_t peers, int messages) {
 
 MeshChatActivity* MeshChatActivity::activeInstance = nullptr;
 
+// A small RTC-backed breadcrumb is reported once on the next boot by main.cpp.
+// Only lifecycle/task context calls this; never scan the heap from an ESP-NOW
+// WiFi callback (which must remain short and non-blocking).
+extern volatile uint32_t meshChatDiagnosticStage;
+namespace {
+void meshDiagnosticCheckpoint(uint8_t stage, const char* location) {
+  meshChatDiagnosticStage = 0x4D455300u | stage;  // "MES" + checkpoint number
+#ifndef SIMULATOR
+  const bool intact = heap_caps_check_integrity_all(true);
+  LOG_INF("MESH_DIAG", "stage=%u %s heap=%s free8=%u largestInternal8=%u",
+          static_cast<unsigned>(stage), location, intact ? "OK" : "CORRUPT",
+          static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+          static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+#else
+  (void)location;
+#endif
+}
+}  // namespace
+
 void MeshChatActivity::onEnter() {
+  meshDiagnosticCheckpoint(1, "before devmode pause");
   devmode::pause();
+  meshDiagnosticCheckpoint(2, "after devmode pause");
   Activity::onEnter();
   state = CHAT_VIEW;
   messageCount = 0;
@@ -57,7 +81,9 @@ void MeshChatActivity::onEnter() {
   activeInstance = this;
   if (!peersMux) peersMux = xSemaphoreCreateMutex();
 
+  meshDiagnosticCheckpoint(3, "before ESP-NOW startup");
   initEspNow();
+  meshDiagnosticCheckpoint(10, "after ESP-NOW startup");
 #ifdef SIMULATOR
   meshSimTrace("ready", peers.size(), messageCount);
 #endif
@@ -65,7 +91,9 @@ void MeshChatActivity::onEnter() {
 }
 
 void MeshChatActivity::onExit() {
+  meshDiagnosticCheckpoint(20, "before ESP-NOW teardown");
   deinitEspNow();
+  meshDiagnosticCheckpoint(21, "after ESP-NOW teardown");
   activeInstance = nullptr;
   if (peersMux) {
 #ifndef SIMULATOR
@@ -79,19 +107,25 @@ void MeshChatActivity::onExit() {
 #endif
   Activity::onExit();
   devmode::resume();
+  meshDiagnosticCheckpoint(22, "after devmode resume");
+  meshChatDiagnosticStage = 0;  // Normal exit; no stale crash breadcrumb.
 }
 
 void MeshChatActivity::initEspNow() {
+  meshDiagnosticCheckpoint(4, "before RADIO.ensureWifi");
   RADIO.ensureWifi();
+  meshDiagnosticCheckpoint(5, "after RADIO.ensureWifi");
 #ifndef SIMULATOR
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
+  meshDiagnosticCheckpoint(6, "after WiFi.disconnect");
 #endif
 
   // Set channel on hardware only. The native ESP-NOW transport has no radio
   // and therefore no RF channel to configure.
 #ifndef SIMULATOR
   esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+  meshDiagnosticCheckpoint(7, "after channel configuration");
 #endif
 
   if (esp_now_init() != ESP_OK) {
@@ -99,6 +133,7 @@ void MeshChatActivity::initEspNow() {
     return;
   }
 
+  meshDiagnosticCheckpoint(8, "after esp_now_init");
   esp_now_register_recv_cb(onDataRecv);
 
   // Add broadcast peer
@@ -109,6 +144,7 @@ void MeshChatActivity::initEspNow() {
   if (esp_now_add_peer(&broadcastPeer) != ESP_OK) {
     LOG_ERR("MESH", "Failed to add broadcast peer");
   }
+  meshDiagnosticCheckpoint(9, "after broadcast peer setup");
 
 #ifdef SIMULATOR
   const uint8_t testMac[6] = {0x02,0,0,0,0,0x20};
