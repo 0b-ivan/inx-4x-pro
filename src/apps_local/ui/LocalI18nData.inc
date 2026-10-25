@@ -1230,3 +1230,6 @@
     {"FETCHING THE FRONT PAGE", "STARTSEITE WIRD GELADEN"},
     {"FETCHING THE THREAD", "DISKUSSION WIRD GELADEN"},
     {"FETCHING ARTICLES", "ARTIKEL WERDEN GELADEN"},
+    {"ENGLISH QUESTIONS", "FRAGEN AUF ENGLISCH"},
+    {"GET ENGLISH QUESTIONS", "ENGLISCHE FRAGEN LADEN"},
+    {"A German question pack is not installed. The available download contains English questions.", "Kein deutsches Fragenpaket vorhanden. Der Download enthaelt englische Fragen."},
