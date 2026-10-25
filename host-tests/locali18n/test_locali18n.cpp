@@ -37,9 +37,11 @@ int main() {
   expect("2 / 5      1 OF 3 DONE", "2 / 5      1 VON 3 FERTIG");
   expect("12 CLUES   HARDEST CELL PAIR   3 EASY SOLVED", "12 VORGABEN   SCHWERSTE FELDPAAR   3 LEICHT GELOEST");
 
-  expect("STUDY", "LERNEN");
-  expect("THEY WIN", "SIE GEWINNEN");  // first duplicate previously took precedence
+  expect("STUDY", "ARBEITSZIMMER");
+  expect("THEY WIN", "GEGNER GEWINNT");  // first duplicate previously took precedence
   expect("THE CASE", "DER FALL");
+  expect("SECOND", "DANACH");
+  expect("WEIGHS BOTH WINS", "WAEGT BEIDE SIEGE AB");
   expect("BATTLESHIP", "SCHIFFE VERSENKEN");
   expect("THE GRID IS YOUR PENCIL", "DAS RASTER IST DEIN NOTIZBLOCK");
 
