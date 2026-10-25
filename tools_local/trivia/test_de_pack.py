@@ -43,6 +43,7 @@ class GermanTriviaPackTests(unittest.TestCase):
         self.assertEqual((n, solo), (1, 1))
         self.assertEqual(size, self.output.stat().st_size)
         pack = pack_format.open_pack(self.output)
+        self.assertEqual(pack["flags"], pack_format.GERMAN_FLAG)
         try:
             row = pack_format.read_one(pack, 0)
             self.assertEqual(row["q"], self.trans["q"])
@@ -106,6 +107,12 @@ class GermanTriviaPackTests(unittest.TestCase):
         again = self.root / "again.jsonl"
         export_pack.export(original_pack, again)
         self.assertEqual(exported.read_bytes(), again.read_bytes())
+
+    def test_export_rejects_german_binary_as_english_source(self):
+        pack_format.write([self.original], self.root / "de.dat",
+                          flags=pack_format.GERMAN_FLAG)
+        with self.assertRaisesRegex(ValueError, "English pack"):
+            export_pack.export(self.root / "de.dat", self.root / "bad.jsonl")
 
     def test_draft_only_with_explicit_override(self):
         self.trans["reviewed"] = False
