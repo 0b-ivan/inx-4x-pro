@@ -171,6 +171,12 @@ assert 'PROBE:touch-detail:3' in smoke_script, "X4 Pro touch path must prove rea
 assert 'script="8500:ENTER:650;11800:QUIT"' in smoke_script, "Clock mode-switch must happen after stable golden"
 assert 'shots="6500:$frame;10400:$out/${name}_stopwatch.bmp"' in smoke_script, "Clock golden must show actual Clock after boot, before Stopwatch"
 assert 'Entering activity: Clock' in smoke_script, "Clock must reject boot-splash screenshots"
+assert "CLOCK boot screenshot detected; retry with late Activity capture" in smoke_script, (
+    "Clock smoke must retry a pre-Activity screenshot instead of accepting splash pixels"
+)
+assert 'CROSSPOINT_SIM_SCREENSHOTS="9500:$frame;13300:$out/CLOCK_stopwatch.bmp"' in smoke_script, (
+    "Clock late retry must move both golden and stopwatch captures beyond boot"
+)
 assert "PASS Biscuit 26/26: screenshots contain rendered Activity headers" in smoke_script, (
     "all 26 Activity snapshots must be checked against boot-splash false positives")
 crowd_ui = (root / "src/apps_local/crowd-density/CrowdDensityActivity.cpp").read_text()
