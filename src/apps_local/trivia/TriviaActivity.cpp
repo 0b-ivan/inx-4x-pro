@@ -173,7 +173,8 @@ void TriviaActivity::onEnter() {
                I18N.getLanguage() == Language::DE
                    ? "A German question pack is not installed. The available download contains English questions."
                    : "There is no question pack on this card yet. Connect to WiFi and fetch one; it is about 6MB.",
-               "GET THE QUESTIONS", triviaui::ActionGetPack);
+               I18N.getLanguage() == Language::DE ? "GET ENGLISH QUESTIONS" : "GET THE QUESTIONS",
+               triviaui::ActionGetPack);
   }
 
   flashOnNextPaint_ = true;
