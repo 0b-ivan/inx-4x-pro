@@ -319,6 +319,13 @@ void buildMenu(toybox::Screen& screen, const MenuModel& model) {
             toybox::kSmallFont, fui::TextAlign::Right, toybox::kButtonCut);
   screen.frame().hit(diffBox, ActionMenuRow, 2);
 
+  if (model.englishFallback) {
+    // The interface may be German even though the 50,000 downloaded clues
+    // are still English. Make that visible without changing the card layout.
+    drawLabel(screen, fui::Rect{body.x, static_cast<int16_t>(footerTop(screen) - 16),
+                                body.width, 28}, "ENGLISH QUESTIONS",
+              toybox::kSmallFont, fui::TextAlign::Center, toybox::kButtonCut);
+  }
   if (model.packCount > 0) {
     char count[48];
     questionCount(count, sizeof(count), model.packCount, model.seenCount);
