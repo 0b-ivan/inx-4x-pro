@@ -18,7 +18,7 @@ The legacy URL still downloads **English only** from
 It does not claim to download a German pack that has not been published.
 The files `pack.state` and `pack-de.state` store independent progress and
 flags; changing UI languages never reuses the other pack's state.
-Both languages use the existing XTRIVIA version 1 reader and record format.
+Both languages use XTRIVIA format version 1. The header explicitly marks German data with flag bit 0; legacy English packs have flags 0. Firmware rejects a file whose header language does not match its selected file path, preventing an English pack renamed to `pack-de.dat` from being presented as German.
 
 ## Build from the publicly released English pack
 
@@ -80,7 +80,7 @@ python3 tools_local/trivia/build_de_pack.py \
 
 By default this rejects unreviewed or missing questions, mismatched choices,
 a distractor equal to the right answer, unsupported display glyphs, clues
-that exceed the real 448×583-pixel text box, and records above 448 bytes.
+that exceed the real 448×583-pixel text box, and records above 448 bytes. It also measures the actual Quizmaster-answer and multiple-choice-button fonts, so translated labels cannot silently overflow their display rectangles.
 It writes `pack-de.dat.part` first and replaces the final output only on
 complete success. **No English fallback is inserted into a German pack.**
 
