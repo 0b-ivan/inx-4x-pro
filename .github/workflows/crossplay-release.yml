@@ -116,7 +116,7 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
-            ### What is new in 1.16.10
+            ### What is new in 1.16.11
 
             **New: WIFI DIAG (read-only WLAN diagnostics)**
 
