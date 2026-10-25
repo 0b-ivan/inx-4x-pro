@@ -54,6 +54,9 @@ void WifiDiagnosticsActivity::refreshSnapshot() {
   std::vector<std::string> snapshot;
   snapshot.reserve(20);
   snapshot.emplace_back(std::string("Firmware: ") + CROSSPOINT_VERSION);
+  char sampleTime[48];
+  snprintf(sampleTime, sizeof(sampleTime), "Sample: %lu ms", millis());
+  snapshot.emplace_back(sampleTime);
 
 #ifdef SIMULATOR
   // A deterministic, explicitly virtual view. Never probe the computer's Wi-Fi.
