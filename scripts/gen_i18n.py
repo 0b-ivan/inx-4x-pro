@@ -920,10 +920,10 @@ def generate_tarot_strings(translations_dir: str, output_path: Optional[str] = N
 
 
 def generate_forehead_strings(translations_dir: str, output_path: Optional[str] = None) -> None:
-    """Regenerate the 13 localized Forehead categories from indexed YAML cards.
+    """Regenerate all 17 localized Forehead categories from indexed YAML cards.
 
-    The remaining four categories retain their English cards. Indexed keys
-    intentionally allow duplicate English words across distinct categories.
+    Indexed keys intentionally allow duplicate English words across distinct
+    categories without conflating their meanings.
     """
     german = parse_yaml_file(str(Path(translations_dir) / "german.yaml"))
     english = parse_yaml_file(str(Path(translations_dir) / "english.yaml"))
@@ -931,7 +931,8 @@ def generate_forehead_strings(translations_dir: str, output_path: Optional[str] 
         ("Animals", 191), ("Act", 176), ("Sound", 130), ("Food", 156),
         ("Movies", 139), ("People", 136), ("Music", 134), ("Jobs", 147),
         ("Sports", 130), ("House", 136), ("Places", 137), ("Nature", 132),
-        ("Science", 130),
+        ("Science", 130), ("Myths", 131), ("Storybook", 134),
+        ("Kids", 190), ("Tricky", 131),
     )
     expected = sum(count for _, count in groups)
     found = [k for k in english if k.startswith("LOCAL_FOREHEAD_")]
