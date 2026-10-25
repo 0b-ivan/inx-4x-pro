@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "TriviaCore.h"
+#include "TriviaPackLocale.h"
 
 using namespace trivia;
 
@@ -122,6 +123,19 @@ std::vector<Item> sampleItems(const int n) {
     items.push_back(it);
   }
   return items;
+}
+
+// German content must not mutate the legacy English pack or its flags.
+void testLocalizedPackPaths() {
+  const auto& en = locationFor(false);
+  const auto& de = locationFor(true);
+  CHECK(std::strcmp(en.packPath, "/trivia/pack.dat") == 0);
+  CHECK(std::strcmp(en.statePath, "/trivia/pack.state") == 0);
+  CHECK(std::strcmp(de.packPath, "/trivia/pack-de.dat") == 0);
+  CHECK(std::strcmp(de.statePath, "/trivia/pack-de.state") == 0);
+  CHECK(!shouldUseGerman(false, true));
+  CHECK(!shouldUseGerman(true, false));
+  CHECK(shouldUseGerman(true, true));
 }
 
 // --- format ---------------------------------------------------------------
@@ -499,6 +513,7 @@ void testRoomFor() {
 }  // namespace
 
 int main() {
+  testLocalizedPackPaths();
   testFormat();
   testRejectsBadFiles();
   testState();
