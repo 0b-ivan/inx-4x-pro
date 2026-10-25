@@ -140,6 +140,9 @@ RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 RTC_NOINIT_ATTR uint32_t silentRebootTarget;
 // MeshChat checkpoint survives a warm reset, including a panic before logs flush.
 RTC_NOINIT_ATTR volatile uint32_t meshChatDiagnosticStage;
+// Decoded once at startup and retained in normal RAM for the developer crash API.
+// Unlike the 16-line RTC log ring, it cannot be overwritten by later UI logs.
+uint32_t previousMeshChatCheckpoint = 0;
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
@@ -380,8 +383,9 @@ void setup() {
   const uint32_t priorMeshStage = meshChatDiagnosticStage;
   meshChatDiagnosticStage = 0;  // Never mistake an earlier boot for this one.
   if ((priorMeshStage & 0xFFFFFF00u) == 0x4D455300u) {
+    previousMeshChatCheckpoint = priorMeshStage & 0xFFu;
     LOG_INF("BOOT", "Previous MeshChat checkpoint before reset: %u",
-            static_cast<unsigned>(priorMeshStage & 0xFFu));
+            static_cast<unsigned>(previousMeshChatCheckpoint));
   }
   // checkPanic() clears the watchdog capture marker after a successful SD
   // dump, so retain the boot classification for the later activity route.
