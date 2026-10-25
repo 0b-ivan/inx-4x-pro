@@ -242,7 +242,7 @@ inline const char* localize(const char* text) {
     return formatted;
   }
   if (scan("%d OVER%n", &first, &consumed) == 1 && text[consumed] == '\0') {
-    std::snprintf(formatted, sizeof(formatted), localizedFormat(LocalFormat::LOCAL_FORMAT_S_S_MOVE), first);
+    std::snprintf(formatted, sizeof(formatted), localizedFormat(LocalFormat::LOCAL_FORMAT_D_OVER), first);
     return formatted;
   }
   const size_t textLength = std::strlen(text);
@@ -250,7 +250,7 @@ inline const char* localize(const char* text) {
   constexpr size_t kMoveSuffixLength = sizeof(kMoveSuffix) - 1;
   if (textLength > kMoveSuffixLength && std::strcmp(text + textLength - kMoveSuffixLength, kMoveSuffix) == 0) {
     const size_t nameLength = textLength - kMoveSuffixLength;
-    std::snprintf(formatted, sizeof(formatted), localizedFormat(LocalFormat::LOCAL_FORMAT_D_OVER), static_cast<int>(nameLength), text);
+    std::snprintf(formatted, sizeof(formatted), localizedFormat(LocalFormat::LOCAL_FORMAT_S_S_MOVE), static_cast<int>(nameLength), text);
     return formatted;
   }
   if (scan("%d OF %d%n", &first, &second, &consumed) == 2 && text[consumed] == '\0') {
