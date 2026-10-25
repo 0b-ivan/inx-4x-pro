@@ -9,6 +9,16 @@
 #include "../../src/apps_local/ui/LocalI18n.h"
 #include "../../src/apps_local/tarot/TarotI18n.h"
 
+// Exercise the complete generated German catalogue, not just a handful of
+// manually selected samples. The YAML generator rejects duplicate source keys.
+struct ExpectedLocalTranslation {
+  const char* english;
+  const char* german;
+};
+static constexpr ExpectedLocalTranslation kExpectedLocal[] = {
+#include "../../src/apps_local/ui/LocalI18nData.inc"
+};
+
 static int checks = 0;
 static int failures = 0;
 
@@ -56,8 +66,22 @@ int main() {
                   "Neuanfang, Optimismus, Vertrauen ins Leben und der Mut zu einem Sprung ins Ungewisse.") != 0)
     ++failures;
 
+  // Check every generated static app translation and all Tarot card slots.
+  for (const auto& translation : kExpectedLocal) {
+    expect(translation.english, translation.german);
+  }
+  for (int card = 0; card < 78; ++card) {
+    ++checks;
+    if (std::strcmp(tarotNameLocalized(card, "English"), tarot_i18n::kGermanNames[card]) != 0) ++failures;
+    ++checks;
+    if (std::strcmp(tarotMeaningLocalized(card, "English"), tarot_i18n::kGermanMeanings[card]) != 0) ++failures;
+  }
+
   // English stays English.
   I18N.language = Language::EN;
+  for (const auto& translation : kExpectedLocal) {
+    expect(translation.english, translation.english);
+  }
   ++checks;
   if (std::strcmp(tarotNameLocalized(0, "The Fool"), "The Fool") != 0) ++failures;
   ++checks;
