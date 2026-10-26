@@ -315,19 +315,14 @@ void TriviaActivity::onEnter() {
 
   const bool haveTrivia = openPack();
   scanStudyDecks();
-  bool haveAws = false;
-  if (deckCatalog_.count()) {
-    const uint8_t first = selectedDeck_;
-    for (uint8_t attempt = 0; attempt < deckCatalog_.count(); ++attempt) {
-      selectedDeck_ = static_cast<uint8_t>((first + attempt) % deckCatalog_.count());
-      if (openAwsPack()) { haveAws = true; break; }
-    }
-  }
-  if (haveTrivia || haveAws) {
+  // Discover certificate names at entry, but do NOT create progress files
+  // before the learner explicitly selects a deck in the menu.
+  const bool haveStudyDecks = deckCatalog_.count() != 0;
+  if (haveTrivia || haveStudyDecks) {
     view_ = View::Menu;
-    LOG_INF("TRIVIA", "Pack open: trivia=%u aws=%u",
+    LOG_INF("TRIVIA", "Available packs: trivia=%u certificates=%u",
             static_cast<unsigned>(pack_.count()),
-            static_cast<unsigned>(awsPack_.count()));
+            static_cast<unsigned>(deckCatalog_.count()));
   } else {
     showNotice("NO QUESTIONS",
                I18N.getLanguage() == Language::DE
@@ -748,10 +743,10 @@ void TriviaActivity::routeAction(const int action, const int value) {
           showNotice("NO STUDY PACKS",
                      "Copy a certificate .dat pack to /trivia/decks on your SD card.",
                      "BACK", triviaui::ActionAwsHome);
-        } else if (deckCatalog_.count() > 1 || !awsInstalled_) {
-          go(View::StudyDecks);
         } else {
-          go(View::AwsMenu);
+          // Even with one certificate, first show the explicit selection.
+          // Only ActionStudySelect opens the file and initializes progress.
+          go(View::StudyDecks);
         }
       }
       break;
