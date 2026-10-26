@@ -10,11 +10,15 @@ void BrowserPlayer::reset() {
 
 bool BrowserPlayer::apply(bship::Game& game, const Command& c) {
   constexpr int side = 1;
-  if (c.revision != view_.revision || view_.revision == std::numeric_limits<uint32_t>::max()) return false;
-
+  // Resume is authenticated by both server-issued capabilities before reaching
+  // the game. A stale browser revision is normal after a lost action reply:
+  // resync the current view rather than permanently locking out the player.
   if (c.kind == CommandKind::Resume) {
     return view_.profile && view_.ready && game.side[side].placed;
   }
+
+  // Mutating commands remain strictly monotonic and reject replays.
+  if (c.revision != view_.revision || view_.revision == std::numeric_limits<uint32_t>::max()) return false;
 
   if (c.kind == CommandKind::Rematch) {
     if (!view_.profile || !view_.ready || !bship::over(game)) return false;
