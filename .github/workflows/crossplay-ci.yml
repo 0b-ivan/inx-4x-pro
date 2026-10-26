@@ -7,7 +7,7 @@ name: CrossPlay
 
 on:
   push:
-    branches: [main, feature/biscuit-simulator-hardware]
+    branches: [main]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -187,17 +187,15 @@ jobs:
           path: .pio/biscuit-native-previews/
           if-no-files-found: ignore
 
-  # Publish *only* on an explicit release(nightly): push or a manual dispatch.
-  # The existing three CI jobs must all pass on this exact commit first.
+  # Manual prerelease on main only, gated by the same three CI jobs.
+  # Never publish prereleases from pull requests or old feature branches.
   nightly-release:
     name: X4 Pro Nightly OTA prerelease
     needs: [firmware, simulator, host-tests]
     if: >-
-      github.ref == 'refs/heads/feature/biscuit-simulator-hardware' &&
-      (
-        (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release(nightly):')) ||
-        (github.event_name == 'workflow_dispatch' && inputs.publish_nightly == true)
-      )
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.publish_nightly == true
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -216,7 +214,7 @@ jobs:
         with:
           version: "latest"
 
-      - name: Compute immutable prerelease version from branch commit
+      - name: Compute immutable prerelease version from tested main commit
         shell: bash
         run: |
           set -euo pipefail
@@ -267,13 +265,13 @@ jobs:
           cp "$ELF" "dist/crossplay-${NIGHTLY_TAG}-x4pro.elf"
           (cd dist && sha256sum firmware.bin > firmware.bin.sha256)
           cat > dist/release-notes.md <<EOF
-          X4 Pro **Nightly OTA test build** from \`feature/biscuit-simulator-hardware\`.
+          X4 Pro **Nightly OTA test build** from \`main\`.
 
           Source commit: \`${GITHUB_SHA}\`
 
           Passed gates: X4 Pro firmware build, native host tests, headless SDL Biscuit Activity smoke tests and visual regression.
 
-          Includes the Biscuit integration being validated on hardware. The simulator's FIRE preview is UI-only; the hardware build contains the normal hardware Activity code. Use wireless features only on owned/authorized test equipment.
+          This prerelease contains the tested X4 Pro main-branch firmware. The simulator's FIRE preview is UI-only; hardware builds contain the normal hardware Activity code. Use wireless features only on owned/authorized test equipment.
 
           **Installation:** On the X4 Pro open OTA Updates, select **Nightly / Pre-release**, then select \`${NIGHTLY_TAG}\` and confirm. The device verifies chip, board and image size. Keep a recovery backup available.
 
