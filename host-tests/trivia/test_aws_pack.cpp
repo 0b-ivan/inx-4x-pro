@@ -93,6 +93,14 @@ void checkGoodPack() {
   assert(state.setFlag(1, kSeen | kAwsMissed));
   assert(chooser.next(id, 1u << 2, true) && id == 1);
   assert(!chooser.next(id, 1u << 5, true));
+  // After a successful retry it must disappear from Review Missed while
+  // preserving the seen bit and its persisted count.
+  assert(state.clearFlag(1, kAwsMissed));
+  assert(state.flags(1) == kSeen && state.seenCount() == 1);
+  assert(!chooser.next(id, 1u << 2, true));
+  assert(chooser.next(id, 1u << 2));  // normal study still sees it
+  assert(state.setFlag(1, kAwsMissed));  // another wrong attempt
+  assert(chooser.next(id, 1u << 2, true) && id == 1);
   assert(state.setFlag(1, kFlagged));
   assert(!chooser.next(id, 1u << 2));
 }
