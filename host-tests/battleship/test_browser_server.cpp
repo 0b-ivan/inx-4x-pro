@@ -133,13 +133,23 @@ int main() {
   http.routes.at("/player/state")();
   assert(http.response.find("true") != std::string::npos);  // Same owner restored.
 
+  // The previous browser connection can still be alive when a tab reloads.
+  ws.event(WStype_CONNECTED, 1);
+  clockMs += 100;
+  ws.event(WStype_TEXT, 1, "[\\\"resume\\\",\\\""+freshToken+"\\\",2,\\\""+resumeToken+"\\\"]");
+  assert(handler.calls == 4);
+  assert(ws.recipients[ws.recipients.size()-4] == 1);
   ws.event(WStype_DISCONNECTED, 0);
+  assert(server.clientSeen());
+  http.routes.at("/player/state")();
+  assert(http.response.find("true") != std::string::npos);
+  ws.event(WStype_DISCONNECTED, 1);
   http.routes.at("/battleship/session")();
   const auto nextToken = http.response;
   ws.event(WStype_CONNECTED, 0);
   clockMs += 100;
   ws.event(WStype_TEXT, 0, "[\"resume\",\"" + nextToken + "\",2,\"00000000000000000000000000000000\"]");
-  assert(handler.calls == 3 && ws.messages.back().find("error") != std::string::npos);
+  assert(handler.calls == 4 && ws.messages.back().find("error") != std::string::npos);
 
   server.stop();
   server.stop();

@@ -16,3 +16,6 @@ Real X4 firmware loading and a full Safari/Chrome smartphone match have **not** 
 ## Open hotspot security
 
 The Wi-Fi QR code uses `WIFI:T:nopass;S:CrossPlay-ConnectFour;;`. Nearby devices can join without authentication. The first accepted browser claims the seat; the private resume capability remains owner-only. HTTP and WebSocket traffic on this open AP is **not encrypted**, so local eavesdropping and interception are possible. Use only in trusted environments, and close Browser Play when finished.
+
+
+A browser refresh may create a new WebSocket before the previous one has closed. The private resume capability can transfer exclusive seat ownership to the new socket; stale sockets are no longer allowed to mutate game state. Public bootstrap tokens alone never authorize a takeover.

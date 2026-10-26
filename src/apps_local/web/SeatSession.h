@@ -44,7 +44,7 @@ class SeatSession final {
   bool admit(uint8_t client, const char* bootstrap, bool newProfile,
              bool resume, const char* seatSecret, uint32_t now) {
     if (!match(token_, bootstrap) ||
-        (hasOwner() && owner_ != client) ||
+        (hasOwner() && owner_ != client && !resume) ||
         (!hasOwner() && !newProfile && !resume) ||
         (resume && !match(resumeToken_, seatSecret))) return false;
     // Wraparound-safe monotonic throttle; commands rejected by the game
@@ -60,6 +60,16 @@ class SeatSession final {
     if (hasOwner()) return;
     owner_ = client;
     if (newProfile) rotate(resumeToken_, entropy);
+  }
+
+  // A browser tab may reconnect before the old WebSocket's close event.
+  // Rebind only on the private 128-bit capability; the old transport loses
+  // owner authorization immediately. Call only after the resume command
+  // passed admission and game-level validation.
+  bool rebind(uint8_t client, const char* seatSecret) {
+    if (!match(resumeToken_, seatSecret)) return false;
+    owner_ = client;
+    return true;
   }
 
   // Revokes the active transport seat, preserving the private resume token

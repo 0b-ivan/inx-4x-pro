@@ -71,6 +71,12 @@ int main() {
   assert(r.deviceDrop(4) && r.game().turn==connectfour::kDark);
   assert(send(r, 1, make("drop", fresh, 9, 6), 1600));
   assert(r.game().cell[6][0]==connectfour::kDark);
+  assert(!send(r, 2, make("drop", fresh, 10, 3), 1800));
+  assert(!send(r, 2, make("resume", fresh, 0, -1, std::string(32,'0')), 1800));
+  assert(send(r, 2, make("resume", fresh, 0, -1, secret), 1800));
+  assert(r.owner()==2);
+  assert(!r.disconnected(1, nextRandom));
+  assert(!send(r, 1, make("drop", fresh, 10, 3), 2000));
   r.stop();
   assert(!r.hasOwner() && !r.authorized(fresh.c_str(), secret.c_str()));
   puts("Connect Four browser: strict command parsing, exclusive seat, X4 turns, win, reconnect and rematch passed");

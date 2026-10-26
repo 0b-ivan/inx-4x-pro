@@ -214,6 +214,9 @@ void Server::receive(uint8_t client, const uint8_t* payload, size_t size) {
     seat_.claim(client, command.kind == CommandKind::Profile, &randomWord);
   }
 
+  if (accepted && command.kind == CommandKind::Resume)
+    seat_.rebind(client, command.resumeToken);
+
   const size_t n = serializePlacement(view, accepted, reply_, sizeof(reply_));
   if (n) ws_.sendTXT(client, reply_, n);
   if (accepted && (command.kind == CommandKind::Profile || command.kind == CommandKind::Resume)) {

@@ -68,6 +68,14 @@ int main() {
   assert(ws.recipients[ws.recipients.size()-2]==2);
   assert(ws.messages.back().find("\"r\":2")!=std::string::npos);
   assert(server.round().authorized(fresh.c_str(),secret.c_str()));
+  // Browser reload: a new socket resumes before the old socket closes.
+  ws.event(WStype_CONNECTED,3);
+  clockMs=650;
+  ws.event(WStype_TEXT,3,"[\\\"resume\\\",\\\""+fresh+"\\\",0,\\\""+secret+"\\\"]");
+  assert(server.round().owner()==3);
+  assert(ws.recipients[ws.recipients.size()-2]==3);
+  ws.event(WStype_DISCONNECTED,2);
+  assert(server.round().owner()==3);
   // End a complete game with four vertical X4 discs, then replay from the
   // physical result screen. The browser must receive the fresh board and
   // revision, not remain stuck on the prior winner.
@@ -75,7 +83,7 @@ int main() {
     assert(server.deviceDrop(3));
     clockMs=static_cast<uint32_t>(700+i*200);
     const std::string moveAgain=std::string(R"(["drop",")")+fresh+R"(",)"+std::to_string(server.round().revision())+",4]";
-    ws.event(WStype_TEXT,2,moveAgain);
+    ws.event(WStype_TEXT,3,moveAgain);
     assert(server.round().game().turn==connectfour::kLight);
   }
   assert(server.deviceDrop(3));

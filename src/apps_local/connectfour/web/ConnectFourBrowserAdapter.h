@@ -112,7 +112,7 @@ class Round final {
     if (!parseCommand(bytes, length, cmd)) return false;
     if (cmd.kind == Kind::Resume) {
       if (!joined_ || !seat_.admit(client, cmd.token, false, true, cmd.secret, now)) return false;
-      if (!seat_.hasOwner()) seat_.claim(client, false, entropy);
+      if (!seat_.rebind(client, cmd.secret)) return false;
       return true; // Read-only resync permits a stale browser revision.
     }
     if (cmd.revision != revision_ || revision_ == std::numeric_limits<uint32_t>::max()) return false;
