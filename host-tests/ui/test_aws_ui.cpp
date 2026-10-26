@@ -75,7 +75,7 @@ void testAwsMenu() {
     assert(out.tap(230, 235).action == triviaui::ActionAwsBegin);
     assert(out.tap(230, 395).action == triviaui::ActionAwsReview);
     assert(out.tap(230, 515).action == triviaui::ActionAwsDomains);
-    assert(out.tap(90, 750).action == triviaui::ActionAwsHome);
+    assert(out.tap(90, 750).action == triviaui::ActionStudyDecks);
     assert(out.tap(360, 750).action == triviaui::ActionAwsBegin);
   }
 }
