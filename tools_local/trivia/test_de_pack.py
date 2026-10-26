@@ -183,7 +183,7 @@ class GermanTriviaPackTests(unittest.TestCase):
         first = source[0]
         checkpoint = {"id": first["id"], "source_hash": build_de_pack.source_hash(first),
                       "q": first["q"], "a": first["a"],
-                      "alt": [], "w": first["w"], "reviewed": False}
+                      "alt": first["alt"], "w": first["w"], "reviewed": False}
         self.translated.write_text(json.dumps(checkpoint) + "\n", encoding="utf-8")
         sample = translate_de_pack.pilot_candidates(source, 2 * 3 + 10, {first["id"]})
         rejected_id = sample[0]["id"]
@@ -191,7 +191,7 @@ class GermanTriviaPackTests(unittest.TestCase):
         def fake_translator(item, model, key):
             attempts.append(item["id"])
             return {"q": item["q"], "a": ("X" * 500 if item["id"] == rejected_id else item["a"]),
-                    "alt": [], "w": item["w"]}
+                    "alt": item["alt"], "w": item["w"]}
         with (patch.object(translate_de_pack, "translate_one", fake_translator),
               patch.object(translate_de_pack.time, "sleep", lambda _: None)):
             new_count, total_count, count = translate_de_pack.generate(
