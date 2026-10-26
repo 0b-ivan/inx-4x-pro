@@ -75,7 +75,7 @@ int main() {
   for (int i=0; i<2; ++i) {
     assert(server.deviceDrop(3));
     clockMs=static_cast<uint32_t>(700+i*200);
-    const std::string moveAgain="[\\\"drop\\\",\\\""+fresh+"\\\","+std::to_string(server.round().revision())+",4]";
+    const std::string moveAgain=std::string(R"(["drop",")")+fresh+R"(",)"+std::to_string(server.round().revision())+",4]";
     ws.event(WStype_TEXT,2,moveAgain);
     assert(server.round().game().turn==connectfour::kLight);
   }
@@ -84,7 +84,7 @@ int main() {
   assert(server.deviceRematch());
   assert(server.round().game().outcome==connectfour::Outcome::Running);
   assert(connectfour::discCount(server.round().game())==0);
-  assert(ws.messages.back().find("\\"r\\":8")!=std::string::npos);
+  assert(ws.messages.back().find(R"("r":8)")!=std::string::npos);
   server.stop();server.stop();
   assert(!server.running() && WiFi.currentMode==WIFI_OFF);
   assert(std::strlen(server.password())==0);
