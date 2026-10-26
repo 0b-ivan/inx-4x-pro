@@ -746,7 +746,9 @@ void TriviaActivity::render(RenderLock&&) {
   // shape -- a headline with a sentence under it -- because at the 20px UI cut
   // a sentence runs off the panel and is truncated with an ellipsis Jersey
   // does not carry, so the line simply stops. See ToyboxTheme.h.
-  const bool prose = view_ == View::Quizmaster || view_ == View::Solo || view_ == View::Notice;
+  const bool prose = view_ == View::Quizmaster || view_ == View::Solo || view_ == View::Notice ||
+                     view_ == View::AwsQuestion || view_ == View::AwsOption ||
+                     view_ == View::AwsExplanation || view_ == View::AwsDomains;
   auto target =
       toybox::makeTarget(renderer, prose ? toybox::readingChromeFaces() : toybox::proseMenuFaces());
   const fui::InputSnapshot noInput{};
@@ -771,6 +773,45 @@ void TriviaActivity::render(RenderLock&&) {
       model.seenCount = state_.seenCount();
       model.englishFallback = I18N.getLanguage() == Language::DE && !germanContent_;
       triviaui::buildMenu(screen, model);
+      break;
+    }
+    case View::AwsMenu: {
+      triviaui::AwsMenuModel model;
+      model.count = awsPack_.count();
+      model.seen = awsState_.seenCount();
+      model.enabled = awsDomains_;
+      triviaui::buildAwsMenu(screen, model);
+      break;
+    }
+    case View::AwsDomains: {
+      triviaui::AwsDomainsModel model;
+      model.enabled = awsDomains_;
+      triviaui::buildAwsDomains(screen, model);
+      break;
+    }
+    case View::AwsQuestion:
+    case View::AwsOption:
+    case View::AwsExplanation: {
+      awsBuildPage();
+      triviaui::AwsPageModel model;
+      model.text = awsPageBuffer_;
+      model.domain = awsQuestion_.domain();
+      model.option = awsOption_;
+      model.optionCount = awsQuestion_.optionCount();
+      model.correct = awsQuestion_.correctMask();
+      model.selected = awsSelected_;
+      model.asked = awsScore_.asked;
+      model.right = awsScore_.right;
+      model.more = awsMore_;
+      model.correctAnswer = awsAnswerCorrect_;
+      model.hasQuestion = awsHasQuestion_;
+      if (view_ == View::AwsQuestion) {
+        triviaui::buildAwsQuestion(screen, model);
+      } else if (view_ == View::AwsOption) {
+        triviaui::buildAwsOption(screen, model);
+      } else {
+        triviaui::buildAwsExplanation(screen, model);
+      }
       break;
     }
     case View::Quizmaster: {
