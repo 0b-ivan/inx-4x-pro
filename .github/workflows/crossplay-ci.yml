@@ -28,6 +28,17 @@ env:
   PIO_CORE_URL: https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
 
 jobs:
+  trivia-batch-qa:
+    name: trivia batch budget QA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Validate budget and checkpoint behavior
+        run: python3 tools_local/trivia/test_batch_budget.py
+
   firmware:
     name: firmware (${{ matrix.environment }})
     runs-on: ubuntu-latest
