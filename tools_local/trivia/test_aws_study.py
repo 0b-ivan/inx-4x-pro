@@ -39,12 +39,13 @@ class TestStudyBuilder(unittest.TestCase):
             self.assertLessEqual(largest, builder.MAX_RECORD)
             self.assertEqual(struct.unpack("<8sHBBI", data[:16]),
                              (builder.MAGIC, 1, 0, 0, 2))
-            offsets = struct.unpack("<3I", data[16:28])
+            self.assertEqual(len(data[16:20]), 4)  # content ID
+            offsets = struct.unpack("<3I", data[20:32])
             self.assertEqual(offsets[0], 0)
             self.assertLess(offsets[1], offsets[2])
-            self.assertEqual(len(data), 28 + offsets[-1])
-            first = data[28:28+offsets[1]]
-            second = data[28+offsets[1]:]
+            self.assertEqual(len(data), 32 + offsets[-1])
+            first = data[32:32+offsets[1]]
+            second = data[32+offsets[1]:]
             self.assertEqual(first[:4], bytes([1, 4, 1, 0]))
             self.assertEqual(second[:4], bytes([6, 4, 5, 0]))
             self.assertIn(b"Which AWS service", first)
