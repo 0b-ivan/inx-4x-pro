@@ -488,7 +488,8 @@ void TriviaActivity::deal() {
 void TriviaActivity::awsDeal() {
   uint32_t index = 0;
   awsHasQuestion_ = false;
-  if (!awsChooser_.next(index, awsDomains_, awsReviewMissed_) ||
+  if (!awsChooser_.next(index, awsDomains_, awsReviewMissed_,
+                        awsHaveLast_ ? awsCurrent_ : UINT32_MAX) ||
       !awsPack_.read(index, awsQuestion_)) {
     showNotice("NO AWS QUESTIONS",
                awsReviewMissed_ ? "No previously missed questions in your enabled domains."
