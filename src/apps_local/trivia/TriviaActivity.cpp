@@ -36,6 +36,7 @@ constexpr const char* kPackUrl = "https://github.com/ma-r-s/crossplay/releases/d
 constexpr const char* kPrefsPath = "/trivia/prefs";
 constexpr const char* kAwsPackPath = "/trivia/aws/pack.dat";
 constexpr const char* kAwsStatePath = "/trivia/aws/pack.state";
+constexpr const char* kAwsStateIdPath = "/trivia/aws/pack.state.id";
 constexpr const char* kAwsPrefsPath = "/trivia/aws/prefs";
 constexpr uint32_t kAwsPageCharacters = 260;
 
@@ -160,8 +161,22 @@ bool TriviaActivity::openAwsPack() {
     LOG_ERR("TRIVIA", "Invalid AWS study pack");
     return false;
   }
+  bool sameContent = false;
+  {
+    HalFile stamp = Storage.open(kAwsStateIdPath, O_RDONLY);
+    if (stamp.isOpen() && stamp.size() == 4) {
+      uint8_t id[4] = {};
+      const uint32_t fingerprint = awsPack_.fingerprint();
+      if (stamp.read(id, 4) == 4) {
+        sameContent = id[0] == static_cast<uint8_t>(fingerprint) &&
+                      id[1] == static_cast<uint8_t>(fingerprint >> 8) &&
+                      id[2] == static_cast<uint8_t>(fingerprint >> 16) &&
+                      id[3] == static_cast<uint8_t>(fingerprint >> 24);
+      }
+    }
+  }
   g_awsStateFile = Storage.open(kAwsStatePath, O_RDWR);
-  if (!g_awsStateFile.isOpen() ||
+  if (!sameContent || !g_awsStateFile.isOpen() ||
       static_cast<uint32_t>(g_awsStateFile.size()) != awsPack_.count()) {
     g_awsStateFile.close();
     HalFile fresh;
@@ -178,6 +193,17 @@ bool TriviaActivity::openAwsPack() {
     }
     fresh.flush();
     fresh.close();
+    HalFile stamp;
+    if (!Storage.openFileForWrite("TRIVIA", kAwsStateIdPath, stamp)) return false;
+    const uint32_t fingerprint = awsPack_.fingerprint();
+    const uint8_t id[4] = {
+        static_cast<uint8_t>(fingerprint),
+        static_cast<uint8_t>(fingerprint >> 8),
+        static_cast<uint8_t>(fingerprint >> 16),
+        static_cast<uint8_t>(fingerprint >> 24)};
+    if (stamp.write(id, sizeof(id)) != sizeof(id)) return false;
+    stamp.flush();
+    stamp.close();
     g_awsStateFile = Storage.open(kAwsStatePath, O_RDWR);
   }
   if (!g_awsStateFile.isOpen()) return false;
