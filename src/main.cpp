@@ -370,7 +370,9 @@ void setup() {
 #endif
 
   HalSystem::begin();
+#if !defined(SIMULATOR)
   LOG_INF("BOOT", "Reset reason: %d", static_cast<int>(esp_reset_reason()));
+#endif
   // checkPanic() clears the watchdog capture marker after a successful SD
   // dump, so retain the boot classification for the later activity route.
   const bool rebootedFromPanic = HalSystem::isRebootFromPanic();
