@@ -11,6 +11,7 @@ import build_de_pack
 import export_pack
 import pack_format
 import translate_de_pack
+import review_de_pack
 import normalize_de_drafts
 import textfit
 from german_orthography import normalize_orthography
@@ -243,6 +244,91 @@ class GermanTriviaPackTests(unittest.TestCase):
         self.assertEqual(len(output), 3)
         self.assertEqual(len({row["id"] for row in output}), 3)
         self.assertNotIn(rejected_id, {row["id"] for row in output})
+
+    def test_independent_editor_accepts_correct_german_without_rewriting(self):
+        decision = {"verdict": "accept", "reason": "Grammatisch und sachlich richtig.",
+                    **{k: self.trans[k] for k in ("q", "a", "alt", "w")}}
+        updated, report = review_de_pack.apply_review(
+            self.original, self.trans, decision)
+        self.assertEqual(report["verdict"], "accept")
+        self.assertEqual(updated["q"], self.trans["q"])
+        self.assertFalse(updated["reviewed"])
+        self.assertFalse(report["applied"])
+        self.assertTrue(report["needs_human_review"])
+
+    def test_independent_editor_rewrites_clue_but_preserves_identity(self):
+        decision = {"verdict": "rewrite", "reason": "Prägnanter und natürlicher.",
+                    **{k: self.trans[k] for k in ("q", "a", "alt", "w")}}
+        decision["q"] = "In welchem Land liegt die Hauptstadt Paris?"
+        updated, report = review_de_pack.apply_review(self.original, self.trans, decision)
+        self.assertEqual(report["verdict"], "rewrite")
+        self.assertTrue(report["applied"])
+        self.assertEqual(updated["q"], decision["q"])
+        self.assertEqual(updated["source_hash"], self.trans["source_hash"])
+        self.assertEqual(updated["a"], "Paris")
+        self.assertFalse(updated["reviewed"])
+
+    def test_independent_editor_rejects_unfaithful_wordplay(self):
+        decision = {"verdict": "reject", "reason": "Wortspiel unübersetzbar.",
+                    **{k: self.trans[k] for k in ("q", "a", "alt", "w")}}
+        decision["a"] = "Falsche Antwort"
+        updated, report = review_de_pack.apply_review(self.original, self.trans, decision)
+        self.assertEqual(report["verdict"], "reject")
+        self.assertFalse(report["applied"])
+        self.assertEqual(updated["a"], "Paris")
+        self.assertFalse(updated["reviewed"])
+
+    def test_independent_editor_blocks_too_wide_rewrite(self):
+        decision = {"verdict": "rewrite", "reason": "Vorschlag passt nicht.",
+                    **{k: self.trans[k] for k in ("q", "a", "alt", "w")}}
+        decision["a"] = "ZuLang" * 100
+        updated, report = review_de_pack.apply_review(self.original, self.trans, decision)
+        self.assertEqual(report["verdict"], "reject")
+        self.assertIn("Firmwarevalidation", report["reason"])
+        self.assertEqual(updated["a"], "Paris")
+        self.assertFalse(updated["reviewed"])
+
+    def test_independent_editor_uses_gpt_and_english_context(self):
+        decision = {"verdict": "accept", "reason": "Kein Fehler.",
+                    **{k: self.trans[k] for k in ("q", "a", "alt", "w")}}
+        reqs = []
+        def fake_open(request, timeout):
+            reqs.append(json.loads(request.data.decode("utf-8")))
+            return io.BytesIO(json.dumps({"choices": [{"message": {
+                "content": json.dumps(decision, ensure_ascii=False)}}]},
+                ensure_ascii=False).encode("utf-8"))
+        with patch.object(review_de_pack.urllib.request, "urlopen", fake_open):
+            returned = review_de_pack.review_one(
+                self.original, self.trans, "openai/gpt-5.4", "never-a-real-key")
+        self.assertEqual(returned, decision)
+        body = reqs[0]
+        self.assertEqual(body["model"], "openai/gpt-5.4")
+        self.assertEqual(body["response_format"]["type"], "json_schema")
+        self.assertEqual(body["response_format"]["json_schema"]["schema"]
+                         ["properties"]["verdict"]["enum"],
+                         ["accept", "rewrite", "reject"])
+        self.assertTrue(body["provider"]["require_parameters"])
+        payload = json.loads(body["messages"][1]["content"])
+        self.assertEqual(payload["original_english"]["q"], self.original["q"])
+        self.assertEqual(payload["draft_german"]["q"], self.trans["q"])
+
+    def test_independent_editor_writes_separate_unapproved_draft_and_report(self):
+        out = self.root / "editor-qa.jsonl"
+        audit = self.root / "editorial-audit.jsonl"
+        decision = {"verdict": "accept", "reason": "Kein Fehler.",
+                    **{k: self.trans[k] for k in ("q", "a", "alt", "w")}}
+        with patch.object(review_de_pack, "review_one", return_value=decision):
+            counts = review_de_pack.review(
+                self.src, self.translated, out, audit, "openai/gpt-5.4", "unused", 20)
+        self.assertEqual(counts, {"accept": 1, "rewrite": 0, "reject": 0})
+        row = list(build_de_pack.load_jsonl(out))[0]
+        report = list(build_de_pack.load_jsonl(audit))[0]
+        self.assertFalse(row["reviewed"])
+        self.assertTrue(report["needs_human_review"])
+        self.assertEqual(report["english"]["a"], "Paris")
+        self.assertEqual(report["model"], "openai/gpt-5.4")
+        self.assertEqual(self.translated.read_text(encoding="utf-8"),
+                         (json.dumps(self.trans, ensure_ascii=False) + "\n"))
 
     def test_draft_only_with_explicit_override(self):
         self.trans["reviewed"] = False
