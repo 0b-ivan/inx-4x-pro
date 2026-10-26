@@ -13,3 +13,13 @@ SRC=../../src/apps_local/connectfour
 "$BUILD_DIR/test_browser_adapter"
 
 node test_browser_page.cjs
+
+cat > "$BUILD_DIR/ConnectFourBrowserPageHtml.generated.h" <<'HEADER'
+#pragma once
+#include <cstddef>
+constexpr char ConnectFourBrowserPageHtml[]="";
+constexpr size_t ConnectFourBrowserPageHtmlCompressedSize=0;
+HEADER
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -Wno-narrowing -O2 -I../battleship/stubs -I"$BUILD_DIR" \
+  $SRC/web/ConnectFourBrowserServer.cpp test_browser_server.cpp -o "$BUILD_DIR/test_browser_server"
+"$BUILD_DIR/test_browser_server"
