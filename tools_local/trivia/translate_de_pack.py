@@ -39,6 +39,24 @@ TRANSLATION_RESPONSE_FORMAT = {
         },
     },
 }
+# The e-ink reading font contains German letters, but omits smart
+# punctuation. Normalize only typography, never spelling, facts or answers.
+_DISPLAY_PUNCTUATION = str.maketrans({
+    "\u201c": '"', "\u201d": '"', "\u201e": '"',
+    "\u201f": '"', "\u00ab": '"', "\u00bb": '"',
+    "\u2018": "'", "\u2019": "'", "\u201a": "'",
+    "\u2013": "-", "\u2014": "-", "\u2212": "-",
+    "\u2026": "...", "\u00a0": " ", "\u202f": " ",
+    "\u2009": " ", "\u200b": "",
+})
+
+
+def normalize_display_punctuation(value):
+    if not isinstance(value, str):
+        return value
+    return value.translate(_DISPLAY_PUNCTUATION)
+
+
 SYSTEM = (
     "You are a meticulous German localization editor for a factual trivia game. "
     "Translate the complete English trivia record into idiomatic, concise German. "
@@ -56,7 +74,9 @@ SYSTEM = (
     "of fabricating a new fact. Use natural German, correct umlauts and ß. "
     "Prefer short phrasing that fits a small e-ink display without removing "
     "information needed to solve the question. Do not include explanations, "
-    "metadata or markdown fences."
+    "metadata or markdown fences. Use plain straight ASCII quotation marks "
+    "and hyphens instead of typographic quotes, en dashes or em dashes; "
+    "the e-ink device's reading font does not support those punctuation glyphs."
 )
 
 
@@ -91,7 +111,11 @@ def translate_one(item, model, api_key, timeout=100):
     translated = json.loads(raw)
     if not isinstance(translated, dict) or set(translated) != {"q", "a", "alt", "w"}:
         raise TranslationError("Model response violates the expected JSON schema")
-    return translated
+    return {
+        key: ([normalize_display_punctuation(x) for x in value]
+              if isinstance(value, list) else normalize_display_punctuation(value))
+        for key, value in translated.items()
+    }
 
 
 
