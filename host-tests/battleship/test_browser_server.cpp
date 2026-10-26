@@ -38,6 +38,7 @@ int main() {
   assert(devmode::depth == 2 && !server.clientSeen());
   assert(std::string(server.password()).size() == 12);
   assert(WiFi.apPassword == server.password());  // No longer an open hotspot.
+  assert(std::string(server.url()) == "http://192.168.4.1/battleship");  // QR avoids mDNS dependency.
   auto& ws = *WebSocketsServer::instance;
   auto& http = *WebServer::instance;
   http.routes.at("/battleship/session")();
@@ -96,6 +97,16 @@ int main() {
   assert(ws.messages.back().find("\"type\":\"f\"") != std::string::npos);
   assert(ws.messages.back().find("SPIKY WINK BEARD") == std::string::npos);
   assert(ws.recipients.back() == 1);
+  // Profile identity changes must be delivered to the claimed seat, never
+  // broadcast to a second connected (unclaimed) browser.
+  server.publish(BrowserSnapshot{BrowserPhase::Placement, true, false});
+  const auto beforeProfileAction = ws.messages.size();
+  http.routes.at("/player/action")();
+  assert(http.response.find("true") != std::string::npos);
+  assert(ws.messages.size() == beforeProfileAction + 1);
+  assert(ws.recipients.back() == 0);
+  assert(ws.messages.back().find("\"type\":\"peer\"") != std::string::npos);
+  server.publish(state);
   ws.event(WStype_TEXT, 1, profile);
   assert(handler.calls == 2 && ws.messages.back().find("error") != std::string::npos);
   ws.event(WStype_DISCONNECTED, 1);
