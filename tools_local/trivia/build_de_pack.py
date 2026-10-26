@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pack_format
 import textfit
+from german_orthography import remaining_orthography_errors
 
 MAX_RECORD = 448
 CLUE_WIDTH, CLUE_HEIGHT = 448, 583
@@ -48,6 +49,15 @@ def validate_record(original, localized, allow_draft=False):
         raise TranslationError(f"{ident}: source changed after translation")
     if not (allow_draft or localized.get("reviewed") is True):
         raise TranslationError(f"{ident}: unreviewed translation; refusing release pack")
+    # The font supports real German umlauts. Reject uncorrected ASCII spellings
+    # even when the record otherwise meets the display and binary constraints.
+    # The translator repairs a conservative dictionary before this step.
+    missing = remaining_orthography_errors(localized)
+    if missing:
+        raise TranslationError(
+            f"{ident}: missing German umlauts in {sorted(set(missing))}; "
+            "repair spelling before releasing"
+        )
     for key in FIELDS:
         before = original.get(key, [] if key in ("alt", "w") else "")
         value = localized.get(key)
