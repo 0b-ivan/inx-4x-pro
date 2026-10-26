@@ -82,7 +82,7 @@ int main() {
   http.routes.at("/player/state")();
   assert(http.response.find("true") != std::string::npos);
   http.routes.at("/player/action")();
-  assert(http.response.find("true") != std::string::npos);
+  assert(http.response.find("PLAYER LOCKED DURING MATCH") != std::string::npos);
 
   ws.event(WStype_TEXT, 0, profile);
   assert(handler.calls == 1);
