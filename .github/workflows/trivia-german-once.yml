@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: trivia-german-pilot-once
@@ -51,6 +52,20 @@ jobs:
             --pack "$RUNNER_TEMP/trivia-pilot/pack.dat" \
             --out "$RUNNER_TEMP/trivia-pilot/source-en.jsonl"
 
+      # Reuse the 13 syntactically valid Sonnet drafts from the last attempt.
+      # Source hashes are rechecked before additional paid requests are made.
+      - name: Resume existing German pilot translations
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 40299809745 --repo "$GITHUB_REPOSITORY" \
+            --name trivia-german-pilot-unreviewed \
+            --dir "$RUNNER_TEMP/trivia-pilot"
+          test -s "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl"
+          echo "Restored $(wc -l < "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl") existing question drafts"
+
       - name: Draft up to 20 German question translations
         shell: bash
         env:
@@ -61,11 +76,18 @@ jobs:
             echo "::error::Missing OPENROUTER_API_KEY repository secret"
             exit 1
           fi
+          completed="$(wc -l < "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl")"
+          if [ "$completed" -ge 20 ]; then
+            echo "Pilot already has 20 drafts; no API request required."
+            exit 0
+          fi
+          remaining="$((20 - completed))"
+          echo "Requesting only $remaining additional drafts to reach 20"
           python3 tools_local/trivia/translate_de_pack.py \
             --src "$RUNNER_TEMP/trivia-pilot/source-en.jsonl" \
             --out "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl" \
             --model 'anthropic/claude-sonnet-4.6' \
-            --limit 20
+            --limit "$remaining"
 
       - name: Save the unreviewed draft (one-day retention)
         if: always()
