@@ -1,0 +1,172 @@
+name: German Trivia Partial DATA Preview Prerelease
+on:
+  push:
+    branches: [experiment/trivia-de-100-20261026]
+    paths: [.github/trivia-de-preview-release-trigger.txt]
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: trivia-de-data-preview-20261026
+  cancel-in-progress: false
+jobs:
+  preview-data-release:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '40336915883'
+      DATA_TAG: trivia-de-preview-20261026
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Offline format regressions
+        run: |
+          python3 tools_local/trivia/test_full_corpus_shards.py
+          python3 tools_local/trivia/test_de_pack.py
+          python3 tools_local/trivia/test_numeric_semantics.py
+      - name: Download original English 49,958 records and user-approved 500
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia-preview/source" "$RUNNER_TEMP/trivia-preview/raw-shards"
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name trivia-de-full-corpus-input \
+            --dir "$RUNNER_TEMP/trivia-preview/source"
+          test "$(wc -l < "$RUNNER_TEMP/trivia-preview/source/source-en.jsonl")" -eq 49958
+          test "$(wc -l < "$RUNNER_TEMP/trivia-preview/source/bulk-approved-500.jsonl")" -eq 500
+          curl -fsSL --retry 3 --max-time 90 \
+            https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat \
+            -o "$RUNNER_TEMP/trivia-preview/source/trivia-en-original-pack.dat"
+          printf '%s  %s\n' \
+            'a17435136122ce1d2485d4c4c30e58206e6dffc88b819e0d4c646081b485f9cf' \
+            "$RUNNER_TEMP/trivia-preview/source/trivia-en-original-pack.dat" | sha256sum -c -
+      - name: Snapshot all currently available successful and partial German shard artifacts
+        run: |
+          set -euo pipefail
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'trivia-de-shard-*' \
+            --dir "$RUNNER_TEMP/trivia-preview/raw-shards"
+          count="$(find "$RUNNER_TEMP/trivia-preview/raw-shards" -maxdepth 1 -type d \
+            -name 'trivia-de-shard-*' | wc -l)"
+          test "$count" -ge 2
+          for folder in "$RUNNER_TEMP"/trivia-preview/raw-shards/trivia-de-shard-*; do
+            number="$(basename "$folder" | sed 's/^trivia-de-shard-//')"
+            case "$number" in ''|*[!0-9]*) exit 1;; esac
+            test "$number" -ge 0 && test "$number" -le 49
+            printf -v padded '%02d' "$number"
+            mkdir -p "$RUNNER_TEMP/trivia-preview/normalized/shard-$padded"
+            cp "$folder"/* "$RUNNER_TEMP/trivia-preview/normalized/shard-$padded/" 2>/dev/null || true
+          done
+      - name: Verify every translated record and generate transparent missing/quarantine counts
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia-preview/results"
+          python3 tools_local/trivia/full_corpus_shards.py assemble \
+            --source "$RUNNER_TEMP/trivia-preview/source/source-en.jsonl" \
+            --shards "$RUNNER_TEMP/trivia-preview/normalized" \
+            --out "$RUNNER_TEMP/trivia-preview/results/translated-german-partial.jsonl" \
+            --quarantine "$RUNNER_TEMP/trivia-preview/results/quarantined.jsonl" \
+            --summary "$RUNNER_TEMP/trivia-preview/results/coverage.json"
+          python3 - "$RUNNER_TEMP/trivia-preview/results/coverage.json" <<'PY'
+          import json,sys
+          r=json.load(open(sys.argv[1]))
+          assert r["english_total"] == 49958 and r["german_valid"] > 500
+          assert r["firmware_released"] is False and r["human_review_required"] is True
+          print("PREVIEW_VALIDATED",r)
+          PY
+      - name: Package original English binary, attributed sources and all available German translations
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/trivia-preview"
+          mkdir -p "$root/release" "$root/bundle/english" "$root/bundle/german" \
+            "$root/bundle/checkpoints" "$root/bundle/provenance"
+          cp "$root/source/source-en.jsonl" "$root/bundle/english/english-49958.jsonl"
+          cp "$root/source/trivia-en-original-pack.dat" "$root/bundle/english/trivia-en-original-pack.dat"
+          cp "$root/source/bulk-approved-500.jsonl" "$root/bundle/german/bulk-approved-500.jsonl"
+          cp "$root/results"/* "$root/bundle/german/"
+          cp -R "$root/raw-shards"/trivia-de-shard-* "$root/bundle/checkpoints/"
+          python3 - "$root/results/coverage.json" "$root/bundle/README.md" \
+                     "$SOURCE_RUN" "$GITHUB_SHA" <<'PY'
+          import json,sys
+          p,out,run,sha=sys.argv[1:]
+          r=json.load(open(p))
+          lines=[
+            "# German Trivia partial data preview",
+            "",
+            "**Not an OTA/firmware release and NOT a complete German pack.**",
+            "This is a snapshot of completed translation shards during a running batch.",
+            "",
+            "## Verified coverage",
+            "",
+            "Original English records: "+str(r["english_total"]),
+            "Valid German translations now available: "+str(r["german_valid"]),
+            "Quarantined / needing repair: "+str(r["quarantined"]),
+            "Unprocessed: "+str(r["unprocessed"]),
+            "Unavailable shard checkpoints: "+str(r["missing_shards"]),
+            "OpenRouter requests in available ledgers: "+str(r["paid_requests"]),
+            "OpenRouter USD cost in available ledgers: "+str(r["new_api_cost_usd"]),
+            "",
+            "## Provenance",
+            "Original English pack: https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat",
+            "Original English pack SHA-256: a17435136122ce1d2485d4c4c30e58206e6dffc88b819e0d4c646081b485f9cf",
+            "Translation job: https://github.com/0b-ivan/inx-4x-pro/actions/runs/"+run,
+            "Source commit: https://github.com/0b-ivan/inx-4x-pro/commit/"+sha,
+            "",
+            "## Contents",
+            "english/: pinned original English binary and full JSONL export",
+            "german/: translated partial JSONL, 500 bulk-approved questions, quarantine and coverage",
+            "checkpoints/: raw files from every completed or partial shard artifact at snapshot time",
+            "provenance/: SHA256SUMS covering package contents",
+            "",
+            "Do not rename partial JSONL as pack-de.dat. No firmware.bin is included.",
+            "New translations outside the 500-question approved pilot require editorial review.",
+            "All 49,958 English questions remain available in the original English pack.",
+          ]
+          open(out,"w",encoding="utf-8").write("\n".join(lines)+"\n")
+          PY
+          cp "$root/bundle/README.md" "$root/release/README-PREVIEW.md"
+          cp "$root/results/coverage.json" "$root/release/coverage.json"
+          (
+            cd "$root/bundle"
+            find english german checkpoints -type f -print0 | sort -z | xargs -0 sha256sum \
+              > provenance/SHA256SUMS.txt
+            zip -q -r "$root/release/trivia-de-preview-partial-20261026.zip" .
+          )
+          (
+            cd "$root/release"
+            sha256sum README-PREVIEW.md coverage.json trivia-de-preview-partial-20261026.zip \
+              > SHA256SUMS-release.txt
+          )
+          ls -lh "$root/release"
+      - name: Publish distinct trivia-only GitHub prerelease without v* firmware tag
+        run: |
+          set -euo pipefail
+          if gh release view "$DATA_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Data prerelease already exists; refusing to overwrite."
+            exit 1
+          fi
+          gh release create "$DATA_TAG" \
+            "$RUNNER_TEMP/trivia-preview/release/trivia-de-preview-partial-20261026.zip" \
+            "$RUNNER_TEMP/trivia-preview/release/README-PREVIEW.md" \
+            "$RUNNER_TEMP/trivia-preview/release/coverage.json" \
+            "$RUNNER_TEMP/trivia-preview/release/SHA256SUMS-release.txt" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "German Trivia PARTIAL DATA Preview — 26 October 2026" \
+            --notes-file "$RUNNER_TEMP/trivia-preview/release/README-PREVIEW.md" \
+            --prerelease --latest=false
+          echo "PREVIEW_RELEASE https://github.com/$GITHUB_REPOSITORY/releases/tag/$DATA_TAG"
+      - name: Keep validated package if publication is blocked
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivia-german-partial-data-preview-zip
+          path: ${{ runner.temp }}/trivia-preview/release/
+          if-no-files-found: ignore
+          retention-days: 14

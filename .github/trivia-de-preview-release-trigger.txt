@@ -1,0 +1,1 @@
+Release data-only preview of English source, all currently completed German shards, partial failure checkpoints, provenance and coverage from action 40336915883. Distinct non-v tag; no OTA firmware or complete DE pack claim.
