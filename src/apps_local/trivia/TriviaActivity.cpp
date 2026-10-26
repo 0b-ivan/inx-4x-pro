@@ -498,6 +498,7 @@ void TriviaActivity::awsDeal() {
     return;
   }
   awsCurrent_ = index;
+  awsHaveLast_ = true;
   awsHasQuestion_ = true;
   awsPageStart_ = 0;
   awsOption_ = 0;
