@@ -9,9 +9,7 @@ The reviewer never sets reviewed=True and never publishes a pack.
 import argparse
 import json
 import os
-import re
 import time
-from collections import Counter
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -19,17 +17,7 @@ from pathlib import Path
 from build_de_pack import TranslationError, load_jsonl, source_hash, validate_record
 from translate_de_pack import API, normalize_display_punctuation
 
-# Numeric contradictions require evidence outside the translation model.
-# The 1947 Kon-Tiki record is a real regression: the English Jeopardy clue
-# says "10 days", but the historically correct duration is 101 days.
-_NUMBER = re.compile(r"(?<![0-9])(?:[0-9]+(?:[.,][0-9]+)?)(?![0-9])")
-
-
-def numeric_facts(value):
-    if isinstance(value, list):
-        return Counter(token for part in value for token in _NUMBER.findall(part))
-    return Counter(_NUMBER.findall(value))
-
+from numerical_equivalence import numeric_facts
 
 DEFAULT_MODEL = "openai/gpt-5.4"
 FIELDS = ("q", "a", "alt", "w")
