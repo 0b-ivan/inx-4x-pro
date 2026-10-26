@@ -170,11 +170,19 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
             if ident in done:
                 raise TranslationError(f"duplicate saved translation {ident}")
             done[ident] = row
-    source_ids = {row["id"] for row in source}
-    if set(done) - source_ids:
+    source_by_id = {row["id"]: row for row in source}
+    if set(done) - set(source_by_id):
         raise TranslationError("saved draft has IDs absent from this source")
+    for ident, old in done.items():
+        if old.get("source_hash") != source_hash(source_by_id[ident]):
+            raise TranslationError(f"source changed since draft for {ident}")
     generated = 0
-    candidates = source if all_questions else pilot_candidates(source, limit, done)
+    skipped = 0
+    # In a pilot, allow spare diverse candidates to replace questions whose
+    # correct answer cannot fit the actual e-ink fonts. Full corpus runs fail
+    # rather than silently omitting content.
+    candidates = (source if all_questions else
+                  pilot_candidates(source, min(len(source), limit * 3 + 10), done))
     with output.open("a", encoding="utf-8") as out:
         for original in candidates:
             ident = original["id"]
@@ -184,6 +192,7 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
                 continue
             if not all_questions and generated >= limit:
                 break
+            accepted = False
             for attempt in range(4):
                 try:
                     translated = translate_one(original, model, api_key)
@@ -193,19 +202,44 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
                            **{k: translated[k] for k in ("q", "a", "alt", "w")},
                            "reviewed": False}
                     validate_record(original, row, allow_draft=True)
+                    accepted = True
                     break
-                except (urllib.error.URLError, TimeoutError, KeyError,
-                        ValueError, TranslationError) as error:
+                except (KeyError, ValueError, TranslationError) as error:
+                    # Only pilots may replace a question that is unsuitable
+                    # for the display, after one retry. Record why it was
+                    # rejected; never disguise missing translations as a pack.
+                    if not all_questions and attempt >= 1:
+                        skipped += 1
+                        print(f"Rejected pilot question {ident}: {error}", flush=True)
+                        if skipped > 10:
+                            raise TranslationError("Too many rejected pilot questions") from error
+                        break
                     if attempt == 3:
                         raise TranslationError(
-                            f"{ident}: failed translation or validation after 4 tries: {error}"
+                            f"{ident}: validation failed after 4 tries: {error}"
                         ) from error
                     time.sleep(min(20, 2 ** attempt))
+                except (urllib.error.URLError, TimeoutError) as error:
+                    # Authentication, rate limits and connectivity are not
+                    # invalid questions. Do not skip and hide API outages.
+                    if attempt == 3:
+                        raise TranslationError(
+                            f"{ident}: OpenRouter failed after 4 tries: {error}"
+                        ) from error
+                    time.sleep(min(20, 2 ** attempt))
+            if not accepted:
+                continue
             out.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
             out.flush()  # resume after interruption without losing completed calls
             done[ident] = row
             generated += 1
             print(f"Draft translations: {len(done)}/{len(source)}", flush=True)
+    if not all_questions and generated != limit:
+        raise TranslationError(
+            f"Pilot produced only {generated}/{limit} requested questions; {skipped} rejected"
+        )
+    if skipped:
+        print(f"Pilot skipped {skipped} display-invalid questions (no releases).", flush=True)
     return generated, len(done), len(source)
 
 
