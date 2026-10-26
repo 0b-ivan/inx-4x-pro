@@ -1,0 +1,66 @@
+# One-shot repair: grade existing translations only; no new translations.
+name: German Trivia Blind Judge Repair
+
+on:
+  push:
+    branches:
+      - experiment/trivia-de-100-20261026
+    paths:
+      - .github/trivia-judge-repair-trigger.txt
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: trivia-judge-repair-one-shot
+  cancel-in-progress: false
+
+jobs:
+  editorial:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    name: Judge 20 stored pairs without new translation
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout experiment
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Install Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Offline QA gate before billed review
+        run: python3 tools_local/trivia/test_de_pack.py
+      - name: Recover saved low-cost model outputs from prior CI
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia-judge"
+          gh run download 40317248535 --repo "$GITHUB_REPOSITORY" \
+            --name trivia-cheap-20-comparison-unreviewed \
+            --dir "$RUNNER_TEMP/trivia-judge"
+          test "$(wc -l < "$RUNNER_TEMP/trivia-judge/comparison-per-question.jsonl")" -eq 20
+      - name: Grade saved translations using GPT-5.4 (no retranslation)
+        shell: bash
+        env:
+          TRIVIA_JUDGE_DIR: ${{ runner.temp }}/trivia-judge
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$OPENROUTER_API_KEY"
+          python3 tools_local/trivia/judge_cheap_results.py
+      - name: Upload judge report only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivia-cheap-20-independent-judge-repair
+          path: |
+            ${{ runner.temp }}/trivia-judge/judge-only-20-results.jsonl
+            ${{ runner.temp }}/trivia-judge/judge-only-20-summary.json
+          if-no-files-found: ignore
+          retention-days: 14

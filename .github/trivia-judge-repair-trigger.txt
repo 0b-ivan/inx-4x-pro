@@ -1,0 +1,1 @@
+Judge-only repair for the saved 20 matched trivia translations. No new model translation calls. GPT-5.4 with approved editorial request fields, no temperature; max 20 calls and budget guard.
