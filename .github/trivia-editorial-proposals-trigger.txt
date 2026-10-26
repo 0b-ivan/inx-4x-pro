@@ -1,1 +1,1 @@
-Rebuild editorial proposals after annotated CSV feedback E8 (Marco Polo route), H15 (Rocky Mountains), E13 (avoirdupois ounce -> metric grams), and stricter unit conversion QA. No model calls, all unapproved.
+Annotated trivia feedback E8 H15 E13 and independent numeric QA: correct Waldorf Astoria clock 9 ft = 2.74 m; rerun all 500 without APIs, all unapproved.

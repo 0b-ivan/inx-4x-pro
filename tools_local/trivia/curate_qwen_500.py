@@ -111,6 +111,10 @@ EDITS = {
     "q": "Ein französisch-kanadischer Holzfäller aus dem 19. Jahrhundert soll Legenden über welchen riesenhaften Holzfäller inspiriert haben?",
     "reason": "French-Canadian idiomatisch und präzise wiedergegeben."
   },
+  "0228fa6144593af6": {
+    "q": "In der Lobby des Waldorf Astoria steht eine 2,74 Meter hohe Uhr, die für die Weltausstellung 1893 in welcher Stadt im US-Mittelwesten geschaffen wurde?",
+    "reason": "QA: 9 Fuß entsprechen 2,7432 Metern, nicht 2,70 Metern; auf zwei Nachkommastellen gerundet."
+  },
   "b326216f49e428a8": {
     "q": "Wessen Reisen nach Osten im 13. Jahrhundert hielt Rustichello da Pisa schriftlich fest?",
     "reason": "Nutzerfeedback E8: 'nach Osten' statt 'nach dem Osten'; grammatisch und als Quizfrage formuliert."

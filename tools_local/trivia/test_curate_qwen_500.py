@@ -44,5 +44,10 @@ class ProposedEdits(unittest.TestCase):
         self.assertIn("28,35 Gramm",proposal["q"])
         self.assertNotIn("Unze",proposal["q"])
 
+    def test_nine_foot_clock_is_rounded_correctly(self):
+        text=EDITS["0228fa6144593af6"]["q"]
+        self.assertIn("2,74 Meter",text)
+        self.assertNotIn("2,70 Meter",text)
+
 if __name__=="__main__":
     unittest.main()
