@@ -607,6 +607,15 @@ void TriviaActivity::routeAction(const int action, const int value) {
         break;
       }
       selected_ = value;
+      if ((value == 0 || value == 1) && pack_.count() == 0) {
+        // A user can install only the private AWS deck. In that case the
+        // public Jeopardy pack is absent, but the legacy menu still renders.
+        // Do not start an empty round or call an uninitialized chooser.
+        showNotice("TRIVIA PACK MISSING",
+                   "Install the general questions pack to use Solo or Quizmaster.",
+                   "BACK TO MENU", triviaui::ActionAwsHome);
+        break;
+      }
       if (value == 0) {
         go(View::Quizmaster);
         deal();
