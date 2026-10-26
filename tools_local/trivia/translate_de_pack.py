@@ -198,6 +198,8 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
         spent = float(json.loads(cost_file.read_text(encoding="utf-8"))["spent_usd"])
         if not math.isfinite(spent) or spent < 0:
             raise TranslationError("Invalid saved cost ledger")
+    if max_cost_usd is not None and not cost_file.exists():
+        cost_file.write_text(json.dumps({"spent_usd": 0.0}), encoding="utf-8")
     # Reserve conservatively for the next request; account-level limits remain authoritative.
     request_reserve = 0.10
     # In a pilot, allow spare diverse candidates to replace questions whose
@@ -219,6 +221,9 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
                 break
             accepted = False
             for attempt in range(4):
+                if max_cost_usd is not None and spent + request_reserve > max_cost_usd:
+                    print(f"Budget stop during retries: USD {spent:.6f}", flush=True)
+                    return generated, len(done), len(source)
                 try:
                     if max_cost_usd is None:
                         translated = translate_one(original, model, api_key)
