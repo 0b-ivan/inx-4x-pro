@@ -52,6 +52,10 @@ Only these bounded JSON tuples are accepted (token below abbreviated):
 - Place: ship index 0..4, bow 0..99, horizontal 0 or 1. The X4 applies the
   existing core's board and collision checks against the browser's draft.
 - Randomize: creates a valid browser fleet through the same Battleship core.
+  Each session initializes its own private RNG state with the ESP32 hardware
+  random source; repeated randomizations advance this state. Fleet locations
+  cannot be reconstructed from the public command revision or a hardcoded seed.
+  Simulator/host testing may use a deterministic injected seed.
 - Ready: all five ships must form a valid fleet. Browser readiness and X4
   readiness are tracked independently at the activity layer, allowing both
   placement UIs to be used at the same time. The X4 fleet remains a local draft
