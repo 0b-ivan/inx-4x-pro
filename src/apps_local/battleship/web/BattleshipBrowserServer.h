@@ -42,6 +42,7 @@ class Server final {
   bool hotspot() const { return mode_ == NetworkMode::Hotspot; }
   bool clientSeen() const { return clientSeen_; }
   const char* ssid() const { return ssid_.c_str(); }
+  const char* password() const { return password_.c_str(); }
   const char* ip() const { return ip_.c_str(); }
   const char* url() const { return url_.c_str(); }
 
@@ -85,6 +86,7 @@ class Server final {
   bool clientSeen_ = false;
   std::string opponentName_ = "X4 PRO";
   std::string ssid_;
+  std::string password_;
   std::string ip_;
   std::string url_;
 };
