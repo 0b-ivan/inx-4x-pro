@@ -117,3 +117,39 @@ text = log.read_text(errors="replace")
 assert "Autostart into TRIVIA" in text, "Trivia Activity not entered"
 print("PASS X4 Pro AWS study SDL: menu -> wrong -> Review Missed -> correct, progress persisted")
 PY
+
+# Re-enter the real activity and select the *other* installed certification.
+# The second question's correct response is B, and it has its own progress
+# state. This is an end-to-end guarantee that an SD pack selection isn't just
+# cosmetic and never modifies another certification's answers.
+secondScript="8200:TAP:240,520,110;10000:TAP:240,230,110"  # second pack
+secondScript+=";11800:TAP:240,240,110"  # study
+secondScript+=";13600:TAP:370,750,110"  # first option
+secondScript+=";15400:TAP:370,750,110"  # second option
+secondScript+=";17200:TAP:80,750,110"   # mark B
+secondScript+=";19000:TAP:390,750,110"  # grade correct
+secondScript+=";21500:QUIT"
+if ! env CROSSPLAY_AUTOSTART=TRIVIA CROSSPOINT_SIM_SD="$tmp/sd" \
+  CROSSPOINT_SIM_INPUT_SCRIPT="$secondScript" \
+  CROSSPOINT_SIM_SCREENSHOTS="11000:.pio/aws-study-ui-smoke/saa-menu.bmp;20500:.pio/aws-study-ui-smoke/saa-correct.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 \
+  xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 30s "$bin" >".pio/aws-study-ui-smoke/second.log" 2>&1; then
+  echo "FAIL: SAA-C03 second study session"
+  tail -100 .pio/aws-study-ui-smoke/second.log
+  exit 1
+fi
+python3 - "$tmp/sd/trivia/aws" .pio/aws-study-ui-smoke <<'PY'
+from pathlib import Path
+import hashlib, sys
+root, screenshots = map(Path, sys.argv[1:])
+d = (root / "DOP-C02.state").read_bytes()
+s = (root / "SAA-C03.state").read_bytes()
+assert d == b"\x01", f"Opening SAA-C03 altered DOP-C02 progress: {d.hex()}"
+assert s == b"\x01", f"SAA-C03 should have independent correct-answer progress: {s.hex()}"
+assert (root / "DOP-C02.state.id").exists()
+assert (root / "SAA-C03.state.id").exists()
+assert (screenshots / "saa-menu.bmp").stat().st_size > 1000
+assert (screenshots / "saa-correct.bmp").stat().st_size > 1000
+print("PASS X4 Pro AWS study SDL: DOP-C02 and SAA-C03 independent selections/progress")
+PY
