@@ -32,6 +32,13 @@ jobs:
           curl -fsSL --retry 3 --max-time 90 https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat -o "$RUNNER_TEMP/trivia/pack.dat"
           echo "a17435136122ce1d2485d4c4c30e58206e6dffc88b819e0d4c646081b485f9cf  $RUNNER_TEMP/trivia/pack.dat" | sha256sum -c -
           python3 tools_local/trivia/export_pack.py --pack "$RUNNER_TEMP/trivia/pack.dat" --out "$RUNNER_TEMP/trivia/source-en.jsonl"
+      - name: Restore previous checkpoint when provided
+        if: vars.TRIVIA_BATCH_RESUME_RUN != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESUME_RUN: ${{ vars.TRIVIA_BATCH_RESUME_RUN }}
+        run: |
+          gh run download "$RESUME_RUN" --repo "$GITHUB_REPOSITORY" --name trivia-de-5000-unreviewed --dir "$RUNNER_TEMP/trivia"
       - name: Translate 5000 new drafts (not approved)
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -43,6 +50,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: trivia-de-5000-unreviewed
-          path: ${{ runner.temp }}/trivia/questions-de-draft.jsonl
+          path: |
+            ${{ runner.temp }}/trivia/questions-de-draft.jsonl
+            ${{ runner.temp }}/trivia/questions-de-draft.jsonl.cost.json
           if-no-files-found: ignore
           retention-days: 30
