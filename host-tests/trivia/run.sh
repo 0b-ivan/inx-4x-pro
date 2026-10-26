@@ -60,7 +60,7 @@ python3 "$TOOLS/test_aws_study.py"
 # Cross-language check: build a complete synthetic 150-question pack with the
 # production Python builder and read it using the actual firmware C++ reader.
 # This does not contain or fetch any purchased quiz content.
-"\${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC \
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC \
   test_aws_realpack.cpp "$SRC/AwsStudyPack.cpp" "$SRC/TriviaCore.cpp" \
   -o "$BUILD_DIR/test_aws_realpack"
 python3 - "$BUILD_DIR" "$TOOLS" <<'PY'
