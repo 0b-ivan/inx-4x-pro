@@ -459,6 +459,106 @@ void TriviaActivity::deal() {
   requestUpdate();
 }
 
+void TriviaActivity::awsDeal() {
+  uint32_t index = 0;
+  awsHasQuestion_ = false;
+  if (!awsChooser_.next(index, awsDomains_, awsReviewMissed_) ||
+      !awsPack_.read(index, awsQuestion_)) {
+    showNotice("NO AWS QUESTIONS",
+               awsReviewMissed_ ? "No previously missed questions in your enabled domains."
+                                : "No matching questions. Enable more AWS domains.",
+               "DOMAINS", triviaui::ActionAwsDomains);
+    return;
+  }
+  awsCurrent_ = index;
+  awsHasQuestion_ = true;
+  awsPageStart_ = 0;
+  awsOption_ = 0;
+  awsSelected_ = 0;
+  awsAnswerCorrect_ = false;
+  awsState_.setFlag(index, trivia::kSeen);
+  go(View::AwsQuestion);
+}
+
+const char* TriviaActivity::awsPageSource() const {
+  switch (view_) {
+    case View::AwsQuestion: return awsQuestion_.question();
+    case View::AwsOption: return awsQuestion_.option(awsOption_);
+    case View::AwsExplanation: return awsQuestion_.explanation();
+    default: return "";
+  }
+}
+
+void TriviaActivity::awsBuildPage() {
+  const char* text = awsPageSource();
+  const trivia::AwsTextPage page = trivia::awsTextPage(
+      text, awsPageStart_, kAwsPageCharacters);
+  uint32_t bytes = page.length;
+  if (bytes >= sizeof(awsPageBuffer_)) bytes = sizeof(awsPageBuffer_) - 1;
+  if (bytes != 0) std::memcpy(awsPageBuffer_, text + page.start, bytes);
+  awsPageBuffer_[bytes] = '\0';
+  awsMore_ = page.more;
+}
+
+void TriviaActivity::awsSubmit() {
+  // Marking is deliberate even for single-choice; a missed tap cannot
+  // silently count as a wrong answer or advance to the next question.
+  if (!awsHasQuestion_ || awsSelected_ == 0) return;
+  awsAnswerCorrect_ = awsQuestion_.evaluate(awsSelected_);
+  awsScore_.record(awsAnswerCorrect_);
+  if (!awsAnswerCorrect_) awsState_.setFlag(awsCurrent_, trivia::kAwsMissed);
+  awsPageStart_ = 0;
+  go(View::AwsExplanation);
+}
+
+void TriviaActivity::awsNextPage() {
+  if (!awsHasQuestion_) return;
+  const trivia::AwsTextPage page =
+      trivia::awsTextPage(awsPageSource(), awsPageStart_, kAwsPageCharacters);
+  if (page.more && page.length > 0) {
+    awsPageStart_ += page.length;
+    requestUpdate();
+    return;
+  }
+  if (view_ == View::AwsQuestion) {
+    awsPageStart_ = 0;
+    go(View::AwsOption);
+  } else if (view_ == View::AwsOption) {
+    if (awsOption_ + 1 < awsQuestion_.optionCount()) {
+      ++awsOption_;
+      awsPageStart_ = 0;
+      requestUpdate();
+    } else {
+      awsSubmit();
+    }
+  } else if (view_ == View::AwsExplanation) {
+    awsDeal();
+  }
+}
+
+void TriviaActivity::awsPreviousPage() {
+  if (view_ != View::AwsOption) return;
+  if (awsPageStart_ > 0) {
+    uint32_t previous = 0, cursor = 0;
+    while (cursor < awsPageStart_) {
+      previous = cursor;
+      const trivia::AwsTextPage page =
+          trivia::awsTextPage(awsPageSource(), cursor, kAwsPageCharacters);
+      if (page.length == 0) break;
+      cursor += page.length;
+    }
+    awsPageStart_ = previous;
+    requestUpdate();
+  } else if (awsOption_ > 0) {
+    --awsOption_;
+    awsPageStart_ = 0;
+    requestUpdate();
+  } else {
+    awsPageStart_ = 0;
+    go(View::AwsQuestion);
+  }
+}
+
 void TriviaActivity::routeAction(const int action, const int value) {
   switch (action) {
     case triviaui::ActionGetPack:
