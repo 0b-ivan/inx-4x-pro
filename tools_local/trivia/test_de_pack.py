@@ -139,6 +139,13 @@ class GermanTriviaPackTests(unittest.TestCase):
         self.assertEqual(len(translate_de_pack.pilot_candidates(source, 4)), 4)
         self.assertEqual(translate_de_pack.pilot_candidates(source, 2, {"0","1","2","3","4"}), [])
 
+    def test_normalize_unsupported_smart_punctuation(self):
+        text = '„München“ – die Stadt … 12\u202fkm'
+        self.assertEqual(translate_de_pack.normalize_display_punctuation(text),
+                         '"München" - die Stadt ... 12 km')
+        self.assertEqual(translate_de_pack.normalize_display_punctuation("für"), "für")
+        self.assertEqual(translate_de_pack.normalize_display_punctuation("Österreich"), "Österreich")
+
     def test_openrouter_requests_strict_structured_json(self):
         supplied = {k: self.trans[k] for k in ("q", "a", "alt", "w")}
         fake_response = {"choices": [{"message": {"content":
