@@ -7,16 +7,19 @@ namespace triviaui {
 namespace fui = freeink::ui;
 
 struct AwsMenuModel {
+  bool german = false;
   uint32_t count = 0;
   uint32_t seen = 0;
   uint8_t enabled = trivia::kAwsAllDomains;
 };
 
 struct AwsDomainsModel {
+  bool german = false;
   uint8_t enabled = trivia::kAwsAllDomains;
 };
 
 struct AwsPageModel {
+  bool german = false;
   const char* text = "";
   const char* headline = "";
   const char* subtitle = "";
