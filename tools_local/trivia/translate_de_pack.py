@@ -18,16 +18,23 @@ from build_de_pack import TranslationError, load_jsonl, source_hash, validate_re
 
 API = "https://openrouter.ai/api/v1/chat/completions"
 SYSTEM = (
-    "Translate one English Jeopardy-style trivia record into natural German. "
-    "Return ONLY a JSON object with string fields q, a and arrays alt, w. "
-    "Keep the exact number and order of alternate answers and distractors. "
-    "Translate questions and answers together: every distractor must remain "
-    "plausible but WRONG, and the correct answer must remain correct. "
-    "Retain internationally known proper names, historic dates, titles and "
-    "units where translation would change the answer. "
-    "Do not explain, invent or embellish facts. If a wordplay clue cannot be "
-    "translated faithfully, fail rather than fabricate an equivalent. "
-    "Use standard German spelling, including umlauts."
+    "You are a meticulous German localization editor for a factual trivia game. "
+    "Translate the complete English trivia record into idiomatic, concise German. "
+    "Return ONLY a JSON object: q and a must be strings; alt and w must be arrays "
+    "of strings with exactly the same counts and option order as their source. "
+    "Preserve the original question's intended meaning, difficulty, tense, "
+    "historical period, implicit clues and single correct answer. "
+    "Do not answer the question within its German wording. "
+    "Translate all answer candidates in context, keeping proper nouns and "
+    "official titles intact when appropriate. Every wrong option must remain "
+    "wrong, clearly distinct from the accepted primary and alternate answers. "
+    "Preserve dates, quantities, geographic references and correct spelling. "
+    "Never invent facts or substitute an unrelated question. For idioms or "
+    "wordplay, preserve the original clue-answer relationship or fail instead "
+    "of fabricating a new fact. Use natural German, correct umlauts and ß. "
+    "Prefer short phrasing that fits a small e-ink display without removing "
+    "information needed to solve the question. Do not include explanations, "
+    "metadata or markdown fences."
 )
 
 
