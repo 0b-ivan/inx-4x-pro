@@ -116,6 +116,27 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.12
+
+            **German Trivia questions via Wi-Fi and separate SD data pack**
+
+            The German-language Trivia menu offers GET GERMAN QUESTIONS when
+            it currently falls back to English. Download installs the
+            data-only trivia-de-pack prerelease to /trivia/pack-de.dat.
+            The existing /trivia/pack.dat English questions and progress
+            remain untouched. The XTRIVIA language flag is validated before
+            replacing the destination.
+
+            This data pack currently contains 3,344 German questions, with
+            machine-translated early-access entries needing editorial review.
+            No question data rides inside the OTA firmware image.
+
+            **Current main changes included**
+
+            Built on all latest main commits, including centralized German
+            UI localization, ESP32 reset-reason diagnostics and corrected
+            CI and release automation.
+
             ### What is new in 1.16.11
 
             **German UI localization and review safeguards**
