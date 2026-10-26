@@ -38,7 +38,7 @@ constexpr const char* kGermanPartPath = "/trivia/pack-de.dat.part";
 // deleted on exit, so leaving Trivia and coming back silently put a player who
 // had chosen Level 4 back on "Any" with nothing on screen to say so.
 constexpr const char* kPrefsPath = "/trivia/prefs";
-constexpr const char* kSelectedStudyDeck = "/trivia/decks/selected";
+constexpr const char* kSelectedStudyDeck = "/trivia/study-selected";
 constexpr uint32_t kStudyPathCapacity = 96;
 constexpr uint32_t kAwsPageCharacters = 260;
 
@@ -154,6 +154,10 @@ bool TriviaActivity::openPack() {
 
 void TriviaActivity::scanStudyDecks() {
   deckCatalog_.clear();
+  // AWS packs stay in /trivia/aws, and unrelated study decks in /trivia/decks.
+  // Include both in one selector without moving private question content.
+  for (const String& filename : Storage.listFiles(trivia::kAwsStudyDeckFolder, 160))
+    deckCatalog_.addAwsFile(filename.c_str());
   for (const String& filename : Storage.listFiles(trivia::kStudyDeckFolder, 160))
     deckCatalog_.addFile(filename.c_str());
   selectedDeck_ = 0;
@@ -741,7 +745,7 @@ void TriviaActivity::routeAction(const int action, const int value) {
         scanStudyDecks();
         if (!deckCatalog_.count()) {
           showNotice("NO STUDY PACKS",
-                     "Copy a certificate .dat pack to /trivia/decks on your SD card.",
+                     "Place AWS certificates in /trivia/aws or other packs in /trivia/decks.",
                      "BACK", triviaui::ActionAwsHome);
         } else {
           // Even with one certificate, first show the explicit selection.

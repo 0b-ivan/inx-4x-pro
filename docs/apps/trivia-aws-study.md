@@ -9,18 +9,22 @@ mit englischen/deutschen Allgemeinwissensfragen bleibt unverändert.
 Das Zertifikat bestimmt den Dateinamen. Pro Zertifikat eine Datei:
 
 ```text
-/trivia/decks/
-  DOP-C02.dat         # AWS DevOps Engineer Professional (englische Fragen)
-  DOP-C02.topics      # sechs fachliche Themenbezeichnungen
-  SAA-C03.dat         # zweites Zertifikat
-  SAA-C03.topics
-  LINUX.dat           # weitere eigene Übungsfragen
-  LINUX.topics
+/trivia/
+  aws/
+    DOP-C02.dat       # AWS DevOps Engineer Professional
+    DOP-C02.topics    # sechs fachliche Themenbezeichnungen
+    SAA-C03.dat       # AWS Solutions Architect Associate
+    SAA-C03.topics
+  decks/
+    LINUX.dat         # andere Übungsfragen
+    LINUX.topics
 ```
 
 **Kein `pack.dat` und keine Migration alter Lernstände erforderlich.**
-Der Ordner /trivia/decks/ ist auf der SD-Karte anzulegen. Die Firmware erkennt
-die Zertifikate beim Start und beim erneuten Öffnen der Paketauswahl.
+Der AWS-Ordner **/trivia/aws/** bleibt erhalten. AWS-Zertifikate liegen dort
+mit ihrem Zertifikatsnamen, nicht unter `pack.dat`. Andere Themen können
+weiterhin unter `/trivia/decks/` liegen. Die Firmware durchsucht beide
+Verzeichnisse beim Öffnen der Paketauswahl.
 
 Erlaubt sind 1–30 ASCII-Zeichen A–Z, a–z, 0–9, `_` und `-`.
 Maximal 12 Pakete werden gleichzeitig in der Auswahlliste angezeigt; je
@@ -44,7 +48,7 @@ python3 tools_local/trivia/build_aws_study.py \
 ```
 
 Der Befehl erzeugt `DOP-C02.dat` und `DOP-C02.topics`. Übertrage beide
-Dateien in `/trivia/decks/` auf die X4-Pro-SD-Karte.
+Dateien in **`/trivia/aws/`** auf die X4-Pro-SD-Karte.
 
 Nach der Installation: **TRIVIA → STUDY PACKS → DOP-C02**.
 Im Gerätemenü kannst du Fragen üben, Fehlerfragen wiederholen, Themen filtern

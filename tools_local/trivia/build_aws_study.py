@@ -3,7 +3,8 @@
 
 No source questions, raw HAR files, images, or resulting .dat should ever be
 committed to the public repository. Copy the output CERTIFICATE.dat and its
-CERTIFICATE.topics sidecar to /trivia/decks on SD. No network is used.
+CERTIFICATE.topics sidecar to /trivia/aws on SD for AWS certificates,
+or /trivia/decks for other topics. No network is used.
 """
 import argparse
 import hashlib

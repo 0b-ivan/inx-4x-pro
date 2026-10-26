@@ -24,13 +24,15 @@ bool validExtension(const char* ext) {
 }
 } // namespace
 
-bool StudyDeckCatalog::add(const char* slug) {
+bool StudyDeckCatalog::add(const char* slug, const bool aws) {
   if (!validSlug(slug) || count_ >= kStudyMaxDecks || find(slug) >= 0) return false;
   StudyDeckEntry& target = entries_[count_++];
   std::snprintf(target.slug, sizeof(target.slug), "%s", slug);
+  target.aws = aws;
   return true;
 }
 
+// The catalog parses filenames independently of the SD implementation.
 bool StudyDeckCatalog::addFile(const char* filename) {
   if (!filename) return false;
   const uint32_t len = static_cast<uint32_t>(std::strlen(filename));
@@ -38,7 +40,16 @@ bool StudyDeckCatalog::addFile(const char* filename) {
       std::strcmp(filename + len - 4, ".dat") != 0) return false;
   char slug[kStudySlugMax + 1] = {};
   std::memcpy(slug, filename, len - 4);
-  return add(slug);
+  return add(slug, false);
+}
+bool StudyDeckCatalog::addAwsFile(const char* filename) {
+  if (!filename) return false;
+  const uint32_t len = static_cast<uint32_t>(std::strlen(filename));
+  if (len <= 4 || len > kStudySlugMax + 4 ||
+      std::strcmp(filename + len - 4, ".dat") != 0) return false;
+  char slug[kStudySlugMax + 1] = {};
+  std::memcpy(slug, filename, len - 4);
+  return add(slug, true);
 }
 
 int StudyDeckCatalog::find(const char* slug) const {
@@ -53,8 +64,9 @@ bool StudyDeckCatalog::path(uint8_t index, const char* ext, char* out,
                             uint32_t capacity) const {
   if (index >= count_ || !out || capacity == 0 || !validExtension(ext)) return false;
   const StudyDeckEntry& deck = entries_[index];
-  const int result = std::snprintf(out, capacity,
-                                   "/trivia/decks/%s%s", deck.slug, ext);
+  const int result = std::snprintf(out, capacity, "%s/%s%s",
+                                   deck.aws ? kAwsStudyDeckFolder : kStudyDeckFolder,
+                                   deck.slug, ext);
   return result >= 0 && static_cast<uint32_t>(result) < capacity;
 }
 

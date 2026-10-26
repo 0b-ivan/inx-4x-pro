@@ -11,7 +11,7 @@ test -x "$bin" || { echo "FAIL: no SDL simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL: xvfb-run is missing"; exit 1; }
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/sd/trivia/decks" ".pio/aws-study-ui-smoke"
+mkdir -p "$tmp/sd/trivia/aws" ".pio/aws-study-ui-smoke"
 log=".pio/aws-study-ui-smoke/run.log"
 export AWS_SMOKE_PRIVATE_DIR="$tmp"
 python3 - <<'PY'
@@ -30,7 +30,7 @@ row = {
 }
 input_file = root / "synthetic.jsonl"
 input_file.write_text(json.dumps(row) + "\n", encoding="utf-8")
-count, size, _ = build_aws_study.build(input_file, root / "sd/trivia/decks/DOP-C02.dat")
+count, size, _ = build_aws_study.build(input_file, root / "sd/trivia/aws/DOP-C02.dat")
 # A second independent certificate is visible in the chooser. Its progress
 # must not be modified when the learner studies the DOP-C02 questions.
 other = dict(row)
@@ -39,7 +39,7 @@ other["correct"] = [1]
 other["category"] = "Topic 1: Serverless patterns"
 other_file = root / "synthetic-other.jsonl"
 other_file.write_text(json.dumps(other) + "\n", encoding="utf-8")
-build_aws_study.build(other_file, root / "sd/trivia/decks/SAA-C03.dat")
+build_aws_study.build(other_file, root / "sd/trivia/aws/SAA-C03.dat")
 assert count == 1 and size > 50
 print("Synthetic AWS SD pack installed; no paid questions involved.")
 PY
@@ -84,7 +84,7 @@ if ! env CROSSPLAY_AUTOSTART=TRIVIA CROSSPOINT_SIM_SD="$tmp/sd" \
   exit 1
 fi
 
-python3 - "$tmp/sd/trivia/decks" .pio/aws-study-ui-smoke "$log" <<'PY'
+python3 - "$tmp/sd/trivia/aws" .pio/aws-study-ui-smoke "$log" <<'PY'
 from pathlib import Path
 import hashlib, struct, sys
 root, shots, log = map(Path, sys.argv[1:])
