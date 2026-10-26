@@ -170,6 +170,39 @@ class GermanTriviaPackTests(unittest.TestCase):
         self.assertFalse(schema["schema"]["additionalProperties"])
         self.assertGreaterEqual(body["max_tokens"], 1024)
 
+    def test_pilot_resumes_and_replaces_a_display_invalid_question(self):
+        source = []
+        for i in range(12):
+            row = dict(self.original)
+            row["id"] = f"q{i}"
+            row["a"] = f"Correct {i}"
+            row["q"] = f"Which city is number {i}?"
+            source.append(row)
+        self.src.write_text("".join(json.dumps(item) + "\\n" for item in source),
+                            encoding="utf-8")
+        first = source[0]
+        checkpoint = {"id": first["id"], "source_hash": build_de_pack.source_hash(first),
+                      "q": first["q"], "a": first["a"],
+                      "alt": [], "w": first["w"], "reviewed": False}
+        self.translated.write_text(json.dumps(checkpoint) + "\\n", encoding="utf-8")
+        sample = translate_de_pack.pilot_candidates(source, 2 * 3 + 10, {first["id"]})
+        rejected_id = sample[0]["id"]
+        attempts = []
+        def fake_translator(item, model, key):
+            attempts.append(item["id"])
+            return {"q": item["q"], "a": ("X" * 500 if item["id"] == rejected_id else item["a"]),
+                    "alt": [], "w": item["w"]}
+        with patch.object(translate_de_pack, "translate_one", fake_translator), \\
+                patch.object(translate_de_pack.time, "sleep", lambda _: None):
+            new_count, total_count, count = translate_de_pack.generate(
+                self.src, self.translated, "fake-model", "unused", limit=2)
+        self.assertEqual((new_count, total_count, count), (2, 3, 12))
+        self.assertEqual(attempts.count(rejected_id), 2)
+        output = list(build_de_pack.load_jsonl(self.translated))
+        self.assertEqual(len(output), 3)
+        self.assertEqual(len({row["id"] for row in output}), 3)
+        self.assertNotIn(rejected_id, {row["id"] for row in output})
+
     def test_draft_only_with_explicit_override(self):
         self.trans["reviewed"] = False
         self.write()
