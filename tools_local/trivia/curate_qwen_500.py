@@ -111,6 +111,20 @@ EDITS = {
     "q": "Ein französisch-kanadischer Holzfäller aus dem 19. Jahrhundert soll Legenden über welchen riesenhaften Holzfäller inspiriert haben?",
     "reason": "French-Canadian idiomatisch und präzise wiedergegeben."
   },
+  "b326216f49e428a8": {
+    "q": "Wessen Reisen nach Osten im 13. Jahrhundert hielt Rustichello da Pisa schriftlich fest?",
+    "reason": "Nutzerfeedback E8: 'nach Osten' statt 'nach dem Osten'; grammatisch und als Quizfrage formuliert."
+  },
+  "c6d50209cfa9459e": {
+    "a": "Rocky Mountains",
+    "alt": ["Rockies"],
+    "reason": "Nutzerfeedback H15: vollständiger und korrekt geschriebener deutscher Gebirgsname 'Rocky Mountains'; 'Rockies' als Synonym bleibt gültig."
+  },
+  "79942ab2044834cc": {
+    "q": "Bei allen Arten dieses Vogels wiegen ausgewachsene Tiere weniger als etwa 28,35 Gramm",
+    "reason": "Nutzerfeedback E13: metrische statt angloamerikanische Masseeinheit. Eine gewöhnliche Unze (avoirdupois) sind exakt 28,349523125 Gramm.",
+    "evidence": ["https://www.nist.gov/document/2026-hb-133-appendix-e"]
+  },
   "e4ec556b1977a1eb": {
     "q": "Am 3. Dezember 1973 näherte sich Pioneer 10 den Wolkenobergrenzen dieses Planeten auf 81.000 Meilen. Welcher Planet war es?",
     "reason": "Deutliche Pronomenbezüge; 'mostly liquid' aus alter Quellenfrage separat zu prüfen.",

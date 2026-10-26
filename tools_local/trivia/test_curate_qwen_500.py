@@ -29,5 +29,20 @@ class ProposedEdits(unittest.TestCase):
         q=EDITS["c7a58d162a0b6969"]["q"]
         self.assertNotIn("Arafat",q)
         self.assertIn("1994",q)
+
+    def test_comment_marco_polo_e8(self):
+        q=EDITS["b326216f49e428a8"]["q"]
+        self.assertIn("Reisen nach Osten",q)
+        self.assertNotIn("nach dem Osten",q)
+        self.assertTrue(q.endswith("?"))
+    def test_comment_rocky_mountains_h15(self):
+        proposal=EDITS["c6d50209cfa9459e"]
+        self.assertEqual(proposal["a"],"Rocky Mountains")
+        self.assertIn("Rockies",proposal["alt"])
+    def test_comment_metric_hummingbird_e13(self):
+        proposal=EDITS["79942ab2044834cc"]
+        self.assertIn("28,35 Gramm",proposal["q"])
+        self.assertNotIn("Unze",proposal["q"])
+
 if __name__=="__main__":
     unittest.main()

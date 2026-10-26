@@ -33,6 +33,14 @@ class NumericSemanticsTests(unittest.TestCase):
         self.assertClean("12 inches","30,48 Zentimeter")
     def test_pounds_to_kilos(self):
         self.assertClean("10 pounds","4,536 Kilogramm")
+    def test_avoirdupois_ounce_to_metric_grams(self):
+        self.assertClean("less than 1 ounce", "weniger als etwa 28,35 Gramm")
+        self.assertFlagged("less than 1 ounce", "weniger als 1 Gramm")
+        self.assertFlagged("less than 1 ounce", "weniger als 30 Gramm")
+    def test_strict_conversion_rounding(self):
+        self.assertClean("10 miles","16,09 Kilometer")
+        self.assertFlagged("10 miles","16,5 Kilometer")
+        self.assertClean("450 pounds","204 Kilogramm")
     def test_pound_ambiguous(self):
         self.assertFlagged("10 pounds","5 Pfund")
     def test_temperature(self):

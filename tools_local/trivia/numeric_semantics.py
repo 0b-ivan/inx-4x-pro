@@ -27,12 +27,12 @@ UNIT_RX = {
         r"(?<!\w)(?P<num>\d+(?:[.,]\d+)*)\s*(?:-| )?\s*"
         r"(?P<unit>feet|foot|ft|inches|inch|miles|mile|mi|kilometers|kilometres|"
         r"km|centimeters|centimetres|centimeter|centimetre|cm|meters|metres|meter|metre|m|pounds|pound|lbs|lb|kg|kilograms|"
-        r"kilogram|°f|°c|fahrenheit|celsius)\b", re.I),
+        r"kilogram|ounce|ounces|oz|°f|°c|fahrenheit|celsius)\b", re.I),
     "de": re.compile(
         r"(?<!\w)(?P<num>\d+(?:[.,]\d+)*)\s*(?:-| )?\s*"
         r"(?P<unit>fuß|fuss|feet|ft|zoll|meilen|meile|kilometer|kilometern|"
         r"km|zentimeter|zentimetern|cm|meter|metern|m|pfund|kilogramm|kilogrammen|kg|"
-        r"°f|°c|fahrenheit|celsius)\b", re.I)
+        r"gramm|grammen|gram|grams|g|°f|°c|fahrenheit|celsius)\b", re.I)
 }
 UNITS = {
     "ft": ("length", Decimal("0.3048")),
@@ -71,6 +71,14 @@ UNITS = {
     "lb": ("mass", Decimal("0.45359237")),
     "lbs": ("mass", Decimal("0.45359237")),
     "pfund": ("mass", Decimal("0.5")), # German Pfund is 500 g; context ambiguous!
+    "ounce": ("mass", Decimal("0.028349523125")),
+    "ounces": ("mass", Decimal("0.028349523125")),
+    "oz": ("mass", Decimal("0.028349523125")),
+    "g": ("mass", Decimal("0.001")),
+    "gram": ("mass", Decimal("0.001")),
+    "grams": ("mass", Decimal("0.001")),
+    "gramm": ("mass", Decimal("0.001")),
+    "grammen": ("mass", Decimal("0.001")),
     "kg": ("mass", Decimal("1")),
     "kilogram": ("mass", Decimal("1")),
     "kilograms": ("mass", Decimal("1")),
@@ -176,9 +184,10 @@ def _conversion_notes(original, translated):
                 expected = a * Decimal(9) / Decimal(5) + Decimal(32)
             else:
                 continue
-            # Include rounding uncertainty in BOTH source and translated quantities.
-            source_tolerance = (aincrement * afactor / bfactor / 2) if dim == bdim and dim not in ("temperature_c","temperature_f") else aincrement / 2
-            tolerance = (bincrement / 2) + source_tolerance
+            # A translated quantity must match the rounded conversion to
+            # the target's precision. Do not add half of the source quantity
+            # as tolerance: that would silently allow '10 miles' -> '16.5 km'.
+            tolerance = bincrement / Decimal(2) + Decimal("0.0000001")
             if abs(expected - b) <= tolerance:
                 av, bv = format(a.normalize(), "f"), format(b.normalize(), "f")
                 if src[av] and dst[bv] and (av != bv or au != bu):
