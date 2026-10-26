@@ -39,6 +39,22 @@ jobs:
           RESUME_RUN: ${{ vars.TRIVIA_BATCH_RESUME_RUN }}
         run: |
           gh run download "$RESUME_RUN" --repo "$GITHUB_REPOSITORY" --name trivia-de-5000-unreviewed --dir "$RUNNER_TEMP/trivia"
+      - name: Verify OpenRouter API budget is externally capped
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          key = os.environ.get('OPENROUTER_API_KEY', '')
+          if not key: raise SystemExit('Missing OPENROUTER_API_KEY')
+          req = urllib.request.Request('https://openrouter.ai/api/v1/key', headers={'Authorization': 'Bearer ' + key})
+          with urllib.request.urlopen(req, timeout=20) as response: data = json.load(response)['data']
+          limit = data.get('limit')
+          usage = data.get('usage', 0)
+          if limit is None or not isinstance(limit, (int, float)) or not isinstance(usage, (int, float)) or limit - usage > 5.0 or limit - usage <= 0:
+              raise SystemExit('Refusing paid run: OpenRouter key must have <= $5 remaining hard limit')
+          print('External OpenRouter key limit verified (remaining <= USD 5)')
+          PY
       - name: Translate 5000 new drafts (not approved)
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
