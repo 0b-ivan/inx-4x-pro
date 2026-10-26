@@ -48,6 +48,7 @@ class AwsPack {
  public:
   bool open(ByteSource& source);
   uint32_t count() const { return count_; }
+  uint32_t fingerprint() const { return fingerprint_; }
   bool isOpen() const { return source_ != nullptr; }
   bool domainAt(uint32_t index, uint8_t& domain) const;
   bool read(uint32_t index, AwsQuestion& out) const;
@@ -56,6 +57,7 @@ class AwsPack {
   bool extent(uint32_t index, uint32_t& absolute, uint32_t& length) const;
   ByteSource* source_ = nullptr;
   uint32_t count_ = 0;
+  uint32_t fingerprint_ = 0;
   uint32_t indexAt_ = 0;
   uint32_t base_ = 0;
 };
