@@ -1,0 +1,1 @@
+500 Qwen German trivia draft experiment, 2026-10-26. Reuse 20 previous Qwen translations, generate exactly 480 new, audit flagged items selectively, budget guards, no release.
