@@ -23,7 +23,9 @@ jobs:
         with:
           python-version: '3.13'
       - name: Offline QA
-        run: python3 tools_local/trivia/test_de_pack.py
+        run: |
+          python3 tools_local/trivia/test_de_pack.py
+          python3 tools_local/trivia/test_batch_budget.py
       - name: Obtain pinned English source
         shell: bash
         run: |
