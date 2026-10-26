@@ -69,7 +69,6 @@ Server::~Server() { stop(); }
 bool Server::begin(const NetworkMode mode) {
   if (running_) return true;
 
-  seat_.begin(&randomWord);
   opponentName_ = playerweb::displayName();
   mode_ = mode;
   clientSeen_ = false;
@@ -88,6 +87,10 @@ bool Server::begin(const NetworkMode mode) {
     releaseDevMode();
     return false;
   }
+
+  // ESP32 RF has started in AP/STA mode; initialize seat capabilities only
+  // after it can contribute fresh entropy to esp_random().
+  seat_.begin(&randomWord);
 
   if (!startMdns()) LOG_DBG("BSHIPWEB", "mDNS unavailable; IP fallback remains usable");
 
