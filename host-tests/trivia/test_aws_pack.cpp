@@ -157,6 +157,25 @@ void checkPaging() {
   assert(b.start == 5 && b.length == 1 && !b.more);
   auto c = awsTextPage(text, 4, 1); // continuation byte: rewind
   assert(c.start == 3 && c.length == 2 && c.more);
+
+  // End the first page at a word boundary rather than splitting "autoscaling".
+  const char* words = "AWS DevOps tests several long deployment strategy options "
+                      "with autoscaling and blue green deployments.";
+  const auto first = awsTextPage(words, 0, 63);
+  assert(first.more && first.length > 0);
+  assert(words[first.start + first.length - 1] == ' ');
+  const auto second = awsTextPage(words, first.start + first.length, 63);
+  assert(second.start == first.start + first.length);
+  assert(second.length > 0 && !second.more);
+
+  // A long unbroken ARN must still move forward and never loop.
+  const char* arn = "arn:aws:iam::123456789012:role/MyLongUnbrokenRoleNameHere";
+  uint32_t at = 0;
+  while (at < std::strlen(arn)) {
+    auto slice = awsTextPage(arn, at, 13);
+    assert(slice.start == at && slice.length > 0);
+    at += slice.length;
+  }
 }
 
 int main() {
