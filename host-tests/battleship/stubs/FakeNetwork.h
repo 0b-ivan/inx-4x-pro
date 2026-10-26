@@ -31,8 +31,12 @@ struct IPAddress {
 struct FakeWifi {
   bool available = true;
   int currentMode = 0;
+  std::string apPassword;
   void mode(int mode) { currentMode = mode; }
-  bool softAP(const char*, const char*, int, bool, int) { return available; }
+  bool softAP(const char*, const char* password, int, bool, int) {
+    apPassword = password ? password : "";
+    return available;
+  }
   void softAPdisconnect(bool) {}
   IPAddress softAPIP() { return {}; }
   IPAddress localIP() { return {}; }
