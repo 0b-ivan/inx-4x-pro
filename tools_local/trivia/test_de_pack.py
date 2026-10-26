@@ -2,6 +2,7 @@
 """Offline regression tests for validated German question packs (no API calls)."""
 import json
 import io
+import os
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -369,6 +370,32 @@ class GermanTriviaPackTests(unittest.TestCase):
         n, _, _ = build_de_pack.build(self.src, self.translated,
                                       self.root / "sample-draft.dat", allow_draft=True)
         self.assertEqual(n, 1)
+
+
+    def test_resume_skips_saved_display_rejections_without_api_calls(self):
+        second = dict(self.original)
+        second["id"] = "different-record"
+        self.src.write_text(
+            json.dumps(self.original) + "\n" + json.dumps(second) + "\n",
+            encoding="utf-8")
+        self.translated.write_text("", encoding="utf-8")
+        reject_file = self.root / "reject-checkpoint.jsonl"
+        reject_file.write_text(json.dumps({
+            "id": self.original["id"],
+            "source_hash": build_de_pack.source_hash(self.original),
+            "reason": "answer too wide for Quizmaster display"
+        }) + "\n", encoding="utf-8")
+        content = {k: self.trans[k] for k in ("q", "a", "alt", "w")}
+        with (patch.dict(os.environ, {"TRIVIA_REJECTS_FILE": str(reject_file)}),
+              patch.object(translate_de_pack, "translate_one",
+                           return_value=content) as translator):
+            n, count, _ = translate_de_pack.generate(
+                self.src, self.translated, "test-model", "not-a-key", limit=1)
+        self.assertEqual((n, count), (1, 1))
+        self.assertEqual(translator.call_count, 1)
+        saved = list(build_de_pack.load_jsonl(self.translated))
+        self.assertEqual(saved[0]["id"], second["id"])
+        self.assertEqual(len(list(build_de_pack.load_jsonl(reject_file))), 1)
 
     def test_english_state_filename_is_not_reused(self):
         # English /trivia/pack.state is not a suitable progress file for the

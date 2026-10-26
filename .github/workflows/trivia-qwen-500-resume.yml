@@ -1,0 +1,135 @@
+# Resume only: reuse 247 German Qwen drafts and avoid 11 paid retries.
+# Never publish an unreviewed language pack.
+name: German Trivia Qwen 500 Resume
+on:
+  push:
+    branches:
+      - experiment/trivia-de-100-20261026
+    paths:
+      - .github/trivia-qwen-500-resume-trigger.txt
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: german-trivia-qwen-500-resume
+  cancel-in-progress: false
+
+jobs:
+  resume:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    name: Resume saved 247 Qwen drafts, finish 500, selective GPT editorial QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - name: Checkout experiment
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Offline tests before paid API calls
+        run: |
+          python3 tools_local/trivia/test_numerical_equivalence.py
+          python3 tools_local/trivia/test_de_pack.py
+      - name: Fetch checksum-verified English quiz pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia-qwen500"
+          curl -fsSL --retry 3 --max-time 90 \
+            'https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat' \
+            -o "$RUNNER_TEMP/trivia-qwen500/pack.dat"
+          printf '%s  %s\n' \
+            'a17435136122ce1d2485d4c4c30e58206e6dffc88b819e0d4c646081b485f9cf' \
+            "$RUNNER_TEMP/trivia-qwen500/pack.dat" | sha256sum -c -
+          python3 tools_local/trivia/export_pack.py \
+            --pack "$RUNNER_TEMP/trivia-qwen500/pack.dat" \
+            --out "$RUNNER_TEMP/trivia-qwen500/source-en.jsonl"
+      - name: Recover 247 previous translations and recorded API spending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 40320283970 --repo "$GITHUB_REPOSITORY" \
+            --name trivia-qwen-500-unapproved-audit \
+            --dir "$RUNNER_TEMP/trivia-qwen500"
+          test "$(wc -l < "$RUNNER_TEMP/trivia-qwen500/qwen-500-drafts.jsonl")" -eq 247
+          test "$(wc -l < "$RUNNER_TEMP/trivia-qwen500/translation-usage.jsonl")" -eq 249
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])/"trivia-qwen500"
+          records=[json.loads(line) for line in (root/"qwen-500-drafts.jsonl").read_text(encoding="utf-8").splitlines()]
+          assert len(records)==len({x["id"] for x in records})==247
+          print("Recovered 247 unique Qwen translations. No paid retranslation required.")
+          PY
+      - name: Seed rejected source IDs from failed run log
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          rejected=["b3b5e55dd9e92f71","c96f0a80fdc49e71","85bfcb9e595cbc86","a2155388fa91cee0","f0f459e0a704c810","6a0a9edc5fcbde12","9537fa567a8844f3","20bce79336040cba","eb325700d23dcba4","9e6c76f688b56598","b155c709abc1dc53"]
+          path=Path(os.environ["RUNNER_TEMP"])/"trivia-qwen500"/"rejected-source-ids.jsonl"
+          with path.open("w",encoding="utf-8") as output:
+              for ident in rejected:
+                  output.write(json.dumps({"id":ident,"reason":"Prior run: answer too wide for Quizmaster display"})+"\n")
+          assert len(rejected)==len(set(rejected))==11
+          print("Restored 11 rejected candidate IDs from previous run.")
+          PY
+      - name: Translate ONLY the missing 253, skipping previous rejections
+        shell: bash
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TRIVIA_USAGE_LOG: ${{ runner.temp }}/trivia-qwen500/translation-usage.jsonl
+          TRIVIA_REJECTS_FILE: ${{ runner.temp }}/trivia-qwen500/rejected-source-ids.jsonl
+          TRIVIA_SPEND_LIMIT_USD: '0.35'
+        run: |
+          set -euo pipefail
+          test -n "$OPENROUTER_API_KEY"
+          remaining="$((500 - $(wc -l < "$RUNNER_TEMP/trivia-qwen500/qwen-500-drafts.jsonl")))"
+          test "$remaining" -eq 253
+          python3 tools_local/trivia/translate_de_pack.py \
+            --src "$RUNNER_TEMP/trivia-qwen500/source-en.jsonl" \
+            --out "$RUNNER_TEMP/trivia-qwen500/qwen-500-drafts.jsonl" \
+            --model 'qwen/qwen3-235b-a22b-2507' \
+            --limit "$remaining"
+          test "$(wc -l < "$RUNNER_TEMP/trivia-qwen500/qwen-500-drafts.jsonl")" -eq 500
+      - name: Audit all 500 and selectively review risks plus 10 controls
+        shell: bash
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TRIVIA_REVIEW_USAGE_LOG: ${{ runner.temp }}/trivia-qwen500/review-usage.jsonl
+          TRIVIA_REVIEW_SPEND_LIMIT_USD: '0.35'
+        run: |
+          set -euo pipefail
+          python3 tools_local/trivia/qwen_500_experiment.py audit \
+            --source "$RUNNER_TEMP/trivia-qwen500/source-en.jsonl" \
+            --drafts "$RUNNER_TEMP/trivia-qwen500/qwen-500-drafts.jsonl" \
+            --edited "$RUNNER_TEMP/trivia-qwen500/qwen-500-ai-edited.jsonl" \
+            --report "$RUNNER_TEMP/trivia-qwen500/qwen-500-audit.jsonl" \
+            --summary "$RUNNER_TEMP/trivia-qwen500/qwen-500-summary.json" \
+            --translation-ledger "$RUNNER_TEMP/trivia-qwen500/translation-usage.jsonl" \
+            --review-ledger "$RUNNER_TEMP/trivia-qwen500/review-usage.jsonl"
+      - name: Keep all draft checkpoints, rejected IDs and spending logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivia-qwen-500-resume-unapproved
+          path: |
+            ${{ runner.temp }}/trivia-qwen500/qwen-500-drafts.jsonl
+            ${{ runner.temp }}/trivia-qwen500/qwen-500-ai-edited.jsonl
+            ${{ runner.temp }}/trivia-qwen500/qwen-500-audit.jsonl
+            ${{ runner.temp }}/trivia-qwen500/qwen-500-summary.json
+            ${{ runner.temp }}/trivia-qwen500/rejected-source-ids.jsonl
+            ${{ runner.temp }}/trivia-qwen500/translation-usage.jsonl
+            ${{ runner.temp }}/trivia-qwen500/review-usage.jsonl
+          if-no-files-found: ignore
+          retention-days: 14

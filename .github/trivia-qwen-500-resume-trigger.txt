@@ -1,0 +1,1 @@
+Resume the checkpoint from failed 500-question Qwen run 40320283970, with 247 saved drafts and 11 known rejections excluded. Target 500; no release.

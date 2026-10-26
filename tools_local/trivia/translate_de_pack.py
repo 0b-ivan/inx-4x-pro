@@ -201,19 +201,41 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
     for ident, old in done.items():
         if old.get("source_hash") != source_hash(source_by_id[ident]):
             raise TranslationError(f"source changed since draft for {ident}")
+    # Excluded IDs are explicitly tracked (and source-validated), preventing
+    # previously rejected display-incompatible candidates from being charged
+    # again when restoring a checkpoint. No exclusions in full-corpus mode.
+    rejected_path = os.getenv("TRIVIA_REJECTS_FILE")
+    prior_rejected = set()
+    if rejected_path and Path(rejected_path).exists():
+        for item in load_jsonl(rejected_path):
+            ident = item.get("id")
+            if not isinstance(ident, str) or not ident or ident in prior_rejected:
+                raise TranslationError("invalid or duplicate rejected source ID")
+            prior_rejected.add(ident)
+    if prior_rejected - set(source_by_id):
+        raise TranslationError("rejection checkpoint contains IDs absent from source")
+    if prior_rejected & set(done):
+        raise TranslationError("translation and rejection checkpoints overlap")
+    if all_questions and prior_rejected:
+        raise TranslationError("full-corpus build must not exclude source questions")
     generated = 0
     skipped = 0
+    # The fixed 10-skip threshold worked for 20-item pilots, but incorrectly
+    # aborted large quality samples. Preserve a 20% failure ceiling per run.
+    max_skipped = max(10, math.ceil(limit * 0.20))
     # In a pilot, allow spare diverse candidates to replace questions whose
     # correct answer cannot fit the actual e-ink fonts. Full corpus runs fail
     # rather than silently omitting content.
     candidates = (source if all_questions else
-                  pilot_candidates(source, min(len(source), limit * 3 + 10), done))
+                  pilot_candidates(source, min(len(source), limit * 3 + 10), set(done) | prior_rejected))
     with output.open("a", encoding="utf-8") as out:
         for original in candidates:
             ident = original["id"]
             if ident in done:
                 if done[ident].get("source_hash") != source_hash(original):
                     raise TranslationError(f"source changed since draft for {ident}")
+                continue
+            if ident in prior_rejected:
                 continue
             if not all_questions and generated >= limit:
                 break
@@ -236,8 +258,16 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
                     if not all_questions and attempt >= 1:
                         skipped += 1
                         print(f"Rejected pilot question {ident}: {error}", flush=True)
-                        if skipped > 10:
-                            raise TranslationError("Too many rejected pilot questions") from error
+                        if rejected_path:
+                            with open(rejected_path, "a", encoding="utf-8") as rejected:
+                                rejected.write(json.dumps({
+                                    "id": ident, "source_hash": source_hash(original),
+                                    "reason": str(error)[:300]}, ensure_ascii=False) + "\n")
+                        if skipped > max_skipped:
+                            raise TranslationError(
+                                f"Too many rejected pilot questions: {skipped}/{max_skipped}; "
+                                "partial translations and rejection checkpoints preserved"
+                            ) from error
                         break
                     if attempt == 3:
                         raise TranslationError(
