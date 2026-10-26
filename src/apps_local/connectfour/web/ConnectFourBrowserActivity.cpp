@@ -52,14 +52,23 @@ void ConnectFourBrowserActivity::loop() {
     if (col >= 0 && server_.deviceDrop(static_cast<uint8_t>(col))) requestUpdate();
     return;
   }
-  // Use the same physical result controls as Connect Four; rematch is
-  // authoritative on X4 and broadcasts a new round to the browser.
-  const fui::DeviceContext dc=toybox::makeTarget(renderer).deviceContext();
-  if (tapY > dc.height - toybox::kMargin - toybox::kPillHeight * 2 - toybox::kGutter * 3) {
+  // Route precisely through the result screen's registered PLAY AGAIN and
+  // DONE actions. Never interpret an arbitrary tap near the footer as rematch.
+  if (!interactionsReady_) return;
+  fui::InputSnapshot input;
+  input.touchReleased = true;
+  input.touchX = static_cast<int16_t>(tapX);
+  input.touchY = static_cast<int16_t>(tapY);
+  const fui::ActionEvent event = interactions_.route(input);
+  if (event.action == c4ui::ActionAgain) {
     if (server_.deviceRematch()) requestUpdate();
+  } else if (event.action == c4ui::ActionDone) {
+    server_.stop();
+    finish();
   }
 }
 void ConnectFourBrowserActivity::drawJoin() {
+  interactionsReady_ = false;
   renderer.clearScreen();
   const auto& m = UITheme::getInstance().getMetrics();
   const int width = renderer.getScreenWidth();
@@ -94,8 +103,8 @@ void ConnectFourBrowserActivity::drawGame() {
   renderer.clearScreen();
   auto target=toybox::makeTarget(renderer);
   const fui::InputSnapshot noInput{};
-  toybox::Interactions interactions;
-  toybox::Frame frame(target,target.deviceContext(),noInput,interactions);
+  interactionsReady_ = false;
+  toybox::Frame frame(target,target.deviceContext(),noInput,interactions_);
   toybox::Screen surface(frame);
   const c4::Game& game=server_.round().game();
   if (!c4::over(game)) {
@@ -116,6 +125,7 @@ void ConnectFourBrowserActivity::drawGame() {
     else if (game.outcome==c4::Outcome::DarkWins) c4::winningLine(game,c4::kDark,model.line);
     c4ui::buildResult(surface,model);
   }
+  interactionsReady_ = true;
   const auto labels=mappedInput.mapLabels("Back","","","");
   GUI.drawButtonHints(renderer,labels.btn1,labels.btn2,labels.btn3,labels.btn4);
   renderer.displayBuffer();

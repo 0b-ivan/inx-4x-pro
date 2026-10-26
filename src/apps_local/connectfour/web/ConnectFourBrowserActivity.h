@@ -1,6 +1,7 @@
 #pragma once
 #include "../../../activities/Activity.h"
 #include "ConnectFourBrowserServer.h"
+#include "../../ui/ToyboxScreen.h"
 
 // Independent activity: the solo and ESP-NOW ConnectFourActivity/LinkActivity
 // lifecycle remains unchanged. This only owns a temporary protected hotspot.
@@ -18,6 +19,8 @@ class ConnectFourBrowserActivity final : public Activity {
   void drawJoin();
   void drawGame();
   c4web::Server server_;
+  toybox::Interactions interactions_;
+  bool interactionsReady_ = false;
   bool failed_ = false;
   bool shownJoined_ = false;
   bool shownConnected_ = false;
