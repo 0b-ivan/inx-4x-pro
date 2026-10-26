@@ -10,6 +10,7 @@
 #include "../../../util/QrUtils.h"
 #include "../../ui/Toybox.h"
 #include "../../ui/ToyboxFonts.h"
+#include "../../ui/ToyboxTheme.h"
 #include "../ConnectFourScreens.h"
 
 namespace c4 = connectfour;
