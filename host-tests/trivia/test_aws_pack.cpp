@@ -99,6 +99,11 @@ void checkGoodPack() {
   assert(state.flags(1) == kSeen && state.seenCount() == 1);
   assert(!chooser.next(id, 1u << 2, true));
   assert(chooser.next(id, 1u << 2));  // normal study still sees it
+
+  // Avoid a repeat when alternatives are available within an enabled domain.
+  // A one-question review set still permits the sole eligible question.
+  assert(chooser.next(id, trivia::kAwsAllDomains, false, 1) && id != 1);
+  assert(chooser.next(id, 1u << 2, false, 1) && id == 1);
   assert(state.setFlag(1, kAwsMissed));  // another wrong attempt
   assert(chooser.next(id, 1u << 2, true) && id == 1);
   assert(state.setFlag(1, kFlagged));
