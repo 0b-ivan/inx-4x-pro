@@ -11,6 +11,9 @@ import build_de_pack
 import export_pack
 import pack_format
 import translate_de_pack
+import normalize_de_drafts
+import textfit
+from german_orthography import normalize_orthography
 
 
 class GermanTriviaPackTests(unittest.TestCase):
@@ -138,6 +141,44 @@ class GermanTriviaPackTests(unittest.TestCase):
         source = [{"id": str(i), "a": "SAME"} for i in range(5)]
         self.assertEqual(len(translate_de_pack.pilot_candidates(source, 4)), 4)
         self.assertEqual(translate_de_pack.pilot_candidates(source, 2, {"0","1","2","3","4"}), [])
+
+    def test_real_german_umlauts_supported_by_eink_font(self):
+        glyphs, _ = textfit.font("reading_serif_14")
+        for character in "äöüÄÖÜß":
+            self.assertIn(ord(character), glyphs, character)
+
+    def test_vetted_spelling_repairs_keep_umlauts(self):
+        before = "Die Konige in Munchen, Danemark und Nobelpreistrager " \\
+                 "Fruh und spaeter. Muenchen, Koenige und Daenemark."
+        after = "Die Könige in München, Dänemark und Nobelpreisträger " \\
+                "Früh und später. München, Könige und Dänemark."
+        self.assertEqual(normalize_orthography(before), after)
+        self.assertEqual(normalize_orthography("MUNCHEN"), "MÜNCHEN")
+        self.assertEqual(normalize_orthography("München"), "München")
+        self.assertEqual(normalize_orthography("MUELLER"), "MUELLER")
+        self.assertEqual(normalize_orthography("Schienbein"), "Schienbein")
+
+    def test_release_gate_rejects_missing_umlauts(self):
+        self.trans["q"] = "Die Konige in Munchen?"
+        self.trans["a"] = "Munchen"
+        self.write()
+        with self.assertRaisesRegex(build_de_pack.TranslationError, "missing German umlauts"):
+            build_de_pack.build(self.src, self.translated, self.output)
+
+    def test_existing_drafts_repaired_without_changing_identity_or_review(self):
+        self.trans["q"] = "Die Konige in Munchen?"
+        self.trans["a"] = "Munchen"
+        self.write()
+        out = self.root / "corrected.jsonl"
+        count, corrected, fields = normalize_de_drafts.repair(self.translated, out)
+        self.assertEqual((count, corrected, fields), (1, 1, 2))
+        item = list(build_de_pack.load_jsonl(out))[0]
+        self.assertEqual(item["q"], "Die Könige in München?")
+        self.assertEqual(item["a"], "München")
+        self.assertEqual(item["source_hash"], self.trans["source_hash"])
+        self.assertEqual(item["id"], self.trans["id"])
+        self.assertIs(item["reviewed"], False)
+        self.assertEqual(self.translated.read_text(encoding="utf-8").count("Munchen"), 2)
 
     def test_normalize_unsupported_smart_punctuation(self):
         text = '„München“ – die Stadt … 12\u202fkm'
