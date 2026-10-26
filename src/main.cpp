@@ -370,7 +370,8 @@ void setup() {
 #endif
 
   HalSystem::begin();
-#if !defined(SIMULATOR)
+#ifndef SIMULATOR
+  // ESP-IDF reset reasons are only available on the actual device.
   LOG_INF("BOOT", "Reset reason: %d", static_cast<int>(esp_reset_reason()));
 #endif
   // checkPanic() clears the watchdog capture marker after a successful SD

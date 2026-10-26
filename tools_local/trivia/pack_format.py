@@ -9,6 +9,7 @@ import struct
 
 MAGIC = b'XTRIVIA\0'
 VERSION = 1
+GERMAN_FLAG = 0x01
 HEADER = struct.Struct('<8sHBBI')      # magic, version, flags, reserved, count
 
 def _rec(item):
@@ -24,7 +25,9 @@ def _rec(item):
         body += struct.pack('<H', len(p)) + p
     return body
 
-def write(items, path):
+def write(items, path, flags=0):
+    if flags not in (0, GERMAN_FLAG):
+        raise ValueError(f'unsupported pack language flags: {flags}')
     recs = [_rec(i) for i in items]
     index, off = [], 0
     for r in recs:
@@ -32,7 +35,7 @@ def write(items, path):
         off += len(r)
     index.append(off)                                    # sentinel
     with open(path, 'wb') as f:
-        f.write(HEADER.pack(MAGIC, VERSION, 0, 0, len(recs)))
+        f.write(HEADER.pack(MAGIC, VERSION, flags, 0, len(recs)))
         f.write(struct.pack(f'<{len(index)}I', *index))
         for r in recs:
             f.write(r)
@@ -42,12 +45,14 @@ def open_pack(path):
     """Holds NO index in RAM. The index is 195KB for a 50k pack, which the
     device does not have to spare, so index entries are seeked to as well."""
     f = open(path, 'rb')
-    magic, version, _flags, _r, count = HEADER.unpack(f.read(HEADER.size))
+    magic, version, flags, reserved, count = HEADER.unpack(f.read(HEADER.size))
     if magic != MAGIC:
         raise ValueError(f'not a trivia pack: {magic!r}')
     if version != VERSION:
         raise ValueError(f'unsupported pack version {version}')
-    return {'f': f, 'count': count,
+    if flags not in (0, GERMAN_FLAG) or reserved != 0:
+        raise ValueError(f'unsupported pack flags: {flags}')
+    return {'f': f, 'count': count, 'flags': flags,
             'index_at': HEADER.size,
             'base': HEADER.size + 4 * (count + 1)}
 

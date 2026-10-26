@@ -1,0 +1,112 @@
+# One-shot user-requested 20-question German quiz translation pilot.
+# Only a change to .github/trivia-pilot-trigger.txt on the named PR branch
+# triggers this workflow; ordinary commits, PRs and releases do not.
+name: German Trivia One-Shot Pilot
+
+on:
+  push:
+    branches:
+      - fix/i18n-translation-quality-audit
+    paths:
+      - .github/trivia-pilot-trigger.txt
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: trivia-german-pilot-once
+  cancel-in-progress: false
+
+jobs:
+  translate:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    name: Translate 20 questions only
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - name: Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Run offline translator QA before paid requests
+        run: python3 tools_local/trivia/test_de_pack.py
+
+      - name: Verify and export English questions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia-pilot"
+          curl -fsSL --retry 3 --max-time 90 \
+            https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat \
+            -o "$RUNNER_TEMP/trivia-pilot/pack.dat"
+          printf '%s  %s\n' \
+            'a17435136122ce1d2485d4c4c30e58206e6dffc88b819e0d4c646081b485f9cf' \
+            "$RUNNER_TEMP/trivia-pilot/pack.dat" | sha256sum -c -
+          python3 tools_local/trivia/export_pack.py \
+            --pack "$RUNNER_TEMP/trivia-pilot/pack.dat" \
+            --out "$RUNNER_TEMP/trivia-pilot/source-en.jsonl"
+
+      # Reuse the 13 syntactically valid Sonnet drafts from the last attempt.
+      # Source hashes are rechecked before additional paid requests are made.
+      - name: Resume existing German pilot translations
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 40299809745 --repo "$GITHUB_REPOSITORY" \
+            --name trivia-german-pilot-unreviewed \
+            --dir "$RUNNER_TEMP/trivia-pilot"
+          test -s "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl"
+          echo "Restored $(wc -l < "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl") existing question drafts"
+
+      - name: Correct known German umlaut errors in restored drafts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools_local/trivia/normalize_de_drafts.py \
+            --src "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl" \
+            --out "$RUNNER_TEMP/trivia-pilot/questions-de-draft-corrected.jsonl"
+          mv "$RUNNER_TEMP/trivia-pilot/questions-de-draft-corrected.jsonl" \
+             "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl"
+
+      - name: Draft up to 20 German question translations
+        shell: bash
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+            echo "::error::Missing OPENROUTER_API_KEY repository secret"
+            exit 1
+          fi
+          completed="$(wc -l < "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl")"
+          if [ "$completed" -ge 20 ]; then
+            echo "Pilot already has 20 drafts; no API request required."
+            exit 0
+          fi
+          remaining="$((20 - completed))"
+          echo "Requesting only $remaining additional drafts to reach 20"
+          python3 tools_local/trivia/translate_de_pack.py \
+            --src "$RUNNER_TEMP/trivia-pilot/source-en.jsonl" \
+            --out "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl" \
+            --model 'anthropic/claude-sonnet-4.6' \
+            --limit "$remaining"
+
+      - name: Save the unreviewed draft (one-day retention)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivia-german-pilot-unreviewed
+          path: ${{ runner.temp }}/trivia-pilot/questions-de-draft.jsonl
+          if-no-files-found: ignore
+          retention-days: 1

@@ -55,6 +55,7 @@ struct MenuModel {
   uint32_t packCount = 0;
   uint32_t seenCount = 0;  // how many of packCount have been served
   bool packMissing = false;
+  bool englishFallback = false;  // German UI, but only an English pack is installed
 };
 
 // One question, mid-round. `answer` is null until it is turned over, which is

@@ -7,6 +7,7 @@
 
 #include "../../components/UITheme.h"
 #include "../Shelf.h"
+#include "../ui/LocalI18n.h"
 #include "../ui/ToyboxFonts.h"
 #include "../ui/ToyboxTheme.h"
 #include "WavelengthPairs.h"
@@ -196,8 +197,18 @@ void WavelengthActivity::saveState() {
 wavelengthui::Spectrum WavelengthActivity::spectrumAt(const int index) const {
   wavelengthui::Spectrum s;
   if (index >= 0 && index < wl::kPairCountEn) {
-    s.top = std::strcmp(wl::kPairsEn[index].top, "ROUND") == 0 ? "RUND" : wl::kPairsEn[index].top;
-    s.bottom = std::strcmp(wl::kPairsEn[index].bottom, "ROUND") == 0 ? "RUND" : wl::kPairsEn[index].bottom;
+    // Axis terms have a different meaning from difficulty labels ("HARD") and
+    // round counters ("ROUND"). Keep the source pair unchanged in English.
+    const auto pole = [](const char* text) {
+      if (toybox::isGermanLanguage()) {
+        for (const auto& term : toybox::kGermanWavelengthTerms) {
+          if (std::strcmp(text, term.english) == 0) return term.german;
+        }
+      }
+      return text;
+    };
+    s.top = pole(wl::kPairsEn[index].top);
+    s.bottom = pole(wl::kPairsEn[index].bottom);
   }
   return s;
 }

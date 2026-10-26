@@ -118,18 +118,26 @@ jobs:
 
             ### What is new in 1.16.11
 
-            **Boot reset diagnostics and CI maintenance**
+            **German UI localization and review safeguards**
 
-            The X4 Pro now reports the ESP-IDF reset reason in its boot
-            log, helping distinguish watchdog, panic and power-on resets
-            when investigating device restarts (including MeshChat).
-            This is diagnostic logging; it does not claim to repair the
-            underlying reset.
+            German UI labels and contextual strings now share an audited
+            translation catalogue. Host tests check catalogue consistency
+            and screen-label widths on the 480px X4 Pro display.
+            Trivia translation pilots generate review-only drafts; they
+            do not ship an unreviewed German question pack.
 
-            The native SDL simulator excludes this hardware-only API,
-            and the release pipeline is hardened so prereleases can be
-            built from a tested main commit without a permanent feature
-            branch. Firmware, simulator and host tests remain required.
+            **Reset-reason diagnostics**
+
+            The X4 Pro reports the ESP-IDF reset reason in its BOOT log,
+            helping investigate unexpected device restarts and MeshChat
+            crashes. This is diagnostic instrumentation, not a crash fix.
+            The native SDL simulator excludes this hardware-only API.
+
+            **CI and Nightly release maintenance**
+
+            Nightly prereleases can be explicitly dispatched against
+            tested main commits without depending on a stale feature
+            branch. Firmware, simulator and host checks remain mandatory.
 
             ### What is new in 1.16.10
 

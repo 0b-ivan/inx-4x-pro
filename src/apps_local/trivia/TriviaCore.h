@@ -47,6 +47,7 @@ inline constexpr int kDifficulties = 5;
 
 inline constexpr uint8_t kMagic[8] = {'X', 'T', 'R', 'I', 'V', 'I', 'A', 0};
 inline constexpr uint16_t kFormatVersion = 1;
+inline constexpr uint8_t kPackGermanFlag = 0x01;  // header flags: 0 English, 1 German
 
 // pack.state bits, one byte per question at the question's own index.
 inline constexpr uint8_t kSeen = 0x01;
@@ -94,6 +95,7 @@ class Pack {
   bool open(ByteSource& source);
   bool isOpen() const { return count_ > 0; }
   uint32_t count() const { return count_; }
+  uint8_t flags() const { return flags_; }
 
   // Two reads: the index pair, then the record. False on a torn or oversized
   // record, which the caller must treat as fatal for that question rather than
@@ -103,6 +105,7 @@ class Pack {
  private:
   ByteSource* source_ = nullptr;
   uint32_t count_ = 0;
+  uint8_t flags_ = 0;
   uint32_t indexAt_ = 0;
   uint32_t base_ = 0;
 };

@@ -21,13 +21,15 @@ namespace fui = freeink::ui;
 namespace {
 
 constexpr const char* kDir = "/trivia";
-constexpr const char* kPackPath = "/trivia/pack.dat";
+// Legacy English pack path stays unchanged; a German pack is installed
+// separately as /trivia/pack-de.dat. Neither language replaces the other.
+constexpr const char* kPackPath = trivia::kEnglishPackLocation.packPath;
 constexpr const char* kPartPath = "/trivia/pack.dat.part";
 // A rolling PRERELEASE, so the OTA's releases/latest can never see it and a
 // 6MB question pack never lands in a firmware update. Same arrangement as the
 // xkcd archive; see docs/apps/trivia-pack-format.md.
 constexpr const char* kPackUrl = "https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat";
-constexpr const char* kStatePath = "/trivia/pack.state";
+
 // One byte: the difficulty filter. It lived only in the activity, which is
 // deleted on exit, so leaving Trivia and coming back silently put a player who
 // had chosen Level 4 back on "Any" with nothing on screen to say so.
@@ -76,29 +78,32 @@ std::unique_ptr<Activity> TriviaActivity::create(GfxRenderer& renderer, MappedIn
   return makeUniqueNoThrow<TriviaActivity>(renderer, mappedInput);
 }
 
-bool TriviaActivity::ensureState(const uint32_t count) {
-  g_stateFile = Storage.open(kStatePath, O_RDWR);
-  if (!g_stateFile.isOpen() || static_cast<uint32_t>(g_stateFile.size()) < count) {
-    // Missing, or shorter than the pack because the pack was replaced under it.
+bool TriviaActivity::ensureState(const uint32_t count, const char* statePath) {
+  g_stateFile = Storage.open(statePath, O_RDWR);
+  if (!g_stateFile.isOpen() || static_cast<uint32_t>(g_stateFile.size()) != count) {
+    // Missing, or sized for a different pack. Close the old handle before
+    // truncating: keeping it open can prevent overwriting on the actual SD HAL.
+    g_stateFile.close();
+    // The pack was replaced under its state or is being installed for the first time.
     // Rewriting loses which questions have been seen, which is the right trade:
     // reading a stale byte for a question it does not describe is worse.
     HalFile fresh;
-    if (!Storage.openFileForWrite("TRIVIA", kStatePath, fresh)) {
-      LOG_ERR("TRIVIA", "Cannot create %s", kStatePath);
+    if (!Storage.openFileForWrite("TRIVIA", statePath, fresh)) {
+      LOG_ERR("TRIVIA", "Cannot create %s", statePath);
       return false;
     }
     uint8_t zeros[256] = {};
     for (uint32_t written = 0; written < count;) {
       const uint32_t chunk = (count - written) < sizeof(zeros) ? (count - written) : sizeof(zeros);
       if (fresh.write(zeros, chunk) != chunk) {
-        LOG_ERR("TRIVIA", "Short write creating %s", kStatePath);
+        LOG_ERR("TRIVIA", "Short write creating %s", statePath);
         return false;
       }
       written += chunk;
     }
     fresh.flush();
     fresh.close();
-    g_stateFile = Storage.open(kStatePath, O_RDWR);
+    g_stateFile = Storage.open(statePath, O_RDWR);
   }
   if (!g_stateFile.isOpen()) return false;
   g_stateSource.attach(g_stateFile);
@@ -106,18 +111,34 @@ bool TriviaActivity::ensureState(const uint32_t count) {
 }
 
 bool TriviaActivity::openPack() {
-  if (!Storage.openFileForRead("TRIVIA", kPackPath, g_packFile)) {
-    LOG_ERR("TRIVIA", "No pack at %s", kPackPath);
-    return false;
-  }
-  g_packSource.attach(g_packFile);
-  if (!pack_.open(g_packSource)) {
-    LOG_ERR("TRIVIA", "%s is not a readable trivia pack", kPackPath);
-    return false;
-  }
-  if (!ensureState(pack_.count())) return false;
-  chooser_.begin(pack_, state_, rng_);
-  return true;
+  const bool wantsGerman = I18N.getLanguage() == Language::DE;
+  const auto tryOpen = [this](const trivia::PackLocation& location, bool german) {
+    g_packFile.close();
+    g_stateFile.close();
+    if (!Storage.openFileForRead("TRIVIA", location.packPath, g_packFile)) return false;
+    g_packSource.attach(g_packFile);
+    if (!pack_.open(g_packSource) || pack_.flags() != (german ? trivia::kPackGermanFlag : 0)) {
+      LOG_ERR("TRIVIA", "Unreadable question pack: %s", location.packPath);
+      g_packFile.close();
+      return false;
+    }
+    if (!ensureState(pack_.count(), location.statePath)) {
+      g_packFile.close();
+      g_stateFile.close();
+      return false;
+    }
+    germanContent_ = german;
+    chooser_.begin(pack_, state_, rng_);
+    return true;
+  };
+
+  // A German UI must never misidentify the legacy English data as translated.
+  // Until an actual German pack is installed, continue to allow English play.
+  if (trivia::shouldUseGerman(wantsGerman, Storage.exists(trivia::kGermanPackLocation.packPath)) &&
+      tryOpen(trivia::kGermanPackLocation, true)) return true;
+  if (tryOpen(trivia::kEnglishPackLocation, false)) return true;
+  LOG_ERR("TRIVIA", "No readable German or English question pack");
+  return false;
 }
 
 namespace {
@@ -153,8 +174,11 @@ void TriviaActivity::onEnter() {
     LOG_INF("TRIVIA", "Pack open: %u questions", static_cast<unsigned>(pack_.count()));
   } else {
     showNotice("NO QUESTIONS",
-               "There is no question pack on this card yet. Connect to WiFi and fetch one; it is about 6MB.",
-               "GET THE QUESTIONS", triviaui::ActionGetPack);
+               I18N.getLanguage() == Language::DE
+                   ? "A German question pack is not installed. The available download contains English questions."
+                   : "There is no question pack on this card yet. Connect to WiFi and fetch one; it is about 6MB.",
+               I18N.getLanguage() == Language::DE ? "GET ENGLISH QUESTIONS" : "GET THE QUESTIONS",
+               triviaui::ActionGetPack);
   }
 
   flashOnNextPaint_ = true;
@@ -522,6 +546,7 @@ void TriviaActivity::render(RenderLock&&) {
       model.difficulty = difficulty_;
       model.packCount = pack_.count();
       model.seenCount = state_.seenCount();
+      model.englishFallback = I18N.getLanguage() == Language::DE && !germanContent_;
       triviaui::buildMenu(screen, model);
       break;
     }

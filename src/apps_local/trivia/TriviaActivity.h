@@ -11,6 +11,7 @@
 #include "../../activities/Activity.h"
 #include "../ui/ToyboxScreen.h"
 #include "TriviaCore.h"
+#include "TriviaPackLocale.h"
 #include "TriviaScreens.h"
 
 class TriviaActivity final : public Activity {
@@ -37,7 +38,7 @@ class TriviaActivity final : public Activity {
   void runPackDownload();
   void showNotice(const char* headline, const char* body, const char* actionLabel = nullptr,
                   freeink::ui::ActionId action = 0);
-  bool ensureState(uint32_t count);
+  bool ensureState(uint32_t count, const char* statePath);
   void go(View next);
   void deal();
   void routeAction(int action, int value);
@@ -56,6 +57,7 @@ class TriviaActivity final : public Activity {
 
   uint32_t current_ = 0;
   bool haveQuestion_ = false;
+  bool germanContent_ = false;  // current pack, not the firmware UI locale
   bool revealed_ = false;
   int chosen_ = -1;
 
