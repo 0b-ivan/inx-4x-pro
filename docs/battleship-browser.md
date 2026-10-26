@@ -21,6 +21,11 @@ endpoints to the public Internet.
 
 The first accepted profile binds the browser seat to that WebSocket client.
 Other clients receive only the public status DTO and cannot issue commands.
+Only the claimed owner receives the X4 device Player name (`peer` event),
+including subsequent account/name updates; opening an unclaimed WebSocket
+never discloses the active local Player identity. Join QR codes encode the
+X4's numeric IP URL to work even when a captive-network phone cannot
+resolve `crossplay.local` through mDNS.
 A heartbeat detects disconnects. Losing the owner rotates the normal session
 capability and clears an unconfirmed profile/draft. A confirmed match can be
 resumed by the same browser with a separate resume capability kept in
