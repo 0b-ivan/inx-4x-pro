@@ -668,6 +668,7 @@ void TriviaActivity::routeAction(const int action, const int value) {
         break;
       }
       awsScore_.reset();
+      awsHaveLast_ = false;
       awsReviewMissed_ = action == triviaui::ActionAwsReview;
       awsDeal();
       break;
