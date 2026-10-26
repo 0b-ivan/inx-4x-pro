@@ -119,11 +119,13 @@ def translate_one(item, model, api_key, timeout=100):
     translated = json.loads(raw)
     if not isinstance(translated, dict) or set(translated) != {"q", "a", "alt", "w"}:
         raise TranslationError("Model response violates the expected JSON schema")
-    return {
-        key: ([normalize_display_punctuation(x) for x in value]
+    cleaned = {key: ([normalize_display_punctuation(x) for x in value]
               if isinstance(value, list) else normalize_display_punctuation(value))
-        for key, value in translated.items()
-    }
+        for key, value in translated.items()}
+    cost = result.get("usage", {}).get("cost")
+    if cost is None or not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost < 0:
+        raise TranslationError("OpenRouter did not report a valid USD usage.cost; fail closed")
+    return cleaned, float(cost)
 
 
 
@@ -168,7 +170,7 @@ def pilot_candidates(source, limit, already_done=()):
                 break
     return chosen
 
-def generate(source_path, output_path, model, api_key, limit=20, all_questions=False):
+def generate(source_path, output_path, model, api_key, limit=20, all_questions=False, max_cost_usd=None):
     source = list(load_jsonl(source_path))
     done = {}
     output = Path(output_path)
@@ -186,6 +188,9 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
             raise TranslationError(f"source changed since draft for {ident}")
     generated = 0
     skipped = 0
+    spent = 0.0
+    # Reserve conservatively for the next request; account-level limits remain authoritative.
+    request_reserve = 0.10
     # In a pilot, allow spare diverse candidates to replace questions whose
     # correct answer cannot fit the actual e-ink fonts. Full corpus runs fail
     # rather than silently omitting content.
@@ -193,6 +198,9 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
                   pilot_candidates(source, min(len(source), limit * 3 + 10), done))
     with output.open("a", encoding="utf-8") as out:
         for original in candidates:
+            if max_cost_usd is not None and spent + request_reserve > max_cost_usd:
+                print(f"Budget stop: reported USD {spent:.6f} of {max_cost_usd:.2f}; drafts saved.", flush=True)
+                return generated, len(done), len(source)
             ident = original["id"]
             if ident in done:
                 if done[ident].get("source_hash") != source_hash(original):
@@ -203,7 +211,10 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
             accepted = False
             for attempt in range(4):
                 try:
-                    translated = translate_one(original, model, api_key)
+                    translated, cost = translate_one(original, model, api_key)
+                    spent += cost
+                    if max_cost_usd is not None and spent > max_cost_usd:
+                        raise TranslationError(f"USD budget exceeded after request: {spent:.6f}")
                     # Accept only content fields. Provider-supplied IDs or
                     # approval flags may not override our source and review gate.
                     row = {"id": ident, "source_hash": source_hash(original),
@@ -259,14 +270,17 @@ def main():
     scope = ap.add_mutually_exclusive_group()
     scope.add_argument("--limit", type=int, default=20, help="New questions (default 20)")
     scope.add_argument("--all", action="store_true", help="Opt into translating every remaining item")
+    ap.add_argument("--max-cost-usd", type=float, default=None)
     args = ap.parse_args()
     if args.limit is not None and args.limit <= 0:
         ap.error("--limit must be positive")
+    if args.max_cost_usd is not None and (not math.isfinite(args.max_cost_usd) or args.max_cost_usd <= 0):
+        ap.error("--max-cost-usd must be positive and finite")
     key = os.getenv("OPENROUTER_API_KEY")
     if not key:
         ap.error("OPENROUTER_API_KEY environment variable is required")
     try:
-        n, done, total = generate(args.src, args.out, args.model, key, args.limit, args.all)
+        n, done, total = generate(args.src, args.out, args.model, key, args.limit, args.all, args.max_cost_usd)
     except TranslationError as e:
         ap.error(str(e))
     print(f"Added {n} unchecked drafts; {done}/{total} saved. Review before releasing.")
