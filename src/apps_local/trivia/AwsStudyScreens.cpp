@@ -101,10 +101,11 @@ void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* st
 }  // namespace
 
 void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model) {
-  chrome(screen, "AWS DEVOPS");
+  chrome(screen, model.german ? "AWS LERNEN" : "AWS DEVOPS");
   const fui::Rect body = screen.body();
   char count[64];
-  std::snprintf(count, sizeof(count), "%u / %u SEEN  |  %u DOMAINS",
+  std::snprintf(count, sizeof(count), model.german ? "%u / %u GESEHEN | %u BEREICHE"
+                                                      : "%u / %u SEEN | %u DOMAINS",
                 static_cast<unsigned>(model.seen), static_cast<unsigned>(model.count),
                 static_cast<unsigned>(
                     ((model.enabled >> 0) & 1u) + ((model.enabled >> 1) & 1u) +
@@ -113,17 +114,21 @@ void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model) {
   label(screen, {body.x, static_cast<int16_t>(body.y + 28), body.width, 42}, count);
   const int16_t x = static_cast<int16_t>(body.x + kMargin);
   const int16_t w = static_cast<int16_t>(body.width - 2 * kMargin);
-  button(screen, {x, static_cast<int16_t>(body.y + 105), w, 142}, "STUDY QUESTIONS",
+  button(screen, {x, static_cast<int16_t>(body.y + 105), w, 142},
+         model.german ? "FRAGEN LERNEN" : "STUDY QUESTIONS",
          ActionAwsBegin, 0, true);
-  button(screen, {x, static_cast<int16_t>(body.y + 265), w, 112}, "REVIEW MISSED",
+  button(screen, {x, static_cast<int16_t>(body.y + 265), w, 112},
+         model.german ? "FEHLERTRAINING" : "REVIEW MISSED",
          ActionAwsReview);
-  button(screen, {x, static_cast<int16_t>(body.y + 394), w, 112}, "SELECT DOMAINS",
+  button(screen, {x, static_cast<int16_t>(body.y + 394), w, 112},
+         model.german ? "BEREICHE WAEHLEN" : "SELECT DOMAINS",
          ActionAwsDomains);
-  footerPair(screen, "TRIVIA", ActionAwsHome, "START", ActionAwsBegin);
+  footerPair(screen, model.german ? "ZURUECK" : "TRIVIA", ActionAwsHome,
+             "START", ActionAwsBegin);
 }
 
 void buildAwsDomains(toybox::Screen& screen, const AwsDomainsModel& model) {
-  chrome(screen, "AWS DOMAINS");
+  chrome(screen, model.german ? "AWS BEREICHE" : "AWS DOMAINS");
   const fui::Rect body = screen.body();
   const int16_t x = static_cast<int16_t>(body.x + kMargin);
   const int16_t w = static_cast<int16_t>(body.width - kMargin * 2);
@@ -142,41 +147,51 @@ void buildAwsDomains(toybox::Screen& screen, const AwsDomainsModel& model) {
                          domainName(i), style(toybox::kSmallFont, fui::TextAlign::Left));
     screen.frame().hit(box, ActionAwsToggleDomain, static_cast<int16_t>(i));
   }
-  footerPair(screen, "ALL ON", ActionAwsAllDomains, "DONE", ActionAwsBackToMenu);
+  footerPair(screen, model.german ? "ALLE AN" : "ALL ON", ActionAwsAllDomains,
+             model.german ? "FERTIG" : "DONE", ActionAwsBackToMenu);
 }
 
 void buildAwsQuestion(toybox::Screen& screen, const AwsPageModel& model) {
-  chrome(screen, "AWS QUESTION");
+  chrome(screen, model.german ? "AWS FRAGE" : "AWS QUESTION");
   char status[44];
-  std::snprintf(status, sizeof(status), "DOMAIN %u  |  READ THE SCENARIO",
+  std::snprintf(status, sizeof(status), model.german ? "BEREICH %u | FRAGE LESEN"
+                                                      : "DOMAIN %u | READ THE SCENARIO",
                 static_cast<unsigned>(model.domain));
   frameText(screen, model, status);
-  footerPair(screen, "EXIT", ActionAwsBackToMenu,
-             model.more ? "MORE TEXT" : "ANSWERS", ActionAwsPageNext);
+  footerPair(screen, model.german ? "ENDE" : "EXIT", ActionAwsBackToMenu,
+             model.more ? (model.german ? "MEHR TEXT" : "MORE TEXT")
+                        : (model.german ? "ANTWORTEN" : "ANSWERS"), ActionAwsPageNext);
 }
 
 void buildAwsOption(toybox::Screen& screen, const AwsPageModel& model) {
-  chrome(screen, "AWS ANSWERS");
+  chrome(screen, model.german ? "AWS ANTWORTEN" : "AWS ANSWERS");
   char status[64];
   const bool marked = (model.selected & (1u << model.option)) != 0;
-  std::snprintf(status, sizeof(status), "OPTION %c / %u  |  %s",
+  std::snprintf(status, sizeof(status), model.german ? "ANTWORT %c/%u | %s"
+                                                      : "OPTION %c / %u | %s",
                 static_cast<char>('A' + model.option),
-                static_cast<unsigned>(model.optionCount), marked ? "SELECTED" : "NOT SELECTED");
+                static_cast<unsigned>(model.optionCount),
+                marked ? (model.german ? "GEWAEHLT" : "SELECTED")
+                       : (model.german ? "OFFEN" : "NOT SELECTED"));
   frameText(screen, model, status);
   // Three always-visible controls: select/deselect, previous, and next text/
   // next option or grade. Multi-answer questions must be submitted explicitly.
   const bool lastPage = !model.more && model.option + 1 == model.optionCount;
   const bool needsSelection = lastPage && model.selected == 0;
-  footerThree(screen, marked ? "UNMARK" : "MARK", ActionAwsToggleOption,
-              "BACK", ActionAwsPageBack,
-              model.more ? "MORE" : !lastPage ? "NEXT" :
-              needsSelection ? "SELECT" : "GRADE",
+  footerThree(screen,
+              marked ? (model.german ? "ABWAEHLEN" : "UNMARK")
+                     : (model.german ? "WAEHLEN" : "MARK"), ActionAwsToggleOption,
+              model.german ? "ZURUECK" : "BACK", ActionAwsPageBack,
+              model.more ? (model.german ? "MEHR" : "MORE")
+                         : !lastPage ? (model.german ? "WEITER" : "NEXT")
+                         : needsSelection ? (model.german ? "WAEHLEN" : "SELECT")
+                                          : (model.german ? "PRUEFEN" : "GRADE"),
               needsSelection ? ActionAwsToggleOption :
               lastPage ? ActionAwsSubmit : ActionAwsPageNext);
 }
 
 void buildAwsExplanation(toybox::Screen& screen, const AwsPageModel& model) {
-  chrome(screen, "AWS REVIEW");
+  chrome(screen, model.german ? "AWS LOESUNG" : "AWS REVIEW");
   char status[80];
   char key[8] = {};
   char chosen[8] = {};
@@ -185,12 +200,15 @@ void buildAwsExplanation(toybox::Screen& screen, const AwsPageModel& model) {
     if (model.correct & (1u << i)) key[k++] = static_cast<char>('A' + i);
     if (model.selected & (1u << i)) chosen[p++] = static_cast<char>('A' + i);
   }
-  std::snprintf(status, sizeof(status), "%s %d/%d  |  YOU %s  KEY %s",
-                model.correctAnswer ? "RIGHT" : "WRONG", model.right, model.asked,
-                chosen, key);
+  std::snprintf(status, sizeof(status), model.german ? "%s %d/%d | DU %s SOLL %s"
+                                                      : "%s %d/%d | YOU %s KEY %s",
+                model.correctAnswer ? (model.german ? "RICHTIG" : "RIGHT")
+                                    : (model.german ? "FALSCH" : "WRONG"),
+                model.right, model.asked, chosen, key);
   frameText(screen, model, status);
-  footerPair(screen, "END", ActionAwsBackToMenu,
-             model.more ? "MORE TEXT" : "NEXT QUESTION", ActionAwsPageNext);
+  footerPair(screen, model.german ? "ENDE" : "END", ActionAwsBackToMenu,
+             model.more ? (model.german ? "MEHR TEXT" : "MORE TEXT")
+                        : (model.german ? "NAECHSTE" : "NEXT QUESTION"), ActionAwsPageNext);
 }
 
 }  // namespace triviaui
