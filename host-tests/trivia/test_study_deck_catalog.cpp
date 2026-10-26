@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstring>
 #include <cstdio>
+#include <initializer_list>
 
 #include "StudyDeckCatalog.h"
 
