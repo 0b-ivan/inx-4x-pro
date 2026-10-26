@@ -66,7 +66,8 @@ class AwsChooser {
  public:
   void begin(const AwsPack& pack, PackState& state, Rng& rng);
   // Domain mask bit 0 = Domain 1. 0 is intentionally "no categories", not all.
-  bool next(uint32_t& index, uint8_t enabledDomains, bool missedOnly = false);
+  bool next(uint32_t& index, uint8_t enabledDomains, bool missedOnly = false,
+            uint32_t avoidIndex = UINT32_MAX);
 
  private:
   const AwsPack* pack_ = nullptr;
