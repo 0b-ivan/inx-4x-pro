@@ -355,6 +355,10 @@
       async function pxState() {
         // The bootstrap token alone does not authorize device player details.
         if(!resumeToken||!token){
+          document.getElementById('playerLogin').hidden=true;
+          document.getElementById('deviceProfileToggle').hidden=true;
+          document.getElementById('deviceProfileDetails').hidden=true;
+          document.getElementById('guestRegistration').hidden=true;
           document.getElementById('playerMessage').textContent='SELECT YOUR BROWSER PLAYER BELOW TO UNLOCK THE X4 PROFILE';
           return;
         }
