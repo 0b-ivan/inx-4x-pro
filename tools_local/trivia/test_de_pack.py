@@ -8,6 +8,7 @@ from pathlib import Path
 import build_de_pack
 import export_pack
 import pack_format
+import translate_de_pack
 
 
 class GermanTriviaPackTests(unittest.TestCase):
@@ -113,6 +114,28 @@ class GermanTriviaPackTests(unittest.TestCase):
                           flags=pack_format.GERMAN_FLAG)
         with self.assertRaisesRegex(ValueError, "English pack"):
             export_pack.export(self.root / "de.dat", self.root / "bad.jsonl")
+
+    def test_diverse_pilot_samples_across_full_corpus(self):
+        source = [
+            {"id": f"q-{i}", "a": f"Answer {i // 10}", "q": f"Question {i}"}
+            for i in range(200)
+        ]
+        selected = translate_de_pack.pilot_candidates(source, 20)
+        self.assertEqual(len(selected), 20)
+        self.assertEqual(len({item["a"] for item in selected}), 20)
+        self.assertNotEqual([x["id"] for x in selected],
+                            [x["id"] for x in source[:20]])
+        self.assertEqual(selected, translate_de_pack.pilot_candidates(source, 20))
+        further = translate_de_pack.pilot_candidates(source, 10,
+                            {item["id"] for item in selected})
+        self.assertEqual(len(further), 10)
+        self.assertFalse({item["id"] for item in selected} &
+                         {item["id"] for item in further})
+
+    def test_pilot_handles_duplicate_answers_in_small_source(self):
+        source = [{"id": str(i), "a": "SAME"} for i in range(5)]
+        self.assertEqual(len(translate_de_pack.pilot_candidates(source, 4)), 4)
+        self.assertEqual(translate_de_pack.pilot_candidates(source, 2, {"0","1","2","3","4"}), [])
 
     def test_draft_only_with_explicit_override(self):
         self.trans["reviewed"] = False
