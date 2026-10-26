@@ -1,0 +1,1 @@
+Offline numeric and unit equivalence QA of 500 saved Qwen translations; no OpenRouter API credentials or calls; preserve all unapproved status.

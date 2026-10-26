@@ -1,0 +1,80 @@
+name: German Trivia 500 Offline Numeric Reaudit
+on:
+  push:
+    branches:
+      - experiment/trivia-de-100-20261026
+    paths:
+      - .github/trivia-500-numeric-reaudit-trigger.txt
+
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: trivia-500-numeric-reaudit
+  cancel-in-progress: false
+
+jobs:
+  offline-reaudit:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout isolated experiment
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Regression tests for display and numeric semantics
+        run: |
+          python3 tools_local/trivia/test_numeric_semantics.py
+          python3 tools_local/trivia/test_numerical_equivalence.py
+          python3 tools_local/trivia/test_de_pack.py
+      - name: Recover checkpoint and prior audit without paid API access
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia-reaudit"
+          gh run download 40324386261 --repo "$GITHUB_REPOSITORY" \
+            --name trivia-qwen-500-resume-unapproved \
+            --dir "$RUNNER_TEMP/trivia-reaudit"
+          test "$(wc -l < "$RUNNER_TEMP/trivia-reaudit/qwen-500-drafts.jsonl")" -eq 500
+          test "$(wc -l < "$RUNNER_TEMP/trivia-reaudit/qwen-500-audit.jsonl")" -eq 500
+      - name: Verify original English source pack before re-analysis
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --max-time 90 \
+            'https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat' \
+            -o "$RUNNER_TEMP/trivia-reaudit/pack.dat"
+          printf '%s  %s\n' \
+            'a17435136122ce1d2485d4c4c30e58206e6dffc88b819e0d4c646081b485f9cf' \
+            "$RUNNER_TEMP/trivia-reaudit/pack.dat" | sha256sum -c -
+          python3 tools_local/trivia/export_pack.py \
+            --pack "$RUNNER_TEMP/trivia-reaudit/pack.dat" \
+            --out "$RUNNER_TEMP/trivia-reaudit/source-en.jsonl"
+      - name: Reanalyse all 500 saved records and generate evidence report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools_local/trivia/reanalyze_qwen_500.py \
+            --source "$RUNNER_TEMP/trivia-reaudit/source-en.jsonl" \
+            --drafts "$RUNNER_TEMP/trivia-reaudit/qwen-500-drafts.jsonl" \
+            --prior-audit "$RUNNER_TEMP/trivia-reaudit/qwen-500-audit.jsonl" \
+            --report "$RUNNER_TEMP/trivia-reaudit/numeric-reaudit-500.jsonl" \
+            --summary "$RUNNER_TEMP/trivia-reaudit/numeric-reaudit-summary.json"
+      - name: Preserve audit and source-aligned samples (14 days)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivia-qwen-500-numeric-reaudit
+          path: |
+            ${{ runner.temp }}/trivia-reaudit/numeric-reaudit-500.jsonl
+            ${{ runner.temp }}/trivia-reaudit/numeric-reaudit-summary.json
+          if-no-files-found: ignore
+          retention-days: 14
