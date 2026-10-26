@@ -18,6 +18,7 @@
 #include <cstring>
 
 #include "ForeheadCore.h"
+#include "../../src/apps_local/forehead/ForeheadWordsDe.h"
 
 using namespace forehead;
 
@@ -97,6 +98,87 @@ void testNoCategoryRepeatsAnEntry() {
       }
     }
   }
+}
+
+// German decks must remain index-aligned with the English cards, readable in
+// the 22-character display font and unique within each playable category.
+void testGermanDeckTranslations() {
+  const char* const* const decks[] = {
+      kGermanAnimals, kGermanAct, kGermanSound, kGermanFood,
+      kGermanMovies, kGermanPeople, kGermanMusic, kGermanJobs,
+      kGermanSports, kGermanHouse, kGermanPlaces, kGermanNature, kGermanScience,
+      kGermanMyths, kGermanStorybook, kGermanKids, kGermanTricky,
+  };
+  const int counts[] = {
+      kGermanAnimalCount, kGermanActCount, kGermanSoundCount, kGermanFoodCount,
+      kGermanMovieCount, kGermanPeopleCount, kGermanMusicCount, kGermanJobCount,
+      kGermanSportCount, kGermanHouseCount, kGermanPlaceCount, kGermanNatureCount,
+      kGermanScienceCount, kGermanMythsCount, kGermanStorybookCount,
+      kGermanKidsCount, kGermanTrickyCount,
+  };
+  constexpr int translatedCategories = sizeof(counts) / sizeof(counts[0]);
+  CHECK(translatedCategories == kCategoryCount);
+  int covered = 0;
+  for (int category = 0; category < translatedCategories; ++category) {
+    CHECK(counts[category] == kCategories[category].count);
+    covered += counts[category];
+    for (int i = 0; i < counts[category]; ++i) {
+      const char* word = decks[category][i];
+      CHECK(word != nullptr);
+      if (!word) continue;
+      const int length = static_cast<int>(std::strlen(word));
+      CHECK(length > 0 && length <= kMaxEntryLen);
+      CHECK(word[0] != ' ' && word[length - 1] != ' ');
+      for (int j = 0; j < length; ++j) {
+        CHECK(word[j] >= 0x20 && word[j] <= 0x7E);
+        CHECK(!(word[j] >= 'a' && word[j] <= 'z'));
+        if (j) CHECK(!(word[j] == ' ' && word[j-1] == ' '));
+      }
+      for (int j = i + 1; j < counts[category]; ++j) {
+        CHECK(std::strcmp(word, decks[category][j]) != 0);
+      }
+    }
+  }
+  CHECK(covered == kEntryCount);
+
+  // Test the text delivered to the round UI, not only the compiled tables.
+  // Otherwise a forgotten category in entryText() silently returns English.
+  Deck germanDeck{};
+  Rng germanRng(23917);
+  Round germanRound{};
+  for (int category = 0; category < kCategoryCount; ++category) {
+    for (int sample = 0; sample < 3; ++sample) {
+      setGermanWords(true);
+      germanRound.begin(category, 60, germanDeck, germanRng);
+      CHECK(germanRound.live());
+      const int index = germanRound.cardEntry();
+      CHECK(index >= kCategories[category].first);
+      CHECK(index < kCategories[category].first + kCategories[category].count);
+      if (index < kCategories[category].first ||
+          index >= kCategories[category].first + kCategories[category].count) continue;
+      CHECK(std::strcmp(germanRound.cardText(),
+                        decks[category][index - kCategories[category].first]) == 0);
+      setGermanWords(false);
+      CHECK(std::strcmp(germanRound.cardText(), kEntries[index]) == 0);
+    }
+  }
+  setGermanWords(false);
+  CHECK(std::strcmp(kGermanMyths[28], "DRACHE") == 0);
+  CHECK(std::strcmp(kGermanStorybook[17], "ASCHENPUTTEL") == 0);
+  CHECK(std::strcmp(kGermanKids[0], "FLUGZEUG") == 0);
+  CHECK(std::strcmp(kGermanTricky[0], "ALGORITHMUS") == 0);
+  CHECK(std::strcmp(kEntries[1075], "BARBER") == 0);
+  CHECK(std::strcmp(kGermanJobs[13], "BARBIER") == 0);
+  CHECK(std::strcmp(kEntries[1243], "FOOTBALL") == 0);
+  CHECK(std::strcmp(kGermanSports[34], "AMERICAN FOOTBALL") == 0);
+  CHECK(std::strcmp(kEntries[1308], "SOCCER") == 0);
+  CHECK(std::strcmp(kGermanSports[99], "FUSSBALL") == 0);
+  CHECK(std::strcmp(kEntries[1418], "PAN") == 0);
+  CHECK(std::strcmp(kGermanHouse[79], "PFANNE") == 0);
+  CHECK(std::strcmp(kEntries[1428], "POT") == 0);
+  CHECK(std::strcmp(kGermanHouse[89], "TOPF") == 0);
+  CHECK(std::strcmp(kEntries[604], "PEPPERONI") == 0);
+  CHECK(std::strcmp(kGermanFood[107], "PIZZASALAMI") == 0);
 }
 
 void testEveryCategoryIsBigEnoughForAnEvening() {
@@ -664,6 +746,7 @@ int main() {
   testEveryEntryIsDrawable();
   testCategoriesTileTheEntryTable();
   testNoCategoryRepeatsAnEntry();
+  testGermanDeckTranslations();
   testEveryCategoryIsBigEnoughForAnEvening();
 
   testADeckDealsEveryCardOnceBeforeLapping();

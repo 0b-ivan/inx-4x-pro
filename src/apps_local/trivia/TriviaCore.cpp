@@ -27,6 +27,7 @@ bool sameText(const char* a, const char* b) {
 bool Pack::open(ByteSource& source) {
   source_ = nullptr;
   count_ = 0;
+  flags_ = 0;
 
   uint8_t header[16] = {};
   if (!source.read(0, header, sizeof(header))) return false;
@@ -34,6 +35,8 @@ bool Pack::open(ByteSource& source) {
     if (header[i] != kMagic[i]) return false;
   }
   if (readU16(header + 8) != kFormatVersion) return false;
+  // Legacy English flags=0. The German pack is marked with bit zero.
+  if ((header[10] & ~kPackGermanFlag) != 0 || header[11] != 0) return false;
 
   const uint32_t count = readU32(header + 12);
   if (count == 0) return false;
@@ -54,6 +57,7 @@ bool Pack::open(ByteSource& source) {
 
   source_ = &source;
   count_ = count;
+  flags_ = header[10];
   indexAt_ = sizeof(header);
   base_ = sizeof(header) + indexBytes;
   return true;

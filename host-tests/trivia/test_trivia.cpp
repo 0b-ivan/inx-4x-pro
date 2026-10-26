@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "TriviaCore.h"
+#include "TriviaPackLocale.h"
 
 using namespace trivia;
 
@@ -124,6 +125,19 @@ std::vector<Item> sampleItems(const int n) {
   return items;
 }
 
+// German content must not mutate the legacy English pack or its flags.
+void testLocalizedPackPaths() {
+  const auto& en = locationFor(false);
+  const auto& de = locationFor(true);
+  CHECK(std::strcmp(en.packPath, "/trivia/pack.dat") == 0);
+  CHECK(std::strcmp(en.statePath, "/trivia/pack.state") == 0);
+  CHECK(std::strcmp(de.packPath, "/trivia/pack-de.dat") == 0);
+  CHECK(std::strcmp(de.statePath, "/trivia/pack-de.state") == 0);
+  CHECK(!shouldUseGerman(false, true));
+  CHECK(!shouldUseGerman(true, false));
+  CHECK(shouldUseGerman(true, true));
+}
+
 // --- format ---------------------------------------------------------------
 void testFormat() {
   const auto items = sampleItems(40);
@@ -131,6 +145,7 @@ void testFormat() {
   Pack pack;
   CHECK(pack.open(src));
   CHECK(pack.count() == 40);
+  CHECK(pack.flags() == 0);
 
   for (uint32_t i = 0; i < pack.count(); ++i) {
     Question q;
@@ -159,6 +174,19 @@ void testRejectsBadFiles() {
   MemorySource m1(bad);
   Pack p1;
   CHECK(!p1.open(m1));
+
+  bad = buildPack(items);
+  bad[10] = kPackGermanFlag;
+  MemorySource markedGerman(bad);
+  Pack marked;
+  CHECK(marked.open(markedGerman));
+  CHECK(marked.flags() == kPackGermanFlag);
+
+  bad = buildPack(items);
+  bad[10] = 0x02;  // unsupported language marker must not masquerade as English
+  MemorySource unknownLanguage(bad);
+  Pack unknown;
+  CHECK(!unknown.open(unknownLanguage));
 
   bad = buildPack(items);
   bad[8] = 99;  // unsupported version
@@ -499,6 +527,7 @@ void testRoomFor() {
 }  // namespace
 
 int main() {
+  testLocalizedPackPaths();
   testFormat();
   testRejectsBadFiles();
   testState();
