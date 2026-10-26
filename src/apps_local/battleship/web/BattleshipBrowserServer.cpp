@@ -103,7 +103,7 @@ bool Server::begin(const NetworkMode mode) {
       clientSeen_ = true;
       snapshot_.connected = true;
       sendSnapshot(client);
-      sendOpponentName(client);
+      // Never disclose the device's active Player identity to unclaimed peers.
     } else if (type == WStype_DISCONNECTED) {
       clientSeen_ = ws_.connectedClients() != 0;
       if (owner_ == client) {
@@ -175,9 +175,8 @@ void Server::sendSnapshot(const uint8_t client) {
 }
 
 void Server::sendOpponentName(const uint8_t client) {
-  // player::name() currently guarantees a short generated name made from known
-  // uppercase words and spaces, so it is safe to place directly in this JSON
-  // string. The future typed-name PlayerService should own escaping/validation.
+  // Escaped, validated JSON sent only to the owner; spectators cannot use
+  // public game-state frames to enumerate the X4's active Player identity.
   const size_t n = serializePeerName(opponentName_, reply_, sizeof(reply_));
   if (n != 0) ws_.sendTXT(client, reply_, n);
 }
@@ -252,7 +251,10 @@ void Server::receive(uint8_t client, const uint8_t* payload, size_t size) {
 
   const size_t n = serializePlacement(view, accepted, reply_, sizeof(reply_));
   if (n) ws_.sendTXT(client, reply_, n);
-  if (accepted && (command.kind == CommandKind::Profile || command.kind == CommandKind::Resume)) sendResumeCapability(client);
+  if (accepted && (command.kind == CommandKind::Profile || command.kind == CommandKind::Resume)) {
+    sendOpponentName(client);
+    sendResumeCapability(client);
+  }
   if (command.kind == CommandKind::Resume) sendSnapshot(client);
 }
 
@@ -301,7 +303,7 @@ void Server::configureRoutes() {
       opponentName_ = playerweb::displayName();
       char peerMessage[96]{};
       const size_t n = serializePeerName(opponentName_, peerMessage, sizeof(peerMessage));
-      if (n != 0) ws_.broadcastTXT(peerMessage, n);
+      if (n != 0 && owner_ >= 0) ws_.sendTXT(static_cast<uint8_t>(owner_), peerMessage, n);
     }
     sendPlayerReply(http_, reply);
   });
