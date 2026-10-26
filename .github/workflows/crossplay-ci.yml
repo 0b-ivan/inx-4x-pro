@@ -137,6 +137,9 @@ jobs:
       - name: Verify real SDL screenshot visual goldens
         run: python3 host-tests/biscuit-sim/test_visual_goldens.py .pio/biscuit-ui-smoke
 
+      - name: AWS Trivia study/review touch smoke (synthetic SD pack)
+        run: bash scripts_local/trivia_aws_sim_smoke.sh
+
       - name: Upload Biscuit UI screenshots
         if: always()
         uses: actions/upload-artifact@v4
