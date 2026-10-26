@@ -141,6 +141,20 @@ AwsTextPage awsTextPage(const char* text, uint32_t from, const uint32_t maxChars
     pos += span;
     ++chars;
   }
+  // Prefer a whitespace boundary near the end of the page so a long AWS
+  // scenario does not continue with half a word on the next e-ink refresh.
+  // Keep forward progress for long unbroken tokens such as ARNs and URLs.
+  if (pos < total && pos - from > 12) {
+    uint32_t cut = pos;
+    const uint32_t minCut = from + (pos - from) * 2 / 3;
+    while (cut > minCut) {
+      if (text[cut - 1] == ' ' || text[cut - 1] == '\n' || text[cut - 1] == '\t') {
+        pos = cut;
+        break;
+      }
+      --cut;
+    }
+  }
   p.length = pos - from;
   p.more = pos < total;
   return p;
