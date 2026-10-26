@@ -317,12 +317,14 @@ void buildMenu(toybox::Screen& screen, const MenuModel& model) {
   const int16_t top = static_cast<int16_t>(body.y + 24);
   const int16_t diffH = 62;
   const int16_t diffY = static_cast<int16_t>(footerTop(screen) - diffH - 18);
-  const int16_t cardH = static_cast<int16_t>((diffY - top - 16 - 20) / 2);
+  const int16_t cardH = static_cast<int16_t>((diffY - top - 32 - 20) / 3);
 
   modeCard(screen, fui::Rect{left, top, wide, cardH}, "QUIZMASTER", "Read it out, argue, reveal",
            ActionMenuRow, 0, true);
   modeCard(screen, fui::Rect{left, static_cast<int16_t>(top + cardH + 16), wide, cardH}, "SOLO",
            "Four options, scored", ActionMenuRow, 1, false);
+  modeCard(screen, fui::Rect{left, static_cast<int16_t>(top + (cardH + 16) * 2), wide, cardH},
+           "AWS DEVOPS", "Study questions and domains", ActionMenuRow, 3, false);
 
   const fui::Rect diffBox{left, diffY, wide, diffH};
   screen.target().stroke(diffBox, fui::Paint::solid(fui::Color::Black), 1);
