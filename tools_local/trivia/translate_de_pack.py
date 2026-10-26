@@ -192,6 +192,8 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
     skipped = 0
     spent = 0.0
     cost_file = output.with_suffix(output.suffix + ".cost.json")
+    if max_cost_usd is not None and output.exists() and output.stat().st_size and not cost_file.exists():
+        raise TranslationError("Existing draft checkpoint without cost ledger: cannot safely resume")
     if max_cost_usd is not None and cost_file.exists():
         spent = float(json.loads(cost_file.read_text(encoding="utf-8"))["spent_usd"])
         if not math.isfinite(spent) or spent < 0:
@@ -264,6 +266,9 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
             done[ident] = row
             generated += 1
             print(f"Draft translations: {len(done)}/{len(source)}", flush=True)
+    if max_cost_usd is not None and spent + request_reserve > max_cost_usd:
+        print(f"Budget exhausted: {spent:.6f} USD, {generated} drafts added", flush=True)
+        return generated, len(done), len(source)
     if not all_questions and generated != limit:
         raise TranslationError(
             f"Pilot produced only {generated}/{limit} requested questions; {skipped} rejected"
