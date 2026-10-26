@@ -352,7 +352,7 @@ jobs:
           python3 tools_local/trivia/translate_de_pack.py \
             --src "$RUNNER_TEMP/trivia-pilot/questions-en.jsonl" \
             --out "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl" \
-            --model "openai/gpt-4o-mini" --limit 20
+            --model "anthropic/claude-sonnet-4.6" --limit 20
 
       - name: Upload draft translations for manual quality review
         if: always()
