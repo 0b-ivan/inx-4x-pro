@@ -1,0 +1,90 @@
+name: German Trivia 500 Editorial Proposals QA
+on:
+  push:
+    branches:
+      - experiment/trivia-de-100-20261026
+    paths:
+      - .github/trivia-editorial-proposals-trigger.txt
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: trivia-500-editorial-proposals
+  cancel-in-progress: false
+
+jobs:
+  proposals:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Run offline schema, numeric and editorial tests
+        run: |
+          python3 tools_local/trivia/test_curate_qwen_500.py
+          python3 tools_local/trivia/test_triage_qwen_500.py
+          python3 tools_local/trivia/test_numeric_notation.py
+          python3 tools_local/trivia/test_numeric_semantics.py
+          python3 tools_local/trivia/test_numerical_equivalence.py
+          python3 tools_local/trivia/test_de_pack.py
+      - name: Recover 500 original Qwen questions and previous triage
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia-editor"
+          gh run download 40324386261 --repo "$GITHUB_REPOSITORY" \
+            --name trivia-qwen-500-resume-unapproved \
+            --dir "$RUNNER_TEMP/trivia-editor"
+          gh run download 40330662535 --repo "$GITHUB_REPOSITORY" \
+            --name trivia-qwen-500-numeric-reaudit \
+            --dir "$RUNNER_TEMP/trivia-editor"
+          test "$(wc -l < "$RUNNER_TEMP/trivia-editor/qwen-500-drafts.jsonl")" -eq 500
+          test "$(wc -l < "$RUNNER_TEMP/trivia-editor/numeric-reaudit-500.jsonl")" -eq 500
+      - name: Verify exact English binary question source
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --max-time 90 \
+            'https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat' \
+            -o "$RUNNER_TEMP/trivia-editor/pack.dat"
+          printf '%s  %s\n' \
+            'a17435136122ce1d2485d4c4c30e58206e6dffc88b819e0d4c646081b485f9cf' \
+            "$RUNNER_TEMP/trivia-editor/pack.dat" | sha256sum -c -
+          python3 tools_local/trivia/export_pack.py \
+            --pack "$RUNNER_TEMP/trivia-editor/pack.dat" \
+            --out "$RUNNER_TEMP/trivia-editor/source-en.jsonl"
+      - name: Build machine-validated parallel editorial proposal file
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools_local/trivia/curate_qwen_500.py \
+            --source "$RUNNER_TEMP/trivia-editor/source-en.jsonl" \
+            --drafts "$RUNNER_TEMP/trivia-editor/qwen-500-drafts.jsonl" \
+            --prior-review "$RUNNER_TEMP/trivia-editor/numeric-reaudit-500.jsonl" \
+            --proposals "$RUNNER_TEMP/trivia-editor/editorial-proposals-500.jsonl" \
+            --audit "$RUNNER_TEMP/trivia-editor/editorial-proposals-audit-500.jsonl" \
+            --csv "$RUNNER_TEMP/trivia-editor/editorial-review-needed.csv" \
+            --summary "$RUNNER_TEMP/trivia-editor/editorial-proposals-summary.json"
+          test "$(wc -l < "$RUNNER_TEMP/trivia-editor/editorial-proposals-500.jsonl")" -eq 500
+      - name: Save proposals and bilingual review audit (not a firmware release)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivia-de-500-editorial-proposals-unapproved
+          path: |
+            ${{ runner.temp }}/trivia-editor/editorial-proposals-500.jsonl
+            ${{ runner.temp }}/trivia-editor/editorial-proposals-audit-500.jsonl
+            ${{ runner.temp }}/trivia-editor/editorial-review-needed.csv
+            ${{ runner.temp }}/trivia-editor/editorial-proposals-summary.json
+          if-no-files-found: ignore
+          retention-days: 14

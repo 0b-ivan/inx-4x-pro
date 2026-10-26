@@ -1,0 +1,1 @@
+One-shot 500 question bilingual editorial proposal QA on pinned English source and Qwen checkpoint; 21 manual rewrite proposals with source notes; all human unapproved, no API calls.
