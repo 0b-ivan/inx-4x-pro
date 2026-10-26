@@ -1,0 +1,383 @@
+# Turn a v* tag into a release the devices' own updaters can install.
+#
+# Upstream's release.yml is still in this tree and still fires on every tag, but
+# it builds gh_release, which is -DFREEINK_DEVICE_X4/X3 and therefore ESP32-C3.
+# This fork's devices (X4 Pro, Sticky) are S3. Two workflows on one tag would
+# publish two binaries and let the updater pick the wrong chip, so upstream's is
+# filtered to tags this fork never creates (see the `if` below) and this one
+# owns v*.
+#
+# This release publishes only the X4 Pro images. The x4pro fleet's updater asks
+# for the literal "firmware.bin" (every unit in the field since v1.0.0), and
+# host-tests/release asserts this file keeps publishing that asset. Cross-
+# flashing is guarded twice: the esp_image chip_id check, and the
+# CROSSPOINT-BOARD-V1 tag embedded in every image.
+name: CrossPlay release
+
+on:
+  push:
+    tags:
+      - "v*"
+  # Dispatched by crossplay-autorelease.yml on the tag it just pushed, because
+  # a tag pushed with the workflow token starts nothing on its own.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: crossplay-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIO_CORE_URL: https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: The tag must be the version being built
+        run: |
+          VERSION=$(awk '/^\[crossplay\]/{f=1;next} /^\[/{f=0} f && /^version *=/{print $3; exit}' platformio.ini)
+          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match [crossplay] version ${VERSION}" >&2
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} matches [crossplay] version ${VERSION}"
+
+      - name: The release notes must be this release's
+        run: bash host-tests/release/run.sh
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-release-${{ hashFiles('platformio.ini') }}
+
+      - name: Install PlatformIO Core and tooling
+        run: uv pip install --system -U "$PIO_CORE_URL" esptool
+
+      - name: Build release firmware
+        run: python3 -m platformio run -e gh_release_x4pro
+
+      - name: Name the x4pro artefacts
+        run: |
+          mkdir -p dist
+          python -m esptool --chip esp32s3 merge-bin --format raw \
+            -o "dist/crossplay-${GITHUB_REF_NAME}-x4pro-full.bin" \
+            -fm keep -fs keep -ff keep \
+            0x0     .pio/build/gh_release_x4pro/bootloader.bin \
+            0x8000  .pio/build/gh_release_x4pro/partitions.bin \
+            0x10000 .pio/build/gh_release_x4pro/firmware.bin
+          cp .pio/build/gh_release_x4pro/firmware.bin dist/firmware.bin
+          cp .pio/build/gh_release_x4pro/firmware.elf \
+             "dist/crossplay-${GITHUB_REF_NAME}-x4pro.elf"
+
+      - name: List artefacts
+        run: ls -la dist
+
+      - name: The merged images really are merged
+        run: |
+          fail=0
+          for full in "dist/crossplay-${GITHUB_REF_NAME}-x4pro-full.bin"; do
+            check() {
+              got=$(dd if="$full" bs=1 skip=$1 count=2 2>/dev/null | xxd -p)
+              if [ "$got" != "$2" ]; then
+                echo "::error::$full at $(printf '0x%x' $1): expected $2 ($3), got $got"
+                fail=1
+              else
+                echo "  $(printf '0x%-7x' $1) $got  $3  ($full)"
+              fi
+            }
+            check 0     e903 "bootloader"
+            check 32768 aa50 "partition table"
+            check 65536 e907 "app"
+          done
+          exit $fail
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body: |
+            CrossPlay release for **Xteink X4 Pro**.
+
+            ### What is new in 1.16.12
+
+            **German Trivia questions via Wi-Fi and separate SD data pack**
+
+            The German-language Trivia menu offers GET GERMAN QUESTIONS when
+            it currently falls back to English. Download installs the
+            data-only trivia-de-pack prerelease to /trivia/pack-de.dat.
+            The existing /trivia/pack.dat English questions and progress
+            remain untouched. The XTRIVIA language flag is validated before
+            replacing the destination.
+
+            This data pack currently contains 3,344 German questions, with
+            machine-translated early-access entries needing editorial review.
+            No question data rides inside the OTA firmware image.
+
+            **Current main changes included**
+
+            Built on all latest main commits, including centralized German
+            UI localization, ESP32 reset-reason diagnostics and corrected
+            CI and release automation.
+
+            ### What is new in 1.16.11
+
+            **German UI localization and review safeguards**
+
+            German UI labels and contextual strings now share an audited
+            translation catalogue. Host tests check catalogue consistency
+            and screen-label widths on the 480px X4 Pro display.
+            Trivia translation pilots generate review-only drafts; they
+            do not ship an unreviewed German question pack.
+
+            **Reset-reason diagnostics**
+
+            The X4 Pro reports the ESP-IDF reset reason in its BOOT log,
+            helping investigate unexpected device restarts and MeshChat
+            crashes. This is diagnostic instrumentation, not a crash fix.
+            The native SDL simulator excludes this hardware-only API.
+
+            **CI and Nightly release maintenance**
+
+            Nightly prereleases can be explicitly dispatched against
+            tested main commits without depending on a stale feature
+            branch. Firmware, simulator and host checks remain mandatory.
+
+            ### What is new in 1.16.10
+
+            **New: WIFI DIAG (read-only WLAN diagnostics)**
+
+            A dedicated Xteink X4 Pro hardware diagnostics screen displays
+            chip and ESP-IDF version, WiFi radio mode, connection status,
+            IP address, RSSI, channel, power-save mode and ESP-IDF API
+            errors with names and hexadecimal codes.
+
+            The screen supports touch navigation, scrolling and Refresh.
+            A timestamp marks each snapshot. The SDL simulator uses
+            explicitly virtual telemetry. WIFI DIAG neither changes
+            radio configuration nor transmits wireless frames.
+
+            **Host Scanner fixes**
+
+            TCP connection attempts now use explicit short deadlines.
+            Leaving the scanner preserves an existing WiFi association.
+            Touch controls cover Back, CSV export and Rescan, and rescanning
+            clears the prior host selection to avoid stale indexes.
+
+            **WiFi Deauth and Fire: accurate status reporting**
+
+            Transmit attempts and accepted API calls are no longer
+            presented as verified over-the-air packet delivery.
+            This is a status-display correction, not a claim that
+            unsupported ESP-IDF frame types now work.
+
+            **Validation**
+
+            Added regression checks for passive-only diagnostics,
+            host scanner behavior, transmission labels and simulator
+            Refresh screenshots. The existing Biscuit 26-app
+            screenshot smoke matrix is retained. The release is tagged
+            only after firmware, simulator and host tests pass on the
+            exact current main commit.
+
+            ### What is new in 1.16.9
+
+            Host Scanner: now finds hosts that refuse the connection (TCP RST)
+            rather than only hosts with port 80 open. Also checks port 443.
+            On a typical LAN this detects routers, NAS boxes and IoT devices
+            that do not serve HTTP.
+
+            Fire — Select BLE device: added live BLE scan fallback. When no
+            BLE targets are in the database, Fire now runs a 3-second BLE
+            scan automatically (same as the WiFi live-scan fallback added in
+            v1.16.6 for AP targets). Discovered devices are added to TargetDB
+            and shown in the list immediately.
+
+            ### What is new in 1.16.8
+
+            Evil Portal: restored full original Biscuit implementation.
+            Credential capture is back — submitted usernames and passwords
+            are logged to `/crossplay/creds.csv` on the SD card and shown
+            live on the display (count + last captured pair). Free SSID
+            input via keyboard (default "Free WiFi"). Custom HTML templates
+            from `/crossplay/portals/*.html` are loaded alongside the
+            built-in fake WiFi Login page.
+
+            AP Cloner: removed lab-only restriction that blocked cloning
+            any AP not named `X4PRO-LAB-*`. Now clones any selected AP
+            from the scan list.
+
+            ### What is new in 1.16.7
+
+            Fire app: touch input now works on hardware. All hint-bar
+            buttons and list rows respond to capacitive touch (previously
+            only physical buttons worked on the X4 Pro).
+
+            Captive Portal: new "Credential harvester" template. Serves
+            a fake network-authentication page; submitted passwords are
+            captured in a 6-entry ring buffer and shown live on the
+            device display. Uses POST /harvest endpoint; victim is
+            redirected back after 5 s to look like a failed reconnect.
+
+            ### What is new in 1.16.6
+
+            Fire app: all six grayed-out [X] attacks now work on fresh boot.
+            `loadTargetList()` falls back to a live `WiFi.scanNetworks()` scan
+            when the TargetDB cache is empty, so AP-targeted attacks (deauth,
+            rogue AP, handshake capture, PMKID, Evil Twin, auth flood) are
+            selectable without running WiFi Scanner first.
+
+            New attacks added: Evil Twin (DNS wildcard + captive portal on
+            port 80), BLE Clone (captures manufacturer AD payload and
+            replays at ~6 Hz), BLE Enumerate (connects to target BLE device
+            and dumps GATT service UUIDs).
+
+            Fix: removed incorrect `IRAM_ATTR` from `FireActivity::captureCallback`
+            (WiFi promiscuous callbacks run in WiFi task context, not ISR —
+            IRAM_ATTR was consuming IRAM unnecessarily).
+
+            ### What is new in 1.16.5
+
+            Biscuit apps: all 11 remaining apps (Network Change, USB HID,
+            Credential Viewer, AP History Logger, Vendor OUI, Vehicle Finder,
+            WiFi Heatmap, Perimeter Watch, Signal Triangulation, SSID Channel,
+            Beacon Test) now use `tappedAlwaysHintButton` so the bottom bar tap
+            zone matches the always-drawn hint bar. Includes simulator
+            hardware stubs and lab-safety rules from the
+            `feature/biscuit-simulator-hardware` branch.
+
+            ### What is new in 1.16.4
+
+            Fix: button hints no longer appear on reader screens (home,
+            settings, etc.) on the X4 Pro. The check now uses the
+            compile-time `BoardConfig::hasTouch()` instead of the runtime
+            `gpio.hasTouch()`, which could return false if the GT911 touch
+            controller did not answer on boot.
+
+            ### What is new in 1.16.3
+
+            Touch button hints: all three themes (Base, Lyra, RoundedRaff) now
+            draw their button-hint bar on touch devices instead of leaving it
+            blank. A new `tappedHintButton(tapX, tapY, renderer)` helper on
+            `BaseTheme` maps a tap to button 1–4 (or 0 for a miss), accounting
+            for the current screen orientation.
+
+            ### What is new in 1.16.2
+
+            Touch fix: the three apps missing touch in 1.16.1 (Clock,
+            Device Info, OTP Generator) now respond to touch. All list
+            apps now use the correct theme-aware row step and proper
+            pagination so tapping any row on any page selects the right
+            item. RoundedRaff users are no longer affected by the 6px
+            gap mismatch.
+
+            ### What is new in 1.16.1
+
+            Touch input for all 17 biscuit apps. Every app in
+            src/apps_local/ now responds to capacitive touch alongside
+            buttons: row taps for menus and lists, area taps for actions,
+            and coordinate-mapped taps for grids (calculator keypad,
+            Morse dot/dash halves).
+
+            ### What is new in 1.16.0
+
+            62 apps ported from [biscuit](https://github.com/yattsu/biscuit)
+            across five batches, plus simulator and build-system work to keep
+            all of them building and testable without hardware.
+
+            **Passive WiFi / RF recon (Batch A)**
+
+            Probe Sniffer, Crowd Density, Deauth Detector, Packet Monitor,
+            Network Monitor, Net Change, Device Fingerprinter, AP History
+            Logger, Wardriving, WiFi Heatmap, Signal Triangulation, Vendor OUI,
+            WiFi Creds QR, Tracker Detector, Perimeter Watch, Credential
+            Viewer, Barcode Generator, Key Copier.
+
+            **Active wireless tools (Batch B)**
+
+            Beacon Flood, AP Cloner, BLE Spam, Captive Portal, WiFi Deauth,
+            Fire, SSID Channel, AirTag Spoof, BLE Beacon, BLE Keyboard,
+            USB HID, Dead Drop, Mesh Chat, Bulletin Board.
+
+            **BLE and network utilities (Batch C)**
+
+            BLE Scanner, BLE Proximity, BLE Contact Exchange, DNS Lookup,
+            Host Scanner, HTTP Client, mDNS Browser, Ping, WiFi Connect,
+            Vehicle Finder.
+
+            **Offline utilities (Batch D)**
+
+            Calculator, Cipher Tools, Clock, Countdown, Device Info,
+            Morse Code, OTP Generator, Password Manager, QR Generator,
+            SD File Browser, Unit Converter.
+
+            **Security utilities (Batch E)**
+
+            Steganography, SD Encryption, Security PIN, Quick Wipe,
+            Screen Decoy, QR TOTP, USB Mass Storage.
+
+            All hardware-only apps (Batches A–C) are excluded from the
+            simulator build via `#if !defined(SIMULATOR)` and require the
+            X4 Pro's ESP32-S3 WiFi/BLE stack. Batches D and E run fully
+            in the simulator.
+
+            ### What is new in 1.15.1
+
+            A polish release on top of 1.15.0: the Tarot app, the WiFi Scanner
+            and the German translations.
+
+            **Tarot**
+
+            - Reliable navigation: a visible control bar with three labelled
+              zones (meaning, draw, history) replaces the old hidden tap halves,
+              and tapping the card no longer draws a new one by accident.
+            - Cards are dealt face down and turned over to read, with a drawn
+              card back that also shows the deck before you draw.
+
+            **WiFi Scanner**
+
+            - Touch control: tap a network for its details, tap to leave the
+              detail, signal and channel views.
+
+            **Other**
+
+            - The Authenticator's empty, locked and set-up screens no longer run
+              their heading and body together ("NO ACCOUNTSAdd a TOTP...").
+            - 31 German strings that showed in English are translated: the
+              frontlight panel, Developer Mode, OPDS filters and more.
+
+            PLAY NEARBY games remain: Chess, Checkers, Connect Four, Yahtzee,
+            Knucklebones, Battleship, Jaipur, Sea Salt and Toy Battle.
+
+            ### Install
+
+            - USB full image: `crossplay-<version>-x4pro-full.bin`
+            - OTA app image: `firmware.bin`
+
+      - name: Tell the board a release went out
+        if: vars.SUPABASE_URL != '' && vars.SUPABASE_ANON_KEY != ''
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          curl -sS -o /dev/null -w "events: %{http_code}\n" -X POST "$SUPABASE_URL/rest/v1/events" \
+            -H "apikey: $SUPABASE_ANON_KEY" -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" -H "Prefer: return=minimal" \
+            -d "{\"service\":\"release\",\"event\":\"release\",\"version\":\"${GITHUB_REF_NAME#v}\",\"props\":{\"tag\":\"$GITHUB_REF_NAME\"}}" || true

@@ -1,0 +1,409 @@
+#include "SteganographyActivity.h"
+#include "../Shelf.h"
+
+#include <HalStorage.h>
+#include <Logging.h>
+
+#include <cstring>
+
+#include "MappedInputManager.h"
+#include "activities/util/KeyboardEntryActivity.h"
+#include "components/UITheme.h"
+#include "fontIds.h"
+
+void SteganographyActivity::onEnter() {
+  Activity::onEnter();
+  state = MODE_SELECT;
+  mode = EMBED;
+  fileCount = 0;
+  fileIndex = 0;
+  messageLen = 0;
+  messageBuffer[0] = '\0';
+  scrollOffset = 0;
+  embedSuccess = false;
+  extractFound = false;
+  requestUpdate();
+}
+
+void SteganographyActivity::onExit() { Activity::onExit(); }
+
+void SteganographyActivity::loadFileList() {
+  fileCount = 0;
+  fileIndex = 0;
+
+  HalFile dir = Storage.open("/crossplay/drawings");
+  if (!dir || !dir.isDirectory()) return;
+
+  HalFile entry;
+  while ((entry = dir.openNextFile()) && fileCount < MAX_FILES) {
+    char name[32];
+    entry.getName(name, sizeof(name));
+    size_t len = strlen(name);
+    if (len > 4) {
+      const char* ext = name + len - 4;
+      if (ext[0] == '.' &&
+          (ext[1] == 'b' || ext[1] == 'B') &&
+          (ext[2] == 'm' || ext[2] == 'M') &&
+          (ext[3] == 'p' || ext[3] == 'P')) {
+        strncpy(fileNames[fileCount], name, sizeof(fileNames[0]) - 1);
+        fileNames[fileCount][sizeof(fileNames[0]) - 1] = '\0';
+        fileCount++;
+      }
+    }
+    entry.close();
+  }
+  dir.close();
+}
+
+bool SteganographyActivity::embedMessage(const char* path, const char* msg, int len) {
+  HalFile src = Storage.open(path, O_RDONLY);
+  if (!src) return false;
+
+  uint8_t magic[2];
+  if (src.read(magic, 2) != 2 || magic[0] != 'B' || magic[1] != 'M') {
+    src.close();
+    embedSuccess = false;
+    strncpy(messageBuffer, "Not a valid BMP file", MAX_MSG_LEN);
+    messageBuffer[MAX_MSG_LEN] = '\0';
+    messageLen = 0;
+    return false;
+  }
+
+  if (!src.seekSet(2)) { src.close(); return false; }
+  uint32_t bmpSize = 0;
+  if (src.read(&bmpSize, 4) != 4) { src.close(); return false; }
+  if (bmpSize < 62 || bmpSize > 1024UL * 1024UL * 4UL) { src.close(); return false; }
+  src.seekSet(0);
+
+  char tmpPath[88];
+  snprintf(tmpPath, sizeof(tmpPath), "%s.tmp", path);
+  Storage.remove(tmpPath);
+
+  HalFile dst = Storage.open(tmpPath, O_WRITE | O_CREAT | O_TRUNC);
+  if (!dst) { src.close(); return false; }
+
+  uint8_t buf[128];
+  uint32_t remaining = bmpSize;
+  bool copyOk = true;
+  while (remaining > 0 && copyOk) {
+    uint32_t toRead = (remaining < sizeof(buf)) ? remaining : sizeof(buf);
+    int got = src.read(buf, toRead);
+    if (got <= 0) { copyOk = false; break; }
+    size_t wrote = dst.write(buf, (size_t)got);
+    if (wrote != (size_t)got) { copyOk = false; break; }
+    remaining -= (uint32_t)got;
+  }
+  src.close();
+
+  if (!copyOk) {
+    dst.close();
+    Storage.remove(tmpPath);
+    return false;
+  }
+
+  dst.write((const uint8_t*)"STEG", 4);
+  uint32_t len32 = (uint32_t)len;
+  dst.write((const uint8_t*)&len32, 4);
+  dst.write((const uint8_t*)msg, (size_t)len);
+  uint8_t checksum = 0;
+  for (int i = 0; i < len; i++) checksum ^= (uint8_t)msg[i];
+  dst.write(&checksum, 1);
+  dst.flush();
+  dst.close();
+
+  Storage.remove(path);
+  if (!Storage.rename(tmpPath, path)) {
+    LOG_ERR("Steganography", "rename %s -> %s failed", tmpPath, path);
+    return false;
+  }
+  return true;
+}
+
+bool SteganographyActivity::extractMessage(const char* path) {
+  messageLen = 0;
+  messageBuffer[0] = '\0';
+
+  HalFile f = Storage.open(path, O_RDONLY);
+  if (!f) return false;
+
+  if (!f.seekSet(2)) { f.close(); return false; }
+  uint32_t bmpSize = 0;
+  if (f.read(&bmpSize, 4) != 4) { f.close(); return false; }
+
+  uint32_t fileSize = (uint32_t)f.size();
+  if (fileSize <= bmpSize + 9U) { f.close(); return false; }
+  if (!f.seekSet(bmpSize)) { f.close(); return false; }
+
+  char mg[4];
+  if (f.read(mg, 4) != 4) { f.close(); return false; }
+  if (memcmp(mg, "STEG", 4) != 0) { f.close(); return false; }
+
+  uint32_t len32 = 0;
+  if (f.read(&len32, 4) != 4) { f.close(); return false; }
+  if (len32 == 0 || len32 > (uint32_t)MAX_MSG_LEN) { f.close(); return false; }
+
+  int got = f.read(messageBuffer, (size_t)len32);
+  if (got != (int)len32) { f.close(); return false; }
+  messageBuffer[len32] = '\0';
+
+  uint8_t storedChecksum = 0;
+  if (f.read(&storedChecksum, 1) != 1) { f.close(); return false; }
+  f.close();
+
+  uint8_t calcChecksum = 0;
+  for (uint32_t i = 0; i < len32; i++) calcChecksum ^= (uint8_t)messageBuffer[i];
+  if (storedChecksum != calcChecksum) { messageLen = 0; messageBuffer[0] = '\0'; return false; }
+
+  messageLen = (int)len32;
+  return true;
+}
+
+void SteganographyActivity::doEmbed() {
+  embedSuccess = embedMessage(selectedPath, messageBuffer, messageLen);
+  state = EMBED_DONE;
+  requestUpdate();
+}
+
+void SteganographyActivity::doExtract() {
+  extractFound = extractMessage(selectedPath);
+  scrollOffset = 0;
+  totalLines = 0;
+  linesCacheDirty = true;
+  state = EXTRACT_RESULT;
+  requestUpdate();
+}
+
+void SteganographyActivity::loop() {
+  if (state == MODE_SELECT) {
+    buttonNavigator.onNext([this] { mode = (mode == EMBED) ? EXTRACT : EMBED; requestUpdate(); });
+    buttonNavigator.onPrevious([this] { mode = (mode == EMBED) ? EXTRACT : EMBED; requestUpdate(); });
+
+    bool confirmAction = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+    {
+      const auto& m = UITheme::getInstance().getMetrics();
+      int touchRow = -1;
+      const auto rt = mappedInput.rowTouch(touchRow,
+                                           m.topPadding + m.headerHeight + m.verticalSpacing,
+                                           GUI.getListRowStep(true), 2, 0, renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < 2) {
+        mode = (touchRow == 0) ? EMBED : EXTRACT;
+        if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
+        requestUpdate();
+      }
+    }
+    if (confirmAction) {
+      loadFileList();
+      fileIndex = 0;
+      state = FILE_SELECT;
+      requestUpdate();
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      shelf::leave(renderer, mappedInput);
+    }
+    return;
+  }
+
+  if (state == FILE_SELECT) {
+    buttonNavigator.onNext([this] {
+      if (fileCount > 0) { fileIndex = ButtonNavigator::nextIndex(fileIndex, fileCount); requestUpdate(); }
+    });
+    buttonNavigator.onPrevious([this] {
+      if (fileCount > 0) { fileIndex = ButtonNavigator::previousIndex(fileIndex, fileCount); requestUpdate(); }
+    });
+
+    bool confirmAction = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+    if (fileCount > 0) {
+      const auto& m = UITheme::getInstance().getMetrics();
+      int touchRow = -1;
+      const int rowStep2 = GUI.getListRowStep(true);
+      const int listTop2 = m.topPadding + m.headerHeight + m.verticalSpacing;
+      const int listH2 = renderer.getScreenHeight() - listTop2 - m.buttonHintsHeight - m.verticalSpacing;
+      const int pageItems2 = std::max(1, listH2 / rowStep2);
+      const int pageStart2 = (fileIndex / pageItems2) * pageItems2;
+      const int pageCount2 = std::min(pageItems2, fileCount - pageStart2);
+      const auto rt = mappedInput.rowTouch(touchRow, listTop2, rowStep2, pageCount2, 0, renderer.getScreenWidth(), m.listWithSubtitleRowHeight);
+      if (rt != MappedInputManager::RowTouch::None && touchRow >= 0 && touchRow < pageCount2) {
+        const int actualIdx2 = pageStart2 + touchRow;
+        if (actualIdx2 < fileCount) {
+          fileIndex = actualIdx2;
+          if (rt == MappedInputManager::RowTouch::Tap) confirmAction = true;
+          requestUpdate();
+        }
+      }
+    }
+    if (confirmAction && fileCount > 0) {
+      {
+        snprintf(selectedPath, sizeof(selectedPath), "/crossplay/drawings/%s", fileNames[fileIndex]);
+        if (mode == EMBED) {
+          startActivityForResult(
+              std::make_unique<KeyboardEntryActivity>(renderer, mappedInput,
+                                                     "Secret Message", "", MAX_MSG_LEN, InputType::Text),
+              [this](const ActivityResult& result) {
+                if (!result.isCancelled) {
+                  const auto& kb = std::get<KeyboardResult>(result.data);
+                  int len = static_cast<int>(kb.text.size());
+                  if (len > MAX_MSG_LEN) len = MAX_MSG_LEN;
+                  memcpy(messageBuffer, kb.text.c_str(), (size_t)len);
+                  messageBuffer[len] = '\0';
+                  messageLen = len;
+                  if (messageLen > 0) { doEmbed(); }
+                  else { state = MODE_SELECT; requestUpdate(); }
+                } else {
+                  state = MODE_SELECT; requestUpdate();
+                }
+              });
+        } else {
+          doExtract();
+        }
+      }
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      state = MODE_SELECT; requestUpdate();
+    }
+    return;
+  }
+
+  if (state == EMBED_DONE) {
+    int tx_, ty_;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+        mappedInput.wasScreenTapped(tx_, ty_)) {
+      state = MODE_SELECT;
+      requestUpdate();
+    }
+    return;
+  }
+
+  if (state == EXTRACT_RESULT) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
+    const int pageHeight = renderer.getScreenHeight();
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+    int visibleLines = contentHeight / lineH;
+    if (visibleLines < 1) visibleLines = 1;
+
+    buttonNavigator.onNext([this, visibleLines] {
+      if (scrollOffset + visibleLines < totalLines) { scrollOffset += visibleLines; requestUpdate(); }
+    });
+    buttonNavigator.onPrevious([this, visibleLines] {
+      if (scrollOffset > 0) { scrollOffset -= visibleLines; if (scrollOffset < 0) scrollOffset = 0; requestUpdate(); }
+    });
+
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      state = MODE_SELECT; requestUpdate();
+    }
+    return;
+  }
+}
+
+void SteganographyActivity::render(RenderLock&&) {
+  renderer.clearScreen();
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "Stego Notes");
+
+  if (state == MODE_SELECT) {
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+
+    static const char* const modeLabels[2] = {"Embed Message", "Extract Message"};
+    GUI.drawList(renderer, Rect{0, contentTop, pageWidth, contentHeight},
+                 2, static_cast<int>(mode),
+                 [](int i) -> std::string { return modeLabels[i]; },
+                 [](int i) -> std::string {
+                   return (i == 0) ? "Hide text in a BMP image" : "Read hidden text from a BMP image";
+                 });
+
+    const auto labels = mappedInput.mapLabels("Back", "Select", "^", "v");
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+    return;
+  }
+
+  if (state == FILE_SELECT) {
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+
+    if (fileCount == 0) {
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "No BMP files in /crossplay/drawings");
+    } else {
+      GUI.drawList(renderer, Rect{0, contentTop, pageWidth, contentHeight},
+                   fileCount, fileIndex,
+                   [this](int i) -> std::string { return fileNames[i]; },
+                   [this](int i) -> std::string {
+                     char buf[48];
+                     snprintf(buf, sizeof(buf), "/crossplay/drawings/%s", fileNames[i]);
+                     return buf;
+                   });
+    }
+
+    const char* action = (mode == EMBED) ? "Embed" : "Extract";
+    const auto labels = mappedInput.mapLabels("Back", action, "^", "v");
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+    return;
+  }
+
+  if (state == EMBED_DONE) {
+    int y = pageHeight / 2 - 40;
+    if (embedSuccess) {
+      renderer.drawCenteredText(UI_12_FONT_ID, y, "Message embedded!", true, EpdFontFamily::BOLD);
+      y += 45;
+      const char* slash = strrchr(selectedPath, '/');
+      renderer.drawCenteredText(UI_10_FONT_ID, y, slash ? slash + 1 : selectedPath);
+    } else {
+      renderer.drawCenteredText(UI_12_FONT_ID, y, "Embed failed", true, EpdFontFamily::BOLD);
+      y += 45;
+      renderer.drawCenteredText(UI_10_FONT_ID, y, "Check that the file exists and is writable");
+    }
+
+    const auto labels = mappedInput.mapLabels("Back", "", "", "");
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+    return;
+  }
+
+  if (state == EXTRACT_RESULT) {
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+    const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
+    const int maxWidth = pageWidth - 2 * metrics.contentSidePadding;
+    int visibleLines = contentHeight / lineH;
+    if (visibleLines < 1) visibleLines = 1;
+
+    if (!extractFound || messageLen == 0) {
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "No hidden message found");
+    } else {
+      if (linesCacheDirty) {
+        cachedLines = renderer.wrappedText(UI_10_FONT_ID, messageBuffer, maxWidth, 0);
+        linesCacheDirty = false;
+      }
+      totalLines = static_cast<int>(cachedLines.size());
+
+      int y = contentTop;
+      for (int i = scrollOffset; i < scrollOffset + visibleLines && i < totalLines; i++) {
+        renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y, cachedLines[i].c_str());
+        y += lineH;
+      }
+
+      if (totalLines > visibleLines) {
+        int totalPages = (totalLines + visibleLines - 1) / visibleLines;
+        int currentPage = scrollOffset / visibleLines + 1;
+        char pageInfo[16];
+        snprintf(pageInfo, sizeof(pageInfo), "%d/%d", currentPage, totalPages);
+        int pw = renderer.getTextWidth(SMALL_FONT_ID, pageInfo);
+        renderer.drawText(SMALL_FONT_ID,
+                          pageWidth - pw - metrics.contentSidePadding,
+                          pageHeight - metrics.buttonHintsHeight - 20,
+                          pageInfo);
+      }
+    }
+
+    const auto labels = mappedInput.mapLabels("Back", "", "^", "v");
+    GUI.drawButtonHintsAlways(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+    return;
+  }
+}
