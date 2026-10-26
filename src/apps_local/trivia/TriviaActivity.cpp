@@ -584,11 +584,68 @@ void TriviaActivity::routeAction(const int action, const int value) {
         score_.reset();
         go(View::Solo);
         deal();
-      } else {
+      } else if (value == 2) {
         difficulty_ = (difficulty_ + 1) % (trivia::kDifficulties + 1);
         saveDifficulty(difficulty_);
         requestUpdate();
+      } else if (value == 3) {
+        if (awsInstalled_) {
+          go(View::AwsMenu);
+        } else {
+          showNotice("AWS PACK MISSING", "Install a private AWS study pack at /trivia/aws/pack.dat.",
+                     "BACK", triviaui::ActionAwsHome);
+        }
       }
+      break;
+    case triviaui::ActionAwsHome:
+      go(View::Menu);
+      break;
+    case triviaui::ActionAwsBackToMenu:
+      go(View::AwsMenu);
+      break;
+    case triviaui::ActionAwsDomains:
+      go(View::AwsDomains);
+      break;
+    case triviaui::ActionAwsAllDomains:
+      awsDomains_ = trivia::kAwsAllDomains;
+      saveAwsDomains();
+      requestUpdate();
+      break;
+    case triviaui::ActionAwsToggleDomain:
+      if (value >= 0 && value < trivia::kAwsDomains) {
+        awsDomains_ ^= static_cast<uint8_t>(1u << value);
+        saveAwsDomains();
+        requestUpdate();
+      }
+      break;
+    case triviaui::ActionAwsBegin:
+    case triviaui::ActionAwsReview:
+      if (!awsInstalled_) break;
+      if (awsDomains_ == 0) {
+        showNotice("NO DOMAINS", "Enable at least one AWS exam domain.",
+                   "DOMAINS", triviaui::ActionAwsDomains);
+        break;
+      }
+      awsScore_.reset();
+      awsReviewMissed_ = action == triviaui::ActionAwsReview;
+      awsDeal();
+      break;
+    case triviaui::ActionAwsPageNext:
+      awsNextPage();
+      break;
+    case triviaui::ActionAwsPageBack:
+      awsPreviousPage();
+      break;
+    case triviaui::ActionAwsToggleOption:
+      if (view_ == View::AwsOption && awsHasQuestion_) {
+        const uint8_t bit = static_cast<uint8_t>(1u << awsOption_);
+        awsSelected_ = awsQuestion_.multiple()
+                          ? static_cast<uint8_t>(awsSelected_ ^ bit) : bit;
+        requestUpdate();
+      }
+      break;
+    case triviaui::ActionAwsSubmit:
+      if (view_ == View::AwsOption) awsSubmit();
       break;
     case triviaui::ActionQuit: {
       // Quizmaster keeps no score -- it is a person reading to a room, and
