@@ -106,7 +106,7 @@ void testAwsQuestion() {
     model.more = more;
     Rendered out;
     render(out, model, &triviaui::buildAwsQuestion);
-    assert(out.draw.contains("AWS FRAGE"));
+    assert(out.draw.contains("LERNFRAGE"));
     assert(out.draw.contains(model.text));
     assert(out.draw.contains(more ? "MEHR TEXT" : "ANTWORTEN"));
     assert(out.tap(80, 750).action == triviaui::ActionAwsFinish);

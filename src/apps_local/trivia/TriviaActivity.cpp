@@ -210,7 +210,7 @@ bool TriviaActivity::openAwsPack() {
   g_awsPackSource.attach(g_awsPackFile);
   if (!awsPack_.open(g_awsPackSource)) {
     g_awsPackFile.close();
-    LOG_ERR("TRIVIA", "Invalid AWS study pack");
+    LOG_ERR("TRIVIA", "Invalid study pack");
     return false;
   }
   bool sameContent = false;
@@ -604,9 +604,9 @@ void TriviaActivity::awsDeal() {
       go(View::AwsSummary);
       return;
     }
-    showNotice("NO AWS QUESTIONS",
+    showNotice("NO STUDY QUESTIONS",
                awsReviewMissed_ ? "No previously missed questions in your enabled domains."
-                                : "No matching questions. Enable more AWS domains.",
+                                : "No matching questions. Enable more topics.",
                "DOMAINS", triviaui::ActionAwsDomains);
     return;
   }
@@ -819,7 +819,7 @@ void TriviaActivity::routeAction(const int action, const int value) {
     case triviaui::ActionAwsReview:
       if (!awsInstalled_) break;
       if (awsDomains_ == 0) {
-        showNotice("NO DOMAINS", "Enable at least one AWS exam domain.",
+        showNotice("NO DOMAINS", "Enable at least one study topic.",
                    "DOMAINS", triviaui::ActionAwsDomains);
         break;
       }

@@ -154,7 +154,7 @@ void buildStudyDeckList(toybox::Screen& screen, const StudyDeckListModel& model)
 }
 
 void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model) {
-  chrome(screen, model.german ? "AWS LERNEN" : "AWS DEVOPS");
+  chrome(screen, model.german ? "LERNPAKET" : "STUDY PACK");
   const fui::Rect body = screen.body();
   char count[64];
   std::snprintf(count, sizeof(count), model.german ? "%u / %u GESEHEN | %u BEREICHE"
@@ -211,7 +211,7 @@ void buildAwsQuestion(toybox::Screen& screen, const AwsPageModel& model) {
   chrome(screen, model.german ? "LERNFRAGE" : "STUDY QUESTION");
   char status[44];
   std::snprintf(status, sizeof(status), model.german ? "BEREICH %u | FRAGE LESEN"
-                                                      : "DOMAIN %u | READ THE SCENARIO",
+                                                      : "TOPIC %u | READ THE QUESTION",
                 static_cast<unsigned>(model.domain));
   frameText(screen, model, status);
   footerPair(screen, model.german ? "ENDE" : "EXIT", ActionAwsFinish,
