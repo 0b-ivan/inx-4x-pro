@@ -20,6 +20,35 @@ The files `pack.state` and `pack-de.state` store independent progress and
 flags; changing UI languages never reuses the other pack's state.
 Both languages use XTRIVIA format version 1. The header explicitly marks German data with flag bit 0; legacy English packs have flags 0. Firmware rejects a file whose header language does not match its selected file path, preventing an English pack renamed to `pack-de.dat` from being presented as German.
 
+## Start a 20-question pilot from a phone (GitHub Actions)
+
+No Mac or local terminal is required. Use Safari/Chrome on your phone;
+GitHub's mobile app may not expose repository-secret settings, so request
+the **desktop website** if necessary.
+
+1. Revoke the OpenRouter key that was previously pasted into a chat.
+   Make a fresh, temporary key with a low spending limit and short expiry.
+2. Open [Actions secrets](https://github.com/0b-ivan/inx-4x-pro/settings/secrets/actions)
+   and create a **repository secret** named `OPENROUTER_API_KEY`.
+   Paste the fresh key there, **not into a GitHub issue, PR, chat or file**.
+3. Open the existing [CrossPlay workflow](https://github.com/0b-ivan/inx-4x-pro/actions/workflows/crossplay-ci.yml).
+   Choose **Run workflow**, select branch
+   `fix/i18n-translation-quality-audit`, leave `publish_nightly` off,
+   and select **Run workflow** again.
+4. The `German quiz translation pilot (20 questions)` job downloads the
+   **SHA-256 pinned** upstream English pack, extracts its original questions,
+   sends at most 20 questions to OpenRouter (`openai/gpt-4o-mini`), validates
+   and exports `trivia-german-pilot-unreviewed` as a GitHub Actions artifact.
+   The artifact is retained for **one day** and must be reviewed before use.
+5. Afterwards delete the Actions secret and revoke the temporary OpenRouter
+   key. A finished pilot does not produce or publish a release package.
+
+The workflow job only runs on an **explicit manual dispatch of this exact
+branch**. Regular pull requests, pushes and release jobs will **not** use the
+OpenRouter key. The existing GitHub Actions workflow file is on the default
+branch; the extra pilot job is only defined on this pull-request branch.
+Each full workflow dispatch may also run the repository's ordinary CI jobs.
+
 ## Build from the publicly released English pack
 
 The original, enormous seasons 1–42 TSV is **not required**. Export the
