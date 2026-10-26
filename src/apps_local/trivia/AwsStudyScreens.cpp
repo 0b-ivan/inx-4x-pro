@@ -1,0 +1,186 @@
+#include "AwsStudyScreens.h"
+#include "TriviaScreens.h"
+
+#include <cstdio>
+
+namespace triviaui {
+namespace {
+
+constexpr int16_t kMargin = 16;
+
+fui::TextStyle style(const fui::FontId font, const fui::TextAlign align,
+                     const fui::Color fg = fui::Color::Black) {
+  fui::TextStyle s;
+  s.font = font;
+  s.align = align;
+  s.color = fg;
+  return s;
+}
+
+void label(toybox::Screen& screen, const fui::Rect& rect, const char* txt,
+           const bool invert = false) {
+  screen.target().text(toybox::inkCentred(rect, toybox::kButtonCut), txt,
+                       style(toybox::kSmallFont, fui::TextAlign::Center,
+                             invert ? fui::Color::White : fui::Color::Black));
+}
+
+void prose(toybox::Screen& screen, const fui::Rect& rect, const char* txt) {
+  fui::TextStyle s = style(toybox::kBodyFont, fui::TextAlign::Left);
+  const int16_t lineHeight = screen.target().lineHeight(s.font);
+  const int lines = lineHeight > 0 ? rect.height / lineHeight : 1;
+  s.maxLines = static_cast<uint8_t>(lines < 1 ? 1 : (lines > 16 ? 16 : lines));
+  screen.target().text(rect, txt, s);
+}
+
+void chrome(toybox::Screen& screen, const char* title) {
+  fui::HeaderProps header;
+  header.title = title;
+  header.borderEdges = fui::EdgesNone;
+  toybox::absoluteChrome(screen);
+  toybox::headerBand(screen, header);
+  toybox::headerRule(screen);
+}
+
+int16_t footer(const toybox::Screen& screen) {
+  return static_cast<int16_t>(screen.body().bottom() - 96);
+}
+
+void button(toybox::Screen& screen, const fui::Rect& rect, const char* txt,
+            fui::ActionId action, int16_t value = 0, bool filled = false) {
+  if (filled) {
+    screen.target().fill(rect, fui::Paint::solid(fui::Color::Black));
+  } else {
+    screen.target().stroke(rect, fui::Paint::solid(fui::Color::Black), 2);
+  }
+  label(screen, rect, txt, filled);
+  screen.frame().hit(rect, action, value);
+}
+
+void footerPair(toybox::Screen& screen, const char* left, fui::ActionId leftAction,
+                const char* right, fui::ActionId rightAction) {
+  const fui::Rect body = screen.body();
+  const int16_t top = static_cast<int16_t>(footer(screen) + 16);
+  const int16_t w = static_cast<int16_t>((body.width - kMargin * 3) / 2);
+  button(screen, {static_cast<int16_t>(body.x + kMargin), top, w, 62}, left, leftAction);
+  button(screen, {static_cast<int16_t>(body.x + kMargin * 2 + w), top, w, 62},
+         right, rightAction, 0, true);
+}
+
+void footerThree(toybox::Screen& screen, const char* first, fui::ActionId a,
+                 const char* second, fui::ActionId b, const char* third, fui::ActionId c) {
+  const fui::Rect body = screen.body();
+  const int16_t y = static_cast<int16_t>(footer(screen) + 16);
+  const int16_t gap = 8;
+  const int16_t w = static_cast<int16_t>((body.width - kMargin * 2 - gap * 2) / 3);
+  const int16_t x = static_cast<int16_t>(body.x + kMargin);
+  button(screen, {x, y, w, 62}, first, a);
+  button(screen, {static_cast<int16_t>(x + w + gap), y, w, 62}, second, b);
+  button(screen, {static_cast<int16_t>(x + 2 * (w + gap)), y, w, 62}, third, c, 0, true);
+}
+
+const char* domainName(const int i) {
+  constexpr const char* names[] = {
+      "1  SDLC AUTOMATION", "2  CONFIGURATION / IAC", "3  RESILIENT CLOUD",
+      "4  MONITORING / LOGGING", "5  INCIDENT RESPONSE", "6  SECURITY / COMPLIANCE"};
+  return i >= 0 && i < 6 ? names[i] : "";
+}
+
+void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* status) {
+  const fui::Rect body = screen.body();
+  const int16_t top = static_cast<int16_t>(body.y + 20);
+  label(screen, {static_cast<int16_t>(body.x + kMargin), top,
+                 static_cast<int16_t>(body.width - 2 * kMargin), 32}, status);
+  screen.target().fill({static_cast<int16_t>(body.x + kMargin), static_cast<int16_t>(top + 36),
+                        static_cast<int16_t>(body.width - 2 * kMargin), 2},
+                       fui::Paint::solid(fui::Color::Black));
+  prose(screen, {static_cast<int16_t>(body.x + kMargin), static_cast<int16_t>(top + 54),
+                 static_cast<int16_t>(body.width - 2 * kMargin),
+                 static_cast<int16_t>(footer(screen) - top - 70)}, model.text);
+}
+
+}  // namespace
+
+void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model) {
+  chrome(screen, "AWS DEVOPS");
+  const fui::Rect body = screen.body();
+  char count[64];
+  std::snprintf(count, sizeof(count), "%u / %u SEEN  |  %u DOMAINS",
+                static_cast<unsigned>(model.seen), static_cast<unsigned>(model.count),
+                static_cast<unsigned>(
+                    ((model.enabled >> 0) & 1u) + ((model.enabled >> 1) & 1u) +
+                    ((model.enabled >> 2) & 1u) + ((model.enabled >> 3) & 1u) +
+                    ((model.enabled >> 4) & 1u) + ((model.enabled >> 5) & 1u)));
+  label(screen, {body.x, static_cast<int16_t>(body.y + 28), body.width, 42}, count);
+  const int16_t x = static_cast<int16_t>(body.x + kMargin);
+  const int16_t w = static_cast<int16_t>(body.width - 2 * kMargin);
+  button(screen, {x, static_cast<int16_t>(body.y + 105), w, 142}, "STUDY QUESTIONS",
+         ActionAwsBegin, 0, true);
+  button(screen, {x, static_cast<int16_t>(body.y + 265), w, 112}, "REVIEW MISSED",
+         ActionAwsReview);
+  button(screen, {x, static_cast<int16_t>(body.y + 394), w, 112}, "SELECT DOMAINS",
+         ActionAwsDomains);
+  footerPair(screen, "TRIVIA", ActionAwsHome, "START", ActionAwsBegin);
+}
+
+void buildAwsDomains(toybox::Screen& screen, const AwsDomainsModel& model) {
+  chrome(screen, "AWS DOMAINS");
+  const fui::Rect body = screen.body();
+  const int16_t x = static_cast<int16_t>(body.x + kMargin);
+  const int16_t w = static_cast<int16_t>(body.width - kMargin * 2);
+  for (int i = 0; i < trivia::kAwsDomains; ++i) {
+    const int16_t y = static_cast<int16_t>(body.y + 12 + i * 89);
+    const fui::Rect box{x, y, w, 77};
+    const bool on = (model.enabled & (1u << i)) != 0;
+    screen.target().stroke(box, fui::Paint::solid(fui::Color::Black), 2);
+    if (on) {
+      const fui::Rect tick{static_cast<int16_t>(x + 7), static_cast<int16_t>(y + 25), 27, 27};
+      screen.target().fill(tick, fui::Paint::solid(fui::Color::Black));
+    }
+    const fui::Rect textBox{static_cast<int16_t>(x + 41), y,
+                            static_cast<int16_t>(w - 42), 77};
+    screen.target().text(toybox::inkCentred(textBox, toybox::kButtonCut),
+                         domainName(i), style(toybox::kSmallFont, fui::TextAlign::Left));
+    screen.frame().hit(box, ActionAwsToggleDomain, static_cast<int16_t>(i));
+  }
+  footerPair(screen, "ALL ON", ActionAwsAllDomains, "DONE", ActionAwsBackToMenu);
+}
+
+void buildAwsQuestion(toybox::Screen& screen, const AwsPageModel& model) {
+  chrome(screen, "AWS QUESTION");
+  char status[44];
+  std::snprintf(status, sizeof(status), "DOMAIN %u  |  READ THE SCENARIO",
+                static_cast<unsigned>(model.domain));
+  frameText(screen, model, status);
+  footerPair(screen, "EXIT", ActionAwsBackToMenu,
+             model.more ? "MORE TEXT" : "ANSWERS", ActionAwsPageNext);
+}
+
+void buildAwsOption(toybox::Screen& screen, const AwsPageModel& model) {
+  chrome(screen, "AWS ANSWERS");
+  char status[64];
+  const bool marked = (model.selected & (1u << model.option)) != 0;
+  std::snprintf(status, sizeof(status), "OPTION %c / %u  |  %s",
+                static_cast<char>('A' + model.option),
+                static_cast<unsigned>(model.optionCount), marked ? "SELECTED" : "NOT SELECTED");
+  frameText(screen, model, status);
+  // Three always-visible controls: select/deselect, previous, and next text/
+  // next option or grade. Multi-answer questions must be submitted explicitly.
+  footerThree(screen, marked ? "UNMARK" : "MARK", ActionAwsToggleOption,
+              "BACK", ActionAwsPageBack,
+              model.more ? "MORE" :
+                  (model.option + 1 < model.optionCount ? "NEXT" : "GRADE"),
+              model.more || model.option + 1 < model.optionCount
+                  ? ActionAwsPageNext : ActionAwsSubmit);
+}
+
+void buildAwsExplanation(toybox::Screen& screen, const AwsPageModel& model) {
+  chrome(screen, "AWS REVIEW");
+  char status[64];
+  std::snprintf(status, sizeof(status), "%s  |  %d OF %d CORRECT",
+                model.correctAnswer ? "CORRECT" : "INCORRECT", model.right, model.asked);
+  frameText(screen, model, status);
+  footerPair(screen, "END", ActionAwsBackToMenu,
+             model.more ? "MORE TEXT" : "NEXT QUESTION", ActionAwsPageNext);
+}
+
+}  // namespace triviaui
