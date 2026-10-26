@@ -41,6 +41,8 @@ EN_SPELLED_NUMBERS = {"a":1,"one":1,"two":2,"three":3,"four":4,
 EN_SPELLED_DENOMS = {"half":2,"third":3,"thirds":3,
     "quarter":4,"quarters":4,"fourth":4,"fourths":4,"fifth":5,"fifths":5}
 WAR_ABBREV = re.compile(r"(?<!\w)ww(ii|i)(?!\w)",re.I)
+WORLD_WAR = re.compile(r"(?<!\w)world\s+war\s+(iii|ii|iv|i)(?!\w)", re.I)
+ROMAN_WARS = {"i":"1","ii":"2","iii":"3","iv":"4"}
 EN_QUARTER = re.compile(r"(?<!\w)a quarter(?!\w)",re.I)
 DE_FRAC = re.compile(r"(?<!\w)(ein|eine|einen|zwei|drei|vier|fünf|sechs|sieben|acht|neun)\s+(Drittel|Viertel|Fünftel|Halb)(?!\w)",re.I)
 NUMWORDS = {"ein":1,"eine":1,"einen":1,"zwei":2,"drei":3,"vier":4,"fünf":5,"sechs":6,"sieben":7,"acht":8,"neun":9}
@@ -64,6 +66,7 @@ def pre_normalize(value, language):
     text=YEAR_RANGE.sub(expand_year,text)
     text=SLASH_DATE.sub(lambda m:" ".join(m.groups()),text)
     text=WAR_ABBREV.sub(lambda m:"2" if m.group(1)=="ii" else "1",text)
+    text=WORLD_WAR.sub(lambda m:"world war "+ROMAN_WARS[m.group(1)],text)
     if language=="en":
         # These are semantic titles/phrases, not repeated numeric rankings.
         text=re.sub(r"\bfirst lady\b","firstlady",text)
@@ -90,6 +93,8 @@ def pre_normalize(value, language):
             return m.group(0)
         text=EN_MIXED.sub(em,text)
     elif language=="de":
+        # Official English-language titles can remain unchanged in German.
+        text=re.sub(r"\bcentennial\b","100",text)
         text=re.sub(r"\bfirst lady\b","firstlady",text)
         text=re.sub(r"\berstmals\b","1",text)
         text=re.sub(r"\bdrittälteste(?:n|r|s)?\b","3",text)

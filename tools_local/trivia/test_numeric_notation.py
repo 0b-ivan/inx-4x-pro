@@ -75,5 +75,17 @@ class HistoricalTriviaNumerals(unittest.TestCase):
     def test_act_one_vs_akt_eins(self):
         self.ok("In Act One the character appears","In Akt eins erscheint die Figur")
 
+    def test_word_war_roman_numerals(self):
+        self.ok("serving in World War I","diente im Ersten Weltkrieg")
+        self.ok("service during World War II","Dienst im Zweiten Weltkrieg")
+        self.flagged("World War I","im Zweiten Weltkrieg")
+    def test_unchanged_centennial_title(self):
+        self.ok('In 1876 the "Centennial Inaugural March" celebrated the 100th anniversary',
+                '1876 feierte der "Centennial Inaugural March" den 100. Jahrestag')
+    def test_keep_true_issues_flagged(self):
+        self.flagged("450-pound Bengal tiger","450 Pfund schwerer Bengalitiger")
+        self.flagged("The Mirror Has Two Faces","Das Geheimnis der Gefühle")
+        self.flagged("world #1 tea drinker","weltweit größter Teetrinker")
+
 if __name__=="__main__":
     unittest.main()
