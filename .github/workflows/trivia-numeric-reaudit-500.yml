@@ -30,6 +30,7 @@ jobs:
           python-version: '3.13'
       - name: Regression tests for display and numeric semantics
         run: |
+          python3 tools_local/trivia/test_numeric_notation.py
           python3 tools_local/trivia/test_numeric_semantics.py
           python3 tools_local/trivia/test_numerical_equivalence.py
           python3 tools_local/trivia/test_de_pack.py

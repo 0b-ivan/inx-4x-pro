@@ -1,1 +1,1 @@
-Offline 500 question re-audit 2026-10-26: historical EN ordinals, German number-inflected words, slash dates and year abbreviations, fraction equivalence; no OpenRouter API.
+Offline 500 review, full notation tests 2026-10-26: centuries, historical dates, numerals, units, fractions and known propertitle examples. No OpenRouter calls.

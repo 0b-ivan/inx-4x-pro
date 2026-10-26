@@ -55,6 +55,7 @@ def pre_normalize(value, language):
     text=YEAR_RANGE.sub(expand_year,text)
     text=SLASH_DATE.sub(lambda m:" ".join(m.groups()),text)
     if language=="en":
+        text=re.sub(r"\bcentennial\b","100",text)
         text=EN_DECADE.sub(lambda m:m.group(1),text)
         text=EN_ORDINAL.sub(lambda m:m.group(1),text)
         text=EN_RANK.sub(lambda m:EN_RANKS[m.group().casefold()],text)
@@ -65,6 +66,7 @@ def pre_normalize(value, language):
             return m.group(0)
         text=EN_MIXED.sub(em,text)
     elif language=="de":
+        text=re.sub(r"\bzweier\b","2",text)
         text=DE_DECADE.sub(lambda m:m.group(1),text)
         text=DE_RANK.sub(lambda m:DE_RANKS[m.group().casefold()],text)
         for pattern,replace in DE_COMPOUNDS:
