@@ -45,6 +45,58 @@ int main() {
   assert(!parse(nul, c));
   assert(!parse("[\"ready\",\"0123456789abcdef0123456789abcdeg\",0]", c));
 
+  // Randomize must consume private generator state instead of repeating the
+  // same fleet at a predictable public revision. A fixed seed makes the
+  // host-side sequence fully reproducible without depending on ESP32 APIs.
+  bship::Game randomGame;
+  randomGame.turn = 1;
+  BrowserPlayer randomPlayer;
+  randomPlayer.setRandomSeed(0xC0FFEEu);
+  Command randomAction;
+  randomAction.kind = CommandKind::Profile;
+  randomAction.revision = 0;
+  randomAction.value[0] = 0;
+  randomAction.value[1] = 0;
+  randomAction.value[2] = 0;
+  assert(randomPlayer.apply(randomGame, randomAction));
+  uint32_t expectedSeed = 0xC0FFEEu;
+  bship::Fleet expectedFirst, expectedSecond;
+  bship::randomFleet(expectedFirst, expectedSeed);
+  bship::randomFleet(expectedSecond, expectedSeed);
+  randomAction.kind = CommandKind::Randomize;
+  randomAction.revision = randomPlayer.view().revision;
+  assert(randomPlayer.apply(randomGame, randomAction));
+  const auto firstRandomView = randomPlayer.view();
+  for (int ship = 0; ship < bship::kShipCount; ++ship) {
+    assert(firstRandomView.bow[ship] == expectedFirst.ships[ship].bow);
+    assert(firstRandomView.horizontal[ship] == expectedFirst.ships[ship].horizontal);
+  }
+  randomAction.revision = firstRandomView.revision;
+  assert(randomPlayer.apply(randomGame, randomAction));
+  const auto secondRandomView = randomPlayer.view();
+  for (int ship = 0; ship < bship::kShipCount; ++ship) {
+    assert(secondRandomView.bow[ship] == expectedSecond.ships[ship].bow);
+    assert(secondRandomView.horizontal[ship] == expectedSecond.ships[ship].horizontal);
+  }
+  bool differentFleet = false;
+  for (int ship = 0; ship < bship::kShipCount; ++ship) {
+    if (firstRandomView.bow[ship] != secondRandomView.bow[ship] ||
+        firstRandomView.horizontal[ship] != secondRandomView.horizontal[ship]) differentFleet = true;
+  }
+  assert(differentFleet);
+  randomPlayer.reset();
+  // Resetting an unconfirmed profile must not reset the RNG sequence.
+  randomAction.kind = CommandKind::Profile;
+  randomAction.revision = 0;
+  assert(randomPlayer.apply(randomGame, randomAction));
+  randomAction.kind = CommandKind::Randomize;
+  randomAction.revision = randomPlayer.view().revision;
+  assert(randomPlayer.apply(randomGame, randomAction));
+  bship::Fleet expectedThird;
+  bship::randomFleet(expectedThird, expectedSeed);
+  for (int ship = 0; ship < bship::kShipCount; ++ship)
+    assert(randomPlayer.view().bow[ship] == expectedThird.ships[ship].bow);
+
   bship::Game game;
   game.turn = 1;
   BrowserPlayer player;
