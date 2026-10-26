@@ -44,6 +44,7 @@ class Server final {
   bool routesConfigured_ = false;
 #endif
   Round round_;
+  bool devModePaused_ = false;
   bool running_ = false;
   bool clientSeen_ = false;
   bool changed_ = false;

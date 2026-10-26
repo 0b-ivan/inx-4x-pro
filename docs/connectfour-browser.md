@@ -6,4 +6,8 @@ The firmware retains authority over the seven-column/six-row board. It accepts s
 
 A bounded public snapshot contains phase, revision, turn, outcome, last move and a 42-digit board in column-major/bottom-first order. It never includes session secrets. The adapter reuses `webplay::SeatSession` for first-claim, authorization, disconnect token rotation and command throttling. Native host tests cover win, stale move rejection, unauthorized peers, resume, and rematch.
 
-**The standalone HTML browser page and Node interaction tests now exist, but the page is not yet served by an X4 HTTP/WebSocket route and is not wired into the X4 menu.** Those integrations, simulator UI and real hardware validation remain to be implemented. This adapter is an intentionally isolated first step, not a claim of playable browser Connect Four.
+**The X4 Pro now serves the HTML game from its WPA-protected hotspot at `http://192.168.4.1/connectfour`.** Its CONNECT FOUR menu includes **PLAY BROWSER**. QR codes show WLAN credentials and the URL; HTTP port 80 serves the page and a public bootstrap token, while WebSocket port 81 receives strictly verified commands. The Developer Mode server is paused while this activity owns Wi-Fi, then resumed on exit. Those integrations, simulator UI and real hardware validation remain to be implemented. This adapter is an intentionally isolated first step, not a claim of playable browser Connect Four.
+
+## Hardware acceptance remaining
+
+Real X4 firmware loading and a full Safari/Chrome smartphone match have **not** been verified. Confirm both QR scans, password, WebSocket connection, six-disc stacks, winners, rematches, reconnect and proper radio/devmode cleanup on the physical device before changing the Draft PR to Ready.

@@ -5,6 +5,7 @@
 #include <Logging.h>
 #include <WiFi.h>
 #include <esp_system.h>
+#include "../../../DevMode.h"
 #include <cstdio>
 #include "ConnectFourBrowserPageHtml.generated.h"
 
@@ -22,6 +23,7 @@ bool Server::begin() {
   changed_ = true;
   password_.clear();
   url_.clear();
+  if (!devModePaused_) { devmode::pause(); devModePaused_ = true; }
   WiFi.mode(WIFI_AP);
   delay(50);
   password_.reserve(12);
@@ -29,6 +31,7 @@ bool Server::begin() {
   if (!WiFi.softAP(ssid(), password_.c_str(), 1, false, 2)) {
     WiFi.mode(WIFI_OFF);
     password_.clear();
+    devmode::resume(); devModePaused_ = false;
     return false;
   }
   // ESP32 RF provides entropy after AP startup, including the seat secrets.
@@ -73,6 +76,7 @@ void Server::stop() {
   }
   password_.clear();
   url_.clear();
+  if (devModePaused_) { devmode::resume(); devModePaused_ = false; }
   changed_ = true;
 }
 void Server::loop() {
