@@ -29,6 +29,10 @@ constexpr const char* kPartPath = "/trivia/pack.dat.part";
 // 6MB question pack never lands in a firmware update. Same arrangement as the
 // xkcd archive; see docs/apps/trivia-pack-format.md.
 constexpr const char* kPackUrl = "https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat";
+// XTRIVIA content belongs on SD. OTA firmware images do not contain trivia.
+constexpr const char* kGermanPackUrl =
+    "https://github.com/0b-ivan/inx-4x-pro/releases/download/trivia-de-pack/pack-de.dat";
+constexpr const char* kGermanPartPath = "/trivia/pack-de.dat.part";
 
 // One byte: the difficulty filter. It lived only in the activity, which is
 // deleted on exit, so leaving Trivia and coming back silently put a player who
@@ -175,9 +179,9 @@ void TriviaActivity::onEnter() {
   } else {
     showNotice("NO QUESTIONS",
                I18N.getLanguage() == Language::DE
-                   ? "A German question pack is not installed. The available download contains English questions."
+                   ? "German questions are not installed. WiFi can fetch an early-access German pack."
                    : "There is no question pack on this card yet. Connect to WiFi and fetch one; it is about 6MB.",
-               I18N.getLanguage() == Language::DE ? "GET ENGLISH QUESTIONS" : "GET THE QUESTIONS",
+               I18N.getLanguage() == Language::DE ? "GET GERMAN QUESTIONS" : "GET THE QUESTIONS",
                triviaui::ActionGetPack);
   }
 
@@ -232,6 +236,14 @@ void TriviaActivity::onWifiChosen(const bool connected) {
 }
 
 void TriviaActivity::runPackDownload() {
+  // Firmware OTA and Trivia packs are separate. Leave English and German packs
+  // and their local seen/flagged state files isolated from one another.
+  const bool downloadingGerman = I18N.getLanguage() == Language::DE;
+  const char* const partPath = downloadingGerman ? kGermanPartPath : kPartPath;
+  const char* const packPath =
+      downloadingGerman ? trivia::kGermanPackLocation.packPath : kPackPath;
+  const char* const packUrl = downloadingGerman ? kGermanPackUrl : kPackUrl;
+  const uint8_t requiredPackFlag = downloadingGerman ? trivia::kPackGermanFlag : 0;
   // exists() first, because SdFat's mkdir returns FALSE for a directory that
   // is already there. Treating that as failure meant the second attempt at a
   // download could never succeed: the first one creates /trivia, and every run
@@ -323,9 +335,9 @@ void TriviaActivity::runPackDownload() {
   noticeAction_ = nullptr;
   requestUpdateAndWait();
 
-  const auto err = HttpDownloader::downloadToFile(kPackUrl, kPartPath, progress, &downloadCancel_);
+  const auto err = HttpDownloader::downloadToFile(packUrl, partPath, progress, &downloadCancel_);
   if (err != HttpDownloader::OK) {
-    Storage.remove(kPartPath);
+    Storage.remove(partPath);
     // Every one of these offers TRY AGAIN. A screen that reports a failure and
     // gives you nothing to press is a dead end -- the user's only way out is to
     // leave the app, and nothing on screen says so. Get Books shipped exactly
@@ -342,8 +354,32 @@ void TriviaActivity::runPackDownload() {
     return;
   }
 
-  Storage.remove(kPackPath);  // a half pack from an earlier era must not block the rename
-  if (!Storage.rename(kPartPath, kPackPath)) {
+  // Reject damaged or mismatched language packs BEFORE touching the installed
+  // destination. German content has XTRIVIA header flag=1, English flag=0.
+  {
+    HalFile candidate;
+    if (!Storage.openFileForRead("TRIVIA", partPath, candidate)) {
+      Storage.remove(partPath);
+      showNotice("BAD PACK", "Cannot read downloaded data; no questions replaced.",
+                 "TRY AGAIN", triviaui::ActionGetPack);
+      return;
+    }
+    FileSource candidateSource;
+    candidateSource.attach(candidate);
+    trivia::Pack candidatePack;
+    const bool valid = candidatePack.open(candidateSource) &&
+                       candidatePack.flags() == requiredPackFlag &&
+                       candidatePack.count() > 0;
+    candidate.close();
+    if (!valid) {
+      Storage.remove(partPath);
+      showNotice("BAD PACK", "Wrong-language or damaged pack; no questions replaced.",
+                 "TRY AGAIN", triviaui::ActionGetPack);
+      return;
+    }
+  }
+  Storage.remove(packPath);
+  if (!Storage.rename(partPath, packPath)) {
     showNotice("CARD TROUBLE", "Downloaded, but the card refused the final rename.", "TRY AGAIN",
                triviaui::ActionGetPack);
     return;

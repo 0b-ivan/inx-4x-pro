@@ -210,3 +210,18 @@ Before publishing a full pack, additionally sample complete quizzes on the
 relevance. Pixel fit and binary validity do not prove that 50,000 machine
 translations are factually right. Do not publish a supposedly German pack with
 untouched English questions silently mixed in.
+
+## German trivia over Wi-Fi (CrossPlay 1.16.12)
+
+X4 Pro firmware OTA only updates the application, not the SD-card question
+data. After upgrading to v1.16.12, select German as the UI language, open
+TRIVIA and tap GET GERMAN QUESTIONS when it falls back to English.
+The firmware downloads the [German SD pack](https://github.com/0b-ivan/inx-4x-pro/releases/tag/trivia-de-pack)
+to /trivia/pack-de.dat, leaving /trivia/pack.dat and pack.state intact.
+A staged .part file must pass the XTRIVIA v1 language flag check before
+installation. German questions keep their own state in pack-de.state.
+
+The first German pack is explicitly partial (3,344 translated questions,
+many not individually fact-checked); the complete 49,958-question translation
+will be published separately once finished and reviewed. Data is never
+embedded in the firmware image.
