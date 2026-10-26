@@ -1,0 +1,73 @@
+#include <cassert>
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include "../../src/apps_local/connectfour/web/ConnectFourBrowserServer.h"
+
+int main() {
+  c4web::Server server;
+  assert(server.begin());
+  assert(server.running() && !server.clientSeen());
+  assert(std::strlen(server.password())==12);
+  assert(WiFi.apPassword==server.password());
+  assert(std::string(server.url())=="http://192.168.4.1/connectfour");
+  auto& ws=*WebSocketsServer::instance;
+  auto& http=*WebServer::instance;
+  http.routes.at("/connectfour/session")();
+  const std::string token=http.response;
+  assert(token.size()==32 && !server.round().joined());
+  ws.event(WStype_CONNECTED,0);
+  assert(server.clientSeen());
+  assert(ws.messages.size()==1 && ws.messages.back().find("\"phase\":\"waiting\"")!=std::string::npos);
+  const std::string join="[\"join\",\""+token+"\",0]";
+  ws.event(WStype_BIN,0,join);
+  assert(!server.round().joined());
+  ws.event(WStype_TEXT,0,join);
+  assert(server.round().joined() && server.round().owner()==0);
+  assert(ws.messages[ws.messages.size()-2].find("\"type\":\"resume\"")!=std::string::npos);
+  assert(ws.recipients[ws.recipients.size()-2]==0);
+  const std::string secret=server.round().resumeToken();
+  assert(ws.messages.back().find("\"phase\":\"playing\"")!=std::string::npos);
+  assert(ws.messages.back().find(secret)==std::string::npos);
+  ws.event(WStype_CONNECTED,1);
+  assert(ws.messages.back().find(secret)==std::string::npos);
+  clockMs=250;
+  ws.event(WStype_TEXT,1,"[\"drop\",\""+token+"\",0,4]");
+  assert(ws.messages.back().find("error")!=std::string::npos);
+  assert(!server.deviceRematch());
+  assert(server.deviceDrop(3));
+  assert(server.round().game().turn==connectfour::kDark);
+  clockMs=350;
+  const std::string move="[\"drop\",\""+token+"\",1,4]";
+  ws.event(WStype_TEXT,0,move);
+  assert(server.round().game().cell[4][0]==connectfour::kDark);
+  assert(ws.recipients.back()==-1);
+  assert(ws.messages.back().find("\"r\":2")!=std::string::npos);
+  ws.event(WStype_TEXT,0,move);
+  assert(ws.messages.back().find("error")!=std::string::npos);
+  assert(server.round().revision()==2);
+  ws.event(WStype_DISCONNECTED,0);
+  assert(server.clientSeen() && !server.round().hasOwner());
+  http.routes.at("/connectfour/session")();
+  const std::string fresh=http.response;
+  assert(fresh!=token);
+  ws.event(WStype_CONNECTED,2);
+  assert(ws.messages.back().find(secret)==std::string::npos);
+  clockMs=550;
+  const std::string resume="[\"resume\",\""+fresh+"\",1,\""+secret+"\"]";
+  ws.event(WStype_TEXT,2,resume);
+  assert(server.round().hasOwner() && server.round().owner()==2);
+  assert(ws.messages[ws.messages.size()-2].find("\"type\":\"resume\"")!=std::string::npos);
+  assert(ws.recipients[ws.recipients.size()-2]==2);
+  assert(ws.messages.back().find("\"r\":2")!=std::string::npos);
+  assert(server.round().authorized(fresh.c_str(),secret.c_str()));
+  server.stop();server.stop();
+  assert(!server.running() && WiFi.currentMode==WIFI_OFF);
+  assert(std::strlen(server.password())==0);
+  assert(!server.round().authorized(fresh.c_str(),secret.c_str()));
+  WiFi.available=false;
+  assert(!server.begin());
+  assert(!server.running() && WiFi.currentMode==WIFI_OFF);
+  WiFi.available=true;
+  puts("Connect Four server: WPA hotspot, owner-only resume, secure WS commands and reconnect passed");
+}
