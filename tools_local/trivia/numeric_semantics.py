@@ -180,7 +180,7 @@ def _conversion_notes(original, translated):
             source_tolerance = (aincrement * afactor / bfactor / 2) if dim == bdim and dim not in ("temperature_c","temperature_f") else aincrement / 2
             tolerance = (bincrement / 2) + source_tolerance
             if abs(expected - b) <= tolerance:
-                av, bv = str(a.normalize()), str(b.normalize())
+                av, bv = format(a.normalize(), "f"), format(b.normalize(), "f")
                 if src[av] and dst[bv] and (av != bv or au != bu):
                     src[av] -= 1
                     dst[bv] -= 1

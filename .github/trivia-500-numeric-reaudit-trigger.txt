@@ -1,1 +1,1 @@
-Offline 500 review, full notation tests 2026-10-26: centuries, historical dates, numerals, units, fractions and known propertitle examples. No OpenRouter calls.
+Regression fix 2026-10-26: preserve plain decimals in converted quantities. Re-evaluate all 500 from checkpoint without API calls.
