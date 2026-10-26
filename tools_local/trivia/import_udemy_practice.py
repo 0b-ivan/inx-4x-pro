@@ -23,6 +23,7 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+from urllib.parse import urlsplit
 
 
 class ImportProblem(ValueError):
@@ -35,11 +36,13 @@ class _PlainText(HTMLParser):
         self.parts = []
 
     def handle_starttag(self, tag, attrs):
-        if tag.lower() in ("p", "div", "li", "br", "h1", "h2", "h3"):
+        if tag.lower() in ("p", "div", "li", "br", "h1", "h2", "h3", "pre", "ul", "ol"):
             self.parts.append("\n")
+        if tag.lower() == "img":
+            self.parts.append(" [IMAGE] ")
 
     def handle_endtag(self, tag):
-        if tag.lower() in ("p", "div", "li", "h1", "h2", "h3"):
+        if tag.lower() in ("p", "div", "li", "h1", "h2", "h3", "pre", "ul", "ol"):
             self.parts.append("\n")
 
     def handle_data(self, data):
@@ -136,6 +139,17 @@ def convert(raw):
         section = ""
     if not isinstance(explanation, str) or not isinstance(section, str):
         raise ImportProblem("unsupported explanation/section shape")
+    section = _plain(section)
+    image_count = len(re.findall(r"<img\\b", explanation, flags=re.I))
+    feedbacks = prompt.get("feedbacks")
+    if feedbacks is not None and (not isinstance(feedbacks, list) or
+                                  len(feedbacks) != len(options) or
+                                  not all(isinstance(x, str) for x in feedbacks)):
+        raise ImportProblem("feedbacks must match the available options")
+    assessment_type = raw.get("assessment_type")
+    expected = "multi-select" if len(correct) > 1 else "multiple-choice"
+    if assessment_type is not None and assessment_type != expected:
+        raise ImportProblem("assessment type disagrees with correct answer count")
     fingerprint = hashlib.sha256(
         (question + "\0" + "\0".join(options)).encode("utf-8")
     ).hexdigest()[:16]
@@ -146,9 +160,70 @@ def convert(raw):
         "options": options,
         "correct": correct,  # zero-based positions in options; NOT choice letters
         "explanation": _plain(explanation),
-        "source_section": _plain(section),
-        "category": "Uncategorized",  # never infer an AWS exam domain from section
+        # Kept only in the PRIVATE output to preserve code, images and links for
+        # future offline conversion. Never render this HTML without sanitizing.
+        "explanation_html": explanation,
+        "explanation_images": image_count,
+        "feedbacks": [_plain(x) for x in feedbacks] if feedbacks is not None else [],
+        "source_section": section,
+        "category": section if re.fullmatch(r"Domain [1-6]: [^\\n]+", section)
+                    else "Uncategorized",
+        "source_quiz": raw.get("_local_quiz", ""),
+        "source_question_number": raw.get("_local_sequence", 0),
     }
+
+
+
+def _har_rows(data, allow_incomplete=False):
+    """Extract ONLY whitelisted assessment GET responses from a local HAR.
+
+    Do not copy request headers, cookies, account IDs, quiz attempts, or any
+    other network entry into the output. Repeated responses are de-duplicated.
+    """
+    if not isinstance(data, dict) or not isinstance(data.get("log"), dict):
+        raise ImportProblem("invalid HAR structure")
+    entries = data["log"].get("entries")
+    if not isinstance(entries, list):
+        raise ImportProblem("invalid HAR entries")
+    quizzes = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        request = entry.get("request", {})
+        response = entry.get("response", {})
+        if not isinstance(request, dict) or not isinstance(response, dict):
+            continue
+        path = urlsplit(request.get("url", "")).path
+        match = re.fullmatch(r"/api-2\\.0/quizzes/(\\d+)/assessments/?", path)
+        if not match or request.get("method") != "GET" or response.get("status") != 200:
+            continue
+        content = response.get("content", {})
+        if not isinstance(content, dict) or content.get("encoding"):
+            raise ImportProblem("encoded or unavailable assessment response")
+        text = content.get("text")
+        if not isinstance(text, str):
+            raise ImportProblem("assessment response is missing JSON text")
+        assessment = json.loads(text)
+        if not isinstance(assessment, dict) or not isinstance(assessment.get("results"), list):
+            raise ImportProblem("malformed assessment response")
+        if assessment.get("next") and not allow_incomplete:
+            raise ImportProblem("paginated assessment response; save every page")
+        records = assessment["results"]
+        if assessment.get("next") is None and assessment.get("count") != len(records):
+            raise ImportProblem("assessment count does not match the result list")
+        quiz = match.group(1)
+        if quiz in quizzes and quizzes[quiz] != records:
+            raise ImportProblem("different copies of the same quiz; reconcile manually")
+        quizzes[quiz] = records
+    if not quizzes:
+        raise ImportProblem("no quiz assessment responses found in HAR")
+    rows = []
+    for quiz, records in sorted(quizzes.items()):
+        for i, record in enumerate(records, 1):
+            if not isinstance(record, dict):
+                raise ImportProblem("invalid assessment record")
+            rows.append({**record, "_local_quiz": quiz, "_local_sequence": i})
+    return rows
 
 
 def read_input(path, allow_incomplete=False):
@@ -164,6 +239,8 @@ def read_input(path, allow_incomplete=False):
             "paginated response has a next page; save every page and rerun "
             "with --allow-incomplete only when providing all pages"
         )
+    if isinstance(data, dict) and "log" in data:
+        return _har_rows(data, allow_incomplete)
     return _question_rows(data)
 
 
@@ -213,7 +290,7 @@ def write_private(records, destination, overwrite=False):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--src", nargs="+", required=True,
-                        help="local Udemy assessments JSON/JSONL file(s)")
+                        help="local Udemy assessments JSON/JSONL or Chrome HAR file(s)")
     parser.add_argument("--out", help="private output JSONL outside repository")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--allow-incomplete", action="store_true",
