@@ -355,6 +355,18 @@ void MeshChatActivity::loop() {
       };
       deliverPeer(macA, "Sim Alice", "Local mesh test A");
       deliverPeer(macB, "Sim Bob", "Local mesh test B");
+      // 45 messages in total: stress the fixed 30-entry ring buffer.
+      if (scenario == "flood") {
+        for (int i = 0; i < MAX_MESSAGES + 13; ++i) {
+          uint8_t chat[FRAME_CHAT_SIZE] = {};
+          chat[0] = FRAME_CHAT;
+          memcpy(chat + 1, macA, 6);
+          strncpy(reinterpret_cast<char*>(chat + 7), "Sim Alice", 15);
+          snprintf(reinterpret_cast<char*>(chat + 23), 200,
+                   "Flood message %02d", i);
+          esp_now_sim_deliver(macA, chat, sizeof(chat));
+        }
+      }
     }
     meshSimTrace("injected", peers.size(), messageCount);
     requestUpdate();
@@ -542,30 +554,17 @@ void MeshChatActivity::renderChatView() const {
     xSemaphoreGive(peersMux);
   }
 
-  // MESH-001 / MESH-005: copy only visible messages under the spinlock.
-  // The old approach copied the full ring buffer (Message[30] = ~6.8KB on the
-  // stack), which overflows the 8KB FreeRTOS render task stack on ESP32-C3.
-  // We now copy at most MAX_VISIBLE entries, cutting peak stack use to ~3.6KB.
-  static constexpr int MAX_VISIBLE = 16;  // screen fits ~15 lines max
-  Message visibleMsgs[MAX_VISIBLE];       // ~3.6KB instead of 6.8KB
-  int visibleCount = 0;
+  // Snapshot only the ring metadata. The former Message[16] stack array
+  // consumed about 3.6 KB of the X4 Pro's 16 KB render task stack. Copy
+  // one entry at a time instead and never draw while holding the spinlock.
+  static constexpr int MAX_VISIBLE = 16;
   int localCount, localHead, localScroll;
-
   portENTER_CRITICAL(&msgMux);
-  localCount  = messageCount;
-  localHead   = messageHead;
+  localCount = messageCount;
+  localHead = messageHead;
   localScroll = scrollOffset;
-
-  if (localCount > 0) {
-    int maxDraw = localCount - localScroll;
-    if (maxDraw > MAX_VISIBLE) maxDraw = MAX_VISIBLE;
-    int msgIdx = (localHead - 1 - localScroll + MAX_MESSAGES) % MAX_MESSAGES;
-    for (int i = 0; i < maxDraw; i++) {
-      visibleMsgs[visibleCount++] = messages[msgIdx];
-      msgIdx = (msgIdx - 1 + MAX_MESSAGES) % MAX_MESSAGES;
-    }
-  }
   portEXIT_CRITICAL(&msgMux);
+  const int visibleCount = std::min(MAX_VISIBLE, std::max(0, localCount - localScroll));
 
   char subtitle[48];
   if (relayMode) {
@@ -585,10 +584,17 @@ void MeshChatActivity::renderChatView() const {
                               "No messages yet. Press Confirm to send.");
   } else {
     // Render messages from newest (bottom) to oldest (top).
-    // visibleMsgs[0] is the newest visible message; iterate forward to go older.
+    // Render newest message first, then work back through the ring.
     int y = contentBottom - lineH;
     for (int drawn = 0; drawn < visibleCount && y >= contentTop; drawn++) {
-      const Message& msg = visibleMsgs[drawn];
+      // Copy under the WiFi-callback lock, but release it before rendering.
+      // Concurrent arrivals may advance the ring between lines; each copied
+      // message is nevertheless complete and memory-safe.
+      const int msgIdx = (localHead - 1 - localScroll - drawn + MAX_MESSAGES * 2) % MAX_MESSAGES;
+      Message msg;
+      portENTER_CRITICAL(&msgMux);
+      msg = messages[msgIdx];
+      portEXIT_CRITICAL(&msgMux);
 
       char line[240];
       if (msg.isLocal) {
