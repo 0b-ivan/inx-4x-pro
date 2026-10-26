@@ -15,6 +15,7 @@ import urllib.request
 from pathlib import Path
 
 from build_de_pack import TranslationError, load_jsonl, source_hash, validate_record
+from german_orthography import normalize_orthography
 
 API = "https://openrouter.ai/api/v1/chat/completions"
 # OpenRouter supports a native strict JSON schema for Claude Sonnet 4.6.
@@ -54,7 +55,9 @@ _DISPLAY_PUNCTUATION = str.maketrans({
 def normalize_display_punctuation(value):
     if not isinstance(value, str):
         return value
-    return value.translate(_DISPLAY_PUNCTUATION)
+    # Keep umlauts, ß and all supported accented letters in UTF-8.
+    # Only typographic punctuation not available in the device font is ASCII.
+    return normalize_orthography(value.translate(_DISPLAY_PUNCTUATION))
 
 
 SYSTEM = (
@@ -71,7 +74,12 @@ SYSTEM = (
     "Preserve dates, quantities, geographic references and correct spelling. "
     "Never invent facts or substitute an unrelated question. For idioms or "
     "wordplay, preserve the original clue-answer relationship or fail instead "
-    "of fabricating a new fact. Use natural German, correct umlauts and ß. "
+    "of fabricating a new fact. Use natural German with correct German " 
+    "orthography: ALWAYS write ä, ö, ü, Ä, Ö, Ü and ß wherever required. " 
+    "Do not omit dots or transliterate these letters into ae/oe/ue or " 
+    "plain a/o/u. Examples: München (not Munchen or Muenchen), " 
+    "Dänemark (not Danemark), Könige (not Konige), Nobelpreisträger " 
+    "(not Nobelpreistrager), früh (not fruh), später (not spaeter). "
     "Prefer short phrasing that fits a small e-ink display without removing "
     "information needed to solve the question. Do not include explanations, "
     "metadata or markdown fences. Use plain straight ASCII quotation marks "
