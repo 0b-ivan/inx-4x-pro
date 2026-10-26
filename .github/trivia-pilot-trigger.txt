@@ -10,3 +10,5 @@ Second explicit pilot requested 2026-10-26: Claude Sonnet 4.6, 20 translated que
 2026-10-26: Retry 20-question Sonnet 4.6 pilot after enforcing strict response_format/json_schema; reviewer approval still required; no release.
 
 2026-10-26: Re-test 20 Sonnet 4.6 questions with strict JSON plus e-ink-safe punctuation normalization. Explicit user-requested quality pilot; do not publish or merge.
+
+2026-10-26: Resume prior 13 reviewed-format unreviewed Sonnet 4.6 drafts, test offline QA first, fill up to 20 with bounded substitution for invalid display widths.
