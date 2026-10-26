@@ -50,3 +50,9 @@ PY
 
 # Python reference writer, translation quality gates and binary round-trip.
 python3 "$TOOLS/test_de_pack.py"
+
+# AWS binary format, exact multi-select grading, domain filters and pagination.
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC \
+  test_aws_pack.cpp "$SRC/AwsStudyPack.cpp" "$SRC/TriviaCore.cpp" -o "$BUILD_DIR/test_aws_pack"
+"$BUILD_DIR/test_aws_pack"
+python3 "$TOOLS/test_aws_study.py"
