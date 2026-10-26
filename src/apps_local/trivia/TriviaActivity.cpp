@@ -807,6 +807,7 @@ void TriviaActivity::render(RenderLock&&) {
     }
     case View::AwsMenu: {
       triviaui::AwsMenuModel model;
+      model.german = I18N.getLanguage() == Language::DE;
       model.count = awsPack_.count();
       model.seen = awsState_.seenCount();
       model.enabled = awsDomains_;
@@ -815,6 +816,7 @@ void TriviaActivity::render(RenderLock&&) {
     }
     case View::AwsDomains: {
       triviaui::AwsDomainsModel model;
+      model.german = I18N.getLanguage() == Language::DE;
       model.enabled = awsDomains_;
       triviaui::buildAwsDomains(screen, model);
       break;
@@ -824,6 +826,7 @@ void TriviaActivity::render(RenderLock&&) {
     case View::AwsExplanation: {
       awsBuildPage();
       triviaui::AwsPageModel model;
+      model.german = I18N.getLanguage() == Language::DE;
       model.text = awsPageBuffer_;
       model.domain = awsQuestion_.domain();
       model.option = awsOption_;
