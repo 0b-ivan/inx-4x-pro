@@ -133,6 +133,76 @@ class TestUdemyImporter(unittest.TestCase):
             importer.write_private(rows, target, overwrite=True)
             self.assertEqual(len(list(Path(tmp).glob(".udemy-import-*"))), 0)
 
+
+    def test_har_extracts_only_quiz_assessments_and_deduplicates(self):
+        from json import dumps
+        def entry(url, payload, status=200):
+            return {"request": {"method": "GET", "url": url,
+                                "headers": [{"name": "Cookie", "value": "PRIVATE"}]},
+                    "response": {"status": status,
+                                 "content": {"text": dumps(payload)}}}
+        first = item()
+        first["section"] = "Domain 1: SDLC Automation"
+        first["assessment_type"] = "multiple-choice"
+        first["correct_response"] = ["a"]
+        first["prompt"]["feedbacks"] = ["", "", "", ""]
+        first["prompt"]["explanation"] = "<p>Explanation</p><img src='https://example.invalid/chart.png'>"
+        second = item(question="Select two database services",
+                      answers=["Amazon RDS", "Amazon EBS", "Amazon DynamoDB", "AWS Lambda"],
+                      correct=["a", "c"])
+        second["assessment_type"] = "multi-select"
+        second["section"] = "Domain 2: Configuration Management and IaC"
+        second["prompt"]["feedbacks"] = ["", "", "", ""]
+        response1 = {"results": [first], "next": None, "count": 1}
+        response2 = {"results": [second], "next": None, "count": 1}
+        url1 = "https://www.udemy.com/api-2.0/quizzes/1/assessments/"
+        url2 = "https://www.udemy.com/api-2.0/quizzes/2/assessments/?page=1"
+        har = {"log": {"entries": [
+            entry(url1, response1), entry(url1, response1),
+            entry(url2, response2),
+            entry("https://www.udemy.com/api-2.0/users/me", {"email": "PRIVATE"}),
+        ]}}
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "export.har"
+            src.write_text(dumps(har), encoding="utf-8")
+            rows = importer.import_files([src])
+            self.assertEqual(len(rows), 2)
+            self.assertEqual({row["source_quiz"] for row in rows}, {"1", "2"})
+            self.assertEqual({row["source_question_number"] for row in rows}, {1})
+            self.assertEqual({row["type"] for row in rows}, {"single", "multi"})
+            self.assertEqual(rows[0]["correct"], [0])
+            self.assertEqual(rows[1]["correct"], [0, 2])
+            self.assertEqual(rows[0]["category"], "Domain 1: SDLC Automation")
+            self.assertEqual(rows[0]["explanation_images"], 1)
+            self.assertIn("[IMAGE]", rows[0]["explanation"])
+            self.assertIn("<img", rows[0]["explanation_html"])
+            self.assertNotIn("PRIVATE", str(rows))
+
+    def test_har_rejects_missing_and_conflicting_responses(self):
+        from json import dumps
+        endpoint = "https://www.udemy.com/api-2.0/quizzes/1/assessments/"
+        def request(payload):
+            return {"request": {"method": "GET", "url": endpoint},
+                    "response": {"status": 200, "content": {"text": dumps(payload)}}}
+        good = {"count": 1, "next": None, "results": [item()]}
+        bad = {"count": 1, "next": None,
+               "results": [item(question="Other question")]}
+        self.assertEqual(len(importer._har_rows({"log": {"entries": [request(good)]}})), 1)
+        with self.assertRaisesRegex(importer.ImportProblem, "different copies"):
+            importer._har_rows({"log": {"entries": [request(good), request(bad)]}})
+        with self.assertRaisesRegex(importer.ImportProblem, "count"):
+            importer._har_rows({"log": {"entries": [request({**good, "count": 75})]}})
+        with self.assertRaisesRegex(importer.ImportProblem, "paginated"):
+            importer._har_rows({"log": {"entries": [request({**good, "next": "/next"})]}})
+        with self.assertRaisesRegex(importer.ImportProblem, "no quiz assessment"):
+            importer._har_rows({"log": {"entries": []}})
+
+    def test_assessment_type_must_match_answer_count(self):
+        row = item()
+        row["assessment_type"] = "multi-select"
+        with self.assertRaisesRegex(importer.ImportProblem, "disagrees"):
+            importer.convert(row)
+
     def test_output_into_public_repo_is_blocked(self):
         repo_root = Path(importer.__file__).resolve().parents[2]
         with self.assertRaisesRegex(importer.ImportProblem, "outside"):
