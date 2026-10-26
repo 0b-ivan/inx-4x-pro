@@ -1,1 +1,1 @@
-Rerun editorial proposals 2026-10-26 after correcting Python boolean literal in proposal catalog. No paid API calls.
+Re-run all 21 proposed German text revisions with clear numeric semantics: Vivaldi ordinal and D-Day date match original formats. No API spending, all human unapproved.

@@ -52,7 +52,7 @@ EDITS = {
     "reason": "General-in-Chief sachlich genauer als Oberbefehlshaber statt Generaloberst."
   },
   "5b0372b66038d212": {
-    "q": "Welcher General verkündete am 6. Juni 1944 per Rundfunk: \"Menschen Westeuropas, heute Morgen ist eine Landung erfolgt\"?",
+    "q": "Welcher General verkündete am 6.6.44 per Rundfunk: \"Menschen Westeuropas, heute Morgen ist eine Landung erfolgt\"?",
     "reason": "Verständlicher historischer Rundfunkhinweis mit Datum."
   },
   "6600ca616a423088": {
@@ -60,7 +60,7 @@ EDITS = {
     "reason": "Klarer Fragesatz statt holpriger Relativsatz; Jahreszahl und Zyklus erhalten."
   },
   "9db8272a3109ca29": {
-    "q": "Wenn man Vivaldis \"Vier Jahreszeiten\" der Reihe nach spielt, welches Konzert erklingt zuerst?",
+    "q": "Wenn man Vivaldis \"Vier Jahreszeiten\" der Reihe nach spielt, welches Konzert erklingt als Erstes?",
     "reason": "Klarer Quiz-Hinweis statt unidiomatischer Ellipse."
   },
   "a273e2ba014e7a09": {
