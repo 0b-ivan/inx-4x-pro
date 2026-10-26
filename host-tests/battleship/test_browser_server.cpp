@@ -36,11 +36,16 @@ int main() {
   devmode::pause();
   assert(server.begin(Server::NetworkMode::Hotspot));
   assert(devmode::depth == 2 && !server.clientSeen());
+  assert(std::string(server.password()).size() == 12);
+  assert(WiFi.apPassword == server.password());  // No longer an open hotspot.
   auto& ws = *WebSocketsServer::instance;
   auto& http = *WebServer::instance;
   http.routes.at("/battleship/session")();
   const auto token = http.response;
   assert(token.size() == 32);
+  http.args["token"] = token;
+  http.routes.at("/player/state")();
+  assert(http.response.find("FORBIDDEN") != std::string::npos);  // Public bootstrap token cannot read profiles.
   const auto profile = "[\"profile\",\"" + token + "\",0,0,13,0]";
   ws.event(WStype_CONNECTED, 0);
   assert(server.clientSeen() && ws.messages.size() == 3);
@@ -69,6 +74,15 @@ int main() {
   const std::string prefix = "{\"type\":\"resume\",\"token\":\"";
   assert(resumeMessage.rfind(prefix, 0) == 0 && resumeMessage.size() == prefix.size() + 34);
   const std::string resumeToken = resumeMessage.substr(prefix.size(), 32);
+  http.args["owner"] = "00000000000000000000000000000000";
+  http.args["action"] = "guest";
+  http.routes.at("/player/action")();
+  assert(http.response.find("FORBIDDEN") != std::string::npos);
+  http.args["owner"] = resumeToken;
+  http.routes.at("/player/state")();
+  assert(http.response.find("\\\"ok\\\":true") != std::string::npos);
+  http.routes.at("/player/action")();
+  assert(http.response.find("\\\"ok\\\":true") != std::string::npos);
 
   ws.event(WStype_TEXT, 0, profile);
   assert(handler.calls == 1);
@@ -85,6 +99,8 @@ int main() {
   assert(server.clientSeen() && handler.disconnects == 0);
   ws.event(WStype_DISCONNECTED, 0);
   assert(!server.clientSeen() && handler.disconnects == 1);
+  http.routes.at("/player/state")();
+  assert(http.response.find("FORBIDDEN") != std::string::npos);  // Seat revoked on disconnect.
 
   http.routes.at("/battleship/session")();
   const auto freshToken = http.response;
@@ -99,6 +115,9 @@ int main() {
   assert(ws.messages[ws.messages.size() - 3].find("resume") != std::string::npos);
   assert(ws.messages[ws.messages.size() - 2].find("playing") != std::string::npos);
   assert(ws.messages.back().find("\"type\":\"f\"") != std::string::npos);
+  http.args["token"] = freshToken;
+  http.routes.at("/player/state")();
+  assert(http.response.find("\\\"ok\\\":true") != std::string::npos);  // Same owner restored.
 
   ws.event(WStype_DISCONNECTED, 0);
   http.routes.at("/battleship/session")();
@@ -111,6 +130,7 @@ int main() {
   server.stop();
   server.stop();
   assert(ws.closed && !server.running() && devmode::depth == 1 && WiFi.currentMode == WIFI_OFF);
+  assert(std::string(server.password()).empty());
   WiFi.available = false;
   assert(!server.begin(Server::NetworkMode::ExistingWifi));
   assert(devmode::depth == 1);
