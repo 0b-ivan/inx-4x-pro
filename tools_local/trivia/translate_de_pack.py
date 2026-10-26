@@ -108,8 +108,25 @@ def translate_one(item, model, api_key, timeout=100):
                  "HTTP-Referer": "https://github.com/0b-ivan/inx-4x-pro",
                  "X-Title": "X4 Pro German Trivia Pack"},
         method="POST")
+    # Optional bounded, auditable usage ledger for one-shot experiments.
+    ledger_path = os.getenv("TRIVIA_USAGE_LOG")
+    if ledger_path and os.getenv("TRIVIA_SPEND_LIMIT_USD"):
+        spent = sum(float(r.get("cost_usd", 0)) for r in load_jsonl(ledger_path)) if Path(ledger_path).exists() else 0.0
+        if spent >= float(os.environ["TRIVIA_SPEND_LIMIT_USD"]):
+            raise TranslationError("Translation spending guard reached; no further API calls")
     with urllib.request.urlopen(req, timeout=timeout) as response:
         result = json.load(response)
+    if ledger_path:
+        usage = result.get("usage") or {}
+        input_tokens = int(usage.get("prompt_tokens") or 0)
+        output_tokens = int(usage.get("completion_tokens") or 0)
+        # Conservative fallback for this pilot's Qwen provider, not a billing claim.
+        estimated = max(.0002, (input_tokens * .30 + output_tokens * 1.00) / 1_000_000)
+        cost = float(usage["cost"]) if usage.get("cost") is not None else estimated
+        with open(ledger_path, "a", encoding="utf-8") as ledger:
+            ledger.write(json.dumps({"model": model, "input_tokens": input_tokens,
+                                     "output_tokens": output_tokens, "cost_usd": cost,
+                                     "is_estimate": usage.get("cost") is None}) + "\n")
     raw = result["choices"][0]["message"]["content"]
     if isinstance(raw, list):
         raw = "".join(part.get("text", "") for part in raw if isinstance(part, dict))

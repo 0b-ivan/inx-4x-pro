@@ -89,8 +89,27 @@ def review_one(original, draft, model, api_key, timeout=100):
                  "HTTP-Referer": "https://github.com/0b-ivan/inx-4x-pro",
                  "X-Title": "X4 Pro Independent Trivia Editorial Review"},
         method="POST")
+    # The editor is permitted to inspect at most a bounded number of flagged
+    # records in a one-shot experiment; no retranslation happens here.
+    ledger_path = os.getenv("TRIVIA_REVIEW_USAGE_LOG")
+    if ledger_path and os.getenv("TRIVIA_REVIEW_SPEND_LIMIT_USD"):
+        spent = sum(json.loads(line).get("cost_usd", 0.0)
+                    for line in Path(ledger_path).read_text(encoding="utf-8").splitlines()
+                    if line.strip()) if Path(ledger_path).exists() else 0.0
+        if spent >= float(os.environ["TRIVIA_REVIEW_SPEND_LIMIT_USD"]):
+            raise TranslationError("Editorial review spending guard reached")
     with urllib.request.urlopen(req, timeout=timeout) as response:
         data = json.load(response)
+    if ledger_path:
+        usage = data.get("usage") or {}
+        pin, pout = int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+        # Higher than the observed historical cost when usage.cost is missing.
+        fallback = max(.0005, (pin * 3.5 + pout * 20.0) / 1_000_000)
+        cost = float(usage["cost"]) if usage.get("cost") is not None else fallback
+        with open(ledger_path, "a", encoding="utf-8") as ledger:
+            ledger.write(json.dumps({"model": model, "input_tokens": pin,
+                                     "output_tokens": pout, "cost_usd": cost,
+                                     "is_estimate": usage.get("cost") is None}) + "\n")
     raw = data["choices"][0]["message"]["content"]
     if isinstance(raw, list):
         raw = "".join(part.get("text", "") for part in raw if isinstance(part, dict))

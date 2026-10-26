@@ -46,7 +46,7 @@ def numeric_facts(value):
         return result
     if not isinstance(value,str):
         return Counter()
-    normalized=value.casefold().replace("-"," ")
+    normalized=value.lower().replace("-"," ")
     # Work on a residual string so neither 'twenty one' nor a digit is
     # double-counted as several numerals.
     facts=Counter()
