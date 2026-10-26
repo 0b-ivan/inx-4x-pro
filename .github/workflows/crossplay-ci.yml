@@ -297,3 +297,68 @@ jobs:
             --title "X4 Pro Nightly ${NIGHTLY_TAG}" \
             --prerelease \
             --notes-file dist/release-notes.md
+
+  # One-shot, manual and branch-scoped: never runs on pushes or pull requests.
+  # On mobile: Actions > CrossPlay > Run workflow > fix/i18n-translation-quality-audit.
+  # The user must first set OPENROUTER_API_KEY in Actions repository secrets.
+  trivia-german-pilot:
+    name: German quiz translation pilot (20 questions)
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == '0b-ivan/inx-4x-pro' &&
+      github.ref == 'refs/heads/fix/i18n-translation-quality-audit' &&
+      inputs.publish_nightly != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Require a temporary OpenRouter repository secret
+        shell: bash
+        run: |
+          if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+            echo "::error::Set a NEW temporary OPENROUTER_API_KEY Actions secret; do not paste a key in a chat or workflow file."
+            exit 1
+          fi
+
+      - name: Download and verify the published English question pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia-pilot"
+          curl -fsSL --retry 3 \
+            'https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat' \
+            -o "$RUNNER_TEMP/trivia-pilot/pack.dat"
+          echo 'a17435136122ce1d2485d4c4c30e58206e6dffc88b819e0d4c646081b485f9cf  '"$RUNNER_TEMP/trivia-pilot/pack.dat" | sha256sum --check
+          python3 tools_local/trivia/export_pack.py \
+            --pack "$RUNNER_TEMP/trivia-pilot/pack.dat" \
+            --out "$RUNNER_TEMP/trivia-pilot/questions-en.jsonl"
+
+      - name: Translate at most 20 questions (UNREVIEWED drafts)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools_local/trivia/translate_de_pack.py \
+            --src "$RUNNER_TEMP/trivia-pilot/questions-en.jsonl" \
+            --out "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl" \
+            --model "openai/gpt-4o-mini" --limit 20
+
+      - name: Upload draft translations for manual quality review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivia-german-pilot-unreviewed
+          path: ${{ runner.temp }}/trivia-pilot/questions-de-draft.jsonl
+          if-no-files-found: ignore
+          retention-days: 1
