@@ -127,6 +127,13 @@ int main() {
   assert(bship::shotAt(game.side[0], 0));
   assert(game.turn == 0);
   assert(!player.apply(game, action));
+  // Losing the acknowledgement must not prevent authenticated resumption.
+  const auto confirmedRevision = player.view().revision;
+  action.kind = CommandKind::Resume;
+  action.revision = confirmedRevision - 1;
+  assert(player.apply(game, action));
+  assert(player.view().revision == confirmedRevision);
+  action.kind = CommandKind::Fire;
   action.revision = player.view().revision;
   action.value[0] = 1;
   assert(!player.apply(game, action));
@@ -156,6 +163,9 @@ int main() {
   assert(std::string(player.name()) == previousName);
   for (int i = 0; i < 5; ++i) assert(player.view().bow[i] == 255 && player.view().horizontal[i] == 1);
   assert(!player.apply(game, action));
+  action.kind = CommandKind::Resume;
+  action.revision = 0;
+  assert(!player.apply(game, action));  // A rematch draft is not resumable.
 
   char expected[256], actual[256];
   assert(serializePlacement(player.view(), true, expected, sizeof(expected)));
