@@ -6,4 +6,4 @@ The firmware retains authority over the seven-column/six-row board. It accepts s
 
 A bounded public snapshot contains phase, revision, turn, outcome, last move and a 42-digit board in column-major/bottom-first order. It never includes session secrets. The adapter reuses `webplay::SeatSession` for first-claim, authorization, disconnect token rotation and command throttling. Native host tests cover win, stale move rejection, unauthorized peers, resume, and rematch.
 
-**Not yet wired to the actual X4 menu, Wi-Fi/WebSocket server, or an HTML browser page.** Those integrations, simulator UI and real hardware validation remain to be implemented. This adapter is an intentionally isolated first step, not a claim of playable browser Connect Four.
+**The standalone HTML browser page and Node interaction tests now exist, but the page is not yet served by an X4 HTTP/WebSocket route and is not wired into the X4 menu.** Those integrations, simulator UI and real hardware validation remain to be implemented. This adapter is an intentionally isolated first step, not a claim of playable browser Connect Four.

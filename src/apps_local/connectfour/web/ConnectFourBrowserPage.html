@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Connect Four · CrossPlay</title>
+<style>
+:root{color-scheme:light dark;--bg:#f4f1e8;--ink:#151511;--card:#fffcf4;--line:#54544d;--x4:#222;--web:#a5a195}
+@media(prefers-color-scheme:dark){:root{--bg:#191916;--ink:#f1eee4;--card:#272722;--line:#aeaaa2;--x4:#f1eee4;--web:#aaa69c}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif}
+main{max-width:520px;margin:auto;padding:18px 16px 36px}
+header{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--ink);gap:14px}
+h1{font-size:1.5rem;line-height:1.2;margin:12px 0 16px;letter-spacing:.04em}
+small{font-size:.8rem}#status{min-height:3em;margin:16px 0 8px;font-weight:650}
+#detail{min-height:2.5em;font-size:.9rem;margin:0 0 12px}
+#columns,.board{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+#columns{margin-bottom:7px}
+button{border:2px solid var(--ink);background:var(--card);color:var(--ink);font:inherit;font-weight:700;cursor:pointer}
+button:disabled{opacity:.38;cursor:default}
+#columns button{min-height:42px;border-radius:4px;touch-action:manipulation}
+#columns button:focus-visible,#join:focus-visible,#rematch:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.board{padding:10px 6px;background:var(--card);border:2px solid var(--ink);border-radius:5px}
+.cell{aspect-ratio:1;border:2px solid var(--line);border-radius:50%;background:transparent}
+.cell.x4{background:var(--x4)}.cell.browser{background:var(--web);border-style:dashed}
+.cell.last{outline:2px solid var(--ink);outline-offset:1px}
+.controls{display:flex;gap:10px;margin-top:14px}.controls button{min-height:44px;padding:9px 16px}
+.legend{display:flex;gap:20px;align-items:center;margin:14px 0}
+.legend span{display:inline-flex;align-items:center;gap:7px;font-size:.85rem}
+.legend i{display:inline-block;width:16px;height:16px;border:2px solid var(--line);border-radius:50%}
+.legend i.x4{background:var(--x4)}.legend i.web{background:var(--web);border-style:dashed}
+</style>
+</head>
+<body>
+<main>
+<header><h1>CONNECT FOUR</h1><small>CROSSPLAY · X4 PRO</small></header>
+<p id="status" role="status" aria-live="polite">Connecting to X4 Pro…</p>
+<p id="detail" aria-live="polite"></p>
+<div class="legend"><span><i class="x4"></i> X4 PRO · FIRST</span><span><i class="web"></i> BROWSER · SECOND</span></div>
+<div id="columns" aria-label="Drop a disc into a column"></div>
+<div id="board" class="board" role="img" aria-label="Empty Connect Four board"></div>
+<div class="controls"><button id="join" type="button">JOIN GAME</button><button id="rematch" type="button" hidden>PLAY AGAIN</button></div>
+</main>
+<script>
+(() => {
+  'use strict';
+  const find = id => document.getElementById(id);
+  const status = find('status'), detail = find('detail');
+  const join = find('join'), rematch = find('rematch'), board = find('board');
+  const columns = Array.from({length:7}, (_, col) => {
+    const button = document.createElement('button');
+    button.type='button'; button.textContent=String(col+1);
+    button.setAttribute('aria-label','Drop into column '+(col+1));
+    button.onclick=() => send('drop',col);
+    find('columns').appendChild(button);
+    return button;
+  });
+  const storageKey='crossplay-connectfour-resume-v1';
+  const hex32 = text => typeof text==='string' && /^[0-9a-f]{32}$/.test(text);
+  let secret='', socket=null, bootstrap='', snapshot=null, revision=0;
+  let owner=false, pending=false, generation=0, retry=0, hidden=false;
+  try { const stored=sessionStorage.getItem(storageKey); if(hex32(stored)) secret=stored; } catch {}
+  function usable() {return Boolean(socket && socket.readyState===WebSocket.OPEN && bootstrap && !pending);}
+  function paint() {
+    const connected = usable();
+    const phase = snapshot ? snapshot.phase : 'offline';
+    const canPlay = owner && connected && phase==='playing' && snapshot.turn===2;
+    const cells=[];
+    const values = snapshot ? snapshot.board : '0'.repeat(42);
+    for(let row=5;row>=0;--row) for(let col=0;col<7;++col) {
+      const value=values[col*6+row], cell=document.createElement('div');
+      cell.className='cell'+(value==='1'?' x4':value==='2'?' browser':'');
+      if(snapshot && snapshot.last[0]===col && snapshot.last[1]===row) cell.className+=' last';
+      cell.setAttribute('aria-label','Column '+(col+1)+', row '+(row+1)+': '+(value==='1'?'X4':value==='2'?'Browser':'empty'));
+      cells.push(cell);
+    }
+    board.replaceChildren(...cells);
+    board.setAttribute('aria-label','Connect Four board, '+(snapshot ? snapshot.phase : 'offline'));
+    columns.forEach((button,col)=>{button.disabled=!canPlay || values[col*6+5]!=='0';});
+    join.hidden=owner || phase!=='waiting';
+    join.disabled=!connected || owner;
+    rematch.hidden=!owner || phase!=='finished';
+    rematch.disabled=!connected;
+    if(!snapshot){status.textContent='Connecting to X4 Pro…';return;}
+    if(phase==='waiting'){status.textContent='Join to challenge the X4 Pro';return;}
+    if(phase==='finished'){
+      status.textContent=snapshot.outcome===1?'X4 PRO WINS':snapshot.outcome===2?'BROWSER WINS':'DRAW';
+      return;
+    }
+    status.textContent=owner ? (snapshot.turn===2?'YOUR TURN · PICK A COLUMN':'X4 PRO TURN') : 'MATCH IN PROGRESS';
+  }
+  function send(type,value) {
+    if(!usable())return;
+    if(type==='drop' && (!owner || !snapshot || snapshot.phase!=='playing' || snapshot.turn!==2))return;
+    pending=true;
+    const msg=[type,bootstrap,revision];
+    if(type==='drop')msg.push(value);
+    if(type==='resume')msg.push(secret);
+    socket.send(JSON.stringify(msg));
+    detail.textContent=type==='resume'?'Restoring saved seat…':type==='join'?'Claiming seat…':type==='drop'?'Submitting move…':'Starting rematch…';
+    paint();
+  }
+  join.onclick=()=>send('join');
+  rematch.onclick=()=>send('rematch');
+  function valid(s) {
+    return s && s.type==='c4' && ['waiting','playing','finished'].includes(s.phase) &&
+      Number.isInteger(s.r) && s.r>=0 && s.r<=4294967295 &&
+      (s.turn===1 || s.turn===2) && Number.isInteger(s.outcome) && s.outcome>=0 && s.outcome<=3 &&
+      typeof s.board==='string' && /^[012]{42}$/.test(s.board) &&
+      Array.isArray(s.last) && s.last.length===2 && s.last.every(n=>Number.isInteger(n) && n>=-1 && n<=6);
+  }
+  async function connect() {
+    const current=++generation;
+    bootstrap=''; owner=false; pending=false; snapshot=null; paint();
+    try {
+      const response=await fetch('/connectfour/session',{cache:'no-store',credentials:'same-origin'});
+      if(!response.ok)throw Error('session');
+      const fresh=(await response.text()).trim();
+      if(!hex32(fresh) || current!==generation || hidden)return;
+      bootstrap=fresh;
+      socket=new WebSocket('ws://'+location.hostname+':81/connectfour');
+      const active=socket;
+      socket.onopen=()=>{if(current!==generation)return;if(secret)send('resume');else paint();};
+      socket.onmessage=message=>{
+        if(current!==generation)return;
+        let frame;try{frame=JSON.parse(message.data);}catch{return;}
+        if(valid(frame)){snapshot=frame;revision=frame.r;pending=false;detail.textContent='';paint();}
+        else if(frame && frame.type==='resume' && hex32(frame.token)){
+          secret=frame.token;owner=true;pending=false;
+          try{sessionStorage.setItem(storageKey,secret);}catch{}
+          detail.textContent='Seat verified';paint();
+        } else if(frame && frame.type==='error'){
+          pending=false;detail.textContent='Request rejected. Refresh or check turn.';
+          if(!owner && secret){secret='';try{sessionStorage.removeItem(storageKey);}catch{}}
+          paint();
+        }
+      };
+      socket.onclose=()=>{
+        if(current!==generation)return;
+        bootstrap='';owner=false;pending=false;
+        detail.textContent='Connection lost. Reconnecting…';paint();
+        if(!hidden)retry=setTimeout(connect,1800);
+      };
+      socket.onerror=()=>active.close();
+    } catch {
+      if(current===generation && !hidden){detail.textContent='X4 unavailable. Retrying…';retry=setTimeout(connect,1800);}
+    }
+  }
+  window.addEventListener('pagehide',()=>{
+    hidden=true;++generation;clearTimeout(retry);bootstrap='';
+    if(socket){socket.onclose=null;socket.close();}
+  });
+  window.addEventListener('pageshow',event=>{if(event.persisted){hidden=false;connect();}});
+  paint();connect();
+})();
+</script>
+</body>
+</html>
