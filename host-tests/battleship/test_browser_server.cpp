@@ -136,7 +136,8 @@ int main() {
   // The previous browser connection can still be alive when a tab reloads.
   ws.event(WStype_CONNECTED, 1);
   clockMs += 100;
-  ws.event(WStype_TEXT, 1, "[\\\"resume\\\",\\\""+freshToken+"\\\",2,\\\""+resumeToken+"\\\"]");
+  const std::string rapidResume=std::string(R"(["resume",")")+freshToken+R"(",2,")"+resumeToken+R"("])";
+  ws.event(WStype_TEXT, 1, rapidResume);
   assert(handler.calls == 4);
   assert(ws.recipients[ws.recipients.size()-4] == 1);
   ws.event(WStype_DISCONNECTED, 0);

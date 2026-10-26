@@ -71,7 +71,8 @@ int main() {
   // Browser reload: a new socket resumes before the old socket closes.
   ws.event(WStype_CONNECTED,3);
   clockMs=650;
-  ws.event(WStype_TEXT,3,"[\\\"resume\\\",\\\""+fresh+"\\\",0,\\\""+secret+"\\\"]");
+  const std::string rapidResume=std::string(R"(["resume",")")+fresh+R"(",0,")"+secret+R"("])";
+  ws.event(WStype_TEXT,3,rapidResume);
   assert(server.round().owner()==3);
   assert(ws.recipients[ws.recipients.size()-2]==3);
   ws.event(WStype_DISCONNECTED,2);
