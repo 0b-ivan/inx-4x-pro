@@ -25,12 +25,12 @@ UNIT_RX = {
     "en": re.compile(
         r"(?<!\w)(?P<num>\d+(?:[.,]\d+)*)\s*(?:-| )?\s*"
         r"(?P<unit>feet|foot|ft|inches|inch|miles|mile|mi|kilometers|kilometres|"
-        r"km|meters|metres|meter|metre|m|pounds|pound|lbs|lb|kg|kilograms|"
+        r"km|centimeters|centimetres|centimeter|centimetre|cm|meters|metres|meter|metre|m|pounds|pound|lbs|lb|kg|kilograms|"
         r"kilogram|°f|°c|fahrenheit|celsius)\b", re.I),
     "de": re.compile(
         r"(?<!\w)(?P<num>\d+(?:[.,]\d+)*)\s*(?:-| )?\s*"
         r"(?P<unit>fuß|fuss|feet|ft|zoll|meilen|meile|kilometer|kilometern|"
-        r"km|meter|metern|m|pfund|kilogramm|kilogrammen|kg|"
+        r"km|zentimeter|zentimetern|cm|meter|metern|m|pfund|kilogramm|kilogrammen|kg|"
         r"°f|°c|fahrenheit|celsius)\b", re.I)
 }
 UNITS = {
@@ -55,6 +55,13 @@ UNITS = {
     "kilometern": ("length", Decimal("1000")),
     "kilometers": ("length", Decimal("1000")),
     "kilometres": ("length", Decimal("1000")),
+    "cm": ("length", Decimal("0.01")),
+    "centimeter": ("length", Decimal("0.01")),
+    "centimeters": ("length", Decimal("0.01")),
+    "centimetre": ("length", Decimal("0.01")),
+    "centimetres": ("length", Decimal("0.01")),
+    "zentimeter": ("length", Decimal("0.01")),
+    "zentimetern": ("length", Decimal("0.01")),
     "inch": ("length", Decimal("0.0254")),
     "inches": ("length", Decimal("0.0254")),
     "zoll": ("length", Decimal("0.0254")),
@@ -191,6 +198,22 @@ def audit_field(original, translation):
     before=numeric_tokens(original,"en")
     after=numeric_tokens(translation,"de")
     if before==after:
+        # Equal digits are not evidence that an explicitly changed unit is
+        # equivalent (10 miles != 10 kilometres). Compare recognized units.
+        original_units = _units(original, "en")
+        german_units = _units(translation, "de")
+        if len(original_units) == len(german_units) == 1:
+            english, german = original_units[0], german_units[0]
+            same_unit = (english[3] == german[3] and english[4] == german[4]
+                         and (english[2], german[2]) not in AMBIGUOUS_PAIRS)
+            if not same_unit:
+                remaining_en,remaining_de,converted = _conversion_notes(original, translation)
+                if converted and remaining_en == remaining_de:
+                    return {"warnings":[],"notes":[
+                        {"kind":"verified_unit_conversion",**row} for row in converted]}
+                return {"warnings":[{"kind":"unit_mismatch",
+                                    "english_unit":english[2],
+                                    "german_unit":german[2]}],"notes":[]}
         return {"warnings":[],"notes":[]}
     remaining_en,remaining_de,converted=_conversion_notes(original,translation)
     notes=[{"kind":"verified_unit_conversion",**row} for row in converted]
