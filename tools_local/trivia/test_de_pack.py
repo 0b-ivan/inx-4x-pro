@@ -149,10 +149,10 @@ class GermanTriviaPackTests(unittest.TestCase):
             self.assertIn(ord(character), glyphs, character)
 
     def test_vetted_spelling_repairs_keep_umlauts(self):
-        before = "Die Konige in Munchen, Danemark und Nobelpreistrager " \\
-                 "Fruh und spaeter. Muenchen, Koenige und Daenemark."
-        after = "Die Könige in München, Dänemark und Nobelpreisträger " \\
-                "Früh und später. München, Könige und Dänemark."
+        before = ("Die Konige in Munchen, Danemark und Nobelpreistrager "
+                  "Fruh und spaeter. Muenchen, Koenige und Daenemark.")
+        after = ("Die Könige in München, Dänemark und Nobelpreisträger "
+                 "Früh und später. München, Könige und Dänemark.")
         self.assertEqual(normalize_orthography(before), after)
         self.assertEqual(normalize_orthography("MUNCHEN"), "MÜNCHEN")
         self.assertEqual(normalize_orthography("München"), "München")
