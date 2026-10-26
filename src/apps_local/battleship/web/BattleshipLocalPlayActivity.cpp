@@ -690,15 +690,14 @@ void BattleshipLocalPlayActivity::drawBrowserWaiting() {
   if (browser_.hotspot()) {
     const int gap = 18;
     const int left = (width - (2 * kQrSize + gap)) / 2;
-    const std::string wifiQr = std::string("WIFI:T:WPA;S:") + browser_.ssid() + ";P:" + browser_.password() + ";;";
+    const std::string wifiQr = std::string("WIFI:T:nopass;S:") + browser_.ssid() + ";;";
     QrUtils::drawQrCode(renderer, Rect{left, y, kQrSize, kQrSize}, wifiQr);
     QrUtils::drawQrCode(renderer, Rect{left + kQrSize + gap, y, kQrSize, kQrSize}, browser_.url());
     y += kQrSize + metrics.verticalSpacing;
     renderer.drawText(SMALL_FONT_ID, left, y, "1. JOIN WI-FI", true);
     renderer.drawText(SMALL_FONT_ID, left + kQrSize + gap, y, "2. OPEN GAME", true);
     y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
-    const std::string passwordText = std::string("WI-FI PASS: ") + browser_.password();
-    renderer.drawCenteredText(SMALL_FONT_ID, y, passwordText.c_str(), true);
+    renderer.drawCenteredText(SMALL_FONT_ID, y, "OPEN WI-FI · NO PASSWORD", true);
   } else {
     const int left = (width - kQrSize) / 2;
     QrUtils::drawQrCode(renderer, Rect{left, y, kQrSize, kQrSize}, browser_.url());

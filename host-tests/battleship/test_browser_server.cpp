@@ -36,8 +36,7 @@ int main() {
   devmode::pause();
   assert(server.begin(Server::NetworkMode::Hotspot));
   assert(devmode::depth == 2 && !server.clientSeen());
-  assert(std::string(server.password()).size() == 12);
-  assert(WiFi.apPassword == server.password());  // No longer an open hotspot.
+  assert(WiFi.apPassword.empty());  // Deliberately open game hotspot.
   assert(std::string(server.url()) == "http://192.168.4.1/battleship");  // QR avoids mDNS dependency.
   auto& ws = *WebSocketsServer::instance;
   auto& http = *WebServer::instance;
@@ -145,7 +144,6 @@ int main() {
   server.stop();
   server.stop();
   assert(ws.closed && !server.running() && devmode::depth == 1 && WiFi.currentMode == WIFI_OFF);
-  assert(std::string(server.password()).empty());
   WiFi.available = false;
   assert(!server.begin(Server::NetworkMode::ExistingWifi));
   assert(devmode::depth == 1);

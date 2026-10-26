@@ -27,7 +27,6 @@ class Server final {
   bool clientSeen() const { return clientSeen_; }
   bool takeChanged() { const bool value = changed_; changed_ = false; return value; }
   const Round& round() const { return round_; }
-  const char* password() const { return password_.c_str(); }
   const char* url() const { return url_.c_str(); }
   const char* ssid() const { return "CrossPlay-ConnectFour"; }
  private:
@@ -48,7 +47,6 @@ class Server final {
   bool running_ = false;
   bool clientSeen_ = false;
   bool changed_ = false;
-  std::string password_;
   std::string url_;
 };
 }  // namespace c4web

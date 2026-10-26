@@ -87,15 +87,14 @@ void ConnectFourBrowserActivity::drawJoin() {
   if (!failed_) {
     constexpr int qr=170, gap=18;
     const int left=(width-(2*qr+gap))/2;
-    const std::string wifiQr=std::string("WIFI:T:WPA;S:")+server_.ssid()+";P:"+server_.password()+";;";
+    const std::string wifiQr=std::string("WIFI:T:nopass;S:")+server_.ssid()+";;";
     QrUtils::drawQrCode(renderer,Rect{left,y,qr,qr},wifiQr);
     QrUtils::drawQrCode(renderer,Rect{left+qr+gap,y,qr,qr},server_.url());
     y+=qr+m.verticalSpacing;
     renderer.drawText(SMALL_FONT_ID,left,y,"1. JOIN WI-FI",true);
     renderer.drawText(SMALL_FONT_ID,left+qr+gap,y,"2. OPEN GAME",true);
     y+=renderer.getLineHeight(SMALL_FONT_ID)+m.verticalSpacing;
-    const std::string label=std::string("WI-FI PASS: ")+server_.password();
-    renderer.drawCenteredText(SMALL_FONT_ID,y,label.c_str(),true);
+    renderer.drawCenteredText(SMALL_FONT_ID,y,"OPEN WI-FI · NO PASSWORD",true);
     y+=renderer.getLineHeight(SMALL_FONT_ID)+m.verticalSpacing;
     renderer.drawCenteredText(SMALL_FONT_ID,y,server_.url(),true);
   }

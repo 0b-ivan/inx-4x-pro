@@ -14,10 +14,12 @@ HTTP serves `/battleship` on port 80; WebSocket uses port 81. The page obtains a
 128-bit random bootstrap capability through a same-origin, uncached GET to
 `/battleship/session`. That endpoint has no CORS allowance. The page is not
 frameable. This is local-session/CSRF protection, not account authentication
-or encrypted transport. Each new hotspot session now generates a random
-12-character WPA2 password, displayed on the X4 and encoded in the Wi-Fi QR
-code. The X4 still serves plain HTTP and WebSocket: do not expose these
-endpoints to the public Internet.
+or encrypted transport. The hotspot is intentionally **open (no WPA password)**,
+with an easy-to-scan `WIFI:T:nopass` QR. Anyone physically nearby can join
+the network and observe unencrypted traffic or try to claim an unoccupied
+browser seat. The claimed owner's separate private resume token still gates
+account access and reconnects, but this does not protect traffic against a
+local network eavesdropper. Do not expose these endpoints to the Internet.
 
 The first accepted profile binds the browser seat to that WebSocket client.
 Other clients receive only the public status DTO and cannot issue commands.
@@ -153,7 +155,7 @@ disabled hardware-network backend.
 On hardware:
 
 1. Games → Battleship → PLAY NEARBY → BROWSER → HOTSPOT. Join
-   `CrossPlay-Battleship` using the WPA2 QR/password shown on the X4, then
+   the open `CrossPlay-Battleship` network using its passwordless Wi-Fi QR, then
    open the QR URL or displayed IP URL.
 2. Choose the browser profile. Verify that the browser fleet controls appear
    only after the profile was accepted and that the X4 can immediately start

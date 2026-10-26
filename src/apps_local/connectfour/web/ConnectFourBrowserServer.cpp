@@ -11,7 +11,6 @@
 
 namespace c4web {
 namespace {
-constexpr char kPasswordAlphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 uint32_t randomWord() { return esp_random(); }
 }
 
@@ -21,17 +20,14 @@ bool Server::begin() {
   if (running_) return true;
   clientSeen_ = false;
   changed_ = true;
-  password_.clear();
   url_.clear();
   if (!devModePaused_) { devmode::pause(); devModePaused_ = true; }
   WiFi.mode(WIFI_AP);
   delay(50);
-  password_.reserve(12);
-  for (int i=0;i<12;++i) password_.push_back(kPasswordAlphabet[esp_random() % (sizeof(kPasswordAlphabet)-1)]);
-  if (!WiFi.softAP(ssid(), password_.c_str(), 1, false, 2)) {
+  // Open short-range game hotspot; seat capabilities still gate moves.
+  if (!WiFi.softAP(ssid(), nullptr, 1, false, 2)) {
     WiFi.mode(WIFI_OFF);
-    password_.clear();
-    devmode::resume(); devModePaused_ = false;
+      devmode::resume(); devModePaused_ = false;
     return false;
   }
   // ESP32 RF provides entropy after AP startup, including the seat secrets.
@@ -74,7 +70,6 @@ void Server::stop() {
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
   }
-  password_.clear();
   url_.clear();
   if (devModePaused_) { devmode::resume(); devModePaused_ = false; }
   changed_ = true;

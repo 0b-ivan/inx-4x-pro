@@ -16,8 +16,7 @@ int main() {
   assert(server.begin());
   assert(devmode::depth==2);
   assert(server.running() && !server.clientSeen());
-  assert(std::strlen(server.password())==12);
-  assert(WiFi.apPassword==server.password());
+  assert(WiFi.apPassword.empty()); // Passwordless game AP.
   assert(std::string(server.url())=="http://192.168.4.1/connectfour");
   auto& ws=*WebSocketsServer::instance;
   auto& http=*WebServer::instance;
@@ -87,7 +86,6 @@ int main() {
   assert(ws.messages.back().find(R"("r":8)")!=std::string::npos);
   server.stop();server.stop();
   assert(!server.running() && WiFi.currentMode==WIFI_OFF);
-  assert(std::strlen(server.password())==0);
   assert(devmode::depth==1);
   assert(!server.round().authorized(fresh.c_str(),secret.c_str()));
   WiFi.available=false;
@@ -97,5 +95,5 @@ int main() {
   assert(devmode::depth==1);
   devmode::resume();
   assert(devmode::depth==0);
-  puts("Connect Four server: WPA hotspot, owner-only resume, secure WS commands and reconnect passed");
+  puts("Connect Four server: open hotspot, owner-only resume, guarded WS commands and reconnect passed");
 }

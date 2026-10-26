@@ -17,8 +17,6 @@
 namespace bshipweb {
 namespace {
 constexpr const char* kApSsid = "CrossPlay-Battleship";
-constexpr char kApPasswordAlphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-constexpr size_t kApPasswordLength = 12;
 constexpr const char* kMdnsHost = "crossplay";
 constexpr uint8_t kApChannel = 1;
 constexpr uint8_t kApMaxClients = 2;
@@ -73,7 +71,6 @@ bool Server::begin(const NetworkMode mode) {
   mode_ = mode;
   clientSeen_ = false;
   ssid_.clear();
-  password_.clear();
   ip_.clear();
   url_.clear();
 
@@ -134,7 +131,6 @@ void Server::stop() {
     http_.stop();
   }
   snapshot_ = {};
-  password_.clear();
 
   if (dnsRunning_) {
     dns_.stop();
@@ -299,11 +295,9 @@ bool Server::startHotspot() {
   WiFi.mode(WIFI_AP);
   delay(50);
 
-  password_.reserve(kApPasswordLength);
-  for (size_t i = 0; i < kApPasswordLength; ++i) {
-    password_.push_back(kApPasswordAlphabet[esp_random() % (sizeof(kApPasswordAlphabet) - 1)]);
-  }
-  if (!WiFi.softAP(kApSsid, password_.c_str(), kApChannel, false, kApMaxClients)) {
+  // Intentionally open local game AP: joining requires no WPA password.
+  // Browser seat ownership and private resume capabilities remain enforced.
+  if (!WiFi.softAP(kApSsid, nullptr, kApChannel, false, kApMaxClients)) {
     LOG_ERR("BSHIPWEB", "Failed to start Battleship hotspot");
     WiFi.mode(WIFI_OFF);
     return false;
