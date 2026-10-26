@@ -7,6 +7,7 @@ a potentially expensive full-corpus translation. Never commit API keys.
 """
 import argparse
 import json
+import math
 import os
 import time
 import urllib.error
@@ -73,7 +74,7 @@ def pilot_candidates(source, limit, already_done=()):
     # A coprime stride visits every position exactly once, without shuffling
     # or allocating a duplicate 50k-record list.
     stride = max(1, (n * 61803398875 // 100000000000) | 1)
-    while __import__("math").gcd(n, stride) != 1:
+    while math.gcd(n, stride) != 1:
         stride += 2
     seen_answers = set()
     chosen = []
