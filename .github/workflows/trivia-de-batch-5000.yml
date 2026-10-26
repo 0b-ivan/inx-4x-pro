@@ -1,0 +1,48 @@
+name: German Trivia 5000 Draft Batch
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_paid_translation:
+        description: 'Type TRANSLATE-5000 to authorize paid requests'
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: trivia-de-batch-5000
+  cancel-in-progress: false
+jobs:
+  translate:
+    if: github.event.inputs.confirm_paid_translation == 'TRANSLATE-5000'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Offline QA
+        run: python3 tools_local/trivia/test_de_pack.py
+      - name: Obtain pinned English source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia"
+          curl -fsSL --retry 3 --max-time 90 https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat -o "$RUNNER_TEMP/trivia/pack.dat"
+          echo "a17435136122ce1d2485d4c4c30e58206e6dffc88b819e0d4c646081b485f9cf  $RUNNER_TEMP/trivia/pack.dat" | sha256sum -c -
+          python3 tools_local/trivia/export_pack.py --pack "$RUNNER_TEMP/trivia/pack.dat" --out "$RUNNER_TEMP/trivia/source-en.jsonl"
+      - name: Translate 5000 new drafts (not approved)
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          test -n "$OPENROUTER_API_KEY" || { echo 'Missing OPENROUTER_API_KEY'; exit 1; }
+          python3 tools_local/trivia/translate_de_pack.py --src "$RUNNER_TEMP/trivia/source-en.jsonl" --out "$RUNNER_TEMP/trivia/questions-de-draft.jsonl" --model 'google/gemini-2.5-flash' --limit 5000
+      - name: Upload checkpointed unreviewed drafts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivia-de-5000-unreviewed
+          path: ${{ runner.temp }}/trivia/questions-de-draft.jsonl
+          if-no-files-found: ignore
+          retention-days: 30
