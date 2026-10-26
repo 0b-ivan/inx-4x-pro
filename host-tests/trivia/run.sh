@@ -58,6 +58,12 @@ python3 test_de_ota_contract.py
 "$BUILD_DIR/test_aws_pack"
 python3 "$TOOLS/test_aws_study.py"
 
+# Certificate-named independent study pack catalogue (no private content).
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC \
+  test_study_deck_catalog.cpp "$SRC/StudyDeckCatalog.cpp" \
+  -o "$BUILD_DIR/test_study_deck_catalog"
+"$BUILD_DIR/test_study_deck_catalog"
+
 # Cross-language check: build a complete synthetic 150-question pack with the
 # production Python builder and read it using the actual firmware C++ reader.
 # This does not contain or fetch any purchased quiz content.

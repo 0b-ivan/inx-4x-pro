@@ -324,7 +324,7 @@ void buildMenu(toybox::Screen& screen, const MenuModel& model) {
   modeCard(screen, fui::Rect{left, static_cast<int16_t>(top + cardH + 16), wide, cardH}, "SOLO",
            "Four options, scored", ActionMenuRow, 1, false);
   modeCard(screen, fui::Rect{left, static_cast<int16_t>(top + (cardH + 16) * 2), wide, cardH},
-           "AWS DEVOPS", "Study questions and domains", ActionMenuRow, 3, false);
+           "STUDY PACKS", "Select a certificate question pack", ActionMenuRow, 3, false);
 
   const fui::Rect diffBox{left, diffY, wide, diffH};
   screen.target().stroke(diffBox, fui::Paint::solid(fui::Color::Black), 1);

@@ -2,12 +2,26 @@
 
 #include "../ui/ToyboxScreen.h"
 #include "AwsStudyPack.h"
+#include "StudyDeckCatalog.h"
 
 namespace triviaui {
 namespace fui = freeink::ui;
 
+struct StudyDeckListModel {
+  bool german = false;
+  uint8_t total = 0;
+  uint8_t offset = 0;
+  uint8_t visible = 0;
+  const char* names[trivia::kStudyDecksPerPage] = {};
+  uint8_t indices[trivia::kStudyDecksPerPage] = {};
+  int current = -1;
+};
+
+void buildStudyDeckList(toybox::Screen& screen, const StudyDeckListModel& model);
+
 struct AwsMenuModel {
   bool german = false;
+  const char* deckName = "AWS DEVOPS";
   uint32_t count = 0;
   uint32_t seen = 0;
   uint8_t enabled = trivia::kAwsAllDomains;
@@ -15,6 +29,7 @@ struct AwsMenuModel {
 
 struct AwsDomainsModel {
   bool german = false;
+  const char* topics[trivia::kAwsDomains] = {};
   uint8_t enabled = trivia::kAwsAllDomains;
 };
 

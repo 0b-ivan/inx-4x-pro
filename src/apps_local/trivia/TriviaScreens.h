@@ -48,6 +48,9 @@ enum : fui::ActionId {
   ActionAwsToggleOption = 18,
   ActionAwsSubmit = 19,
   ActionAwsFinish = 20,
+  ActionStudyDecks = 21,
+  ActionStudySelect = 22,
+  ActionStudyNextPage = 23,
 };
 
 enum class MenuRow : int { Quizmaster = 0, Solo, Difficulty, Count };

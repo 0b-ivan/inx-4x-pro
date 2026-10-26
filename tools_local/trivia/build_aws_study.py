@@ -2,8 +2,8 @@
 """Build a private XAWSDEV v1 study pack from an English personal JSONL export.
 
 No source questions, raw HAR files, images, or resulting .dat should ever be
-committed to the public repository. The CrossPlay firmware reads the output
-from /trivia/aws/pack.dat on its SD card. No network is used.
+committed to the public repository. Copy the output CERTIFICATE.dat and its
+CERTIFICATE.topics sidecar to /trivia/decks on SD. No network is used.
 """
 import argparse
 import hashlib
@@ -17,7 +17,8 @@ import tempfile
 MAGIC = b"XAWSDEV\0"
 HEADER = struct.Struct("<8sHBBII")  # content fingerprint prevents stale state reuse
 MAX_RECORD = 12 * 1024
-DOMAIN = re.compile(r"^Domain ([1-6]):\s+\S")
+DOMAIN = re.compile(r"^(?:Domain|Topic|Category) ([1-6]):\s+(.+)$")
+CERTIFICATE = re.compile(r"^[A-Za-z0-9_-]{1,30}$")
 
 
 def _require(cond, message):
@@ -28,7 +29,7 @@ def _require(cond, message):
 def encode(row, line):
     if not isinstance(row, dict):
         raise ValueError(f"line {line}: question must be an object")
-    m = DOMAIN.match(str(row.get("category", "")))
+    m = DOMAIN.fullmatch(str(row.get("category", "")))
     _require(m is not None, f"line {line}: unknown exam domain")
     _require(row.get("type") in ("single", "multi"), f"line {line}: invalid question type")
     options = row.get("options")
@@ -65,12 +66,21 @@ def build(src, out=None):
              "personal questions must be stored outside this public repository")
     records = []
     seen = set()
+    labels = {}
     with source.open("r", encoding="utf-8-sig") as stream:
         for n, line in enumerate(stream, 1):
             if not line.strip():
                 continue
             row = json.loads(line)
             rec = encode(row, n)
+            match = DOMAIN.fullmatch(row["category"])
+            topic_number = int(match.group(1))
+            label = f"{topic_number} {match.group(2).strip()}"
+            _require(0 < len(label) <= 39 and all(32 <= ord(c) <= 126 for c in label),
+                     f"line {n}: topic labels must be at most 39 printable ASCII characters")
+            _require(topic_number not in labels or labels[topic_number] == label,
+                     f"line {n}: conflicting name for topic {topic_number}")
+            labels[topic_number] = label
             key = hashlib.sha256(rec).digest()
             _require(key not in seen, f"line {n}: duplicate study record")
             seen.add(key)
@@ -86,7 +96,10 @@ def build(src, out=None):
         _require(root not in dst.parents and dst != root,
                  "private AWS packs must be built outside the public repository")
         dst.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(prefix=".aws-pack-", dir=str(dst.parent))
+        _require(dst.suffix == ".dat" and
+                 CERTIFICATE.fullmatch(dst.stem) is not None,
+                 "output must be named after a certificate, e.g. DOP-C02.dat")
+        fd, tmp = tempfile.mkstemp(prefix=".study-pack-", dir=str(dst.parent))
         try:
             with os.fdopen(fd, "wb") as stream:
                 stream.write(HEADER.pack(MAGIC, 1, 0, 0, len(records), fingerprint))
@@ -96,6 +109,20 @@ def build(src, out=None):
                 stream.flush()
                 os.fsync(stream.fileno())
             _require(Path(tmp).stat().st_size == expected, "binary size mismatch")
+            # Save short category names beside the pack so the on-device
+            # topic picker is not hardwired to AWS DevOps exam domains.
+            topics = dst.with_suffix(".topics")
+            tfd, tname = tempfile.mkstemp(prefix=".study-topics-", dir=str(dst.parent))
+            try:
+                with os.fdopen(tfd, "w", encoding="ascii") as output:
+                    for category in range(1, 7):
+                        output.write(labels.get(category, f"{category} UNUSED") + "\n")
+                    output.flush()
+                    os.fsync(output.fileno())
+                os.replace(tname, topics)
+            finally:
+                if os.path.exists(tname):
+                    os.unlink(tname)
             os.replace(tmp, dst)
         finally:
             if os.path.exists(tmp):
@@ -106,16 +133,21 @@ def build(src, out=None):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--src", required=True, help="private imported JSONL outside repo")
-    ap.add_argument("--out", help="private destination .dat file outside repo")
+    ap.add_argument("--certificate", help="certificate code, e.g. DOP-C02 or SAA-C03")
+    ap.add_argument("--out", help="private output directory outside repo (with --certificate)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
-    if not args.dry_run and not args.out:
-        ap.error("--out is required unless --dry-run")
+    if not args.dry_run and (not args.out or not args.certificate):
+        ap.error("--certificate and --out are required unless --dry-run")
+    if args.certificate and CERTIFICATE.fullmatch(args.certificate) is None:
+        ap.error("--certificate must contain only letters, digits, underscores or hyphens")
+    destination = (Path(args.out) / (args.certificate + ".dat")
+                   if not args.dry_run else None)
     try:
-        n, size, max_record = build(args.src, None if args.dry_run else args.out)
+        n, size, max_record = build(args.src, destination)
     except (ValueError, OSError, json.JSONDecodeError) as exc:
         ap.exit(1, f"Invalid AWS pack: {exc}\n")
-    print(f"AWS pack validated: questions={n}, bytes={size}, largest_record={max_record}"
+    print(f"Study pack validated: questions={n}, bytes={size}, largest_record={max_record}"
           + (" (dry-run)" if args.dry_run else ""))
 
 

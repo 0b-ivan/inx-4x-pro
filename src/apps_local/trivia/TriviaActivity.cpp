@@ -38,10 +38,8 @@ constexpr const char* kGermanPartPath = "/trivia/pack-de.dat.part";
 // deleted on exit, so leaving Trivia and coming back silently put a player who
 // had chosen Level 4 back on "Any" with nothing on screen to say so.
 constexpr const char* kPrefsPath = "/trivia/prefs";
-constexpr const char* kAwsPackPath = "/trivia/aws/pack.dat";
-constexpr const char* kAwsStatePath = "/trivia/aws/pack.state";
-constexpr const char* kAwsStateIdPath = "/trivia/aws/pack.state.id";
-constexpr const char* kAwsPrefsPath = "/trivia/aws/prefs";
+constexpr const char* kSelectedStudyDeck = "/trivia/decks/selected";
+constexpr uint32_t kStudyPathCapacity = 96;
 constexpr uint32_t kAwsPageCharacters = 260;
 
 // A ByteSource over a HalFile. Every read seeks first: an index entry and the
@@ -154,11 +152,61 @@ bool TriviaActivity::openPack() {
   return false;
 }
 
+void TriviaActivity::scanStudyDecks() {
+  deckCatalog_.clear();
+  for (const String& filename : Storage.listFiles(trivia::kStudyDeckFolder, 160))
+    deckCatalog_.addFile(filename.c_str());
+  selectedDeck_ = 0;
+  char saved[trivia::kStudySlugMax + 2] = {};
+  if (Storage.readFileToBuffer(kSelectedStudyDeck, saved, sizeof(saved)) > 0) {
+    const int found = deckCatalog_.find(saved);
+    if (found >= 0) selectedDeck_ = static_cast<uint8_t>(found);
+  }
+  deckPage_ = selectedDeck_ / trivia::kStudyDecksPerPage;
+}
+
+bool TriviaActivity::studyPath(const char* ext, char* out, uint32_t capacity) const {
+  return deckCatalog_.path(selectedDeck_, ext, out, capacity);
+}
+
+void TriviaActivity::loadStudyTopics() {
+  // No built-in AWS taxonomy: each certification brings its own topics.
+  for (int i = 0; i < trivia::kAwsDomains; ++i)
+    std::snprintf(studyTopics_[i], sizeof(studyTopics_[i]), "TOPIC %d", i + 1);
+  char path[kStudyPathCapacity] = {};
+  if (!studyPath(".topics", path, sizeof(path))) return;
+  char raw[256] = {};
+  const size_t bytes = Storage.readFileToBuffer(path, raw, sizeof(raw));
+  if (bytes == 0 || bytes >= sizeof(raw)) return;
+  const char* cursor = raw;
+  for (int i = 0; i < trivia::kAwsDomains && *cursor; ++i) {
+    const char* end = std::strchr(cursor, '\n');
+    if (!end) end = cursor + std::strlen(cursor);
+    const size_t length = static_cast<size_t>(end - cursor);
+    bool valid = length != 0 && length < sizeof(studyTopics_[i]);
+    for (size_t j = 0; valid && j < length; ++j) {
+      const unsigned char byte = static_cast<unsigned char>(cursor[j]);
+      if (byte < 32 || byte > 126) valid = false;
+    }
+    if (valid) {
+      std::memcpy(studyTopics_[i], cursor, length);
+      studyTopics_[i][length] = '\0';
+    }
+    cursor = *end ? end + 1 : end;
+  }
+}
+
 bool TriviaActivity::openAwsPack() {
   g_awsPackFile.close();
   g_awsStateFile.close();
   awsInstalled_ = false;
-  if (!Storage.openFileForRead("TRIVIA", kAwsPackPath, g_awsPackFile)) return false;
+  char packPath[kStudyPathCapacity], statePath[kStudyPathCapacity];
+  char idPath[kStudyPathCapacity], prefsPath[kStudyPathCapacity];
+  if (!studyPath(".dat", packPath, sizeof(packPath)) ||
+      !studyPath(".state", statePath, sizeof(statePath)) ||
+      !studyPath(".state.id", idPath, sizeof(idPath)) ||
+      !studyPath(".prefs", prefsPath, sizeof(prefsPath))) return false;
+  if (!Storage.openFileForRead("TRIVIA", packPath, g_awsPackFile)) return false;
   g_awsPackSource.attach(g_awsPackFile);
   if (!awsPack_.open(g_awsPackSource)) {
     g_awsPackFile.close();
@@ -167,7 +215,7 @@ bool TriviaActivity::openAwsPack() {
   }
   bool sameContent = false;
   {
-    HalFile stamp = Storage.open(kAwsStateIdPath, O_RDONLY);
+    HalFile stamp = Storage.open(idPath, O_RDONLY);
     if (stamp.isOpen() && stamp.size() == 4) {
       uint8_t id[4] = {};
       const uint32_t fingerprint = awsPack_.fingerprint();
@@ -179,12 +227,12 @@ bool TriviaActivity::openAwsPack() {
       }
     }
   }
-  g_awsStateFile = Storage.open(kAwsStatePath, O_RDWR);
+  g_awsStateFile = Storage.open(statePath, O_RDWR);
   if (!sameContent || !g_awsStateFile.isOpen() ||
       static_cast<uint32_t>(g_awsStateFile.size()) != awsPack_.count()) {
     g_awsStateFile.close();
     HalFile fresh;
-    if (!Storage.openFileForWrite("TRIVIA", kAwsStatePath, fresh)) return false;
+    if (!Storage.openFileForWrite("TRIVIA", statePath, fresh)) return false;
     uint8_t zeros[256] = {};
     for (uint32_t written = 0; written < awsPack_.count();) {
       const uint32_t remaining = awsPack_.count() - written;
@@ -198,7 +246,7 @@ bool TriviaActivity::openAwsPack() {
     fresh.flush();
     fresh.close();
     HalFile stamp;
-    if (!Storage.openFileForWrite("TRIVIA", kAwsStateIdPath, stamp)) return false;
+    if (!Storage.openFileForWrite("TRIVIA", idPath, stamp)) return false;
     const uint32_t fingerprint = awsPack_.fingerprint();
     const uint8_t id[4] = {
         static_cast<uint8_t>(fingerprint),
@@ -208,12 +256,12 @@ bool TriviaActivity::openAwsPack() {
     if (stamp.write(id, sizeof(id)) != sizeof(id)) return false;
     stamp.flush();
     stamp.close();
-    g_awsStateFile = Storage.open(kAwsStatePath, O_RDWR);
+    g_awsStateFile = Storage.open(statePath, O_RDWR);
   }
   if (!g_awsStateFile.isOpen()) return false;
   g_awsStateSource.attach(g_awsStateFile);
   if (!awsState_.open(g_awsStateSource, awsPack_.count())) return false;
-  HalFile prefs = Storage.open(kAwsPrefsPath, O_RDONLY);
+  HalFile prefs = Storage.open(prefsPath, O_RDONLY);
   awsDomains_ = trivia::kAwsAllDomains;
   if (prefs.isOpen() && prefs.size() == 1) {
     uint8_t mask = 0;
@@ -221,13 +269,19 @@ bool TriviaActivity::openAwsPack() {
       awsDomains_ = mask;
   }
   awsChooser_.begin(awsPack_, awsState_, rng_);
+  loadStudyTopics();
+  awsScore_.reset();
+  awsHaveLast_ = false;
+  awsHasQuestion_ = false;
   awsInstalled_ = true;
   return true;
 }
 
 void TriviaActivity::saveAwsDomains() const {
   HalFile prefs;
-  if (!Storage.openFileForWrite("TRIVIA", kAwsPrefsPath, prefs)) return;
+  char path[kStudyPathCapacity] = {};
+  if (!studyPath(".prefs", path, sizeof(path)) ||
+      !Storage.openFileForWrite("TRIVIA", path, prefs)) return;
   prefs.write(&awsDomains_, 1);
 }
 
@@ -260,7 +314,15 @@ void TriviaActivity::onEnter() {
   difficulty_ = loadDifficulty();
 
   const bool haveTrivia = openPack();
-  const bool haveAws = openAwsPack();
+  scanStudyDecks();
+  bool haveAws = false;
+  if (deckCatalog_.count()) {
+    const uint8_t first = selectedDeck_;
+    for (uint8_t attempt = 0; attempt < deckCatalog_.count(); ++attempt) {
+      selectedDeck_ = static_cast<uint8_t>((first + attempt) % deckCatalog_.count());
+      if (openAwsPack()) { haveAws = true; break; }
+    }
+  }
   if (haveTrivia || haveAws) {
     view_ = View::Menu;
     LOG_INF("TRIVIA", "Pack open: trivia=%u aws=%u",
@@ -681,16 +743,54 @@ void TriviaActivity::routeAction(const int action, const int value) {
         saveDifficulty(difficulty_);
         requestUpdate();
       } else if (value == 3) {
-        if (awsInstalled_) {
-          go(View::AwsMenu);
-        } else {
-          showNotice("AWS PACK MISSING", "Install a private AWS study pack at /trivia/aws/pack.dat.",
+        scanStudyDecks();
+        if (!deckCatalog_.count()) {
+          showNotice("NO STUDY PACKS",
+                     "Copy a certificate .dat pack to /trivia/decks on your SD card.",
                      "BACK", triviaui::ActionAwsHome);
+        } else if (deckCatalog_.count() > 1 || !awsInstalled_) {
+          go(View::StudyDecks);
+        } else {
+          go(View::AwsMenu);
         }
       }
       break;
     case triviaui::ActionAwsHome:
       go(View::Menu);
+      break;
+    case triviaui::ActionStudyDecks:
+      scanStudyDecks();
+      deckPage_ = selectedDeck_ / trivia::kStudyDecksPerPage;
+      go(View::StudyDecks);
+      break;
+    case triviaui::ActionStudyNextPage:
+      if (view_ == View::StudyDecks && deckCatalog_.count()) {
+        const uint8_t pages = (deckCatalog_.count() + trivia::kStudyDecksPerPage - 1) /
+                              trivia::kStudyDecksPerPage;
+        deckPage_ = static_cast<uint8_t>((deckPage_ + 1) % pages);
+        requestUpdate();
+      }
+      break;
+    case triviaui::ActionStudySelect:
+      if (view_ == View::StudyDecks && value >= 0 && value < deckCatalog_.count()) {
+        const uint8_t previous = selectedDeck_;
+        selectedDeck_ = static_cast<uint8_t>(value);
+        if (!openAwsPack()) {
+          selectedDeck_ = previous;
+          if (deckCatalog_.at(previous)) openAwsPack();
+          showNotice("INVALID STUDY PACK", "Pack invalid or missing. Progress preserved.",
+                     "PACKS", triviaui::ActionStudyDecks);
+          break;
+        }
+        const auto* selected = deckCatalog_.at(selectedDeck_);
+        HalFile saved;
+        if (selected && Storage.openFileForWrite("TRIVIA", kSelectedStudyDeck, saved)) {
+          saved.write(reinterpret_cast<const uint8_t*>(selected->slug),
+                      std::strlen(selected->slug));
+          saved.flush();
+        }
+        go(View::AwsMenu);
+      }
       break;
     case triviaui::ActionAwsBackToMenu:
       go(View::AwsMenu);
@@ -873,9 +973,27 @@ void TriviaActivity::render(RenderLock&&) {
       triviaui::buildMenu(screen, model);
       break;
     }
+    case View::StudyDecks: {
+      triviaui::StudyDeckListModel model;
+      model.german = I18N.getLanguage() == Language::DE;
+      model.total = deckCatalog_.count();
+      model.offset = deckPage_ * trivia::kStudyDecksPerPage;
+      model.current = selectedDeck_;
+      for (uint8_t i = model.offset; i < deckCatalog_.count() &&
+           model.visible < trivia::kStudyDecksPerPage; ++i) {
+        const auto* deck = deckCatalog_.at(i);
+        model.indices[model.visible] = i;
+        model.names[model.visible] = deck ? deck->slug : "";
+        ++model.visible;
+      }
+      triviaui::buildStudyDeckList(screen, model);
+      break;
+    }
     case View::AwsMenu: {
       triviaui::AwsMenuModel model;
       model.german = I18N.getLanguage() == Language::DE;
+      const auto* activeDeck = deckCatalog_.at(selectedDeck_);
+      model.deckName = activeDeck ? activeDeck->slug : "STUDY PACK";
       model.count = awsPack_.count();
       model.seen = awsState_.seenCount();
       model.enabled = awsDomains_;
@@ -897,6 +1015,7 @@ void TriviaActivity::render(RenderLock&&) {
     case View::AwsDomains: {
       triviaui::AwsDomainsModel model;
       model.german = I18N.getLanguage() == Language::DE;
+      for (int i = 0; i < trivia::kAwsDomains; ++i) model.topics[i] = studyTopics_[i];
       model.enabled = awsDomains_;
       triviaui::buildAwsDomains(screen, model);
       break;

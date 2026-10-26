@@ -101,7 +101,7 @@ void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* st
 }  // namespace
 
 void buildAwsSummary(toybox::Screen& screen, const AwsSummaryModel& model) {
-  chrome(screen, model.german ? "AWS ERGEBNIS" : "AWS RESULTS");
+  chrome(screen, model.german ? "LERNERGEBNIS" : "STUDY RESULTS");
   const fui::Rect body = screen.body();
   const int16_t x = static_cast<int16_t>(body.x + kMargin);
   const int16_t w = static_cast<int16_t>(body.width - 2 * kMargin);
@@ -134,6 +134,25 @@ void buildAwsSummary(toybox::Screen& screen, const AwsSummaryModel& model) {
              model.missed != 0 ? ActionAwsReview : ActionAwsBegin);
 }
 
+void buildStudyDeckList(toybox::Screen& screen, const StudyDeckListModel& model) {
+  chrome(screen, model.german ? "FRAGENPAKETE" : "STUDY PACKS");
+  const fui::Rect body = screen.body();
+  const int16_t x = static_cast<int16_t>(body.x + kMargin);
+  const int16_t w = static_cast<int16_t>(body.width - kMargin * 2);
+  for (uint8_t i = 0; i < model.visible; ++i) {
+    const int16_t y = static_cast<int16_t>(body.y + 24 + i * 89);
+    const bool selected = model.current == model.indices[i];
+    button(screen, {x, y, w, 76}, model.names[i],
+           ActionStudySelect, static_cast<int16_t>(model.indices[i]), selected);
+  }
+  char status[48];
+  std::snprintf(status, sizeof(status), model.german ? "%u PAKETE" : "%u PACKS",
+                static_cast<unsigned>(model.total));
+  label(screen, {x, static_cast<int16_t>(footer(screen) - 32), w, 25}, status);
+  footerPair(screen, model.german ? "ZURUECK" : "TRIVIA", ActionAwsHome,
+             model.german ? "WEITERE" : "MORE PACKS", ActionStudyNextPage);
+}
+
 void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model) {
   chrome(screen, model.german ? "AWS LERNEN" : "AWS DEVOPS");
   const fui::Rect body = screen.body();
@@ -145,7 +164,9 @@ void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model) {
                     ((model.enabled >> 0) & 1u) + ((model.enabled >> 1) & 1u) +
                     ((model.enabled >> 2) & 1u) + ((model.enabled >> 3) & 1u) +
                     ((model.enabled >> 4) & 1u) + ((model.enabled >> 5) & 1u)));
-  label(screen, {body.x, static_cast<int16_t>(body.y + 28), body.width, 42}, count);
+  label(screen, {body.x, static_cast<int16_t>(body.y + 8), body.width, 36},
+        model.deckName);
+  label(screen, {body.x, static_cast<int16_t>(body.y + 50), body.width, 42}, count);
   const int16_t x = static_cast<int16_t>(body.x + kMargin);
   const int16_t w = static_cast<int16_t>(body.width - 2 * kMargin);
   button(screen, {x, static_cast<int16_t>(body.y + 105), w, 142},
@@ -157,12 +178,12 @@ void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model) {
   button(screen, {x, static_cast<int16_t>(body.y + 394), w, 112},
          model.german ? "BEREICHE WAEHLEN" : "SELECT DOMAINS",
          ActionAwsDomains);
-  footerPair(screen, model.german ? "ZURUECK" : "TRIVIA", ActionAwsHome,
+  footerPair(screen, model.german ? "PAKETE" : "PACKS", ActionStudyDecks,
              "START", ActionAwsBegin);
 }
 
 void buildAwsDomains(toybox::Screen& screen, const AwsDomainsModel& model) {
-  chrome(screen, model.german ? "AWS BEREICHE" : "AWS DOMAINS");
+  chrome(screen, model.german ? "LERNBEREICHE" : "STUDY TOPICS");
   const fui::Rect body = screen.body();
   const int16_t x = static_cast<int16_t>(body.x + kMargin);
   const int16_t w = static_cast<int16_t>(body.width - kMargin * 2);
@@ -178,7 +199,8 @@ void buildAwsDomains(toybox::Screen& screen, const AwsDomainsModel& model) {
     const fui::Rect textBox{static_cast<int16_t>(x + 41), y,
                             static_cast<int16_t>(w - 42), 77};
     screen.target().text(toybox::inkCentred(textBox, toybox::kButtonCut),
-                         domainName(i), style(toybox::kSmallFont, fui::TextAlign::Left));
+                         model.topics[i] ? model.topics[i] : domainName(i),
+                         style(toybox::kSmallFont, fui::TextAlign::Left));
     screen.frame().hit(box, ActionAwsToggleDomain, static_cast<int16_t>(i));
   }
   footerPair(screen, model.german ? "ALLE AN" : "ALL ON", ActionAwsAllDomains,
@@ -186,7 +208,7 @@ void buildAwsDomains(toybox::Screen& screen, const AwsDomainsModel& model) {
 }
 
 void buildAwsQuestion(toybox::Screen& screen, const AwsPageModel& model) {
-  chrome(screen, model.german ? "AWS FRAGE" : "AWS QUESTION");
+  chrome(screen, model.german ? "LERNFRAGE" : "STUDY QUESTION");
   char status[44];
   std::snprintf(status, sizeof(status), model.german ? "BEREICH %u | FRAGE LESEN"
                                                       : "DOMAIN %u | READ THE SCENARIO",
@@ -198,7 +220,7 @@ void buildAwsQuestion(toybox::Screen& screen, const AwsPageModel& model) {
 }
 
 void buildAwsOption(toybox::Screen& screen, const AwsPageModel& model) {
-  chrome(screen, model.german ? "AWS ANTWORTEN" : "AWS ANSWERS");
+  chrome(screen, model.german ? "ANTWORTEN" : "ANSWERS");
   char status[64];
   const bool marked = (model.selected & (1u << model.option)) != 0;
   std::snprintf(status, sizeof(status), model.german ? "ANTWORT %c/%u | %s"
@@ -225,7 +247,7 @@ void buildAwsOption(toybox::Screen& screen, const AwsPageModel& model) {
 }
 
 void buildAwsExplanation(toybox::Screen& screen, const AwsPageModel& model) {
-  chrome(screen, model.german ? "AWS LOESUNG" : "AWS REVIEW");
+  chrome(screen, model.german ? "LOESUNG" : "REVIEW");
   char status[80];
   char key[8] = {};
   char chosen[8] = {};

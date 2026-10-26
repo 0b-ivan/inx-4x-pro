@@ -13,6 +13,7 @@
 #include "TriviaCore.h"
 #include "AwsStudyPack.h"
 #include "AwsStudyScreens.h"
+#include "StudyDeckCatalog.h"
 #include "TriviaPackLocale.h"
 #include "TriviaScreens.h"
 
@@ -31,7 +32,7 @@ class TriviaActivity final : public Activity {
  private:
   enum class View : uint8_t {
     Menu, Quizmaster, Solo, AwsMenu, AwsDomains, AwsQuestion, AwsOption,
-    AwsExplanation, AwsSummary, Notice
+    AwsExplanation, AwsSummary, StudyDecks, Notice
   };
   // Which mode the HIDDEN notice came from. deal() decides whether it needs a
   // multiple-choice question by reading view_, so the notice has to put the
@@ -40,6 +41,9 @@ class TriviaActivity final : public Activity {
 
   bool openPack();
   bool openAwsPack();
+  void scanStudyDecks();
+  void loadStudyTopics();
+  bool studyPath(const char* ext, char* out, uint32_t capacity) const;
   void awsDeal();
   void awsSubmit();
   void awsNextPage();
@@ -63,6 +67,10 @@ class TriviaActivity final : public Activity {
 
   // An independent licensed/private study deck. Never mixes its state with
   // the public trivia pack or the separate German translation state.
+  trivia::StudyDeckCatalog deckCatalog_;
+  uint8_t selectedDeck_ = 0;
+  uint8_t deckPage_ = 0;
+  char studyTopics_[trivia::kAwsDomains][40] = {};
   trivia::AwsPack awsPack_;
   trivia::PackState awsState_;
   trivia::AwsQuestion awsQuestion_;

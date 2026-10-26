@@ -197,7 +197,30 @@ void testAwsSummary() {
   }
 }
 
+void testStudyDeckList() {
+  triviaui::StudyDeckListModel model{};
+  model.german = true; model.total = 8; model.visible = 6;
+  model.current = 2;
+  constexpr const char* items[] = {
+      "DOP-C02", "SAA-C03", "CLF-C02", "LINUX", "K8S", "NETWORKING"};
+  for (int i = 0; i < 6; ++i) {
+    model.names[i] = items[i];
+    model.indices[i] = static_cast<uint8_t>(i);
+  }
+  Rendered out;
+  render(out, model, &triviaui::buildStudyDeckList);
+  assert(out.draw.contains("FRAGENPAKETE"));
+  for (int i = 0; i < 6; ++i) {
+    const auto event = out.tap(240, 110 + 89*i);
+    assert(event.action == triviaui::ActionStudySelect);
+    assert(event.value == i);
+  }
+  assert(out.tap(90, 750).action == triviaui::ActionAwsHome);
+  assert(out.tap(365, 750).action == triviaui::ActionStudyNextPage);
+}
+
 int main() {
+  testStudyDeckList();
   testAwsSummary();
   testAwsMenu();
   testAwsDomains();

@@ -30,11 +30,15 @@ class TestStudyBuilder(unittest.TestCase):
     def test_roundtrip_and_private_no_html(self):
         with tempfile.TemporaryDirectory() as directory:
             src = Path(directory) / "study.jsonl"
-            dst = Path(directory) / "pack.dat"
+            dst = Path(directory) / "DOP-C02.dat"
             rows = [sample(), sample("Which two qualify?", [0, 2], 6)]
             src.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
             n, size, largest = builder.build(src, dst)
             data = dst.read_bytes()
+            topics = dst.with_suffix(".topics").read_text(encoding="ascii").splitlines()
+            self.assertEqual(len(topics), 6)
+            self.assertEqual(topics[0], "1 Example test domain")
+            self.assertEqual(topics[5], "6 Example test domain")
             self.assertEqual((n, size), (2, len(data)))
             self.assertLessEqual(largest, builder.MAX_RECORD)
             self.assertEqual(struct.unpack("<8sHBBI", data[:16]),
@@ -52,6 +56,24 @@ class TestStudyBuilder(unittest.TestCase):
             self.assertNotIn(b"never put this", data)
             self.assertNotIn(b"should never", data)
             self.assertIn(b"[IMAGE]", data)
+
+    def test_generic_topic_titles_are_accepted(self):
+        row = sample()
+        row["category"] = "Topic 1: Linux services"
+        encoded = builder.encode(row, 1)
+        self.assertEqual(encoded[0], 1)
+        row["category"] = "Category 2: Network protocols"
+        self.assertEqual(builder.encode(row, 1)[0], 2)
+
+    def test_conflicting_topics_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src = Path(directory) / "study.jsonl"
+            rows = [sample(), sample("Second synthetic question")]
+            rows[1]["category"] = "Domain 1: Different label"
+            src.write_text("".join(json.dumps(row) + "\n" for row in rows),
+                           encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "conflicting"):
+                builder.build(src)
 
     def test_bad_answer_and_type_rejected(self):
         for row in (
@@ -84,7 +106,7 @@ class TestStudyBuilder(unittest.TestCase):
             src = Path(directory) / "study.jsonl"
             src.write_text(json.dumps(sample()) + "\n")
             with self.assertRaisesRegex(ValueError, "outside"):
-                builder.build(src, root / "never-create.dat")
+                builder.build(src, root / "DOP-C02.dat")
 
 
 if __name__ == "__main__":
