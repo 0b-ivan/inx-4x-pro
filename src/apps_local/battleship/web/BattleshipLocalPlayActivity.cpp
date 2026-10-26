@@ -68,11 +68,6 @@ void BattleshipLocalPlayActivity::onEnter() {
   Activity::onEnter();
   toybox::ensureFonts(renderer);
   seed_ = toybox::seed();
-#ifndef SIMULATOR
-  browserPlayer_.setRandomSeed(esp_random());
-#else
-  browserPlayer_.setRandomSeed(toybox::seed());
-#endif
   stage_ = Stage::Transport;
   selected_ = 0;
   browser_.setCommands(
@@ -231,6 +226,13 @@ void BattleshipLocalPlayActivity::startHotspotBrowser() {
 }
 
 void BattleshipLocalPlayActivity::enterBrowserWaiting() {
+  // Seed only after STA/AP startup, when the ESP32 RF subsystem provides
+  // entropy for esp_random(). A new browser session gets a fresh secret seed.
+#ifndef SIMULATOR
+  browserPlayer_.setRandomSeed(esp_random());
+#else
+  browserPlayer_.setRandomSeed(toybox::seed());
+#endif
   bship::reset(browserGame_);
   browserGame_.turn = 1;
   browserPlayer_.reset();
