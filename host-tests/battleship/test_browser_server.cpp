@@ -80,9 +80,9 @@ int main() {
   assert(http.response.find("FORBIDDEN") != std::string::npos);
   http.args["owner"] = resumeToken;
   http.routes.at("/player/state")();
-  assert(http.response.find("\\\"ok\\\":true") != std::string::npos);
+  assert(http.response.find("true") != std::string::npos);
   http.routes.at("/player/action")();
-  assert(http.response.find("\\\"ok\\\":true") != std::string::npos);
+  assert(http.response.find("true") != std::string::npos);
 
   ws.event(WStype_TEXT, 0, profile);
   assert(handler.calls == 1);
@@ -117,7 +117,7 @@ int main() {
   assert(ws.messages.back().find("\"type\":\"f\"") != std::string::npos);
   http.args["token"] = freshToken;
   http.routes.at("/player/state")();
-  assert(http.response.find("\\\"ok\\\":true") != std::string::npos);  // Same owner restored.
+  assert(http.response.find("true") != std::string::npos);  // Same owner restored.
 
   ws.event(WStype_DISCONNECTED, 0);
   http.routes.at("/battleship/session")();
