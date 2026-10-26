@@ -7,3 +7,7 @@ mkdir -p "$BUILD_DIR"
 SRC=../../src/apps_local/connectfour
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC test_connectfour.cpp -o "$BUILD_DIR/test_connectfour"
 "$BUILD_DIR/test_connectfour"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC \
+  test_browser_adapter.cpp -o "$BUILD_DIR/test_browser_adapter"
+"$BUILD_DIR/test_browser_adapter"
