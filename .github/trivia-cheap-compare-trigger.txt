@@ -1,0 +1,1 @@
+One-shot limited 20-question comparison, Qwen3 235B vs GPT-4o-mini, independent blind GPT-5.4 judge, $1 budget goal, no release.

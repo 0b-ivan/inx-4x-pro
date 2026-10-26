@@ -1,0 +1,76 @@
+name: German Trivia Cheap Translation Quality Comparison
+on:
+  push:
+    branches:
+      - experiment/trivia-de-100-20261026
+    paths:
+      - .github/trivia-cheap-compare-trigger.txt
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: trivia-cheap-compare-one-shot
+  cancel-in-progress: false
+
+jobs:
+  comparison:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout experimental branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Offline translation tests before API billing
+        run: python3 tools_local/trivia/test_de_pack.py
+      - name: Restore 100 original draft translations
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia-compare"
+          gh run download 40314023987 --repo "$GITHUB_REPOSITORY" \
+            --name trivia-german-editorial-100-unapproved \
+            --dir "$RUNNER_TEMP/trivia-compare"
+          test "$(wc -l < "$RUNNER_TEMP/trivia-compare/questions-de-editorial-100.jsonl")" -eq 100
+      - name: Verify English question pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --max-time 90 \
+            'https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat' \
+            -o "$RUNNER_TEMP/trivia-compare/pack.dat"
+          printf '%s  %s\n' \
+            'a17435136122ce1d2485d4c4c30e58206e6dffc88b819e0d4c646081b485f9cf' \
+            "$RUNNER_TEMP/trivia-compare/pack.dat" | sha256sum -c -
+          python3 tools_local/trivia/export_pack.py \
+            --pack "$RUNNER_TEMP/trivia-compare/pack.dat" \
+            --out "$RUNNER_TEMP/trivia-compare/source-en.jsonl"
+      - name: Compare 20 identical questions with capped spending
+        shell: bash
+        env:
+          TRIVIA_COMPARE_DIR: ${{ runner.temp }}/trivia-compare
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$OPENROUTER_API_KEY"
+          python3 tools_local/trivia/compare_cheap_models.py
+      - name: Preserve results (no firmware changes)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivia-cheap-20-comparison-unreviewed
+          path: |
+            ${{ runner.temp }}/trivia-compare/comparison-per-question.jsonl
+            ${{ runner.temp }}/trivia-compare/comparison-summary.json
+          if-no-files-found: ignore
+          retention-days: 14
