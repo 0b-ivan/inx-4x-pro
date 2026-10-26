@@ -55,6 +55,48 @@ def translate_one(item, model, api_key, timeout=100):
     return json.loads(raw)
 
 
+
+def pilot_candidates(source, limit, already_done=()):
+    """Deterministically sample the entire pack, avoiding repeated answers.
+
+    Source packs are grouped by the correct answer. Taking the first 20
+    therefore produced ten AUSTRALIA and ten CHINA questions. Spread the pilot
+    across the whole file and prefer distinct answers; never reshuffle the
+    source when translating the complete corpus with --all.
+    """
+    done = set(already_done)
+    if limit <= 0:
+        return []
+    n = len(source)
+    if n == 0:
+        return []
+    # A coprime stride visits every position exactly once, without shuffling
+    # or allocating a duplicate 50k-record list.
+    stride = max(1, (n * 61803398875 // 100000000000) | 1)
+    while __import__("math").gcd(n, stride) != 1:
+        stride += 2
+    seen_answers = set()
+    chosen = []
+    for j in range(n):
+        row = source[(n // 3 + j * stride) % n]
+        if row["id"] in done:
+            continue
+        answer = row.get("a", "").casefold().strip()
+        if not answer or answer in seen_answers:
+            continue
+        seen_answers.add(answer)
+        chosen.append(row)
+        if len(chosen) == limit:
+            return chosen
+    # Small synthetic/test packs may contain fewer unique answers than slots.
+    for j in range(n):
+        row = source[(n // 3 + j * stride) % n]
+        if row["id"] not in done and row not in chosen:
+            chosen.append(row)
+            if len(chosen) == limit:
+                break
+    return chosen
+
 def generate(source_path, output_path, model, api_key, limit=20, all_questions=False):
     source = list(load_jsonl(source_path))
     done = {}
@@ -69,8 +111,9 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
     if set(done) - source_ids:
         raise TranslationError("saved draft has IDs absent from this source")
     generated = 0
+    candidates = source if all_questions else pilot_candidates(source, limit, done)
     with output.open("a", encoding="utf-8") as out:
-        for original in source:
+        for original in candidates:
             ident = original["id"]
             if ident in done:
                 if done[ident].get("source_hash") != source_hash(original):
