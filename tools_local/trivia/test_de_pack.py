@@ -259,7 +259,7 @@ class GermanTriviaPackTests(unittest.TestCase):
     def test_independent_editor_rewrites_clue_but_preserves_identity(self):
         decision = {"verdict": "rewrite", "reason": "Prägnanter und natürlicher.",
                     **{k: self.trans[k] for k in ("q", "a", "alt", "w")}}
-        decision["q"] = "In welchem Land liegt die Hauptstadt Paris?"
+        decision["q"] = "Welche Hauptstadt befindet sich in Frankreich?"
         updated, report = review_de_pack.apply_review(self.original, self.trans, decision)
         self.assertEqual(report["verdict"], "rewrite")
         self.assertTrue(report["applied"])
