@@ -532,7 +532,11 @@ void TriviaActivity::awsSubmit() {
   if (!awsHasQuestion_ || awsSelected_ == 0) return;
   awsAnswerCorrect_ = awsQuestion_.evaluate(awsSelected_);
   awsScore_.record(awsAnswerCorrect_);
-  if (!awsAnswerCorrect_) awsState_.setFlag(awsCurrent_, trivia::kAwsMissed);
+  if (awsAnswerCorrect_) {
+    awsState_.clearFlag(awsCurrent_, trivia::kAwsMissed);
+  } else {
+    awsState_.setFlag(awsCurrent_, trivia::kAwsMissed);
+  }
   awsPageStart_ = 0;
   go(View::AwsExplanation);
 }
