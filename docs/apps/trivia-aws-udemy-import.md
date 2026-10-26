@@ -4,7 +4,9 @@ This is an **offline intake tool**, not yet an installable Trivia pack. It does
 not call Udemy, automate a browser, request credentials, or bypass access
 controls. It accepts a JSON response manually saved from a course you can
 legitimately view in your own browser. The accepted shape is based on an
-older, publicly documented Udemy quiz response; **Udemy can change it**.
+older, publicly documented Udemy quiz response; **Udemy can change it**. It also
+accepts a locally saved HAR export and extracts only the quiz-assessment JSON
+responses, discarding every unrelated network entry and user-session field.
 
 ## Why a separate format?
 
@@ -26,11 +28,14 @@ The content stays in **English**. UI localization can remain German.
 3. Open Chrome DevTools (Cmd + Option + I) → **Network** → **Fetch/XHR**.
 4. Reload Review and look for an assessment/question response; inspect the
    **Response** tab and check whether it has the fields shown below.
-5. Save *only the response JSON* to a private directory outside the git clone,
-   e.g. ~/Documents/Private-AWS/assessments.json. Do not export HAR files,
-   copy request headers, share access tokens, cookies or personal data.
-6. If the response has next pagination, save each page. Never assume the
-   first result page contains every question.
+5. Prefer saving **Response → Save as JSON** outside the git clone, e.g.
+   ~/Documents/Private-AWS/assessments.json. If response-only export is
+   unavailable, you can also save a HAR **locally** and pass that to the
+   importer. **A HAR is sensitive:** it can include cookies, credentials,
+   session tokens and personal data. Do not upload, share or commit raw HAR.
+6. If there are multiple quizzes, load both reviews so both question APIs
+   appear in the capture. The importer de-duplicates identical requests and
+   checks counts. If an API response is paginated, save all pages.
 
 Use this procedure only for course material you are authorized to view.
 Respect Udemy's terms and copyright; the raw questions and imported output
@@ -49,6 +54,12 @@ python3 tools_local/trivia/import_udemy_practice.py \
 python3 tools_local/trivia/import_udemy_practice.py \
   --src "$HOME/Documents/Private-AWS/assessments.json" \
   --out "$HOME/Documents/Private-AWS/aws-devops-english.jsonl"
+
+# Or use a HAR file captured locally (DO NOT upload the HAR publicly):
+python3 tools_local/trivia/import_udemy_practice.py \
+  --src "$HOME/Documents/Private-AWS/udemy-review.har" \
+  --out "$HOME/Documents/Private-AWS/aws-devops-english.jsonl" \
+  --dry-run
 ```
 
 If the data spans multiple saved pages, pass **all** paths after --src
@@ -100,21 +111,34 @@ One JSON object per line with only these allowlisted fields:
   "q": "English question text",
   "options": ["Option A", "Option B"],
   "correct": [0],
-  "explanation": "English explanation",
-  "source_section": "Section heading",
-  "category": "Uncategorized"
+  "explanation": "English explanation (with image placeholders if needed)",
+  "explanation_html": "<p>Original HTML, for offline conversion only</p>",
+  "explanation_images": 0,
+  "feedbacks": [],
+  "source_section": "Domain 1: SDLC Automation",
+  "category": "Domain 1: SDLC Automation",
+  "source_quiz": "12345",
+  "source_question_number": 1
 }
 ```
 
 The correct list holds **zero-based indexes into options**. type is
-single or multi. category is intentionally unassigned: a Udemy
-section is not necessarily one of the six DOP-C02 exam domains. Categorization
-must be reviewed separately.
+single or multi. category uses the original section **only** if that section
+has a clearly labeled "Domain 1" through "Domain 6" prefix. Otherwise the
+category remains "Uncategorized", pending manual review. Every question from a
+recognized HAR carries its quiz number for grouping. The public PR contains no
+question text from Udemy.
 
 For privacy the importer intentionally drops Udemy user IDs, attempt data,
 cookies, result URLs and any unknown fields. It writes atomically using a
 user-readable-only temporary file. The output is still purchased course
 content and remains private.
+
+Many explanations contain images and rich HTML; this tool preserves the
+original explanation HTML in a private output field as well as plain text
+with [IMAGE] placeholders. **Never render untrusted imported HTML as active
+web content without sanitization.** External illustrations are not downloaded;
+offline rendering of those images is future work.
 
 ## Tests
 
