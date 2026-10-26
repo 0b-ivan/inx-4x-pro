@@ -209,5 +209,12 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   events.pagehide();assert.equal(reconnect,null);
   events.pageshow({persisted:true});await flush();
   assert.equal(sockets.length,3);
+  // The X4 discards unconfirmed rematch drafts on disconnect; the browser
+  // must clear the profile, restore revision zero, and allow a fresh claim.
+  const fresh=sockets[2];fresh.onopen();
+  assert.equal(elements.profile.hidden,false);
+  assert.equal(elements.placement.hidden,true);
+  elements.save.onclick();
+  assert.deepEqual(sent[8],['profile',token,0,0,13,0]);
   console.log('Browser page: compact player login/profile, peer identity, sunk announcements/visuals, active-turn inversion, fleet damage boxes, two-tap fire, surrender, secure resume and rematch passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
