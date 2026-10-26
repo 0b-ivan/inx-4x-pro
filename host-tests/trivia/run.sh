@@ -56,3 +56,43 @@ python3 "$TOOLS/test_de_pack.py"
   test_aws_pack.cpp "$SRC/AwsStudyPack.cpp" "$SRC/TriviaCore.cpp" -o "$BUILD_DIR/test_aws_pack"
 "$BUILD_DIR/test_aws_pack"
 python3 "$TOOLS/test_aws_study.py"
+
+# Cross-language check: build a complete synthetic 150-question pack with the
+# production Python builder and read it using the actual firmware C++ reader.
+# This does not contain or fetch any purchased quiz content.
+"\${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC \
+  test_aws_realpack.cpp "$SRC/AwsStudyPack.cpp" "$SRC/TriviaCore.cpp" \
+  -o "$BUILD_DIR/test_aws_realpack"
+python3 - "$BUILD_DIR" "$TOOLS" <<'PY'
+import json, pathlib, sys
+build, tools = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+sys.path.insert(0, str(tools))
+import build_aws_study
+source = build / "aws-synthetic-study.jsonl"
+with source.open("w", encoding="utf-8") as out:
+    for i in range(150):
+        body = (
+            f"Scenario {i}: A company needs highly available AWS services. "
+            "Choose the best configuration while considering deployments, "
+            "resilience, observability, IAM, network isolation and automation. "
+        ) * 3 + "Service details include café and availability zones."
+        options = [
+            "Amazon S3", "Amazon EBS", "Amazon EFS", "Amazon FSx",
+            "AWS Lambda", "Amazon DynamoDB"
+        ]
+        correct = [0, 2] if i % 4 == 0 else [1]
+        rec = {
+            "q": body,
+            "options": options,
+            "correct": correct,
+            "type": "multi" if len(correct) > 1 else "single",
+            "explanation": "Explanation: the synthetic answer key is part of this format test only. "
+                           "This is not a recommendation for a real AWS question.",
+            "category": f"Domain {1 + (i % 6)}: Synthetic test domain",
+        }
+        out.write(json.dumps(rec, ensure_ascii=False) + "\n")
+n, size, largest = build_aws_study.build(source, build / "aws-synthetic.dat")
+assert n == 150 and size > 0 and largest <= build_aws_study.MAX_RECORD
+PY
+"$BUILD_DIR/test_aws_realpack" "$BUILD_DIR/aws-synthetic.dat"
+
