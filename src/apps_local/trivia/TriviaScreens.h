@@ -36,6 +36,17 @@ enum : fui::ActionId {
   ActionQuit = 6,
   ActionDifficulty = 7,
   ActionGetPack = 8,  // fetch the question pack over WiFi
+  ActionAwsBegin = 9,
+  ActionAwsDomains = 10,
+  ActionAwsReview = 11,
+  ActionAwsToggleDomain = 12,
+  ActionAwsAllDomains = 13,
+  ActionAwsHome = 14,
+  ActionAwsBackToMenu = 15,
+  ActionAwsPageNext = 16,
+  ActionAwsPageBack = 17,
+  ActionAwsToggleOption = 18,
+  ActionAwsSubmit = 19,
 };
 
 enum class MenuRow : int { Quizmaster = 0, Solo, Difficulty, Count };
