@@ -12,6 +12,9 @@
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
 #include <esp_ota_ops.h>
+#ifndef SIMULATOR
+#include <esp_system.h>
+#endif
 #if !defined(SIMULATOR)
 #include <Preferences.h>
 #include <esp_random.h>
@@ -40,6 +43,7 @@
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
 #include "apps_local/rss/RssWebHandlers.h"
+#include "apps_local/mesh-chat/MeshChatRuntimeDiagnostics.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -49,6 +53,10 @@
 #include "html/js/jszip_minJs.generated.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
+
+// Main captures this from RTC memory at boot, before UI logs overwrite the
+// small panic log ring. Zero means no MeshChat checkpoint was preserved.
+extern uint32_t previousMeshChatCheckpoint;
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -2298,6 +2306,17 @@ void CrossPointWebServer::handleDevCrash() {
   JsonDocument doc;
   const bool corrupt = sanitizeLogHead();
   doc["panicked"] = HalSystem::isRebootFromPanic();
+#ifndef SIMULATOR
+  doc["resetReason"] = static_cast<int>(esp_reset_reason());
+#endif
+  doc["previousMeshCheckpoint"] = previousMeshChatCheckpoint;
+  JsonObject meshRuntime = doc["meshRuntime"].to<JsonObject>();
+  meshRuntime["loopPhase"] = meshdiag::previous[meshdiag::LOOP_PHASE];
+  meshRuntime["renderPhase"] = meshdiag::previous[meshdiag::RENDER_PHASE];
+  meshRuntime["recvPhase"] = meshdiag::previous[meshdiag::RECV_PHASE];
+  meshRuntime["presenceSent"] = meshdiag::previous[meshdiag::PRESENCE_SENT];
+  meshRuntime["renderDone"] = meshdiag::previous[meshdiag::RENDER_DONE];
+  meshRuntime["recvDone"] = meshdiag::previous[meshdiag::RECV_DONE];
   doc["panic"] = HalSystem::getPanicInfo(true);
   // A corrupt ring is reported rather than hidden: an empty "logs" that means
   // "nothing was logged" and one that means "RTC memory was garbage" are

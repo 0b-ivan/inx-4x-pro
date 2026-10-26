@@ -1,4 +1,5 @@
 #include "MeshChatActivity.h"
+#include "MeshChatRuntimeDiagnostics.h"
 #include "DevMode.h"
 #include "../Shelf.h"
 
@@ -7,6 +8,9 @@
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
+#ifndef SIMULATOR
+#include <esp_heap_caps.h>
+#endif
 
 #include <algorithm>
 #include <cstring>
@@ -31,8 +35,32 @@ static void meshSimTrace(const char* state, size_t peers, int messages) {
 
 MeshChatActivity* MeshChatActivity::activeInstance = nullptr;
 
+// A small RTC-backed breadcrumb is reported once on the next boot by main.cpp.
+// Only lifecycle/task context calls this; never scan the heap from an ESP-NOW
+// WiFi callback (which must remain short and non-blocking).
+extern volatile uint32_t meshChatDiagnosticStage;
+namespace {
+void meshDiagnosticCheckpoint(uint8_t stage, const char* location) {
+  meshChatDiagnosticStage = 0x4D455300u | stage;  // "MES" + checkpoint number
+#ifndef SIMULATOR
+  const bool intact = heap_caps_check_integrity_all(true);
+  LOG_INF("MESH_DIAG", "stage=%u %s heap=%s free8=%u largestInternal8=%u",
+          static_cast<unsigned>(stage), location, intact ? "OK" : "CORRUPT",
+          static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+          static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+#else
+  (void)location;
+#endif
+}
+}  // namespace
+
 void MeshChatActivity::onEnter() {
+  // Initialize the per-task retained breadcrumbs for this session only after
+  // main.cpp has already captured the prior boot's diagnostic snapshot.
+  for (size_t i = 0; i < meshdiag::COUNT; ++i) meshdiag::rtc[i] = 0;
+  meshDiagnosticCheckpoint(1, "before devmode pause");
   devmode::pause();
+  meshDiagnosticCheckpoint(2, "after devmode pause");
   Activity::onEnter();
   state = CHAT_VIEW;
   messageCount = 0;
@@ -57,7 +85,9 @@ void MeshChatActivity::onEnter() {
   activeInstance = this;
   if (!peersMux) peersMux = xSemaphoreCreateMutex();
 
+  meshDiagnosticCheckpoint(3, "before ESP-NOW startup");
   initEspNow();
+  meshDiagnosticCheckpoint(10, "after ESP-NOW startup");
 #ifdef SIMULATOR
   meshSimTrace("ready", peers.size(), messageCount);
 #endif
@@ -65,7 +95,9 @@ void MeshChatActivity::onEnter() {
 }
 
 void MeshChatActivity::onExit() {
+  meshDiagnosticCheckpoint(20, "before ESP-NOW teardown");
   deinitEspNow();
+  meshDiagnosticCheckpoint(21, "after ESP-NOW teardown");
   activeInstance = nullptr;
   if (peersMux) {
 #ifndef SIMULATOR
@@ -79,19 +111,25 @@ void MeshChatActivity::onExit() {
 #endif
   Activity::onExit();
   devmode::resume();
+  meshDiagnosticCheckpoint(22, "after devmode resume");
+  meshChatDiagnosticStage = 0;  // Normal exit; no stale crash breadcrumb.
 }
 
 void MeshChatActivity::initEspNow() {
+  meshDiagnosticCheckpoint(4, "before RADIO.ensureWifi");
   RADIO.ensureWifi();
+  meshDiagnosticCheckpoint(5, "after RADIO.ensureWifi");
 #ifndef SIMULATOR
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
+  meshDiagnosticCheckpoint(6, "after WiFi.disconnect");
 #endif
 
   // Set channel on hardware only. The native ESP-NOW transport has no radio
   // and therefore no RF channel to configure.
 #ifndef SIMULATOR
   esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+  meshDiagnosticCheckpoint(7, "after channel configuration");
 #endif
 
   if (esp_now_init() != ESP_OK) {
@@ -99,6 +137,7 @@ void MeshChatActivity::initEspNow() {
     return;
   }
 
+  meshDiagnosticCheckpoint(8, "after esp_now_init");
   esp_now_register_recv_cb(onDataRecv);
 
   // Add broadcast peer
@@ -109,6 +148,7 @@ void MeshChatActivity::initEspNow() {
   if (esp_now_add_peer(&broadcastPeer) != ESP_OK) {
     LOG_ERR("MESH", "Failed to add broadcast peer");
   }
+  meshDiagnosticCheckpoint(9, "after broadcast peer setup");
 
 #ifdef SIMULATOR
   const uint8_t testMac[6] = {0x02,0,0,0,0,0x20};
@@ -144,12 +184,15 @@ static uint32_t computeFrameHash(const uint8_t* mac, const uint8_t* textBytes) {
 }
 
 void MeshChatActivity::onDataRecv(const esp_now_recv_info_t* recvInfo, const uint8_t* data, int len) {
-  if (!activeInstance || !recvInfo || len < 23) return;
+  if (!activeInstance || !recvInfo || !data || len < 23) return;
+  // WiFi task only. One aligned RTC write per phase; no heap operations here.
+  meshdiag::rtc[meshdiag::RECV_PHASE] = 1;
   const uint8_t* mac = recvInfo->src_addr;
 
   uint8_t frameType = data[0];
 
   if (frameType == FRAME_CHAT) {
+    meshdiag::rtc[meshdiag::RECV_PHASE] = 2;
     char senderName[16] = {};
     char text[200] = {};
     memcpy(senderName, data + 7, 15);
@@ -201,6 +244,7 @@ void MeshChatActivity::onDataRecv(const esp_now_recv_info_t* recvInfo, const uin
       }
     }
   } else if (frameType == FRAME_PRESENCE) {
+    meshdiag::rtc[meshdiag::RECV_PHASE] = 3;
     char peerName[16] = {};
     memcpy(peerName, data + 7, 15);
     peerName[15] = '\0';
@@ -226,6 +270,8 @@ void MeshChatActivity::onDataRecv(const esp_now_recv_info_t* recvInfo, const uin
       xSemaphoreGive(activeInstance->peersMux);
     }
   }
+  meshdiag::rtc[meshdiag::RECV_PHASE] = 4;
+  meshdiag::rtc[meshdiag::RECV_DONE] = meshdiag::rtc[meshdiag::RECV_DONE] + 1;
 }
 
 void MeshChatActivity::sendMessage(const char* text) {
@@ -255,6 +301,7 @@ void MeshChatActivity::sendPresenceBeacon() {
 
   uint8_t broadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
   esp_now_send(broadcast, frame, sizeof(frame));
+  meshdiag::rtc[meshdiag::PRESENCE_SENT] = meshdiag::rtc[meshdiag::PRESENCE_SENT] + 1;
   lastPresenceTime = millis();
 }
 
@@ -279,6 +326,7 @@ void MeshChatActivity::addMessage(const uint8_t* senderMac, const char* senderNa
 }
 
 void MeshChatActivity::loop() {
+  meshdiag::rtc[meshdiag::LOOP_PHASE] = 1;  // main task: inside MeshChat loop
 #ifdef SIMULATOR
   if (espnowInitialized && !simInjected && millis() - simStarted >= 850) {
     simInjected = true;
@@ -307,6 +355,18 @@ void MeshChatActivity::loop() {
       };
       deliverPeer(macA, "Sim Alice", "Local mesh test A");
       deliverPeer(macB, "Sim Bob", "Local mesh test B");
+      // 45 messages in total: stress the fixed 30-entry ring buffer.
+      if (scenario == "flood") {
+        for (int i = 0; i < MAX_MESSAGES + 13; ++i) {
+          uint8_t chat[FRAME_CHAT_SIZE] = {};
+          chat[0] = FRAME_CHAT;
+          memcpy(chat + 1, macA, 6);
+          strncpy(reinterpret_cast<char*>(chat + 7), "Sim Alice", 15);
+          snprintf(reinterpret_cast<char*>(chat + 23), 200,
+                   "Flood message %02d", i);
+          esp_now_sim_deliver(macA, chat, sizeof(chat));
+        }
+      }
     }
     meshSimTrace("injected", peers.size(), messageCount);
     requestUpdate();
@@ -340,7 +400,9 @@ void MeshChatActivity::loop() {
 
   // Send presence beacon periodically
   if (espnowInitialized && millis() - lastPresenceTime >= PRESENCE_INTERVAL_MS) {
+    meshdiag::rtc[meshdiag::LOOP_PHASE] = 2;  // entering esp_now_send()
     sendPresenceBeacon();
+    meshdiag::rtc[meshdiag::LOOP_PHASE] = 3;  // beacon returned
   }
 
   switch (state) {
@@ -464,15 +526,21 @@ void MeshChatActivity::loop() {
       break;
     }
   }
+  meshdiag::rtc[meshdiag::LOOP_PHASE] = 4;  // main task finished loop
 }
 
 void MeshChatActivity::render(RenderLock&&) {
+  meshdiag::rtc[meshdiag::RENDER_PHASE] = 1;  // render task: start
   renderer.clearScreen();
+  meshdiag::rtc[meshdiag::RENDER_PHASE] = 2;  // rendering activity contents
   switch (state) {
     case CHAT_VIEW: renderChatView(); break;
     case PEERS: renderPeers(); break;
   }
+  meshdiag::rtc[meshdiag::RENDER_PHASE] = 3;  // displaying frame
   renderer.displayBuffer();
+  meshdiag::rtc[meshdiag::RENDER_PHASE] = 4;  // render returned
+  meshdiag::rtc[meshdiag::RENDER_DONE] = meshdiag::rtc[meshdiag::RENDER_DONE] + 1;
 }
 
 void MeshChatActivity::renderChatView() const {
@@ -486,30 +554,17 @@ void MeshChatActivity::renderChatView() const {
     xSemaphoreGive(peersMux);
   }
 
-  // MESH-001 / MESH-005: copy only visible messages under the spinlock.
-  // The old approach copied the full ring buffer (Message[30] = ~6.8KB on the
-  // stack), which overflows the 8KB FreeRTOS render task stack on ESP32-C3.
-  // We now copy at most MAX_VISIBLE entries, cutting peak stack use to ~3.6KB.
-  static constexpr int MAX_VISIBLE = 16;  // screen fits ~15 lines max
-  Message visibleMsgs[MAX_VISIBLE];       // ~3.6KB instead of 6.8KB
-  int visibleCount = 0;
+  // Snapshot only the ring metadata. The former Message[16] stack array
+  // consumed about 3.6 KB of the X4 Pro's 16 KB render task stack. Copy
+  // one entry at a time instead and never draw while holding the spinlock.
+  static constexpr int MAX_VISIBLE = 16;
   int localCount, localHead, localScroll;
-
   portENTER_CRITICAL(&msgMux);
-  localCount  = messageCount;
-  localHead   = messageHead;
+  localCount = messageCount;
+  localHead = messageHead;
   localScroll = scrollOffset;
-
-  if (localCount > 0) {
-    int maxDraw = localCount - localScroll;
-    if (maxDraw > MAX_VISIBLE) maxDraw = MAX_VISIBLE;
-    int msgIdx = (localHead - 1 - localScroll + MAX_MESSAGES) % MAX_MESSAGES;
-    for (int i = 0; i < maxDraw; i++) {
-      visibleMsgs[visibleCount++] = messages[msgIdx];
-      msgIdx = (msgIdx - 1 + MAX_MESSAGES) % MAX_MESSAGES;
-    }
-  }
   portEXIT_CRITICAL(&msgMux);
+  const int visibleCount = std::min(MAX_VISIBLE, std::max(0, localCount - localScroll));
 
   char subtitle[48];
   if (relayMode) {
@@ -529,10 +584,17 @@ void MeshChatActivity::renderChatView() const {
                               "No messages yet. Press Confirm to send.");
   } else {
     // Render messages from newest (bottom) to oldest (top).
-    // visibleMsgs[0] is the newest visible message; iterate forward to go older.
+    // Render newest message first, then work back through the ring.
     int y = contentBottom - lineH;
     for (int drawn = 0; drawn < visibleCount && y >= contentTop; drawn++) {
-      const Message& msg = visibleMsgs[drawn];
+      // Copy under the WiFi-callback lock, but release it before rendering.
+      // Concurrent arrivals may advance the ring between lines; each copied
+      // message is nevertheless complete and memory-safe.
+      const int msgIdx = (localHead - 1 - localScroll - drawn + MAX_MESSAGES * 2) % MAX_MESSAGES;
+      Message msg;
+      portENTER_CRITICAL(&msgMux);
+      msg = messages[msgIdx];
+      portEXIT_CRITICAL(&msgMux);
 
       char line[240];
       if (msg.isLocal) {

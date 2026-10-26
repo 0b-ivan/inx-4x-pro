@@ -1224,30 +1224,42 @@ for state in ("ready:0:0","injected:2:2","peers:2:2",
 print("PASS Mesh Chat: 2 synthetic peers and messages, navigation, radio cleanup")
 PYMESH
 
-for scenario in empty malformed; do
+# Empty and truncated frames must not introduce any peers or messages;
+# 45 synthetic frames must wrap the 30-message ring without corruption.
+for scenario in empty malformed flood; do
   log="$out/MESH_CHAT_$scenario.log"
   image="$out/MESH_CHAT_$scenario.bmp"
+  expected="0:0"
+  shot_at=4500
+  if [ "$scenario" = flood ]; then
+    expected="2:30"
+    shot_at=2900  # Render the messages, not the peer list.
+  fi
   if ! env CROSSPLAY_AUTOSTART="MESH CHAT" \
     CROSSPLAY_SIM_MESH_TRACE=1 \
     CROSSPLAY_SIM_MESH_SCENARIO="$scenario" \
     CROSSPOINT_SIM_INPUT_SCRIPT="3600:RIGHT:100;4800:BACK:100;5900:BACK:100;7200:QUIT" \
-    CROSSPOINT_SIM_SCREENSHOTS="4500:$image" \
+    CROSSPOINT_SIM_SCREENSHOTS="${shot_at}:$image" \
     LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
     timeout 18s "$bin" >"$log" 2>&1; then
     echo "FAIL Mesh Chat $scenario"; tail -100 "$log"; exit 1
   fi
-  for stage in "MESH:injected:0:0" "MESH:peers:0:0" "MESH:radio-off:0:0"; do
+  for stage in "MESH:injected:$expected" "MESH:peers:$expected" "MESH:radio-off:$expected"; do
     grep -Fq "$stage" "$log" || {
       echo "FAIL Mesh Chat $scenario state $stage"; tail -100 "$log"; exit 1
     }
   done
-  python3 - "$image" <<'PYMESHNEG'
+  python3 - "$image" "$out/MESH_CHAT_messages.bmp" "$scenario" <<'PYMESHRING'
 from pathlib import Path
-import struct,sys
+import hashlib,struct,sys
 bmp=Path(sys.argv[1]).read_bytes()
 assert bmp[:2]==b"BM" and len(bmp)>1000
 assert tuple(map(abs,struct.unpack_from("<ii",bmp,18)))==(480,800)
-PYMESHNEG
+if sys.argv[3]=="flood":
+    original=Path(sys.argv[2]).read_bytes()
+    assert hashlib.sha256(bmp).digest()!=hashlib.sha256(original).digest(), (
+        "Mesh Chat flood did not change rendered message ring")
+PYMESHRING
 done
 # X4 Pro capacitive touch: exercise Mesh Chat's "Peers", "Relay" and "Back"
 # footer buttons with actual native TOUCH events, not keyboard shortcuts.

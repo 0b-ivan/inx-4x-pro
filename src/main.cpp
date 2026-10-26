@@ -38,6 +38,7 @@
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "apps_local/Shelf.h"
+#include "apps_local/mesh-chat/MeshChatRuntimeDiagnostics.h"
 #include "apps_local/rss/RssSync.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -138,6 +139,15 @@ unsigned long t2 = 0;
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 RTC_NOINIT_ATTR uint32_t silentRebootTarget;
+// MeshChat checkpoint survives a warm reset, including a panic before logs flush.
+RTC_NOINIT_ATTR volatile uint32_t meshChatDiagnosticStage;
+// Decoded once at startup and retained in normal RAM for the developer crash API.
+// Unlike the 16-line RTC log ring, it cannot be overwritten by later UI logs.
+uint32_t previousMeshChatCheckpoint = 0;
+namespace meshdiag {
+RTC_NOINIT_ATTR volatile uint32_t rtc[COUNT];
+uint32_t previous[COUNT] = {};
+}  // namespace meshdiag
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
@@ -370,10 +380,19 @@ void setup() {
 #endif
 
   HalSystem::begin();
+  // Only ESP32 hardware exposes esp_reset_reason(). The desktop simulator
+  // cannot report an ESP32 reset cause, but still records MeshChat checkpoints.
 #ifndef SIMULATOR
-  // ESP-IDF reset reasons are only available on the actual device.
   LOG_INF("BOOT", "Reset reason: %d", static_cast<int>(esp_reset_reason()));
 #endif
+  const uint32_t priorMeshStage = meshChatDiagnosticStage;
+  meshChatDiagnosticStage = 0;  // Never mistake an earlier boot for this one.
+  if ((priorMeshStage & 0xFFFFFF00u) == 0x4D455300u) {
+    previousMeshChatCheckpoint = priorMeshStage & 0xFFu;
+    for (size_t i = 0; i < meshdiag::COUNT; ++i) meshdiag::previous[i] = meshdiag::rtc[i];
+    LOG_INF("BOOT", "Previous MeshChat checkpoint before reset: %u",
+            static_cast<unsigned>(previousMeshChatCheckpoint));
+  }
   // checkPanic() clears the watchdog capture marker after a successful SD
   // dump, so retain the boot classification for the later activity route.
   const bool rebootedFromPanic = HalSystem::isRebootFromPanic();
