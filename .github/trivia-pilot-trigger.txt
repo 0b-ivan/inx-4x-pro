@@ -1,0 +1,6 @@
+One-shot German Trivia pilot
+Requested by repository owner from phone on 2026-10-26.
+Scope: maximum 20 machine-translated questions for review only.
+Provider credentials: GitHub Actions secret OPENROUTER_API_KEY.
+No OTA, releases, merges, or writing to main.
+Only this marker creation is intended to trigger the workflow.
