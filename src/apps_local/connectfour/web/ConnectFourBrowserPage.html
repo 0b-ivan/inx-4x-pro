@@ -11,8 +11,12 @@
 main{max-width:520px;margin:auto;padding:18px 16px 36px}
 header{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--ink);gap:14px}
 h1{font-size:1.5rem;line-height:1.2;margin:12px 0 16px;letter-spacing:.04em}
-small{font-size:.8rem}#status{min-height:3em;margin:16px 0 8px;font-weight:650}
-#detail{min-height:2.5em;font-size:.9rem;margin:0 0 12px}
+small{font-size:.8rem}#status{min-height:3.25em;margin:16px 0 8px;padding:12px 13px;border:2px solid var(--ink);border-left-width:7px;border-radius:4px;background:var(--card);font-size:1.08rem;font-weight:750;letter-spacing:.018em}
+#status[data-state="turn"]{background:var(--ink);color:var(--bg);border-left-width:10px}
+#status[data-state="finished"]{border-style:double;border-width:4px;font-size:1.22rem}
+#detail{min-height:1.5em;font-size:.86rem;margin:0 0 8px}
+#move-note{padding:6px 0 8px;min-height:2.1em;border-bottom:1px solid var(--line);font-size:.85rem;font-weight:650;letter-spacing:.04em}
+#hint{font-size:.75rem;letter-spacing:.07em;font-weight:700;margin:14px 0 8px}
 #columns,.board{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
 #columns{margin-bottom:7px}
 button{border:2px solid var(--ink);background:var(--card);color:var(--ink);font:inherit;font-weight:700;cursor:pointer}
@@ -23,6 +27,9 @@ button:disabled{opacity:.38;cursor:default}
 .cell{aspect-ratio:1;border:2px solid var(--line);border-radius:50%;background:transparent}
 .cell.x4{background:var(--x4)}.cell.browser{background:var(--web);border-style:dashed}
 .cell.last{outline:2px solid var(--ink);outline-offset:1px}
+.cell.winning{outline:3px double var(--ink);outline-offset:2px;border-width:3px}
+#columns button:not(:disabled){background:var(--ink);color:var(--bg)}
+@media(prefers-reduced-motion:no-preference){#columns button:not(:disabled):active{transform:translateY(2px)}}
 .controls{display:flex;gap:10px;margin-top:14px}.controls button{min-height:44px;padding:9px 16px}
 .legend{display:flex;gap:20px;align-items:center;margin:14px 0}
 .legend span{display:inline-flex;align-items:center;gap:7px;font-size:.85rem}
@@ -35,7 +42,9 @@ button:disabled{opacity:.38;cursor:default}
 <header><h1>CONNECT FOUR</h1><small>CROSSPLAY · X4 PRO</small></header>
 <p id="status" role="status" aria-live="polite">Connecting to X4 Pro…</p>
 <p id="detail" aria-live="polite"></p>
+<p id="move-note" aria-live="off">WAITING FOR THE FIRST DISC</p>
 <div class="legend"><span><i class="x4"></i> X4 PRO · FIRST</span><span><i class="web"></i> BROWSER · SECOND</span></div>
+<p id="hint">CHOOSE YOUR COLUMN</p>
 <div id="columns" aria-label="Drop a disc into a column"></div>
 <div id="board" class="board" role="img" aria-label="Empty Connect Four board"></div>
 <div class="controls"><button id="join" type="button">JOIN GAME</button><button id="rematch" type="button" hidden>PLAY AGAIN</button></div>
@@ -44,7 +53,7 @@ button:disabled{opacity:.38;cursor:default}
 (() => {
   'use strict';
   const find = id => document.getElementById(id);
-  const status = find('status'), detail = find('detail');
+  const status = find('status'), detail = find('detail'), moveNote = find('move-note');
   const join = find('join'), rematch = find('rematch'), board = find('board');
   const columns = Array.from({length:7}, (_, col) => {
     const button = document.createElement('button');
@@ -60,16 +69,42 @@ button:disabled{opacity:.38;cursor:default}
   let owner=false, pending=false, generation=0, retry=0, hidden=false;
   try { const stored=sessionStorage.getItem(storageKey); if(hex32(stored)) secret=stored; } catch {}
   function usable() {return Boolean(socket && socket.readyState===WebSocket.OPEN && bootstrap && !pending);}
+  function winningCells(values, side) {
+    const result = new Set();
+    const directions = [[1,0],[0,1],[1,1],[1,-1]];
+    for(let col=0;col<7;++col)for(let row=0;row<6;++row){
+      if(values[col*6+row]!==side)continue;
+      for(const [dc,dr] of directions){
+        const cells=[];
+        for(let k=0;k<4;++k){
+          const c=col+dc*k,r=row+dr*k;
+          if(c<0||c>=7||r<0||r>=6||values[c*6+r]!==side)break;
+          cells.push(c*6+r);
+        }
+        if(cells.length===4)cells.forEach(cell=>result.add(cell));
+      }
+    }
+    return result;
+  }
   function paint() {
     const connected = usable();
     const phase = snapshot ? snapshot.phase : 'offline';
     const canPlay = owner && connected && phase==='playing' && snapshot.turn===2;
     const cells=[];
     const values = snapshot ? snapshot.board : '0'.repeat(42);
+    const winning = phase==='finished' && snapshot && snapshot.outcome!==3 ?
+      winningCells(values, snapshot.outcome===1?'1':'2') : new Set();
+    status.setAttribute('data-state', phase==='finished'?'finished':canPlay?'turn':phase==='waiting'?'waiting':'idle');
+    if(snapshot && snapshot.last[0]>=0 && snapshot.last[1]>=0) {
+      const cellIndex=snapshot.last[0]*6+snapshot.last[1];
+      moveNote.textContent='LAST DISC · '+(values[cellIndex]==='1'?'X4 PRO':'BROWSER')+
+        ' → COLUMN '+(snapshot.last[0]+1)+' · MOVE '+snapshot.r;
+    } else moveNote.textContent=phase==='waiting'?'WAITING FOR THE FIRST DISC':'NEW ROUND · NO MOVES';
     for(let row=5;row>=0;--row) for(let col=0;col<7;++col) {
       const value=values[col*6+row], cell=document.createElement('div');
       cell.className='cell'+(value==='1'?' x4':value==='2'?' browser':'');
       if(snapshot && snapshot.last[0]===col && snapshot.last[1]===row) cell.className+=' last';
+      if(winning.has(col*6+row))cell.className+=' winning';
       cell.setAttribute('aria-label','Column '+(col+1)+', row '+(row+1)+': '+(value==='1'?'X4':value==='2'?'Browser':'empty'));
       cells.push(cell);
     }

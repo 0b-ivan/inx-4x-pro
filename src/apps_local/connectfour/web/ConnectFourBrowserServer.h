@@ -37,6 +37,7 @@ class Server final {
   void receive(uint8_t client, const uint8_t* bytes, size_t length);
   void configureRoutes();
   void servePage();
+  void releaseDevMode();
   WebServer http_{80};
   WebSocketsServer ws_{81};
   DNSServer dns_;

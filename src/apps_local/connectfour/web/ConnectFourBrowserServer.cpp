@@ -27,7 +27,7 @@ bool Server::begin() {
   // Open short-range game hotspot; seat capabilities still gate moves.
   if (!WiFi.softAP(ssid(), nullptr, 1, false, 2)) {
     WiFi.mode(WIFI_OFF);
-      devmode::resume(); devModePaused_ = false;
+    releaseDevMode();
     return false;
   }
   // ESP32 RF provides entropy after AP startup, including the seat secrets.
@@ -71,8 +71,13 @@ void Server::stop() {
     WiFi.mode(WIFI_OFF);
   }
   url_.clear();
-  if (devModePaused_) { devmode::resume(); devModePaused_ = false; }
+  releaseDevMode();
   changed_ = true;
+}
+void Server::releaseDevMode() {
+  if (!devModePaused_) return;
+  devmode::resume();
+  devModePaused_ = false;
 }
 void Server::loop() {
   if (!running_) return;

@@ -2,7 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const html=fs.readFileSync('../../src/apps_local/connectfour/web/ConnectFourBrowserPage.html','utf8');
-const ids=['status','detail','join','rematch','board','columns'];
+const ids=['status','detail','move-note','join','rematch','board','columns'];
 function element() {
   return {textContent:'',hidden:false,disabled:false,children:[],className:'',attrs:{},
     appendChild(child){this.children.push(child);},
@@ -51,6 +51,8 @@ const state=(phase,r,turn,board='0'.repeat(42),outcome=0,last=[-1,-1])=>({type:'
   const x4='1'+'0'.repeat(41);
   ws.onmessage({data:JSON.stringify(state('playing',1,2,x4,0,[0,0]))});
   assert.equal(elements.columns.children[1].disabled,false);
+  assert.equal(elements.status.attrs['data-state'],'turn');
+  assert.match(elements['move-note'].textContent,/LAST DISC · X4 PRO → COLUMN 1/);
   elements.columns.children[1].onclick();
   assert.deepEqual(sent[1],['drop',first,1,1]);
   const both='1'+'0'.repeat(5)+'2'+'0'.repeat(35);
@@ -61,12 +63,16 @@ const state=(phase,r,turn,board='0'.repeat(42),outcome=0,last=[-1,-1])=>({type:'
   const restored=sockets[1];restored.onopen();
   assert.deepEqual(sent[2],['resume',second,2,secret]);
   restored.onmessage({data:JSON.stringify({type:'resume',token:secret})});
-  restored.onmessage({data:JSON.stringify(state('finished',7,1,both,1,[0,3]))});
+  const winningBoard='1111'+'0'.repeat(38);
+  restored.onmessage({data:JSON.stringify(state('finished',7,1,winningBoard,1,[0,3]))});
   assert.match(elements.status.textContent,/X4 PRO WINS/);
+  assert.equal(elements.status.attrs['data-state'],'finished');
+  assert.equal(elements.board.children.filter(cell=>cell.className.includes('winning')).length,4);
   assert.equal(elements.rematch.hidden,false);
   elements.rematch.onclick();assert.deepEqual(sent[3],['rematch',second,7]);
   restored.onmessage({data:JSON.stringify(state('playing',8,1))});
   assert.equal(elements.rematch.hidden,true);
+  assert.equal(elements.board.children.filter(cell=>cell.className.includes('winning')).length,0);
   assert.equal(elements.board.children.length,42);
   listeners.pagehide();assert.equal(retry,null);
   console.log('Connect Four browser page: board, accessible column moves, X4 turn, reconnect/resume and rematch passed');
