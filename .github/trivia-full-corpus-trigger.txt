@@ -1,0 +1,1 @@
+Explicit user approval and full trivia DE translation: 49,958 English questions, reuse 500 user-bulk-authorized edits, 50 disjoint Qwen shards, $0.18 per shard (max approximately $9), quarantine display failures, no automatic release.
