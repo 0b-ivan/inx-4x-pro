@@ -118,6 +118,21 @@ jobs:
 
             ### What is new in 1.16.11
 
+            **Boot reset diagnostics and CI maintenance**
+
+            The X4 Pro now reports the ESP-IDF reset reason in its boot
+            log, helping distinguish watchdog, panic and power-on resets
+            when investigating device restarts (including MeshChat).
+            This is diagnostic logging; it does not claim to repair the
+            underlying reset.
+
+            The native SDL simulator excludes this hardware-only API,
+            and the release pipeline is hardened so prereleases can be
+            built from a tested main commit without a permanent feature
+            branch. Firmware, simulator and host tests remain required.
+
+            ### What is new in 1.16.10
+
             **New: WIFI DIAG (read-only WLAN diagnostics)**
 
             A dedicated Xteink X4 Pro hardware diagnostics screen displays
