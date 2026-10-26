@@ -165,12 +165,14 @@ void buildAwsOption(toybox::Screen& screen, const AwsPageModel& model) {
   frameText(screen, model, status);
   // Three always-visible controls: select/deselect, previous, and next text/
   // next option or grade. Multi-answer questions must be submitted explicitly.
+  const bool lastPage = !model.more && model.option + 1 == model.optionCount;
+  const bool needsSelection = lastPage && model.selected == 0;
   footerThree(screen, marked ? "UNMARK" : "MARK", ActionAwsToggleOption,
               "BACK", ActionAwsPageBack,
-              model.more ? "MORE" :
-                  (model.option + 1 < model.optionCount ? "NEXT" : "GRADE"),
-              model.more || model.option + 1 < model.optionCount
-                  ? ActionAwsPageNext : ActionAwsSubmit);
+              model.more ? "MORE" : !lastPage ? "NEXT" :
+              needsSelection ? "SELECT" : "GRADE",
+              needsSelection ? ActionAwsToggleOption :
+              lastPage ? ActionAwsSubmit : ActionAwsPageNext);
 }
 
 void buildAwsExplanation(toybox::Screen& screen, const AwsPageModel& model) {
