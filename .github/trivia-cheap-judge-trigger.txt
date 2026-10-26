@@ -1,0 +1,1 @@
+One-time judge 20 existing test translations using GPT-4.1-mini. No repeated translation; bounded budget and no publishing.

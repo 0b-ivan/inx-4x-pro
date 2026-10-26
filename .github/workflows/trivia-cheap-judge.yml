@@ -1,0 +1,56 @@
+name: German Trivia Independent Budget Judge
+on:
+  push:
+    branches:
+      - experiment/trivia-de-100-20261026
+    paths:
+      - .github/trivia-cheap-judge-trigger.txt
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: trivia-cheap-judge-one-shot
+  cancel-in-progress: false
+jobs:
+  judge:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Restore Qwen, GPT-4o mini and baseline answers
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia-judge"
+          gh run download 40317248535 --repo "$GITHUB_REPOSITORY" \
+            --name trivia-cheap-20-comparison-unreviewed \
+            --dir "$RUNNER_TEMP/trivia-judge"
+          test "$(wc -l < "$RUNNER_TEMP/trivia-judge/comparison-per-question.jsonl")" -eq 20
+      - name: Blindly judge existing answers without translating again
+        shell: bash
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TRIVIA_JUDGE_DIR: ${{ runner.temp }}/trivia-judge
+        run: |
+          set -euo pipefail
+          test -n "$OPENROUTER_API_KEY"
+          python3 tools_local/trivia/judge_cheap_compare.py
+      - name: Upload detailed quality scores without release
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivia-cheap-judge-20
+          path: |
+            ${{ runner.temp }}/trivia-judge/independent-scores.jsonl
+            ${{ runner.temp }}/trivia-judge/judge-summary.json
+          if-no-files-found: ignore
+          retention-days: 14
