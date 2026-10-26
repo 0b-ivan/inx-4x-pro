@@ -111,6 +111,54 @@ spellchecker**: other spelling mistakes, broken wordplay and factual errors
 still require editorial review. Do not merge a draft straight into a
 published pack without review.
 
+### Independent AI editorial pass (Claude Sonnet 4.6 → GPT-5.4)
+
+A second model from a different provider checks **both** the original English
+clue and the first German translation, including correct and wrong options.
+This catches errors that a one-model spelling check will miss: literal US road
+directions, awkward literal translations such as `Antonym dieses Wortes`,
+answer drift, English-only puns and unacceptable cultural assumptions.
+
+The one-shot [independent editorial workflow](https://github.com/0b-ivan/inx-4x-pro/actions/workflows/trivia-german-editorial.yml)
+uses the existing 20-question Claude artifact from successful GitHub run
+`40300699483`, normalizes supported German umlauts offline, then asks
+`openai/gpt-5.4` for at most **20** separate editorial judgments.
+It requires the temporary `OPENROUTER_API_KEY` repository secret.
+It runs only when `.github/trivia-editor-trigger.txt` changes on this
+specific PR branch, not on every ordinary push. No release or merge runs.
+
+The editor's choices are **accept** (a sound question remains unchanged),
+**rewrite** (conservative correction, then automatic device/answer checks),
+or **reject** (untranslatable wordplay, suspected factual errors, or failed
+device validation). It produces two files in artifact
+`trivia-german-gpt54-editorial-unreviewed`:
+
+- `questions-de-editorial.jsonl`: approved-by-NO-ONE edited drafts with
+  `reviewed: false`, preserving each ID, source hash and option positions
+- `editorial-report.jsonl`: side-by-side original English, initial German,
+  proposed German, verdict and reason in German for the human reviewer
+
+**Machine acceptance is not human approval**. Questions remain with
+`reviewed: false`; editorial flags must be checked before the
+`build_de_pack.py` release gate. The GPT-5.4 call has additional OpenRouter
+costs, separate from the Claude translation calls. The underlying model
+supports structured JSON output but cannot independently certify historical
+facts without external sources.
+
+For local authorized runs:
+
+```sh
+OPENROUTER_API_KEY=... python3 tools_local/trivia/review_de_pack.py \
+  --src /tmp/trivia-source-en.jsonl \
+  --drafts /tmp/trivia-draft-de-orthography.jsonl \
+  --out /tmp/trivia-editorial-de.jsonl \
+  --report /tmp/trivia-editorial-audit.jsonl \
+  --model openai/gpt-5.4 --limit 20
+```
+
+Use a secret environment variable instead of writing the key into a command
+or sharing it in a conversation.
+
 ### Review and build
 
 Review the German clue, correct answer, accepted alternates, all six
