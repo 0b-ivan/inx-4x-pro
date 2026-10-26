@@ -16,20 +16,22 @@ uint32_t u32(const uint8_t* p) {
 bool AwsPack::open(ByteSource& source) {
   source_ = nullptr;
   count_ = 0;
-  uint8_t header[16] = {};
+  fingerprint_ = 0;
+  uint8_t header[20] = {};
   if (!source.read(0, header, sizeof(header))) return false;
   if (std::memcmp(header, kAwsMagic, sizeof(kAwsMagic)) != 0 ||
       u16(header + 8) != kAwsVersion || header[10] != 0 || header[11] != 0) return false;
   const uint32_t n = u32(header + 12);
   if (n == 0 || n > 100000) return false;
-  const uint64_t base = 16ull + (static_cast<uint64_t>(n) + 1) * 4;
+  const uint64_t base = 20ull + (static_cast<uint64_t>(n) + 1) * 4;
   if (base > source.size()) return false;
   uint8_t sentinel[4] = {};
-  if (!source.read(16 + 4 * n, sentinel, 4)) return false;
+  if (!source.read(20 + 4 * n, sentinel, 4)) return false;
   if (base + u32(sentinel) != source.size()) return false;  // reject torn and trailing garbage
   source_ = &source;
   count_ = n;
-  indexAt_ = 16;
+  fingerprint_ = u32(header + 16);
+  indexAt_ = 20;
   base_ = static_cast<uint32_t>(base);
   return true;
 }
