@@ -88,7 +88,7 @@ SYSTEM = (
 )
 
 
-def translate_one(item, model, api_key, timeout=100):
+def translate_one(item, model, api_key, timeout=100, track_cost=False):
     user = {k: item.get(k, [] if k in ("alt", "w") else "")
             for k in ("q", "a", "alt", "w")}
     request = {
@@ -122,6 +122,8 @@ def translate_one(item, model, api_key, timeout=100):
     cleaned = {key: ([normalize_display_punctuation(x) for x in value]
               if isinstance(value, list) else normalize_display_punctuation(value))
         for key, value in translated.items()}
+    if not track_cost:
+        return cleaned
     cost = result.get("usage", {}).get("cost")
     if cost is None or not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost < 0:
         raise TranslationError("OpenRouter did not report a valid USD usage.cost; fail closed")
@@ -211,8 +213,11 @@ def generate(source_path, output_path, model, api_key, limit=20, all_questions=F
             accepted = False
             for attempt in range(4):
                 try:
-                    translated, cost = translate_one(original, model, api_key)
-                    spent += cost
+                    if max_cost_usd is None:
+                        translated = translate_one(original, model, api_key)
+                    else:
+                        translated, cost = translate_one(original, model, api_key, track_cost=True)
+                        spent += cost
                     if max_cost_usd is not None and spent > max_cost_usd:
                         raise TranslationError(f"USD budget exceeded after request: {spent:.6f}")
                     # Accept only content fields. Provider-supplied IDs or
