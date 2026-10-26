@@ -315,7 +315,8 @@ class GermanTriviaPackTests(unittest.TestCase):
     def test_editor_rejects_english_german_numeric_conflict(self):
         # Regression: the source says ten days, the Kon-Tiki journey
         # actually took 101. Do not silently accept the English error.
-        original = {"id": "kon-tiki", "q": "The 1947 voyage ended 10 days later",
+        original = {"id": "kon-tiki", "d": 2, "y": 1947,
+                    "q": "The 1947 voyage ended 10 days later",
                     "a": "Thor Heyerdahl", "alt": [], "w": []}
         draft = {"id": "kon-tiki", "source_hash": build_de_pack.source_hash(original),
                  "q": "Seine Reise von 1947 endete 101 Tage später",
@@ -331,7 +332,8 @@ class GermanTriviaPackTests(unittest.TestCase):
         self.assertEqual(report["proposed"]["q"], ai["q"])
 
     def test_editor_rejects_numeric_drift_even_if_source_matches_draft(self):
-        original = {"id": "example", "q": "A war ended in 1950",
+        original = {"id": "example", "d": 2, "y": 1950,
+                    "q": "A war ended in 1950",
                     "a": "A", "alt": [], "w": []}
         draft = {"id": "example", "source_hash": build_de_pack.source_hash(original),
                  "q": "Ein Krieg endete 1950", "a": "A", "alt": [], "w": [],
