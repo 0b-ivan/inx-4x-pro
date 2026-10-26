@@ -10,10 +10,11 @@ from collections import Counter
 from decimal import Decimal, InvalidOperation
 
 from numerical_equivalence import WORDS
+from numeric_notation import pre_normalize
 
 # Exclude identifiers (AK-47, X-15) from quantity comparisons; these are not
 # measurements. The separate semantic editorial review still sees the text.
-CODES = re.compile(r"(?<!\w)[a-zA-Z]{1,8}-\d+(?!\w)")
+CODES = re.compile(r"(?<!\w)(?:ak|x|f|sr|mig)-\d+(?!\w)", re.I)
 DIGITS = re.compile(r"(?<!\w)\d+(?:[.,]\d+)*(?!\w)")
 NUM_WORDS = re.compile(r"(?<!\w)(?:" + "|".join(
     re.escape(s) for s in sorted(WORDS, key=len, reverse=True)
@@ -114,12 +115,19 @@ def numeric_tokens(value, language):
         for part in value:
             result.update(numeric_tokens(part, language))
         return result
-    text = CODES.sub(" ", value.casefold())
+    # Preserve and canonicalize ordinals, century dates, fractions, and common
+    # EN/DE word-number morphology before comparing quantities.
+    text, special = pre_normalize(value, language)
+    # 'One' as a complete proper-noun answer/distractor is not quantity 1.
+    if text.strip() == "one":
+        return Counter()
+    text = CODES.sub(" ", text)
     occupied = [False] * len(text)
+    result.update(special)
     for match in DIGITS.finditer(text):
         pair = number_value(match.group(), language)
         if pair:
-            result[str(pair[0].normalize())] += 1
+            result[format(pair[0].normalize(), "f")] += 1
         for offset in range(match.start(), match.end()):
             occupied[offset] = True
     for match in NUM_WORDS.finditer(text):
