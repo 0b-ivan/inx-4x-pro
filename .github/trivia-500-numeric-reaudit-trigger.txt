@@ -1,1 +1,1 @@
-One-shot 500 offline audit after correcting Python regex escaping for English spelled fractions and Roman World War abbreviations. No billing or firmware release.
+Offline numeric re-audit and prioritized human review queue for 500 Qwen German questions. CSV+JSONL+MD, all unapproved, no API.

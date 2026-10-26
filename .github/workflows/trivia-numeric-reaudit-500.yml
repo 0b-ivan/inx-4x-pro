@@ -30,6 +30,7 @@ jobs:
           python-version: '3.13'
       - name: Regression tests for display and numeric semantics
         run: |
+          python3 tools_local/trivia/test_triage_qwen_500.py
           python3 tools_local/trivia/test_numeric_notation.py
           python3 tools_local/trivia/test_numeric_semantics.py
           python3 tools_local/trivia/test_numerical_equivalence.py
@@ -69,6 +70,16 @@ jobs:
             --prior-audit "$RUNNER_TEMP/trivia-reaudit/qwen-500-audit.jsonl" \
             --report "$RUNNER_TEMP/trivia-reaudit/numeric-reaudit-500.jsonl" \
             --summary "$RUNNER_TEMP/trivia-reaudit/numeric-reaudit-summary.json"
+      - name: Create prioritized bilingual manual review queue
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools_local/trivia/triage_qwen_500.py \
+            --input "$RUNNER_TEMP/trivia-reaudit/numeric-reaudit-500.jsonl" \
+            --csv "$RUNNER_TEMP/trivia-reaudit/review-priority-500.csv" \
+            --jsonl "$RUNNER_TEMP/trivia-reaudit/review-priority-500.jsonl" \
+            --summary "$RUNNER_TEMP/trivia-reaudit/review-priority-summary.json" \
+            --markdown "$RUNNER_TEMP/trivia-reaudit/review-queue-500.md"
       - name: Preserve audit and source-aligned samples (14 days)
         if: always()
         uses: actions/upload-artifact@v4
@@ -77,5 +88,9 @@ jobs:
           path: |
             ${{ runner.temp }}/trivia-reaudit/numeric-reaudit-500.jsonl
             ${{ runner.temp }}/trivia-reaudit/numeric-reaudit-summary.json
+            ${{ runner.temp }}/trivia-reaudit/review-priority-500.csv
+            ${{ runner.temp }}/trivia-reaudit/review-priority-500.jsonl
+            ${{ runner.temp }}/trivia-reaudit/review-priority-summary.json
+            ${{ runner.temp }}/trivia-reaudit/review-queue-500.md
           if-no-files-found: ignore
           retention-days: 14
