@@ -56,5 +56,24 @@ class HistoricalTriviaNumerals(unittest.TestCase):
         self.ok("less than 1 ounce","weniger als eine Unze")
     def test_ordinals_dont_hide_actual_changes(self):
         self.flagged("58th birthday","57. Geburtstag")
+    def test_contextual_first_and_first_lady(self):
+        self.ok("Custer first saw action in this war","Custer sah erstmals in diesem Krieg Kampfhandlungen")
+        self.ok("This GOP first lady got a prize in 1977","Diese First Lady erhielt 1977 einen Preis")
+        self.ok("in 1809 the 1st first lady to attend","1809 die erste First Lady, die teilnahm")
+    def test_roman_world_war(self):
+        self.ok("WWII paratroopers","Fallschirmjäger im Zweiten Weltkrieg")
+        self.ok("after WWI","nach dem Ersten Weltkrieg")
+        self.flagged("after WWII","nach dem Ersten Weltkrieg")
+    def test_spelled_fraction_without_digit(self):
+        self.ok("two-thirds of the globe","zwei Drittel der Erde")
+        self.ok("nearly a quarter of all mammals","fast ein Viertel aller Säugetiere")
+        self.flagged("two-thirds of the globe","ein Viertel der Erde")
+    def test_three_oldest_and_titles(self):
+        self.ok("the third-oldest school, older by 5 years","die drittälteste Schule, fünf Jahre älter")
+        self.ok('The Fifth Queen: this king\'s fifth wife',
+                'The Fifth Queen: die fünfte Frau dieses Königs')
+    def test_act_one_vs_akt_eins(self):
+        self.ok("In Act One the character appears","In Akt eins erscheint die Figur")
+
 if __name__=="__main__":
     unittest.main()
