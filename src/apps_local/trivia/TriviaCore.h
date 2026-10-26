@@ -118,6 +118,8 @@ class PackState {
   bool open(WritableByteSource& source, uint32_t count);
   uint8_t flags(uint32_t index) const;
   bool setFlag(uint32_t index, uint8_t bit);
+  // Clear a transient review flag without touching seen/hidden state or counters.
+  bool clearFlag(uint32_t index, uint8_t bit);
   bool seen(const uint32_t i) const { return (flags(i) & kSeen) != 0; }
   bool flagged(const uint32_t i) const { return (flags(i) & kFlagged) != 0; }
 
