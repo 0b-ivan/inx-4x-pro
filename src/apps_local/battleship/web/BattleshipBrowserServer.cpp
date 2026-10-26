@@ -17,14 +17,21 @@
 namespace bshipweb {
 namespace {
 constexpr const char* kApSsid = "CrossPlay-Battleship";
+constexpr char kApPasswordAlphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+constexpr size_t kApPasswordLength = 12;
 constexpr const char* kMdnsHost = "crossplay";
 constexpr uint8_t kApChannel = 1;
 constexpr uint8_t kApMaxClients = 2;
 constexpr uint16_t kDnsPort = 53;
 constexpr const char* kGamePath = "/battleship";
 
-bool playerAuthorized(WebServer& http, const char* token) {
-  return token != nullptr && token[0] != '\0' && http.hasArg("token") && http.arg("token") == token;
+// The bootstrap session token is public to clients on the LAN. Never use it
+// alone to read or mutate the X4's stored player identities. The separate
+// 128-bit seat secret is only sent to the accepted WebSocket owner.
+bool playerAuthorized(WebServer& http, const char* token, const char* ownerSecret, bool hasOwner) {
+  return hasOwner && token != nullptr && token[0] != '\0' && ownerSecret != nullptr && ownerSecret[0] != '\0' &&
+         http.hasArg("token") && http.arg("token") == token &&
+         http.hasArg("owner") && http.arg("owner") == ownerSecret;
 }
 
 void sendPlayerReply(WebServer& http, const playerweb::Reply& reply) {
@@ -70,6 +77,7 @@ bool Server::begin(const NetworkMode mode) {
   mode_ = mode;
   clientSeen_ = false;
   ssid_.clear();
+  password_.clear();
   ip_.clear();
   url_.clear();
 
@@ -133,6 +141,7 @@ void Server::stop() {
     http_.stop();
   }
   snapshot_ = {};
+  password_.clear();
 
   if (dnsRunning_) {
     dns_.stop();
@@ -258,14 +267,14 @@ void Server::configureRoutes() {
     http_.send(200, "text/plain", token_);
   });
   http_.on("/player/state", HTTP_GET, [this] {
-    if (!playerAuthorized(http_, token_)) {
+    if (!playerAuthorized(http_, token_, resumeToken_, owner_ >= 0)) {
       sendPlayerReply(http_, playerweb::Reply{403, "{\"ok\":false,\"message\":\"FORBIDDEN\"}"});
       return;
     }
     sendPlayerReply(http_, playerweb::state());
   });
   http_.on("/player/action", HTTP_POST, [this] {
-    if (!playerAuthorized(http_, token_)) {
+    if (!playerAuthorized(http_, token_, resumeToken_, owner_ >= 0)) {
       sendPlayerReply(http_, playerweb::Reply{403, "{\"ok\":false,\"message\":\"FORBIDDEN\"}"});
       return;
     }
@@ -319,7 +328,11 @@ bool Server::startHotspot() {
   WiFi.mode(WIFI_AP);
   delay(50);
 
-  if (!WiFi.softAP(kApSsid, nullptr, kApChannel, false, kApMaxClients)) {
+  password_.reserve(kApPasswordLength);
+  for (size_t i = 0; i < kApPasswordLength; ++i) {
+    password_.push_back(kApPasswordAlphabet[esp_random() % (sizeof(kApPasswordAlphabet) - 1)]);
+  }
+  if (!WiFi.softAP(kApSsid, password_.c_str(), kApChannel, false, kApMaxClients)) {
     LOG_ERR("BSHIPWEB", "Failed to start Battleship hotspot");
     WiFi.mode(WIFI_OFF);
     return false;
