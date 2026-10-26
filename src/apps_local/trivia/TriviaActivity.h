@@ -75,6 +75,7 @@ class TriviaActivity final : public Activity {
   bool awsInstalled_ = false;
   bool awsHasQuestion_ = false;
   bool awsReviewMissed_ = false;
+  bool awsHaveLast_ = false;
   bool awsAnswerCorrect_ = false;
   bool awsMore_ = false;
   char awsPageBuffer_[1200] = {};
