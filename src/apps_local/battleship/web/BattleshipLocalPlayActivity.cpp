@@ -4,6 +4,9 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
+#ifndef SIMULATOR
+#include <esp_system.h>
+#endif
 
 #include <algorithm>
 #include <cstdio>
@@ -65,6 +68,11 @@ void BattleshipLocalPlayActivity::onEnter() {
   Activity::onEnter();
   toybox::ensureFonts(renderer);
   seed_ = toybox::seed();
+#ifndef SIMULATOR
+  browserPlayer_.setRandomSeed(esp_random());
+#else
+  browserPlayer_.setRandomSeed(toybox::seed());
+#endif
   stage_ = Stage::Transport;
   selected_ = 0;
   browser_.setCommands(
