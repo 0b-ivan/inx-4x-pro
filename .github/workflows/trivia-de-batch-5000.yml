@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm_paid_translation:
-        description: 'Type TRANSLATE-5000 to authorize paid requests'
+        description: 'Type TRANSLATE-5000 to authorize paid requests (USD 5 budget)'
         required: true
         type: string
 permissions:
@@ -37,7 +37,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           test -n "$OPENROUTER_API_KEY" || { echo 'Missing OPENROUTER_API_KEY'; exit 1; }
-          python3 tools_local/trivia/translate_de_pack.py --src "$RUNNER_TEMP/trivia/source-en.jsonl" --out "$RUNNER_TEMP/trivia/questions-de-draft.jsonl" --model 'google/gemini-2.5-flash' --limit 5000
+          python3 tools_local/trivia/translate_de_pack.py --src "$RUNNER_TEMP/trivia/source-en.jsonl" --out "$RUNNER_TEMP/trivia/questions-de-draft.jsonl" --model 'google/gemini-2.5-flash' --limit 5000 --max-cost-usd 5
       - name: Upload checkpointed unreviewed drafts
         if: always()
         uses: actions/upload-artifact@v4
