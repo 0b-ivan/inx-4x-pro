@@ -35,6 +35,10 @@ void ConnectFourBrowserActivity::loop() {
     return;
   }
   if (failed_) return;
+  // Network callbacks mutate the authoritative board in this loop pass.
+  // Hold the same rendering mutex used by Battleship while frames and
+  // touch actions update shared state, so the e-ink render sees one revision.
+  RenderLock lock(*this);
   server_.loop();
   if (server_.takeChanged() || shownJoined_ != server_.round().joined() ||
       shownConnected_ != server_.clientSeen()) {
