@@ -26,9 +26,16 @@ bool validExtension(const char* ext) {
 
 bool StudyDeckCatalog::add(const char* slug, const bool aws) {
   if (!validSlug(slug) || count_ >= kStudyMaxDecks || find(slug) >= 0) return false;
-  StudyDeckEntry& target = entries_[count_++];
+  // Readdir order is filesystem-dependent. Stable sorting makes the on-device
+  // selection and simulator touch targets refer to the same certificate on
+  // every boot, regardless of how FAT/host directories enumerate their files.
+  uint8_t pos = 0;
+  while (pos < count_ && std::strcmp(entries_[pos].slug, slug) < 0) ++pos;
+  for (uint8_t i = count_; i > pos; --i) entries_[i] = entries_[i - 1];
+  StudyDeckEntry& target = entries_[pos];
   std::snprintf(target.slug, sizeof(target.slug), "%s", slug);
   target.aws = aws;
+  ++count_;
   return true;
 }
 

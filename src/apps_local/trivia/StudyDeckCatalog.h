@@ -35,7 +35,7 @@ class StudyDeckCatalog {
   bool path(uint8_t index, const char* extension, char* out, uint32_t capacity) const;
 
  private:
-  bool add(const char* filename, bool aws);
+  bool add(const char* slug, bool aws);
   StudyDeckEntry entries_[kStudyMaxDecks] = {};
   uint8_t count_ = 0;
 };
