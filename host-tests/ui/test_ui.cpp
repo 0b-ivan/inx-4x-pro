@@ -6402,6 +6402,35 @@ void testTriviaOptionsCarryTheirIndex() {
 // there are no options -- so no option boxes, and nothing tappable that would
 // score a question that is not there. Found by looking at a render, not by a
 // suite: four empty boxes draw exactly like four real ones.
+// The button/display cuts are ASCII-only. UTF-8 German choices and answers
+// must use the reading font or letters like ä/ü disappear on the actual panel.
+void testTriviaGermanGlyphsUseReadingFont() {
+  triviaui::ChoiceModel model;
+  model.clue = "Welche Stadt liegt in Bayern?";
+  static const char* labels[trivia::kOptions] = {"Berlin", "München", "Zürich", "Rom"};
+  for (int i = 0; i < trivia::kOptions; ++i) model.option[i] = labels[i];
+  Rendered out;
+  buildChoice(out, model);
+  for (int i = 0; i < trivia::kOptions; ++i) {
+    const FakeTarget::TextRun* run = out.target.find(labels[i]);
+    CHECK(run != nullptr);
+    if (run) CHECK(run->style.font == (i == 1 || i == 2 ? toybox::kBodyFont : toybox::kSmallFont));
+  }
+
+  Rendered answer;
+  const fui::DeviceContext ctx = device();
+  const fui::InputSnapshot noInput{};
+  toybox::Frame frame(answer.target, ctx, noInput, answer.interactions);
+  toybox::Screen screen(frame, toybox::themeTokens());
+  triviaui::QuestionModel question;
+  question.clue = "Welche Stadt ist die Antwort?";
+  question.answer = "München";
+  triviaui::buildQuestion(screen, question);
+  const FakeTarget::TextRun* run = answer.target.find("München");
+  CHECK(run != nullptr);
+  if (run) CHECK(run->style.font == toybox::kBodyFont);
+}
+
 void testTriviaDrawsNoOptionsWithoutAQuestion() {
   triviaui::ChoiceModel model;
   model.clue = "No multiple-choice question available at this difficulty.";
@@ -6469,6 +6498,7 @@ void testTriviaAlwaysOffersAWayOut() {
 
 int main() {
   testTriviaOptionsCarryTheirIndex();
+  testTriviaGermanGlyphsUseReadingFont();
   testTriviaAlwaysOffersAWayOut();
   testTriviaDrawsNoOptionsWithoutAQuestion();
   testTheSeaSaltCardYouTapIsTheCardTheRulesGet();

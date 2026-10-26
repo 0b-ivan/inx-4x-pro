@@ -144,6 +144,14 @@ jobs:
             This is a status-display correction, not a claim that
             unsupported ESP-IDF frame types now work.
 
+            **German UI localization and review safeguards**
+
+            German UI labels and contextual strings now share an audited
+            translation catalogue. Host tests check catalogue consistency
+            and screen-label widths on the 480px X4 Pro display.
+            Trivia translation pilots generate review-only drafts; they
+            do not ship an unreviewed German question pack.
+
             **Validation**
 
             Added regression checks for passive-only diagnostics,

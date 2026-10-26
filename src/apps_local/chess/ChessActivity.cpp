@@ -760,7 +760,7 @@ const char* ChessActivity::statusText() const {
   if (gameOver) return "PLAY AGAIN";
   if (engineThinking) return "THINKING";
   // Whose check it is does not need saying: the board already shows the turn.
-  if (chess::isInCheck(position)) return "CHECK";
+  if (chess::isInCheck(position)) return "IN CHECK";
   // Naming them matters most here. You learn who you are playing on the
   // searching screen and then, until now, spent the whole game being told only
   // that it was somebody else's move.
