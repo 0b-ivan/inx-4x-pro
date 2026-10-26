@@ -1,1 +1,1 @@
-Offline 500 numeric QA 2026-10-26: EN/DE fractions, WWI/WWII, First Lady title and German first/third compounds. Preserve risk flags; no paid calls.
+One-shot 500 offline audit after correcting Python regex escaping for English spelled fractions and Roman World War abbreviations. No billing or firmware release.

@@ -32,16 +32,16 @@ DE_COMPOUNDS = (
 )
 DE_MIXED = re.compile(r"(?<!\w)(ein|zwei|drei|vier|fünf|sechs|sieben|acht|neun)einhalb(?!\w)",re.I)
 EN_MIXED = re.compile(r"(?<!\w)(\d+)\s+(\d+)\s*/\s*(\d+)(?!\w)")
-FRACTION = re.compile(r"(?<!\\w)(\\d+)\\s*/\\s*(\\d+)(?!\\w)")
+FRACTION = re.compile(r"(?<!\w)(\d+)\s*/\s*(\d+)(?!\w)")
 EN_SPELLED_FRACTION = re.compile(
-    r"(?<!\\w)(one|a|two|three|four|five|six|seven|eight|nine)[ -]"
-    r"(half|thirds?|quarters?|fourths?|fifths?)(?!\\w)", re.I)
+    r"(?<!\w)(one|a|two|three|four|five|six|seven|eight|nine)[ -]"
+    r"(half|thirds?|quarters?|fourths?|fifths?)(?!\w)", re.I)
 EN_SPELLED_NUMBERS = {"a":1,"one":1,"two":2,"three":3,"four":4,
     "five":5,"six":6,"seven":7,"eight":8,"nine":9}
 EN_SPELLED_DENOMS = {"half":2,"third":3,"thirds":3,
     "quarter":4,"quarters":4,"fourth":4,"fourths":4,"fifth":5,"fifths":5}
-WAR_ABBREV = re.compile(r"(?<!\\w)ww(ii|i)(?!\\w)",re.I)
-EN_QUARTER = re.compile(r"(?<!\\w)a quarter(?!\\w)",re.I)
+WAR_ABBREV = re.compile(r"(?<!\w)ww(ii|i)(?!\w)",re.I)
+EN_QUARTER = re.compile(r"(?<!\w)a quarter(?!\w)",re.I)
 DE_FRAC = re.compile(r"(?<!\w)(ein|eine|einen|zwei|drei|vier|fünf|sechs|sieben|acht|neun)\s+(Drittel|Viertel|Fünftel|Halb)(?!\w)",re.I)
 NUMWORDS = {"ein":1,"eine":1,"einen":1,"zwei":2,"drei":3,"vier":4,"fünf":5,"sechs":6,"sieben":7,"acht":8,"neun":9}
 DENOMS = {"halb":2,"drittel":3,"viertel":4,"fünftel":5}
