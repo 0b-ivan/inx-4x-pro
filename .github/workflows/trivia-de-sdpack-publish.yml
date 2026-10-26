@@ -1,0 +1,118 @@
+name: German Trivia Validated SD Pack Prerelease
+on:
+  push:
+    branches: [experiment/trivia-de-100-20261026]
+    paths: [.github/trivia-sdpack-publish-trigger.txt]
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: trivia-de-sdpack-publish
+  cancel-in-progress: false
+jobs:
+  sdpack:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Obtain immutable preview data and source provenance
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/sd-preview"
+          mkdir -p "$root/raw" "$root/unpacked" "$root/dist"
+          gh release download trivia-de-preview-20261026 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern trivia-de-preview-partial-20261026.zip \
+            --dir "$root/raw"
+          unzip -q "$root/raw/trivia-de-preview-partial-20261026.zip" -d "$root/unpacked"
+          test "$(wc -l < "$root/unpacked/english/english-49958.jsonl")" -eq 49958
+      - name: Validate, write and read back every German XTRIVIA record
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/sd-preview/unpacked" "$RUNNER_TEMP/sd-preview/dist" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          sys.path.insert(0,"tools_local/trivia")
+          from build_de_pack import load_jsonl,validate_record
+          import pack_format
+          root,dest=map(Path,sys.argv[1:])
+          english=list(load_jsonl(root/"english/english-49958.jsonl"))
+          german=list(load_jsonl(root/"german/translated-german-partial.jsonl"))
+          approved=list(load_jsonl(root/"german/bulk-approved-500.jsonl"))
+          byid={x["id"]:x for x in english}
+          assert len(english)==49958 and len({x["id"] for x in english})==49958
+          assert len(german)>3000 and len({x["id"] for x in german})==len(german)
+          assert len(approved)==500 and all(x["reviewed"] is True for x in approved)
+          translations={}
+          for row in german:
+              assert row["id"] in byid
+              translations[row["id"]]=validate_record(byid[row["id"]],row,allow_draft=True)
+          records=[translations[x["id"]] for x in english if x["id"] in translations]
+          assert len(records)==len(german)
+          dest.mkdir(parents=True,exist_ok=True)
+          output=dest/"pack-de.dat"
+          pack_format.write(records,str(output),flags=pack_format.GERMAN_FLAG)
+          pack=pack_format.open_pack(str(output))
+          assert pack["flags"]==pack_format.GERMAN_FLAG and pack["count"]==len(records)
+          for i,want in enumerate(records):
+              got=pack_format.read_one(pack,i)
+              for k in ("q","a","alt","w","d","y"):
+                  assert got[k]==want[k],(i,k)
+          pack["f"].close()
+          coverage=json.loads((root/"german/coverage.json").read_text())
+          assert coverage["german_valid"]==len(records)
+          manifest={
+            "pack_format":"XTRIVIA v1","language":"de",
+            "records":len(records),"user_bulk_approved":500,
+            "machine_translated_unreviewed":len(records)-500,
+            "source_english_questions":49958,"is_complete":False,
+            "is_preview":True,"bytes":output.stat().st_size,
+            "sha256":hashlib.sha256(output.read_bytes()).hexdigest(),
+            "source_release":"https://github.com/0b-ivan/inx-4x-pro/releases/tag/trivia-de-preview-20261026"
+          }
+          (dest/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n")
+          print("GERMAN_PACK_VERIFIED "+json.dumps(manifest))
+          PY
+      - name: Publish the data-only prerelease, never firmware.bin
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/sd-preview/dist"
+          printf '%s\n' \
+            '# German Trivia SD Pack — EARLY ACCESS' \
+            '' \
+            'This is a partial German trivia SD-card pack. It is NOT firmware or an OTA update.' \
+            'Install at /trivia/pack-de.dat; the English /trivia/pack.dat is unchanged.' \
+            'Firmware version 1.16.11 does not automatically download this German pack.' \
+            'The German pack is valid XTRIVIA v1 with German language flag=1.' \
+            'Every translated record passed structural and font/display validation.' \
+            'Most machine-translated records are unreviewed and may contain content errors.' \
+            'Use the FLAG feature for mistakes; a complete 49,958-question translation is not yet available.' \
+            'The exact count and SHA-256 are in manifest.json.' \
+            'Original English and source history: https://github.com/0b-ivan/inx-4x-pro/releases/tag/trivia-de-preview-20261026' \
+            > "$d/README.md"
+          if gh release view trivia-de-pack --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Preview SD pack tag already exists. No overwrite performed."
+            exit 1
+          fi
+          gh release create trivia-de-pack "$d/pack-de.dat" "$d/manifest.json" "$d/README.md" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "German Trivia SD Pack (partial, early access)" \
+            --notes-file "$d/README.md" --prerelease --latest=false
+          echo "SD_PACK_RELEASE https://github.com/$GITHUB_REPOSITORY/releases/tag/trivia-de-pack"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivia-de-validated-partial-sdpack
+          path: ${{ runner.temp }}/sd-preview/dist/
+          if-no-files-found: ignore
+          retention-days: 14
