@@ -1,0 +1,169 @@
+# One-shot bounded translation experiment: 20 existing drafts + 80 new.
+# Does not create a release, modify firmware, or mark drafts as human-reviewed.
+name: German Trivia Editorial Batch 100
+
+on:
+  push:
+    branches:
+      - experiment/trivia-de-100-20261026
+    paths:
+      - .github/trivia-batch-100-trigger.txt
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: trivia-german-editorial-100
+  cancel-in-progress: false
+
+jobs:
+  translation:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    name: 80 new German drafts + independent GPT editorial review
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Offline QA before paid requests
+        run: python3 tools_local/trivia/test_de_pack.py
+
+      - name: Fetch verified English pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia-batch"
+          curl -fsSL --retry 3 --max-time 90 \
+            'https://github.com/ma-r-s/crossplay/releases/download/trivia-pack/pack.dat' \
+            -o "$RUNNER_TEMP/trivia-batch/pack.dat"
+          printf '%s  %s\n' \
+            'a17435136122ce1d2485d4c4c30e58206e6dffc88b819e0d4c646081b485f9cf' \
+            "$RUNNER_TEMP/trivia-batch/pack.dat" | sha256sum -c -
+          python3 tools_local/trivia/export_pack.py \
+            --pack "$RUNNER_TEMP/trivia-batch/pack.dat" \
+            --out "$RUNNER_TEMP/trivia-batch/source-en.jsonl"
+
+      - name: Restore previous 20 unapproved, independently edited questions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/trivia-batch"
+          gh run download 40303848778 --repo "$GITHUB_REPOSITORY" \
+            --name trivia-german-gpt54-editorial-unreviewed --dir .
+          test "$(wc -l < questions-de-editorial.jsonl)" -eq 20
+          test "$(wc -l < editorial-report.jsonl)" -eq 20
+          python3 "$GITHUB_WORKSPACE/tools_local/trivia/normalize_de_drafts.py" \
+            --src questions-de-editorial.jsonl --out prior-20.jsonl
+          cp prior-20.jsonl all-drafts.jsonl
+          python3 - <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path(os.environ['GITHUB_WORKSPACE']) / 'tools_local/trivia'))
+          from build_de_pack import source_hash, validate_record
+          sources = {r['id']: r for r in map(json.loads, Path('source-en.jsonl').read_text(encoding='utf-8').splitlines())}
+          rows = list(map(json.loads, Path('prior-20.jsonl').read_text(encoding='utf-8').splitlines()))
+          assert len(rows) == len({r['id'] for r in rows}) == 20
+          for r in rows:
+              assert r['reviewed'] is False
+              src = sources[r['id']]
+              assert source_hash(src) == r['source_hash']
+              validate_record(src, r, allow_draft=True)
+          print('20 source-verified, unapproved drafts restored')
+          PY
+
+      - name: Draft exactly 80 additional German translations
+        shell: bash
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+            echo "::error::OPENROUTER_API_KEY not configured"
+            exit 1
+          fi
+          python3 tools_local/trivia/translate_de_pack.py \
+            --src "$RUNNER_TEMP/trivia-batch/source-en.jsonl" \
+            --out "$RUNNER_TEMP/trivia-batch/all-drafts.jsonl" \
+            --model 'anthropic/claude-sonnet-4.6' \
+            --limit 80
+          test "$(wc -l < "$RUNNER_TEMP/trivia-batch/all-drafts.jsonl")" -eq 100
+
+      - name: Select only 80 new records for independent review
+        shell: bash
+        run: |
+          set -euo pipefail
+          tail -n 80 "$RUNNER_TEMP/trivia-batch/all-drafts.jsonl" \
+            > "$RUNNER_TEMP/trivia-batch/new-80.jsonl"
+          test "$(wc -l < "$RUNNER_TEMP/trivia-batch/new-80.jsonl")" -eq 80
+
+      - name: GPT-5.4 independently edits the new 80
+        shell: bash
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+            echo "::error::OPENROUTER_API_KEY not configured"
+            exit 1
+          fi
+          python3 tools_local/trivia/review_de_pack.py \
+            --src "$RUNNER_TEMP/trivia-batch/source-en.jsonl" \
+            --drafts "$RUNNER_TEMP/trivia-batch/new-80.jsonl" \
+            --out "$RUNNER_TEMP/trivia-batch/edited-80.jsonl" \
+            --report "$RUNNER_TEMP/trivia-batch/report-80.jsonl" \
+            --model 'openai/gpt-5.4' \
+            --limit 80
+
+      - name: Combine and validate 100 unapproved drafts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/trivia-batch"
+          cat prior-20.jsonl edited-80.jsonl > questions-de-editorial-100.jsonl
+          cat editorial-report.jsonl report-80.jsonl > editorial-report-100.jsonl
+          python3 - <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path(os.environ['GITHUB_WORKSPACE']) / 'tools_local/trivia'))
+          from build_de_pack import source_hash, validate_record
+          source = {r['id']: r for r in map(json.loads, Path('source-en.jsonl').read_text(encoding='utf-8').splitlines())}
+          rows = list(map(json.loads, Path('questions-de-editorial-100.jsonl').read_text(encoding='utf-8').splitlines()))
+          audit = list(map(json.loads, Path('editorial-report-100.jsonl').read_text(encoding='utf-8').splitlines()))
+          if len(rows) != 100 or len(audit) != 100:
+              raise SystemExit('Wrong number of records')
+          if len({r['id'] for r in rows}) != 100 or {r['id'] for r in rows} != {a['id'] for a in audit}:
+              raise SystemExit('Duplicate or mismatched audit IDs')
+          for row in rows:
+              original = source[row['id']]
+              if row.get('reviewed') is not False or row['source_hash'] != source_hash(original):
+                  raise SystemExit('Unapproved/source-integrity gate failed')
+              validate_record(original, row, allow_draft=True)
+          print('All 100 draft records validated. No questions have human approval.')
+          PY
+
+      - name: Save checkpoint and QA reports (no release)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivia-german-editorial-100-unapproved
+          path: |
+            ${{ runner.temp }}/trivia-batch/all-drafts.jsonl
+            ${{ runner.temp }}/trivia-batch/questions-de-editorial-100.jsonl
+            ${{ runner.temp }}/trivia-batch/editorial-report-100.jsonl
+            ${{ runner.temp }}/trivia-batch/new-80.jsonl
+            ${{ runner.temp }}/trivia-batch/edited-80.jsonl
+            ${{ runner.temp }}/trivia-batch/report-80.jsonl
+          if-no-files-found: ignore
+          retention-days: 14
