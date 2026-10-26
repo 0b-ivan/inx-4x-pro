@@ -93,24 +93,29 @@ void AwsChooser::begin(const AwsPack& pack, PackState& state, Rng& rng) {
   rng_ = &rng;
 }
 
-bool AwsChooser::next(uint32_t& index, const uint8_t domains, const bool missedOnly) {
+bool AwsChooser::next(uint32_t& index, const uint8_t domains, const bool missedOnly,
+                      const uint32_t avoidIndex) {
   if (!pack_ || !state_ || !rng_ || !pack_->count() || !(domains & kAwsAllDomains)) return false;
   const uint32_t count = pack_->count();
   const uint32_t start = rng_->below(count);
-  // In regular mode prefer never-seen questions. Review mode is explicitly
-  // restricted to missed questions regardless of the seen bit.
+  // In normal mode, prefer unseen. In both modes, avoid serving the immediately
+  // preceding question when another eligible question exists. With only one
+  // match, the second pass permits it instead of leaving the learner stuck.
   for (int pass = 0; pass < (missedOnly ? 1 : 2); ++pass) {
-    for (uint32_t step = 0; step < count; ++step) {
-      const uint32_t i = (start + step) % count;
-      const uint8_t flags = state_->flags(i);
-      if (flags & kFlagged) continue;
-      if (missedOnly && !(flags & kAwsMissed)) continue;
-      if (!missedOnly && pass == 0 && (flags & kSeen)) continue;
-      uint8_t domain = 0;
-      if (!pack_->domainAt(i, domain)) continue;
-      if ((domains & (1u << (domain - 1))) == 0) continue;
-      index = i;
-      return true;
+    for (int allowPrevious = 0; allowPrevious < 2; ++allowPrevious) {
+      for (uint32_t step = 0; step < count; ++step) {
+        const uint32_t i = (start + step) % count;
+        if (!allowPrevious && i == avoidIndex) continue;
+        const uint8_t flags = state_->flags(i);
+        if (flags & kFlagged) continue;
+        if (missedOnly && !(flags & kAwsMissed)) continue;
+        if (!missedOnly && pass == 0 && (flags & kSeen)) continue;
+        uint8_t domain = 0;
+        if (!pack_->domainAt(i, domain)) continue;
+        if ((domains & (1u << (domain - 1))) == 0) continue;
+        index = i;
+        return true;
+      }
     }
   }
   return false;
