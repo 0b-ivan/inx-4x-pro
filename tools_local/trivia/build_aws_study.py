@@ -15,7 +15,7 @@ import struct
 import tempfile
 
 MAGIC = b"XAWSDEV\0"
-HEADER = struct.Struct("<8sHBBI")
+HEADER = struct.Struct("<8sHBBII")  # content fingerprint prevents stale state reuse
 MAX_RECORD = 12 * 1024
 DOMAIN = re.compile(r"^Domain ([1-6]):\s+\S")
 
@@ -80,6 +80,7 @@ def build(src, out=None):
     for rec in records:
         indices.append(indices[-1] + len(rec))
     expected = HEADER.size + 4 * len(indices) + indices[-1]
+    fingerprint = int.from_bytes(hashlib.sha256(b"".join(records)).digest()[:4], "little")
     if out is not None:
         dst = Path(out).expanduser().resolve()
         _require(root not in dst.parents and dst != root,
@@ -88,7 +89,7 @@ def build(src, out=None):
         fd, tmp = tempfile.mkstemp(prefix=".aws-pack-", dir=str(dst.parent))
         try:
             with os.fdopen(fd, "wb") as stream:
-                stream.write(HEADER.pack(MAGIC, 1, 0, 0, len(records)))
+                stream.write(HEADER.pack(MAGIC, 1, 0, 0, len(records), fingerprint))
                 stream.write(struct.pack(f"<{len(indices)}I", *indices))
                 for rec in records:
                     stream.write(rec)
