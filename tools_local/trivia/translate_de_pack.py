@@ -88,7 +88,7 @@ SYSTEM = (
 )
 
 
-def translate_one(item, model, api_key, timeout=100):
+def translate_one(item, model, api_key, timeout=100, extra_instruction=""):
     user = {k: item.get(k, [] if k in ("alt", "w") else "")
             for k in ("q", "a", "alt", "w")}
     request = {
@@ -97,7 +97,7 @@ def translate_one(item, model, api_key, timeout=100):
         "max_tokens": 2048,
         "response_format": TRANSLATION_RESPONSE_FORMAT,
         "provider": {"require_parameters": True},
-        "messages": [{"role": "system", "content": SYSTEM},
+        "messages": [{"role": "system", "content": SYSTEM + ("\n" + extra_instruction if extra_instruction else "")},
                      {"role": "user", "content": json.dumps(user, ensure_ascii=False)}],
     }
     data = json.dumps(request, ensure_ascii=False).encode("utf-8")
