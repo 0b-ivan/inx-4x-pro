@@ -50,6 +50,7 @@ PY
 
 # Python reference writer, translation quality gates and binary round-trip.
 python3 "$TOOLS/test_de_pack.py"
+python3 test_de_ota_contract.py
 
 # AWS binary format, exact multi-select grading, domain filters and pagination.
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC \
