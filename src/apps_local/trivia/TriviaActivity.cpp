@@ -34,6 +34,10 @@ constexpr const char* kPackUrl = "https://github.com/ma-r-s/crossplay/releases/d
 // deleted on exit, so leaving Trivia and coming back silently put a player who
 // had chosen Level 4 back on "Any" with nothing on screen to say so.
 constexpr const char* kPrefsPath = "/trivia/prefs";
+constexpr const char* kAwsPackPath = "/trivia/aws/pack.dat";
+constexpr const char* kAwsStatePath = "/trivia/aws/pack.state";
+constexpr const char* kAwsPrefsPath = "/trivia/aws/prefs";
+constexpr uint32_t kAwsPageCharacters = 260;
 
 // A ByteSource over a HalFile. Every read seeks first: an index entry and the
 // record it points at are in different places, so sequential reads are the
@@ -71,6 +75,10 @@ HalFile g_packFile;
 HalFile g_stateFile;
 FileSource g_packSource;
 FileSource g_stateSource;
+HalFile g_awsPackFile;
+HalFile g_awsStateFile;
+FileSource g_awsPackSource;
+FileSource g_awsStateSource;
 
 }  // namespace
 
@@ -141,6 +149,58 @@ bool TriviaActivity::openPack() {
   return false;
 }
 
+bool TriviaActivity::openAwsPack() {
+  g_awsPackFile.close();
+  g_awsStateFile.close();
+  awsInstalled_ = false;
+  if (!Storage.openFileForRead("TRIVIA", kAwsPackPath, g_awsPackFile)) return false;
+  g_awsPackSource.attach(g_awsPackFile);
+  if (!awsPack_.open(g_awsPackSource)) {
+    g_awsPackFile.close();
+    LOG_ERR("TRIVIA", "Invalid AWS study pack");
+    return false;
+  }
+  g_awsStateFile = Storage.open(kAwsStatePath, O_RDWR);
+  if (!g_awsStateFile.isOpen() ||
+      static_cast<uint32_t>(g_awsStateFile.size()) != awsPack_.count()) {
+    g_awsStateFile.close();
+    HalFile fresh;
+    if (!Storage.openFileForWrite("TRIVIA", kAwsStatePath, fresh)) return false;
+    uint8_t zeros[256] = {};
+    for (uint32_t written = 0; written < awsPack_.count();) {
+      const uint32_t remaining = awsPack_.count() - written;
+      const uint32_t chunk = remaining < sizeof(zeros) ? remaining : sizeof(zeros);
+      if (fresh.write(zeros, chunk) != chunk) {
+        fresh.close();
+        return false;
+      }
+      written += chunk;
+    }
+    fresh.flush();
+    fresh.close();
+    g_awsStateFile = Storage.open(kAwsStatePath, O_RDWR);
+  }
+  if (!g_awsStateFile.isOpen()) return false;
+  g_awsStateSource.attach(g_awsStateFile);
+  if (!awsState_.open(g_awsStateSource, awsPack_.count())) return false;
+  HalFile prefs = Storage.open(kAwsPrefsPath, O_RDONLY);
+  awsDomains_ = trivia::kAwsAllDomains;
+  if (prefs.isOpen() && prefs.size() == 1) {
+    uint8_t mask = 0;
+    if (prefs.read(&mask, 1) == 1 && !(mask & ~trivia::kAwsAllDomains))
+      awsDomains_ = mask;
+  }
+  awsChooser_.begin(awsPack_, awsState_, rng_);
+  awsInstalled_ = true;
+  return true;
+}
+
+void TriviaActivity::saveAwsDomains() const {
+  HalFile prefs;
+  if (!Storage.openFileForWrite("TRIVIA", kAwsPrefsPath, prefs)) return;
+  prefs.write(&awsDomains_, 1);
+}
+
 namespace {
 
 int loadDifficulty() {
@@ -169,9 +229,13 @@ void TriviaActivity::onEnter() {
   rng_.seed(static_cast<uint32_t>(millis()) | 1u);
   difficulty_ = loadDifficulty();
 
-  if (openPack()) {
+  const bool haveTrivia = openPack();
+  const bool haveAws = openAwsPack();
+  if (haveTrivia || haveAws) {
     view_ = View::Menu;
-    LOG_INF("TRIVIA", "Pack open: %u questions", static_cast<unsigned>(pack_.count()));
+    LOG_INF("TRIVIA", "Pack open: trivia=%u aws=%u",
+            static_cast<unsigned>(pack_.count()),
+            static_cast<unsigned>(awsPack_.count()));
   } else {
     showNotice("NO QUESTIONS",
                I18N.getLanguage() == Language::DE
@@ -188,6 +252,8 @@ void TriviaActivity::onEnter() {
 void TriviaActivity::onExit() {
   g_packFile.close();
   g_stateFile.close();
+  g_awsPackFile.close();
+  g_awsStateFile.close();
   Activity::onExit();
 }
 
