@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Offline regression tests for validated German question packs (no API calls)."""
 import json
+import io
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import build_de_pack
@@ -136,6 +138,30 @@ class GermanTriviaPackTests(unittest.TestCase):
         source = [{"id": str(i), "a": "SAME"} for i in range(5)]
         self.assertEqual(len(translate_de_pack.pilot_candidates(source, 4)), 4)
         self.assertEqual(translate_de_pack.pilot_candidates(source, 2, {"0","1","2","3","4"}), [])
+
+    def test_openrouter_requests_strict_structured_json(self):
+        supplied = {k: self.trans[k] for k in ("q", "a", "alt", "w")}
+        fake_response = {"choices": [{"message": {"content":
+                         json.dumps(supplied, ensure_ascii=False)}}]}
+        captured = []
+        def fake_open(request, timeout):
+            captured.append(json.loads(request.data.decode("utf-8")))
+            return io.BytesIO(json.dumps(fake_response, ensure_ascii=False).encode("utf-8"))
+
+        with patch.object(translate_de_pack.urllib.request, "urlopen", fake_open):
+            returned = translate_de_pack.translate_one(
+                self.original, "anthropic/claude-sonnet-4.6", "not-a-real-key")
+        self.assertEqual(returned, supplied)
+        self.assertEqual(len(captured), 1)
+        body = captured[0]
+        self.assertEqual(body["model"], "anthropic/claude-sonnet-4.6")
+        self.assertTrue(body["provider"]["require_parameters"])
+        self.assertEqual(body["response_format"]["type"], "json_schema")
+        schema = body["response_format"]["json_schema"]
+        self.assertTrue(schema["strict"])
+        self.assertEqual(set(schema["schema"]["required"]), {"q", "a", "alt", "w"})
+        self.assertFalse(schema["schema"]["additionalProperties"])
+        self.assertGreaterEqual(body["max_tokens"], 1024)
 
     def test_draft_only_with_explicit_override(self):
         self.trans["reviewed"] = False
