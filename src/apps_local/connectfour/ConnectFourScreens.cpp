@@ -199,6 +199,8 @@ void buildMenu(toybox::Screen& screen, const MenuModel& model) {
   rows[static_cast<int>(MenuRow::PlayNearby)].label = "PLAY NEARBY";
   rows[static_cast<int>(MenuRow::PlayNearby)].subtitle = model.nearbyName;
   rows[static_cast<int>(MenuRow::PlayNearby)].actionValue = static_cast<int16_t>(MenuRow::PlayNearby);
+  rows[static_cast<int>(MenuRow::PlayBrowser)].label = "PLAY BROWSER";
+  rows[static_cast<int>(MenuRow::PlayBrowser)].actionValue = static_cast<int16_t>(MenuRow::PlayBrowser);
   rows[static_cast<int>(MenuRow::HowTo)].label = "HOW TO PLAY";
   rows[static_cast<int>(MenuRow::HowTo)].actionValue = static_cast<int16_t>(MenuRow::HowTo);
 

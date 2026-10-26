@@ -138,6 +138,12 @@ class Round final {
         game_.turn != connectfour::kLight || !connectfour::drop(game_, column)) return false;
     ++revision_; return true;
   }
+  bool deviceRematch() {
+    if (!joined_ || revision_ == std::numeric_limits<uint32_t>::max() || !connectfour::over(game_)) return false;
+    connectfour::start(game_);
+    ++revision_;
+    return true;
+  }
   bool disconnected(uint8_t client, RandomWord entropy) {
     return seat_.disconnect(client, entropy);
   }
