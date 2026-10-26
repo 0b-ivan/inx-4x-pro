@@ -521,12 +521,27 @@ void TriviaActivity::deal() {
   requestUpdate();
 }
 
+uint32_t TriviaActivity::awsMissedCount() const {
+  uint32_t count = 0;
+  for (uint32_t i = 0; i < awsState_.count(); ++i) {
+    if (!(awsState_.flags(i) & trivia::kAwsMissed)) continue;
+    uint8_t domain = 0;
+    if (awsPack_.domainAt(i, domain) &&
+        (awsDomains_ & (1u << (domain - 1)))) ++count;
+  }
+  return count;
+}
+
 void TriviaActivity::awsDeal() {
   uint32_t index = 0;
   awsHasQuestion_ = false;
   if (!awsChooser_.next(index, awsDomains_, awsReviewMissed_,
                         awsHaveLast_ ? awsCurrent_ : UINT32_MAX) ||
       !awsPack_.read(index, awsQuestion_)) {
+    if (awsReviewMissed_ && awsScore_.asked > 0) {
+      go(View::AwsSummary);
+      return;
+    }
     showNotice("NO AWS QUESTIONS",
                awsReviewMissed_ ? "No previously missed questions in your enabled domains."
                                 : "No matching questions. Enable more AWS domains.",
@@ -679,6 +694,11 @@ void TriviaActivity::routeAction(const int action, const int value) {
       break;
     case triviaui::ActionAwsBackToMenu:
       go(View::AwsMenu);
+      break;
+    case triviaui::ActionAwsFinish:
+      if (awsInstalled_ && (view_ == View::AwsQuestion ||
+                            view_ == View::AwsExplanation ||
+                            view_ == View::AwsOption)) go(View::AwsSummary);
       break;
     case triviaui::ActionAwsDomains:
       go(View::AwsDomains);
@@ -860,6 +880,18 @@ void TriviaActivity::render(RenderLock&&) {
       model.seen = awsState_.seenCount();
       model.enabled = awsDomains_;
       triviaui::buildAwsMenu(screen, model);
+      break;
+    }
+    case View::AwsSummary: {
+      triviaui::AwsSummaryModel model;
+      model.german = I18N.getLanguage() == Language::DE;
+      model.asked = awsScore_.asked;
+      model.right = awsScore_.right;
+      model.seen = awsState_.seenCount();
+      model.total = awsPack_.count();
+      model.missed = awsMissedCount();
+      model.review = awsReviewMissed_;
+      triviaui::buildAwsSummary(screen, model);
       break;
     }
     case View::AwsDomains: {

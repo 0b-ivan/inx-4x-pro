@@ -31,7 +31,7 @@ class TriviaActivity final : public Activity {
  private:
   enum class View : uint8_t {
     Menu, Quizmaster, Solo, AwsMenu, AwsDomains, AwsQuestion, AwsOption,
-    AwsExplanation, Notice
+    AwsExplanation, AwsSummary, Notice
   };
   // Which mode the HIDDEN notice came from. deal() decides whether it needs a
   // multiple-choice question by reading view_, so the notice has to put the
@@ -44,6 +44,7 @@ class TriviaActivity final : public Activity {
   void awsSubmit();
   void awsNextPage();
   void awsPreviousPage();
+  uint32_t awsMissedCount() const;
   const char* awsPageSource() const;
   void awsBuildPage();
   void saveAwsDomains() const;

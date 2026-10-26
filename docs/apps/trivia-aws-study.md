@@ -49,6 +49,9 @@ remain private; they are never compiled into the publicly distributed firmware.
   ALL ON and DONE are available at the bottom.
 - **REVIEW MISSED**: revisit questions previously answered incorrectly. A correct
   retry removes the question from the missed queue while retaining its seen state.
+- **END** opens a session summary with score, accuracy, seen questions and
+  still-missed questions in enabled domains. Finishing the last missed retry
+  automatically shows a completed-review summary.
 
 Answer choices are shown individually to avoid truncating the often very long
 exam options. The question, individual answers and explanation are paginated

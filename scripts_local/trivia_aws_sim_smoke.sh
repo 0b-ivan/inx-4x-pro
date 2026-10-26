@@ -44,12 +44,13 @@ script+=";13600:TAP:370,750,110"  # first -> second answer
 script+=";15400:TAP:80,750,110"   # mark B (wrong)
 script+=";17200:TAP:390,750,110"  # submit wrong
 script+=";19000:TAP:75,750,110"   # end -> AWS menu
-script+=";20800:TAP:240,395,110"  # Review Missed
+script+=";20800:TAP:350,750,110"  # Review Missed from summary
 script+=";22600:TAP:370,750,110"  # question -> first answer
 script+=";24400:TAP:80,750,110"   # mark A (correct)
 script+=";26200:TAP:370,750,110"  # next -> B
 script+=";28000:TAP:390,750,110"  # submit correct
-script+=";30800:QUIT"
+script+=";30100:TAP:350,750,110"  # completed review summary
+script+=";32500:QUIT"
 
 shots="7500:.pio/aws-study-ui-smoke/main.bmp"
 shots+=";9600:.pio/aws-study-ui-smoke/aws-menu.bmp"
@@ -59,13 +60,14 @@ shots+=";18500:.pio/aws-study-ui-smoke/wrong-review.bmp"
 shots+=";20300:.pio/aws-study-ui-smoke/retry-menu.bmp"
 shots+=";22100:.pio/aws-study-ui-smoke/retry-question.bmp"
 shots+=";29600:.pio/aws-study-ui-smoke/correct-review.bmp"
+shots+=";31600:.pio/aws-study-ui-smoke/completed.bmp"
 
 if ! env CROSSPLAY_AUTOSTART=TRIVIA CROSSPOINT_SIM_SD="$tmp/sd" \
   CROSSPOINT_SIM_INPUT_SCRIPT="$script" \
   CROSSPOINT_SIM_SCREENSHOTS="$shots" \
   LIBGL_ALWAYS_SOFTWARE=1 \
   xvfb-run -a -s '-screen 0 1280x1024x24' \
-  timeout 39s "$bin" >"$log" 2>&1; then
+  timeout 41s "$bin" >"$log" 2>&1; then
   echo "FAIL: AWS Trivia simulator flow"
   tail -100 "$log"
   exit 1
@@ -76,7 +78,7 @@ from pathlib import Path
 import hashlib, struct, sys
 root, shots, log = map(Path, sys.argv[1:])
 names = ["main", "aws-menu", "question", "option-b", "wrong-review",
-         "retry-menu", "retry-question", "correct-review"]
+         "retry-menu", "retry-question", "correct-review", "completed"]
 images = []
 for name in names:
     path = shots / f"{name}.bmp"
@@ -88,6 +90,7 @@ for name in names:
 assert len(set(images)) >= 5, "AWS screen flow did not visit expected different views"
 assert images[1] != images[2], "Study button did not open the question screen"
 assert images[4] != images[7], "Incorrect and corrected review did not change"
+assert images[7] != images[8], "Completed retry did not open summary screen"
 state = (root / "pack.state").read_bytes()
 assert state == b"\x01", f"Review Missed did not clear MISSED flag: {state.hex()}"
 assert len((root / "pack.state.id").read_bytes()) == 4, "no pack identity stamp"

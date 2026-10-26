@@ -36,6 +36,17 @@ struct AwsPageModel {
   bool correctAnswer = false;
 };
 
+struct AwsSummaryModel {
+  bool german = false;
+  int asked = 0;
+  int right = 0;
+  uint32_t missed = 0;
+  uint32_t seen = 0;
+  uint32_t total = 0;
+  bool review = false;
+};
+
+void buildAwsSummary(toybox::Screen& screen, const AwsSummaryModel& model);
 void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model);
 void buildAwsDomains(toybox::Screen& screen, const AwsDomainsModel& model);
 void buildAwsQuestion(toybox::Screen& screen, const AwsPageModel& model);

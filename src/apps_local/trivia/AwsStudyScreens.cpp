@@ -100,6 +100,40 @@ void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* st
 
 }  // namespace
 
+void buildAwsSummary(toybox::Screen& screen, const AwsSummaryModel& model) {
+  chrome(screen, model.german ? "AWS ERGEBNIS" : "AWS RESULTS");
+  const fui::Rect body = screen.body();
+  const int16_t x = static_cast<int16_t>(body.x + kMargin);
+  const int16_t w = static_cast<int16_t>(body.width - 2 * kMargin);
+  char score[64];
+  std::snprintf(score, sizeof(score),
+                model.german ? "%d VON %d RICHTIG" : "%d OF %d CORRECT",
+                model.right, model.asked);
+  label(screen, {x, static_cast<int16_t>(body.y + 74), w, 60}, score);
+  char percent[24];
+  const int accuracy = model.asked ? 100 * model.right / model.asked : 0;
+  std::snprintf(percent, sizeof(percent), "%d%%", accuracy);
+  label(screen, {x, static_cast<int16_t>(body.y + 170), w, 64}, percent);
+  char progress[72];
+  std::snprintf(progress, sizeof(progress),
+                model.german ? "%u / %u GESEHEN" : "%u / %u SEEN",
+                static_cast<unsigned>(model.seen), static_cast<unsigned>(model.total));
+  label(screen, {x, static_cast<int16_t>(body.y + 295), w, 48}, progress);
+  char missed[72];
+  std::snprintf(missed, sizeof(missed),
+                model.german ? "%u FEHLERFRAGEN OFFEN" : "%u MISSED QUESTIONS",
+                static_cast<unsigned>(model.missed));
+  label(screen, {x, static_cast<int16_t>(body.y + 365), w, 48}, missed);
+  if (model.review && model.missed == 0) {
+    label(screen, {x, static_cast<int16_t>(body.y + 444), w, 44},
+          model.german ? "FEHLERTRAINING FERTIG" : "REVIEW COMPLETED");
+  }
+  footerPair(screen, model.german ? "MENUE" : "MENU", ActionAwsBackToMenu,
+             model.missed != 0 ? (model.german ? "FEHLER UEBEN" : "REVIEW MISSED")
+                                : (model.german ? "NEU STARTEN" : "STUDY AGAIN"),
+             model.missed != 0 ? ActionAwsReview : ActionAwsBegin);
+}
+
 void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model) {
   chrome(screen, model.german ? "AWS LERNEN" : "AWS DEVOPS");
   const fui::Rect body = screen.body();
@@ -158,7 +192,7 @@ void buildAwsQuestion(toybox::Screen& screen, const AwsPageModel& model) {
                                                       : "DOMAIN %u | READ THE SCENARIO",
                 static_cast<unsigned>(model.domain));
   frameText(screen, model, status);
-  footerPair(screen, model.german ? "ENDE" : "EXIT", ActionAwsBackToMenu,
+  footerPair(screen, model.german ? "ENDE" : "EXIT", ActionAwsFinish,
              model.more ? (model.german ? "MEHR TEXT" : "MORE TEXT")
                         : (model.german ? "ANTWORTEN" : "ANSWERS"), ActionAwsPageNext);
 }
@@ -206,7 +240,7 @@ void buildAwsExplanation(toybox::Screen& screen, const AwsPageModel& model) {
                                     : (model.german ? "FALSCH" : "WRONG"),
                 model.right, model.asked, chosen, key);
   frameText(screen, model, status);
-  footerPair(screen, model.german ? "ENDE" : "END", ActionAwsBackToMenu,
+  footerPair(screen, model.german ? "ENDE" : "END", ActionAwsFinish,
              model.more ? (model.german ? "MEHR TEXT" : "MORE TEXT")
                         : (model.german ? "NAECHSTE" : "NEXT QUESTION"), ActionAwsPageNext);
 }

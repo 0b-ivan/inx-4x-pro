@@ -109,7 +109,7 @@ void testAwsQuestion() {
     assert(out.draw.contains("AWS FRAGE"));
     assert(out.draw.contains(model.text));
     assert(out.draw.contains(more ? "MEHR TEXT" : "ANTWORTEN"));
-    assert(out.tap(80, 750).action == triviaui::ActionAwsBackToMenu);
+    assert(out.tap(80, 750).action == triviaui::ActionAwsFinish);
     assert(out.tap(350, 750).action == triviaui::ActionAwsPageNext);
   }
 }
@@ -171,13 +171,34 @@ void testAwsExplanation() {
       assert(out.draw.contains(m.text));
       assert(out.draw.contains(more ? (german ? "MEHR TEXT" : "MORE TEXT")
                                     : (german ? "NAECHSTE" : "NEXT QUESTION")));
-      assert(out.tap(90, 750).action == triviaui::ActionAwsBackToMenu);
+      assert(out.tap(90, 750).action == triviaui::ActionAwsFinish);
       assert(out.tap(350, 750).action == triviaui::ActionAwsPageNext);
     }
   }
 }
 
+void testAwsSummary() {
+  for (bool german : {false, true}) {
+    triviaui::AwsSummaryModel m{};
+    m.german = german;
+    m.asked = 10; m.right = 7; m.seen = 42; m.total = 150; m.missed = 3;
+    Rendered out;
+    render(out, m, &triviaui::buildAwsSummary);
+    assert(out.draw.contains(german ? "7 VON 10 RICHTIG" : "7 OF 10 CORRECT"));
+    assert(out.draw.contains("70%"));
+    assert(out.draw.contains(german ? "3 FEHLERFRAGEN OFFEN" : "3 MISSED QUESTIONS"));
+    assert(out.tap(80, 750).action == triviaui::ActionAwsBackToMenu);
+    assert(out.tap(350, 750).action == triviaui::ActionAwsReview);
+    m.missed = 0; m.review = true;
+    Rendered done;
+    render(done, m, &triviaui::buildAwsSummary);
+    assert(done.draw.contains(german ? "FEHLERTRAINING FERTIG" : "REVIEW COMPLETED"));
+    assert(done.tap(350, 750).action == triviaui::ActionAwsBegin);
+  }
+}
+
 int main() {
+  testAwsSummary();
   testAwsMenu();
   testAwsDomains();
   testAwsQuestion();
