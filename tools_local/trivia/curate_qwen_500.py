@@ -114,7 +114,7 @@ EDITS = {
   "e4ec556b1977a1eb": {
     "q": "Am 3. Dezember 1973 näherte sich Pioneer 10 den Wolkenobergrenzen dieses Planeten auf 81.000 Meilen. Welcher Planet war es?",
     "reason": "Deutliche Pronomenbezüge; 'mostly liquid' aus alter Quellenfrage separat zu prüfen.",
-    "needs_fact_check": true
+    "needs_fact_check": True
   }
 }
 
