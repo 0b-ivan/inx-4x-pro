@@ -343,7 +343,8 @@ bool Server::startHotspot() {
   const IPAddress address = WiFi.softAPIP();
   ssid_ = kApSsid;
   ip_ = address.toString().c_str();
-  url_ = std::string("http://") + kMdnsHost + ".local" + kGamePath;
+  // QR links use the numeric address because captive-network browsers may not resolve mDNS.
+  url_ = std::string("http://") + ip_ + kGamePath;
 
   dns_.setErrorReplyCode(DNSReplyCode::NoError);
   dns_.start(kDnsPort, "*", address);
@@ -359,7 +360,8 @@ bool Server::startExistingWifi() {
 
   ssid_ = WiFi.SSID().c_str();
   ip_ = WiFi.localIP().toString().c_str();
-  url_ = std::string("http://") + kMdnsHost + ".local" + kGamePath;
+  // QR links use the numeric address because captive-network browsers may not resolve mDNS.
+  url_ = std::string("http://") + ip_ + kGamePath;
   return true;
 }
 
