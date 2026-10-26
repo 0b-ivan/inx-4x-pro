@@ -11,10 +11,13 @@ same-session rematch.
 ## Transport boundary
 
 HTTP serves `/battleship` on port 80; WebSocket uses port 81. The page obtains a
-128-bit random session capability through a same-origin, uncached GET to
+128-bit random bootstrap capability through a same-origin, uncached GET to
 `/battleship/session`. That endpoint has no CORS allowance. The page is not
 frameable. This is local-session/CSRF protection, not account authentication
-or encrypted transport; the existing hotspot remains open.
+or encrypted transport. Each new hotspot session now generates a random
+12-character WPA2 password, displayed on the X4 and encoded in the Wi-Fi QR
+code. The X4 still serves plain HTTP and WebSocket: do not expose these
+endpoints to the public Internet.
 
 The first accepted profile binds the browser seat to that WebSocket client.
 Other clients receive only the public status DTO and cannot issue commands.
@@ -59,11 +62,15 @@ Only these bounded JSON tuples are accepted (token below abbreviated):
 - Rematch: accepted only after game over. It resets both fleets and all shot
   state while keeping the same browser owner and player profile. Both players
   may again place their new fleets in parallel.
-- Resume: requires the current session capability, matching revision and the
-  separate resume capability. Only a previously confirmed browser fleet is
-  resumable; unfinished placement is intentionally discarded.
-- Revision starts at zero and advances once per accepted application action.
-  Stale/duplicate revisions and wrong-phase commands are refused.
+- Resume: requires the current bootstrap capability and the separate
+  128-bit resume capability, but permits an older revision. A lost action
+  acknowledgement must not prevent rejoining: the device returns its current
+  private placement view and revision to resynchronize the browser. Only a
+  previously confirmed browser fleet is resumable; unfinished placement is
+  intentionally discarded on reconnect.
+- Revision starts at zero and advances once per accepted mutating action.
+  Stale/duplicate revisions and wrong-phase mutations are refused; an
+  authenticated read-only resume is the deliberate exception.
 - Maximum application command is 128 bytes. Parsing and DTO serialization have
   no per-command heap allocation. Commands are limited to one per 100 ms.
   Unknown commands, extra/missing values, negative/fractional/coerced integers
@@ -74,6 +81,19 @@ Only these bounded JSON tuples are accepted (token below abbreviated):
 passes a typed command to the activity, which owns `BrowserPlayer` and the game.
 The activity protects game changes against rendering with `RenderLock`. The
 private command response buffer is a fixed 256-byte server member.
+
+## Local device-player API
+
+The public bootstrap capability is **not** an authorization credential for
+`/player/state` or `/player/action`. Those endpoints additionally require the
+current 128-bit owner/resume capability and a currently bound browser seat.
+The browser unlocks X4 player-profile management only after the browser player
+has selected **USE PLAYER** and its WebSocket seat was accepted. This prevents
+other clients that only retrieved `/battleship/session` from enumerating
+registered X4 player names or changing player/PIN state. The account UI is
+still local-only and follows a first-claim seat model; it does not provide
+physical confirmation or end-to-end encryption. Do not expose it on a
+public/untrusted WLAN.
 
 ## Responses and secrecy
 
@@ -124,7 +144,8 @@ disabled hardware-network backend.
 On hardware:
 
 1. Games → Battleship → PLAY NEARBY → BROWSER → HOTSPOT. Join
-   `CrossPlay-Battleship` and open the QR URL or displayed IP URL.
+   `CrossPlay-Battleship` using the WPA2 QR/password shown on the X4, then
+   open the QR URL or displayed IP URL.
 2. Choose the browser profile. Verify that the browser fleet controls appear
    only after the profile was accepted and that the X4 can immediately start
    placing its own fleet.
