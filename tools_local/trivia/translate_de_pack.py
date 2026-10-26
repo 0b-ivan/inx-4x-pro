@@ -17,6 +17,28 @@ from pathlib import Path
 from build_de_pack import TranslationError, load_jsonl, source_hash, validate_record
 
 API = "https://openrouter.ai/api/v1/chat/completions"
+# OpenRouter supports a native strict JSON schema for Claude Sonnet 4.6.
+# Constrained decoding prevents malformed JSON from wasting paid retries.
+TRANSLATION_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "translated_trivia_question",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "q": {"type": "string", "description": "Complete translated German question"},
+                "a": {"type": "string", "description": "Correct answer in German"},
+                "alt": {"type": "array", "items": {"type": "string"},
+                        "description": "Accepted alternative answers in source order"},
+                "w": {"type": "array", "items": {"type": "string"},
+                      "description": "Incorrect options in source order"},
+            },
+            "required": ["q", "a", "alt", "w"],
+            "additionalProperties": False,
+        },
+    },
+}
 SYSTEM = (
     "You are a meticulous German localization editor for a factual trivia game. "
     "Translate the complete English trivia record into idiomatic, concise German. "
@@ -41,9 +63,15 @@ SYSTEM = (
 def translate_one(item, model, api_key, timeout=100):
     user = {k: item.get(k, [] if k in ("alt", "w") else "")
             for k in ("q", "a", "alt", "w")}
-    request = {"model": model, "temperature": 0,
-               "messages": [{"role": "system", "content": SYSTEM},
-                            {"role": "user", "content": json.dumps(user, ensure_ascii=False)}]}
+    request = {
+        "model": model,
+        "temperature": 0,
+        "max_tokens": 2048,
+        "response_format": TRANSLATION_RESPONSE_FORMAT,
+        "provider": {"require_parameters": True},
+        "messages": [{"role": "system", "content": SYSTEM},
+                     {"role": "user", "content": json.dumps(user, ensure_ascii=False)}],
+    }
     data = json.dumps(request, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
         API, data=data,
@@ -60,7 +88,10 @@ def translate_one(item, model, api_key, timeout=100):
     raw = raw.strip()
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    return json.loads(raw)
+    translated = json.loads(raw)
+    if not isinstance(translated, dict) or set(translated) != {"q", "a", "alt", "w"}:
+        raise TranslationError("Model response violates the expected JSON schema")
+    return translated
 
 
 
