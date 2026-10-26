@@ -377,8 +377,8 @@
           document.getElementById('playerMessage').textContent='SELECT YOUR BROWSER PLAYER FIRST';
           return {ok:false};
         }
-        const token = await pxToken();
-        const body = new URLSearchParams({token, owner:resumeToken, action, ...fields});
+        const sessionToken = await pxToken();
+        const body = new URLSearchParams({token:sessionToken, owner:resumeToken, action, ...fields});
         const response = await fetch('/player/action', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body});
         const data = await response.json();
         pxRender(data);
