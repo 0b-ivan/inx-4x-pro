@@ -48,6 +48,7 @@ std::vector<uint8_t> pack(const std::vector<std::vector<uint8_t>>& records) {
   std::vector<uint8_t> out(kAwsMagic, kAwsMagic + sizeof(kAwsMagic));
   out.push_back(1); out.push_back(0); out.push_back(0); out.push_back(0);
   put32(out, static_cast<uint32_t>(records.size()));
+  put32(out, 0x1234abcd);  // synthetic fixture content fingerprint
   uint32_t total = 0;
   for (const auto& rec : records) {
     put32(out, total);
@@ -63,6 +64,7 @@ void checkGoodPack() {
   AwsPack reader;
   assert(reader.open(content));
   assert(reader.count() == 3);
+  assert(reader.fingerprint() == 0x1234abcdu);
   uint8_t domain = 0;
   assert(reader.domainAt(1, domain) && domain == 3);
   AwsQuestion question;
@@ -108,7 +110,7 @@ void checkBadPacks() {
     AwsPack reader; assert(!reader.open(src));
   }
   {
-    auto data = good; data[16] = 255; // corrupt first offset
+    auto data = good; data[20] = 255; // corrupt first offset
     MemorySource src(std::move(data)); AwsPack reader;
     assert(reader.open(src)); AwsQuestion q; assert(!reader.read(0, q));
   }
