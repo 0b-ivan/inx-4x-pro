@@ -50,3 +50,6 @@ PY
 
 # Python reference writer, translation quality gates and binary round-trip.
 python3 "$TOOLS/test_de_pack.py"
+
+# Local-only Udemy study question importer: fixtures contain no purchased content.
+python3 "$TOOLS/test_import_udemy_practice.py"
