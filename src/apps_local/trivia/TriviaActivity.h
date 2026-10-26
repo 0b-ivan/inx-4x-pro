@@ -11,6 +11,8 @@
 #include "../../activities/Activity.h"
 #include "../ui/ToyboxScreen.h"
 #include "TriviaCore.h"
+#include "AwsStudyPack.h"
+#include "AwsStudyScreens.h"
 #include "TriviaPackLocale.h"
 #include "TriviaScreens.h"
 
@@ -27,13 +29,24 @@ class TriviaActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  enum class View : uint8_t { Menu, Quizmaster, Solo, Notice };
+  enum class View : uint8_t {
+    Menu, Quizmaster, Solo, AwsMenu, AwsDomains, AwsQuestion, AwsOption,
+    AwsExplanation, Notice
+  };
   // Which mode the HIDDEN notice came from. deal() decides whether it needs a
   // multiple-choice question by reading view_, so the notice has to put the
   // mode back before dealing or Quizmaster would start demanding distractors.
   View flagReturn_ = View::Menu;
 
   bool openPack();
+  bool openAwsPack();
+  void awsDeal();
+  void awsSubmit();
+  void awsNextPage();
+  void awsPreviousPage();
+  const char* awsPageSource() const;
+  void awsBuildPage();
+  void saveAwsDomains() const;
   void onWifiChosen(bool connected);
   void runPackDownload();
   void showNotice(const char* headline, const char* body, const char* actionLabel = nullptr,
@@ -46,6 +59,25 @@ class TriviaActivity final : public Activity {
   View view_ = View::Menu;
   int selected_ = -1;
   int difficulty_ = 0;  // 0 = any
+
+  // An independent licensed/private study deck. Never mixes its state with
+  // the public trivia pack or the separate German translation state.
+  trivia::AwsPack awsPack_;
+  trivia::PackState awsState_;
+  trivia::AwsQuestion awsQuestion_;
+  trivia::AwsChooser awsChooser_;
+  trivia::Score awsScore_;
+  uint32_t awsCurrent_ = 0;
+  uint32_t awsPageStart_ = 0;
+  uint8_t awsOption_ = 0;
+  uint8_t awsSelected_ = 0;
+  uint8_t awsDomains_ = trivia::kAwsAllDomains;
+  bool awsInstalled_ = false;
+  bool awsHasQuestion_ = false;
+  bool awsReviewMissed_ = false;
+  bool awsAnswerCorrect_ = false;
+  bool awsMore_ = false;
+  char awsPageBuffer_[1200] = {};
 
   trivia::Pack pack_;
   trivia::PackState state_;
