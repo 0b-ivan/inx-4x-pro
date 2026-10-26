@@ -37,7 +37,7 @@ the **desktop website** if necessary.
    and select **Run workflow** again.
 4. The `German quiz translation pilot (20 questions)` job downloads the
    **SHA-256 pinned** upstream English pack, extracts its original questions,
-   sends at most 20 questions to OpenRouter (`openai/gpt-4o-mini`), validates
+   selects at most 20 deterministically distributed questions with distinct answers across the full English pack and sends them to OpenRouter (`openai/gpt-4o-mini`), validates
    and exports `trivia-german-pilot-unreviewed` as a GitHub Actions artifact.
    The artifact is retained for **one day** and must be reviewed before use.
 5. Afterwards delete the Actions secret and revoke the temporary OpenRouter
