@@ -1,1 +1,1 @@
-Offline numeric and unit equivalence QA of 500 saved Qwen translations; no OpenRouter API credentials or calls; preserve all unapproved status.
+Offline numeric and unit audit rerun 2026-10-26: handle centimeter and same-value different-unit regression. Verify all 500 saved drafts, no API calls and no firmware release.
