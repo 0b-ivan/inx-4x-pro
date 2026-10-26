@@ -10,7 +10,14 @@ bin=".pio/build/simulator_x4_pro/program"
 test -x "$bin" || { echo "FAIL: no SDL simulator binary $bin"; exit 1; }
 command -v xvfb-run >/dev/null || { echo "FAIL: xvfb-run is missing"; exit 1; }
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+trap 'code=$?; if [ "$code" -ne 0 ]; then
+  echo "AWS smoke failed (exit $code). Simulator log:"
+  tail -100 .pio/aws-study-ui-smoke/run.log 2>/dev/null || true
+  echo "Generated capture files:"
+  find .pio/aws-study-ui-smoke -maxdepth 1 -type f -printf "%f %s bytes\\n" || true
+  echo "Emulated SD files:"
+  find "$tmp/sd" -maxdepth 4 -type f -printf "%P %s bytes\\n" || true
+fi; rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/sd/trivia/aws" ".pio/aws-study-ui-smoke"
 log=".pio/aws-study-ui-smoke/run.log"
 export AWS_SMOKE_PRIVATE_DIR="$tmp"
