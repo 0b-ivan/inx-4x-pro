@@ -69,6 +69,22 @@ int main() {
   assert(ws.recipients[ws.recipients.size()-2]==2);
   assert(ws.messages.back().find("\"r\":2")!=std::string::npos);
   assert(server.round().authorized(fresh.c_str(),secret.c_str()));
+  // End a complete game with four vertical X4 discs, then replay from the
+  // physical result screen. The browser must receive the fresh board and
+  // revision, not remain stuck on the prior winner.
+  for (int i=0; i<2; ++i) {
+    assert(server.deviceDrop(3));
+    clockMs=static_cast<uint32_t>(700+i*200);
+    const std::string moveAgain="[\\\"drop\\\",\\\""+fresh+"\\\","+std::to_string(server.round().revision())+",4]";
+    ws.event(WStype_TEXT,2,moveAgain);
+    assert(server.round().game().turn==connectfour::kLight);
+  }
+  assert(server.deviceDrop(3));
+  assert(server.round().game().outcome==connectfour::Outcome::LightWins);
+  assert(server.deviceRematch());
+  assert(server.round().game().outcome==connectfour::Outcome::Running);
+  assert(connectfour::discCount(server.round().game())==0);
+  assert(ws.messages.back().find("\\"r\\":8")!=std::string::npos);
   server.stop();server.stop();
   assert(!server.running() && WiFi.currentMode==WIFI_OFF);
   assert(std::strlen(server.password())==0);
