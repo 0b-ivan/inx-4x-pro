@@ -93,7 +93,7 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   assert.match(html,/id="deviceProfileToggle"/);
   assert.match(html,/id="playerLogin"/);
   await flush();
-  assert.equal(elements.devicePlayerName.textContent,'Loading…');
+  assert.equal(elements.devicePlayerName.textContent,'');  // Mock DOM starts empty; player details remain locked before seat claim.
   assert.match(elements.playerMessage.textContent,/SELECT YOUR BROWSER PLAYER/);
   assert.equal(elements.deviceProfileToggle.hidden,true);
   assert.equal(elements.deviceProfileDetails.hidden,true);
