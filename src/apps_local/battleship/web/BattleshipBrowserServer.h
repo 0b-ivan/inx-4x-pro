@@ -11,6 +11,7 @@
 
 #include "BrowserCommands.h"
 #include "BrowserSnapshot.h"
+#include "../../web/SeatSession.h"
 
 namespace bshipweb {
 
@@ -60,13 +61,7 @@ class Server final {
   void sendOpponentName(uint8_t client);
   void sendResumeCapability(uint8_t client);
   void receive(uint8_t client, const uint8_t* payload, size_t size);
-  void rotateToken();
-  void rotateResumeToken();
-  char token_[33] = {};
-  char resumeToken_[33] = {};
-  int owner_ = -1;
-  uint32_t lastCommandMs_ = 0;
-  bool commandSeen_ = false;
+  webplay::SeatSession seat_;
   char reply_[256] = {};
 
   WebSocketsServer ws_{81};

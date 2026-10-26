@@ -173,3 +173,15 @@ On hardware:
 7. Repeat through BROWSER → WI-FI. With Developer Mode enabled, repeatedly enter
    and leave both modes; its normal service should return after Back. Then
    select X4 PRO and exercise a normal ESP-NOW match on two devices.
+
+
+## Reusable web-session layer
+
+`src/apps_local/web/SeatSession.h` provides a small game-agnostic browser seat
+primitive. It owns bootstrap/resume capabilities, first-claim seat ownership,
+owner-only HTTP authorization, command throttling, disconnect token rotation
+and authenticated resumptions. It is freestanding C++17 and has dedicated host
+tests. Battleship remains responsible for game rules, projections, public and
+private view serialization, and checking whether a profile/resume may claim a
+seat. This is the initial reusable layer, **not yet** a game-agnostic browser
+lobby or a Connect Four browser adapter.
