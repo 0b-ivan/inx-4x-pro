@@ -69,6 +69,16 @@ jobs:
           test -s "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl"
           echo "Restored $(wc -l < "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl") existing question drafts"
 
+      - name: Correct known German umlaut errors in restored drafts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools_local/trivia/normalize_de_drafts.py \
+            --src "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl" \
+            --out "$RUNNER_TEMP/trivia-pilot/questions-de-draft-corrected.jsonl"
+          mv "$RUNNER_TEMP/trivia-pilot/questions-de-draft-corrected.jsonl" \
+             "$RUNNER_TEMP/trivia-pilot/questions-de-draft.jsonl"
+
       - name: Draft up to 20 German question translations
         shell: bash
         env:
