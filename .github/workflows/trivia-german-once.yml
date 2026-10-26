@@ -37,6 +37,9 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Run offline translator QA before paid requests
+        run: python3 tools_local/trivia/test_de_pack.py
+
       - name: Verify and export English questions
         shell: bash
         run: |
