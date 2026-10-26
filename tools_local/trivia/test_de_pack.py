@@ -312,6 +312,37 @@ class GermanTriviaPackTests(unittest.TestCase):
         self.assertEqual(payload["original_english"]["q"], self.original["q"])
         self.assertEqual(payload["draft_german"]["q"], self.trans["q"])
 
+    def test_editor_rejects_english_german_numeric_conflict(self):
+        # Regression: the source says ten days, the Kon-Tiki journey
+        # actually took 101. Do not silently accept the English error.
+        original = {"id": "kon-tiki", "q": "The 1947 voyage ended 10 days later",
+                    "a": "Thor Heyerdahl", "alt": [], "w": []}
+        draft = {"id": "kon-tiki", "source_hash": build_de_pack.source_hash(original),
+                 "q": "Seine Reise von 1947 endete 101 Tage später",
+                 "a": "Thor Heyerdahl", "alt": [], "w": [], "reviewed": False}
+        ai = {"verdict": "rewrite", "reason": "Zahl an englische Vorlage angepasst.",
+              "q": "Seine Reise von 1947 endete 10 Tage später",
+              "a": "Thor Heyerdahl", "alt": [], "w": []}
+        result, report = review_de_pack.apply_review(original, draft, ai)
+        self.assertEqual(result["q"], draft["q"])
+        self.assertEqual(report["verdict"], "reject")
+        self.assertFalse(report["applied"])
+        self.assertIn("Zahlen/Fakten manuell prüfen", report["reason"])
+        self.assertEqual(report["proposed"]["q"], ai["q"])
+
+    def test_editor_rejects_numeric_drift_even_if_source_matches_draft(self):
+        original = {"id": "example", "q": "A war ended in 1950",
+                    "a": "A", "alt": [], "w": []}
+        draft = {"id": "example", "source_hash": build_de_pack.source_hash(original),
+                 "q": "Ein Krieg endete 1950", "a": "A", "alt": [], "w": [],
+                 "reviewed": False}
+        ai = {"verdict": "rewrite", "reason": "Stilistisch angepasst",
+              "q": "Ein Krieg endete 1951", "a": "A", "alt": [], "w": []}
+        result, report = review_de_pack.apply_review(original, draft, ai)
+        self.assertEqual(result["q"], "Ein Krieg endete 1950")
+        self.assertEqual(report["verdict"], "reject")
+        self.assertFalse(report["applied"])
+
     def test_independent_editor_writes_separate_unapproved_draft_and_report(self):
         out = self.root / "editor-qa.jsonl"
         audit = self.root / "editorial-audit.jsonl"
