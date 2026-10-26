@@ -47,7 +47,8 @@ remain private; they are never compiled into the publicly distributed firmware.
   explanation. NEXT QUESTION starts the next round.
 - **SELECT DOMAINS**: tap any of the six DOP-C02 domains to enable/disable.
   ALL ON and DONE are available at the bottom.
-- **REVIEW MISSED**: revisit questions that have ever been marked incorrect.
+- **REVIEW MISSED**: revisit questions previously answered incorrectly. A correct
+  retry removes the question from the missed queue while retaining its seen state.
 
 Answer choices are shown individually to avoid truncating the often very long
 exam options. The question, individual answers and explanation are paginated
