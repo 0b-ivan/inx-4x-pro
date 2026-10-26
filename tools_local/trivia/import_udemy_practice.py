@@ -140,7 +140,7 @@ def convert(raw):
     if not isinstance(explanation, str) or not isinstance(section, str):
         raise ImportProblem("unsupported explanation/section shape")
     section = _plain(section)
-    image_count = len(re.findall(r"<img\\b", explanation, flags=re.I))
+    image_count = len(re.findall(r"<img\b", explanation, flags=re.I))
     feedbacks = prompt.get("feedbacks")
     if feedbacks is not None and (not isinstance(feedbacks, list) or
                                   len(feedbacks) != len(options) or
@@ -166,7 +166,7 @@ def convert(raw):
         "explanation_images": image_count,
         "feedbacks": [_plain(x) for x in feedbacks] if feedbacks is not None else [],
         "source_section": section,
-        "category": section if re.fullmatch(r"Domain [1-6]: [^\\n]+", section)
+        "category": section if re.fullmatch(r"Domain [1-6]: [^\n]+", section)
                     else "Uncategorized",
         "source_quiz": raw.get("_local_quiz", ""),
         "source_question_number": raw.get("_local_sequence", 0),
@@ -194,7 +194,7 @@ def _har_rows(data, allow_incomplete=False):
         if not isinstance(request, dict) or not isinstance(response, dict):
             continue
         path = urlsplit(request.get("url", "")).path
-        match = re.fullmatch(r"/api-2\\.0/quizzes/(\\d+)/assessments/?", path)
+        match = re.fullmatch(r"/api-2\.0/quizzes/(\d+)/assessments/?", path)
         if not match or request.get("method") != "GET" or response.get("status") != 200:
             continue
         content = response.get("content", {})
