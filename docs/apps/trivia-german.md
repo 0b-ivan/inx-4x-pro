@@ -87,6 +87,30 @@ Repeat the command to translate further; `--all` explicitly requests all
 remaining items and may incur **substantial** token costs. No job starts
 automatically or runs in the background.
 
+### Proper German characters (ä ö ü Ä Ö Ü ß)
+
+The actual `reading_serif_14` e-ink font supports all German umlauts and
+`ß`. **Never** transliterate `München`, `Könige`, `Dänemark`,
+`Nobelpreisträger`, `früh`, or `später` to ASCII in German question data.
+The translation prompt requires native German spelling. Its conservative
+normalizer repairs only known unambiguous errors, and the pack validator
+rejects those uncorrected spellings even when other binary/display checks
+pass. Unrelated names are not globally modified.
+
+Older unreviewed artifacts can be updated **offline, without a new API call**:
+
+```sh
+python3 tools_local/trivia/normalize_de_drafts.py \
+  --src /tmp/trivia-draft-de.jsonl \
+  --out /tmp/trivia-draft-de-orthography.jsonl
+```
+
+The script preserves IDs, source hashes, and answer option order. Corrected
+records remain unreviewed. It is intentionally **not a complete German
+spellchecker**: other spelling mistakes, broken wordplay and factual errors
+still require editorial review. Do not merge a draft straight into a
+published pack without review.
+
 ### Review and build
 
 Review the German clue, correct answer, accepted alternates, all six
