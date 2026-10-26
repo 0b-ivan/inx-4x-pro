@@ -333,11 +333,13 @@ void buildMenu(toybox::Screen& screen, const MenuModel& model) {
   screen.frame().hit(diffBox, ActionMenuRow, 2);
 
   if (model.englishFallback) {
-    // The interface may be German even though the 50,000 downloaded clues
-    // are still English. Make that visible without changing the card layout.
-    drawLabel(screen, fui::Rect{body.x, static_cast<int16_t>(footerTop(screen) - 16),
-                                body.width, 28}, "ENGLISH QUESTIONS",
+    // German UI with only the English pack installed: make the missing DE
+    // question pack directly installable without hiding the English fallback.
+    const fui::Rect downloadBox{
+        body.x, static_cast<int16_t>(footerTop(screen) - 16), body.width, 28};
+    drawLabel(screen, downloadBox, "GET GERMAN QUESTIONS",
               toybox::kSmallFont, fui::TextAlign::Center, toybox::kButtonCut);
+    screen.frame().hit(downloadBox, ActionGetPack);
   }
   if (model.packCount > 0) {
     char count[48];
