@@ -175,9 +175,17 @@ void buildAwsOption(toybox::Screen& screen, const AwsPageModel& model) {
 
 void buildAwsExplanation(toybox::Screen& screen, const AwsPageModel& model) {
   chrome(screen, "AWS REVIEW");
-  char status[64];
-  std::snprintf(status, sizeof(status), "%s  |  %d OF %d CORRECT",
-                model.correctAnswer ? "CORRECT" : "INCORRECT", model.right, model.asked);
+  char status[80];
+  char key[8] = {};
+  char chosen[8] = {};
+  int k = 0, p = 0;
+  for (int i = 0; i < model.optionCount; ++i) {
+    if (model.correct & (1u << i)) key[k++] = static_cast<char>('A' + i);
+    if (model.selected & (1u << i)) chosen[p++] = static_cast<char>('A' + i);
+  }
+  std::snprintf(status, sizeof(status), "%s %d/%d  |  YOU %s  KEY %s",
+                model.correctAnswer ? "RIGHT" : "WRONG", model.right, model.asked,
+                chosen, key);
   frameText(screen, model, status);
   footerPair(screen, "END", ActionAwsBackToMenu,
              model.more ? "MORE TEXT" : "NEXT QUESTION", ActionAwsPageNext);
