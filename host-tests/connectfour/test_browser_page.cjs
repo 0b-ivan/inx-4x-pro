@@ -38,6 +38,9 @@ const state=(phase,r,turn,board='0'.repeat(42),outcome=0,last=[-1,-1])=>({type:'
   assert.equal(elements.columns.children.length,7);
   assert.equal(elements.board.children.length,42);
   const ws=sockets[0];ws.onopen();
+  assert.equal(elements.join.hidden,true); // No claim before authoritative first snapshot.
+  ws.onmessage({data:JSON.stringify(state('waiting',0,1))});
+  assert.equal(elements.join.hidden,false);
   assert.equal(elements.join.disabled,false);
   elements.join.onclick();assert.deepEqual(sent[0],['join',first,0]);
   ws.onmessage({data:JSON.stringify({type:'resume',token:secret})});
