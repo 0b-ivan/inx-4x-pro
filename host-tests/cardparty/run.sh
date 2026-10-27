@@ -1,15 +1,22 @@
 #!/bin/sh
-# Freestanding C++17 game and authenticated seat transport host tests.
-# Automatically discovered by .github/workflows/crossplay-ci.yml
+# Freestanding C++17 rules/seat/wire protocol + network and browser smoke.
 set -eu
 cd "$(dirname "$0")"
 mkdir -p /tmp/cardparty-host-tests
-for name in cardparty sessions; do
-  "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pedantic -O2 \
+for name in cardparty sessions protocol; do
+  c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2 \
     -I../../src/apps_local/cardparty "test_$name.cpp" \
     -o "/tmp/cardparty-host-tests/test_$name"
   "/tmp/cardparty-host-tests/test_$name"
 done
-
-# Node.js already runs in the existing Battleship browser host suite.
+cat > /tmp/cardparty-host-tests/CardPartyPageHtml.generated.h <<'HEADER'
+#pragma once
+constexpr char CardPartyPageHtml[]="";
+constexpr size_t CardPartyPageHtmlCompressedSize=0;
+HEADER
+c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2 \
+  -I../battleship/stubs -I/tmp/cardparty-host-tests \
+  ../../src/apps_local/cardparty/web/CardPartyBrowserServer.cpp \
+  test_browser_server.cpp -o /tmp/cardparty-host-tests/test_browser_server
+/tmp/cardparty-host-tests/test_browser_server
 node test_browser_page.cjs
