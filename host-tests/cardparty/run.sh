@@ -3,7 +3,7 @@
 set -eu
 cd "$(dirname "$0")"
 mkdir -p /tmp/cardparty-host-tests
-for name in cardparty sessions protocol; do
+for name in cardparty sessions protocol full_match; do
   c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2 \
     -I../../src/apps_local/cardparty "test_$name.cpp" \
     -o "/tmp/cardparty-host-tests/test_$name"
