@@ -76,8 +76,12 @@ def ask(key, card, candidate, all_sources):
         "deck_answers": [c["text"] for c in all_sources.values()
                          if c["kind"] == "answer"],
     }
-    payload = {"model": MODEL, "temperature": 0, "max_tokens": 1400,
-               "response_format": SCHEMA, "provider": {"require_parameters": True},
+    # GPT-5.4 uses provider-specific reasoning parameters. Strict provider
+    # parameter matching previously caused HTTP 404 (no matching endpoint).
+    # Retain JSON schema preference but let OpenRouter select a compatible
+    # backend; our local validator rejects nonconforming responses.
+    payload = {"model": MODEL, "max_tokens": 1800,
+               "response_format": SCHEMA,
                "messages": [
                   {"role": "system", "content": PROMPT},
                   {"role": "user", "content": json.dumps(input_data, ensure_ascii=False)}
