@@ -1,0 +1,78 @@
+# ISOLATED, ONE-SHOT editorial review. No PR, no merge, no crossplay build.
+# The branch is not targeted by the normal CrossPlay pull_request workflow.
+name: CardParty 20-card independent meaning/humor review
+
+on:
+  push:
+    branches:
+      - audit/cardparty-semantic-review-20261027
+    paths:
+      - .github/workflows/cardparty-isolated-semantic-audit.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cardparty-isolated-audit
+  cancel-in-progress: false
+
+jobs:
+  editorial:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    name: Independent GPT-5.4 review of 20 original sample cards
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout separate audit branch (not PR #47)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check original data and translated proposals without API spend
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools_local/cardparty_l10n -p 'test_*.py' -v
+          python3 tools_local/cardparty_l10n/translate_cards.py validate \
+            --manifest tools_local/cardparty_l10n/examples/deck.json \
+            --source tools_local/cardparty_l10n/examples/cards-en.jsonl \
+            --drafts tools_local/cardparty_l10n/examples/cards-de-editorial-proposed.jsonl
+      - name: Independently review meaning, humor, context and deck grammar
+        shell: bash
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${OPENROUTER_API_KEY:-}" || {
+            echo 'OPENROUTER_API_KEY repository secret not available' >&2
+            exit 1
+          }
+          python3 tools_local/cardparty_l10n/run_isolated_review.py
+      - name: Verify exactly twenty model audit findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(wc -l < "$RUNNER_TEMP/cardparty-independent-semantic-review.jsonl")" -eq 20
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"cardparty-independent-semantic-review.jsonl"
+          rows=[json.loads(x) for x in p.read_text(encoding="utf-8").splitlines()]
+          assert len(set(r['id'] for r in rows)) == 20
+          assert all(r['model']=="openai/gpt-5.4" and r['human_approved'] is False for r in rows)
+          print("PASS independent semantic review 20/20; human approval still needed")
+          PY
+      - name: Upload unapproved audit and filtered translation proposals
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardparty-gpt54-semantic-audit-unreviewed
+          path: |
+            ${{ runner.temp }}/cardparty-independent-semantic-review.jsonl
+            ${{ runner.temp }}/cardparty-independent-approved-for-human-review.jsonl
+          retention-days: 7
+          if-no-files-found: ignore
