@@ -147,7 +147,9 @@ def validate(source, candidate, review):
     if source["kind"] == "answer" and value.rstrip().endswith((".", "?", "!")):
         raise ValueError("terminal punctuation in answer")
     if "public holidays" in source["text"].lower() and "alarm" in source["text"].lower():
-        low = value.casefold()
+        # Keep German ß intact: casefold() turns "ausschließlich" into
+        # "ausschliesslich", which the required-qualification regex missed.
+        low = value.lower()
         if "wecker" in low or "feiertag" not in low or not re.search(
                 r"\b(nur|ausschließlich|einzig|bloß)\b", low):
             raise ValueError("holiday-only monitoring alarm sense lost")
@@ -191,6 +193,15 @@ if __name__ == "__main__":
             if row["source_hash"] != drafts[ident]["source_hash"] or (
                     row["candidate_hash"] != digest(drafts[ident])):
                 print(f"STALE_REVIEW {ident}: checking corrected text afresh", flush=True)
+                continue
+            # Do not reuse a previous manual verdict created by the
+            # buggy local Unicode guard. Independent model review gets a
+            # fresh chance to pass the now-corrected local validation.
+            issues = row["model_review"].get("issues", [])
+            if row["model_review"]["decision"] == "manual_review" and any(
+                    "local_validation:ValueError:holiday-only" in str(i)
+                    for i in issues):
+                print(f"RECHECK_UNICODE_GUARD {ident}", flush=True)
                 continue
             processed.add(ident)
             valid_reviews.append(row)
