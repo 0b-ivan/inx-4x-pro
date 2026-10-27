@@ -182,7 +182,7 @@ void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* st
       const int16_t top = static_cast<int16_t>(rail.y + (rail.height * i) / 6);
       const int16_t bottom = static_cast<int16_t>(rail.y + (rail.height * (i + 1)) / 6);
       const uint8_t page = static_cast<uint8_t>(
-          (static_cast<uint32_t>(count - 1) * (2 * i + 1)) / 12);
+          (static_cast<uint32_t>(count - 1) * i + 2) / 5);
       screen.frame().hit({static_cast<int16_t>(rail.x - 5), top, 20,
                           static_cast<int16_t>(bottom - top)}, ActionAwsScrollTo, page);
     }
@@ -197,7 +197,9 @@ void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* st
   // gesture hint also tells first-time touchscreen users how to navigate.
   label(screen, {static_cast<int16_t>(body.x + kMargin),
                  static_cast<int16_t>(footer(screen) - 49), 224, 40},
-        model.german ? "WISCHEN | AWS HALTEN" : "SWIPE | HOLD AWS");
+        model.optionCount && model.option < model.optionCount
+            ? (model.german ? "LINKS/RECHTS | AWS" : "LEFT/RIGHT | AWS")
+            : (model.german ? "HOCH/RUNTER | AWS" : "UP/DOWN | AWS"));
 }
 
 }  // namespace

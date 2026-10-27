@@ -196,6 +196,8 @@ void testAwsInlineGlossary() {
   assert(count >= 2);
   // Track tap seeks by absolute page; it is not decorative chrome.
   assert(page.tap(450, 420).action == triviaui::ActionAwsScrollTo);
+  assert(page.tap(450, 570).action == triviaui::ActionAwsScrollTo);
+  assert(page.tap(450, 570).value == 1);
   bool foundS3 = false;
   bool foundLambda = false;
   for (uint8_t i = 0; i < count; ++i) {
