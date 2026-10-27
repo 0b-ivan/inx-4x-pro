@@ -27,13 +27,15 @@ class CardPartyActivity final : public Activity {
   enum class Stage : uint8_t { Choice, Hosted, Failed };
   void resetGame();
   void start(cardparty::web::Server::Mode mode);
+  void chooseExistingWifi();
+  void releaseNetwork();
   void handleTap(int x,int y);
   void drawBase(const char* section);
   void drawChoice();
   void drawLobby();
   void drawGame();
   void drawError();
-  void drawPrompt(const char* sentence,int x,int y,int maxChars);
+  int drawWrapped(int fontId,const char* text,int x,int y,int maxWidth,int lineStep,int maxRows);
   void drawDiagnostics();
   bool matchInProgress() const;
   void leave();
@@ -42,7 +44,10 @@ class CardPartyActivity final : public Activity {
   cardparty::Sessions sessions_;
   cardparty::web::Server server_;
   Stage stage_=Stage::Choice;
-  bool ownsOrientation_=false;
+  // Station mode raised by the Wi-Fi picker for [02]; dev mode stays paused
+  // while this Activity holds the radio.
+  bool ownsSta_=false;
+  bool devModePaused_=false;
   uint32_t fingerprint_=0;
   bool abortArmed_=false;
   uint32_t abortArmedAt_=0;

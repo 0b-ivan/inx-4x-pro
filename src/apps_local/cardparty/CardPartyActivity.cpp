@@ -2,6 +2,7 @@
 
 #include <Memory.h>
 #include <Logging.h>
+#include <WiFi.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -9,6 +10,8 @@
 #ifdef SIMULATOR
 #include <cstdlib>
 #endif
+#include "../../DevMode.h"
+#include "../../activities/network/WifiSelectionActivity.h"
 #include "../../components/UITheme.h"
 #include "../../fontIds.h"
 #include "../../util/QrUtils.h"
@@ -67,8 +70,6 @@ void CardPartyActivity::resetGame() {
 void CardPartyActivity::onEnter() {
   Activity::onEnter();
   toybox::ensureFonts(renderer);
-  renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
-  ownsOrientation_=true;
   resetGame();
 #ifdef SIMULATOR
   // SDL fixture mode exercises the actual CardPartyActivity renderer.
@@ -80,12 +81,20 @@ void CardPartyActivity::onEnter() {
   requestUpdate();
 }
 void CardPartyActivity::onExit() {
-  server_.stop();
-  if(ownsOrientation_) {
-    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-    ownsOrientation_=false;
-  }
+  releaseNetwork();
   Activity::onExit();
+}
+void CardPartyActivity::releaseNetwork() {
+  server_.stop();
+  if(ownsSta_) {
+    WiFi.disconnect(false);
+    WiFi.mode(WIFI_OFF);
+    ownsSta_=false;
+  }
+  if(devModePaused_) {
+    devmode::resume();
+    devModePaused_=false;
+  }
 }
 void CardPartyActivity::leave() {
   ActivityResult cancelled;
@@ -105,16 +114,52 @@ void CardPartyActivity::start(cp::web::Server::Mode mode) {
   }
   requestUpdate();
 }
+void CardPartyActivity::chooseExistingWifi() {
+  // Already associated (dev mode keeps its last network): host right away.
+  if(WiFi.status()==WL_CONNECTED) {
+    start(cp::web::Server::Mode::ExistingWifi);
+    return;
+  }
+  if(!devModePaused_) { devmode::pause(); devModePaused_=true; }
+  WiFi.mode(WIFI_STA);
+  ownsSta_=true;
+  auto picker=makeUniqueNoThrow<WifiSelectionActivity>(renderer,mappedInput);
+  if(!picker) {
+    LOG_ERR("CARDPARTY","OOM: WifiSelectionActivity");
+    releaseNetwork();
+    stage_=Stage::Failed;
+    std::snprintf(report_,sizeof(report_),"OUT OF MEMORY");
+    requestUpdate();
+    return;
+  }
+  startActivityForResult(std::move(picker),[this](const ActivityResult& result) {
+    if(result.isCancelled) {
+      releaseNetwork();
+      stage_=Stage::Choice;
+      requestUpdate();
+      return;
+    }
+    const auto& wifi=std::get<WifiResult>(result.data);
+    if(!wifi.connected) {
+      releaseNetwork();
+      stage_=Stage::Failed;
+      std::snprintf(report_,sizeof(report_),"WI-FI NOT CONNECTED");
+      requestUpdate();
+      return;
+    }
+    start(cp::web::Server::Mode::ExistingWifi);
+  });
+}
 void CardPartyActivity::handleTap(int x,int y) {
   const int height=renderer.getScreenHeight();
   const int width=renderer.getScreenWidth();
   if(stage_==Stage::Choice) {
     if(y>=145&&y<232) start(cp::web::Server::Mode::Hotspot);
-    else if(y>=240&&y<325) start(cp::web::Server::Mode::ExistingWifi);
+    else if(y>=240&&y<325) chooseExistingWifi();
     return;
   }
   if(stage_==Stage::Failed) {
-    if(y>=height-100){server_.stop();resetGame();requestUpdate();}
+    if(y>=height-100){releaseNetwork();resetGame();requestUpdate();}
     return;
   }
   if(stage_!=Stage::Hosted||x<0||x>width||y<height-90)return;
@@ -168,7 +213,7 @@ void CardPartyActivity::loop() {
         return;
       }
     }
-    server_.stop();
+    releaseNetwork();
     resetGame();
     requestUpdate();
     return;
@@ -190,8 +235,8 @@ void CardPartyActivity::loop() {
 void CardPartyActivity::drawBase(const char* section) {
   renderer.clearScreen();
   const int width=renderer.getScreenWidth();
-  renderer.drawText(UI_10_FONT_ID,kGutter,20,"C / A / W    // CROSSPLAY TERMINAL",true);
-  renderer.drawText(SMALL_FONT_ID,width-260,25,section,true);
+  renderer.drawText(UI_10_FONT_ID,kGutter,20,"C / A / W",true);
+  renderer.drawText(SMALL_FONT_ID,width-kGutter-renderer.getTextWidth(SMALL_FONT_ID,section),25,section,true);
   renderer.fillRect(kGutter,63,width-2*kGutter,2,true);
 }
 void CardPartyActivity::drawChoice() {
@@ -204,7 +249,7 @@ void CardPartyActivity::drawChoice() {
   renderer.drawText(SMALL_FONT_ID,kGutter+20,205,"LOCAL / PASSWORD PROTECTED",true);
   renderer.drawRect(kGutter,240,width-2*kGutter,85,2,true);
   renderer.drawText(UI_10_FONT_ID,kGutter+20,270,"[02] EXISTING WI-FI",true);
-  renderer.drawText(SMALL_FONT_ID,kGutter+20,304,"SAME NETWORK AS PLAYERS",true);
+  renderer.drawText(SMALL_FONT_ID,kGutter+20,304,"PICK A NETWORK / SAME AS PLAYERS",true);
   renderer.drawText(SMALL_FONT_ID,kGutter,renderer.getScreenHeight()-35,"BACK  /  CANCEL",true);
 }
 void CardPartyActivity::drawLobby() {
@@ -233,13 +278,17 @@ void CardPartyActivity::drawLobby() {
     QrUtils::drawQrCode(renderer,Rect{kGutter,157,kQr,kQr},server_.url());
     renderer.drawText(SMALL_FONT_ID,kGutter,323,"OPEN GAME",true);
   }
-  // Roster and URL are plain text too, so connection works without a camera.
-  const int right=std::min(width-230,kGutter+2*kQr+76);
-  renderer.drawText(SMALL_FONT_ID,right,170,server_.ssid(),true);
-  renderer.drawText(SMALL_FONT_ID,right,200,server_.ip(),true);
-  int y=236;
-  for(const auto& p:view.players)if(p.seated&&y<350){
-    renderer.drawText(SMALL_FONT_ID,right,y,p.name,true);y+=22;
+  // Network, URL and roster as plain text too, so joining works without a camera.
+  renderer.drawText(SMALL_FONT_ID,kGutter,385,server_.ssid(),true);
+  renderer.drawText(SMALL_FONT_ID,kGutter,409,server_.url(),true);
+  renderer.fillRect(kGutter,440,width-2*kGutter,1,true);
+  renderer.drawText(SMALL_FONT_ID,kGutter,452,"/// PLAYERS",true);
+  int y=482;
+  for(const auto& p:view.players) {
+    if(!p.seated)continue;
+    renderer.drawText(UI_10_FONT_ID,kGutter,y,p.name,true);
+    if(!p.connected)renderer.drawText(SMALL_FONT_ID,width-kGutter-renderer.getTextWidth(SMALL_FONT_ID,"OFFLINE"),y+4,"OFFLINE",true);
+    y+=26;
   }
   const int bottom=renderer.getScreenHeight()-72;
   renderer.fillRect(kGutter,bottom-4,width-2*kGutter,2,true);
@@ -247,48 +296,65 @@ void CardPartyActivity::drawLobby() {
   if(report_[0])renderer.drawText(SMALL_FONT_ID,kGutter,bottom+42,report_,true);
   drawDiagnostics();
 }
-void CardPartyActivity::drawPrompt(const char* sentence,int x,int y,int maxChars) {
-  if(!sentence)return;
-  char line[112]={};
-  int used=0;
-  int row=0;
-  const char* p=sentence;
-  while(*p && row<3) {
-    const char* start=p;
+// Greedy word wrap by measured width; returns the y below the last row.
+int CardPartyActivity::drawWrapped(int fontId,const char* text,int x,int y,int maxWidth,int lineStep,int maxRows) {
+  if(!text)return y;
+  char line[160]={};
+  char candidate[160]={};
+  int used=0,row=0;
+  const char* p=text;
+  while(*p==' ')++p;
+  while(*p && row<maxRows) {
+    const char* word=p;
     while(*p && *p!=' ')++p;
-    const int n=static_cast<int>(p-start);
-    if(used>0 && used+1+n>maxChars) {
-      renderer.drawText(UI_10_FONT_ID,x,y+row*38,line,true);
-      ++row;used=0;line[0]=0;
-      if(row==3)break;
-    }
-    if(used>0)line[used++]=' ';
-    const int copy=std::min(n,static_cast<int>(sizeof(line))-used-1);
-    std::memcpy(line+used,start,copy);used+=copy;line[used]=0;
+    const int n=std::min(static_cast<int>(p-word),static_cast<int>(sizeof(line))-2);
     while(*p==' ')++p;
+    int len=used;
+    std::memcpy(candidate,line,used);
+    if(len)candidate[len++]=' ';
+    const int room=static_cast<int>(sizeof(candidate))-1-len;
+    const int copy=std::max(0,std::min(n,room));
+    std::memcpy(candidate+len,word,copy);
+    len+=copy;
+    candidate[len]=0;
+    if(used && renderer.getTextWidth(fontId,candidate)>maxWidth) {
+      renderer.drawText(fontId,x,y+row*lineStep,line,true);
+      ++row;
+      used=std::min(n,static_cast<int>(sizeof(line))-1);
+      std::memcpy(line,word,used);
+      line[used]=0;
+    } else {
+      std::memcpy(line,candidate,len+1);
+      used=len;
+    }
   }
-  if(used&&row<3)renderer.drawText(UI_10_FONT_ID,x,y+row*38,line,true);
+  if(used && row<maxRows) { renderer.drawText(fontId,x,y+row*lineStep,line,true); ++row; }
+  return y+row*lineStep;
 }
 void CardPartyActivity::drawGame() {
   const cp::PublicView v=game_.publicView();
   drawBase(phaseLabel(v.phase));
   const int width=renderer.getScreenWidth();
   char status[96]={};
+  std::snprintf(status,sizeof(status),"ROUND %02u / 10",v.round);
+  renderer.drawText(SMALL_FONT_ID,kGutter,86,status,true);
   const char* czar=v.czar<cp::kPlayers?v.players[v.czar].name:"-";
-  std::snprintf(status,sizeof(status),"ROUND %02u / 10     CZAR: %.22s",v.round,czar);
-  renderer.drawText(SMALL_FONT_ID,kGutter,94,status,true);
-  renderer.fillRect(kGutter,128,width-2*kGutter,1,true);
-  renderer.drawText(SMALL_FONT_ID,kGutter,148,"/// PROMPT",true);
+  std::snprintf(status,sizeof(status),"CZAR: %.22s",czar);
+  renderer.drawText(SMALL_FONT_ID,kGutter,110,status,true);
+  renderer.fillRect(kGutter,140,width-2*kGutter,1,true);
+  renderer.drawText(SMALL_FONT_ID,kGutter,156,"/// PROMPT",true);
   const cp::Deck& deck=cp::demoDeck();
-  if(v.prompt<deck.promptsCount) drawPrompt(deck.prompts[v.prompt].text,kGutter,182,58);
-  renderer.fillRect(kGutter,318,width-2*kGutter,1,true);
+  if(v.prompt<deck.promptsCount)
+    drawWrapped(UI_10_FONT_ID,deck.prompts[v.prompt].text,kGutter,190,width-2*kGutter,38,9);
+  renderer.fillRect(kGutter,540,width-2*kGutter,1,true);
   if(v.phase==cp::Phase::Playing || v.phase==cp::Phase::Judging) {
     std::snprintf(status,sizeof(status),"%u / %u ANSWERS RECEIVED",v.submitted,v.expected);
-    renderer.drawText(UI_10_FONT_ID,kGutter,334,status,true);
+    renderer.drawText(UI_10_FONT_ID,kGutter,558,status,true);
   } else if(v.phase==cp::Phase::Reveal || v.phase==cp::Phase::Finished) {
     const char* winner=v.winner==cp::kRando?"RANDO CARDRISSIAN":
         v.winner<cp::kPlayers?v.players[v.winner].name:"NO WINNER";
-    renderer.drawText(UI_10_FONT_ID,kGutter,334,winner,true);
+    renderer.drawText(SMALL_FONT_ID,kGutter,556,"/// ROUND WINNER",true);
+    renderer.drawText(UI_10_FONT_ID,kGutter,584,winner,true);
   }
   const int bottom=renderer.getScreenHeight()-72;
   renderer.fillRect(kGutter,bottom-4,width-2*kGutter,2,true);
@@ -296,9 +362,10 @@ void CardPartyActivity::drawGame() {
   if(v.phase==cp::Phase::Playing)action="[ CLOSE SUBMISSIONS ]";
   if(v.phase==cp::Phase::Judging)action="[ ABORT STALLED ROUND ]";
   if(v.phase==cp::Phase::Reveal)action="[ NEXT ROUND ]";
-  if(v.phase==cp::Phase::Finished)action="[ REMATCH ]   BACK x2 = END";
+  if(v.phase==cp::Phase::Finished)action="[ REMATCH ]";
   renderer.drawText(UI_10_FONT_ID,kGutter,bottom+8,action,true);
   if(report_[0])renderer.drawText(SMALL_FONT_ID,kGutter,bottom+42,report_,true);
+  else if(v.phase==cp::Phase::Finished)renderer.drawText(SMALL_FONT_ID,kGutter,bottom+42,"BACK x2 = END SESSION",true);
   drawDiagnostics();
 }
 bool CardPartyActivity::matchInProgress() const {
@@ -317,7 +384,7 @@ void CardPartyActivity::drawDiagnostics() {
                 d.sockets,d.stations);
   const int width=renderer.getScreenWidth();
   const int x=width-kGutter-renderer.getTextWidth(SMALL_FONT_ID,line);
-  renderer.drawText(SMALL_FONT_ID,x,renderer.getScreenHeight()-30,line,true);
+  renderer.drawText(SMALL_FONT_ID,x,renderer.getScreenHeight()-104,line,true);
 }
 void CardPartyActivity::drawError() {
   drawBase("ERROR");
