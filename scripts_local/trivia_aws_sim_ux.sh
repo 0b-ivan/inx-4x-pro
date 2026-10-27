@@ -286,3 +286,104 @@ assert not list(root.glob("DOP-C02.session?")), "reset left resumable checkpoint
 
 print("PASS X4 Pro AWS study UX SDL: confirmation, per-pack progress reset, preserved filters")
 PY
+
+# Further isolation: a different ORIGINAL multi-select pack, left *ungraded*
+# when the simulated controller loses all RAM. Resuming must retain both marks.
+rm -rf "$tmp/sd"
+mkdir -p "$tmp/sd/trivia/aws"
+python3 - <<'PY'
+import json,os,sys
+from pathlib import Path
+sys.path.insert(0,str(Path.cwd()/"tools_local/trivia"))
+import build_aws_study
+root=Path(os.environ["AWS_UX_PRIVATE_DIR"])
+row={"q":"Which TWO AWS services provide persistent data storage?",
+     "options":["Amazon S3","Amazon DynamoDB","AWS Lambda"],
+     "correct":[0,1],"type":"multi",
+     "explanation":"S3 is object storage; DynamoDB is a database.",
+     "category":"Domain 2: Durable Resources"}
+src=root/"standby-multi.jsonl"
+src.write_text(json.dumps(row)+"\n",encoding="utf-8")
+assert build_aws_study.build(src,root/"sd/trivia/aws/DOP-C02.dat")[0]==1
+PY
+t=8200; s="$t:TAP:240,520,110"; shots=""
+add "TAP:240,145,110" # open pack
+add "TAP:240,240,110" # begin
+add "$up"             # option A
+add "TAP:80,750,110"  # mark A
+add "$left"; shot ungradedB  # option B, A remains marked
+add "TAP:80,750,110"; shot ungradedBoth  # mark B, A+B both marked
+t=$((t + step)); s+=";$t:QUIT"
+if ! env CROSSPLAY_AUTOSTART=TRIVIA CROSSPOINT_SIM_SD="$tmp/sd" \
+  CROSSPOINT_SIM_INPUT_SCRIPT="$s" CROSSPOINT_SIM_SCREENSHOTS="$shots" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 35s "$bin" >"$out/ungraded.log" 2>&1; then
+  echo "FAIL: ungraded multi-select setup"; tail -60 "$out/ungraded.log"; exit 1
+fi
+python3 - "$tmp/sd/trivia/aws" <<'PY'
+from pathlib import Path
+import sys,struct
+root=Path(sys.argv[1])
+assert (root/"DOP-C02.state").read_bytes()==b"\x01", "ungraded selections must not set MISSED"
+slots=[p for p in root.glob("DOP-C02.session?") if p.stat().st_size==48]
+assert slots,"ungraded session not persisted"
+active=max(slots,key=lambda p:struct.unpack_from("<I",p.read_bytes(),32)[0])
+data=active.read_bytes()
+assert data[:8]==b"AWSSESS1" and data[9]==2 and data[11]==3, (
+    f"saved view/marks not option B and A+B: {(data[9],data[11])}")
+assert struct.unpack_from("<I",data,36)[0]==0, "marking answers accidentally scored the question"
+PY
+
+if ! env CROSSPLAY_AUTOSTART=TRIVIA CROSSPOINT_SIM_SD="$tmp/sd" \
+  CROSSPOINT_SIM_INPUT_SCRIPT="14500:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="11600:$out/ungradedResumed.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 25s "$bin" >"$out/ungraded-resume.log" 2>&1; then
+  echo "FAIL: ungraded multi-select resume"; tail -60 "$out/ungraded-resume.log"; exit 1
+fi
+python3 - "$tmp/sd/trivia/aws" "$out" <<'PY'
+from pathlib import Path
+import hashlib,sys
+root,out=map(Path,sys.argv[1:])
+def digest(name): return hashlib.sha256((out/name).read_bytes()).digest()
+if digest("ungradedResumed.bmp")!=digest("ungradedBoth.bmp"):
+    print((out/"ungraded-resume.log").read_text(errors="replace")[-7000:],file=sys.stderr)
+    raise AssertionError("Standby lost ungraded marks or current answer card")
+assert (root/"DOP-C02.state").read_bytes()==b"\x01", "resume graded an ungraded question"
+print("PASS AWS standby resume of ungraded multi-select: marked answers and option restored")
+PY
+
+# Bank replacement is a deliberate hard boundary: never restore answers from a
+# different question even when the filename and question count are unchanged.
+python3 - <<'PY'
+import json,os,sys
+from pathlib import Path
+sys.path.insert(0,str(Path.cwd()/"tools_local/trivia"))
+import build_aws_study
+root=Path(os.environ["AWS_UX_PRIVATE_DIR"])
+row={"q":"A DIFFERENT installed certification question after bank replacement?",
+     "options":["EBS","S3","Lambda"],"correct":[0],"type":"single",
+     "explanation":"This content is not the previous multi-select pack.",
+     "category":"Domain 3: Replacement"}
+src=root/"replaced-bank.jsonl"
+src.write_text(json.dumps(row)+"\n",encoding="utf-8")
+assert build_aws_study.build(src,root/"sd/trivia/aws/DOP-C02.dat")[0]==1
+PY
+if ! env CROSSPLAY_AUTOSTART=TRIVIA CROSSPOINT_SIM_SD="$tmp/sd" \
+  CROSSPOINT_SIM_INPUT_SCRIPT="14500:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="11500:$out/replacedBankHome.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 25s "$bin" >"$out/replaced-bank.log" 2>&1; then
+  echo "FAIL: replaced bank safety smoke"; tail -60 "$out/replaced-bank.log"; exit 1
+fi
+python3 - "$tmp/sd/trivia/aws" "$out" <<'PY'
+from pathlib import Path
+import hashlib,sys
+root,out=map(Path,sys.argv[1:])
+def digest(name): return hashlib.sha256((out/name).read_bytes()).digest()
+assert digest("replacedBankHome.bmp")!=digest("ungradedResumed.bmp"), (
+  "replaced question bank reused previous answer card")
+assert (root/"DOP-C02.state").read_bytes()==b"\x00", (
+  "pack replacement should safely initialize a fresh seen-state")
+print("PASS AWS standby resume safety: changed pack invalidates saved answer state")
+PY
