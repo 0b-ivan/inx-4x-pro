@@ -176,18 +176,34 @@ if __name__ == "__main__":
     totals = {"accept": 0, "revise": 0, "manual_review": 0}
     processed = set()
     if REPORT.exists():
+        valid_reviews = []
         for line in REPORT.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
             row = json.loads(line)
             ident = row["id"]
-            if (ident in processed or ident not in drafts or
-                    row["source_hash"] != drafts[ident]["source_hash"] or
-                    row["candidate_hash"] != digest(drafts[ident]) or
-                    row["model"] != MODEL or row["human_approved"] is not False):
-                raise SystemExit("Stale/invalid prior review report; refusing resume")
+            if ident in processed or ident not in drafts or row["model"] != MODEL or (
+                    row["human_approved"] is not False):
+                raise SystemExit("Invalid or duplicated prior semantic review")
+            # An updated candidate needs a FRESH independent model review.
+            # Older unrelated evaluations remain reusable and never autobind
+            # to a changed German text.
+            if row["source_hash"] != drafts[ident]["source_hash"] or (
+                    row["candidate_hash"] != digest(drafts[ident])):
+                print(f"STALE_REVIEW {ident}: checking corrected text afresh", flush=True)
+                continue
             processed.add(ident)
+            valid_reviews.append(row)
             totals[row["model_review"]["decision"]] += 1
+        REPORT.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n"
+                                  for row in valid_reviews), encoding="utf-8")
+        CANDIDATES.write_text("".join(
+            json.dumps(dict(drafts[row["id"]],
+                            text=row["model_review"]["proposed_text"], reviewed=False),
+                       ensure_ascii=False) + "\n"
+            for row in valid_reviews
+            if row["model_review"]["decision"] != "manual_review"),
+            encoding="utf-8")
     with REPORT.open("a", encoding="utf-8") as output, CANDIDATES.open(
             "a", encoding="utf-8") as candidates:
         for card_id, card in sources.items():
