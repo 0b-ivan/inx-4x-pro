@@ -3,8 +3,11 @@ on:
   push:
     branches:
       - experiment/trivia-de-100-20261026
+      - fix/trivia-shard-resume-20261027
     paths:
       - .github/trivia-full-corpus-trigger.txt
+      - .github/workflows/trivia-full-corpus-shards.yml
+      - tools_local/trivia/full_corpus_shards.py
 
 permissions:
   contents: read
@@ -78,6 +81,7 @@ jobs:
           retention-days: 14
 
   translate-shard:
+    if: github.ref_name == 'experiment/trivia-de-100-20261026'
     needs: preflight
     name: Qwen shard ${{ matrix.shard }} of 50
     runs-on: ubuntu-latest
