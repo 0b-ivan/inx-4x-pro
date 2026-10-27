@@ -172,7 +172,7 @@ h2{font-size:18px;font-weight:500}
         const order=document.createElement("span");
         order.className="position";
         order.textContent=" <"+(selected+1)+"/"+pick+"> ";
-        item.insertBefore(order,item.children[1]);
+        item.append(order);
         item.setAttribute("aria-label","Position "+(selected+1)+" von "+pick+": "+label);
       }
       list.append(item);
