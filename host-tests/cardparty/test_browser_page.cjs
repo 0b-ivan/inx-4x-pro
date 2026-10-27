@@ -99,11 +99,16 @@ assert.equal(nodes.play.hidden,false);
 assert.equal(nodes.choices.children.length,4);
 assert.equal(nodes.submit.disabled,true);
 assert.equal(nodes.promptText.textContent,playing.promptText);
+nodes.choices.scrollTop=96; // selecting a lower card must not jump to the top
 nodes.choices.children[1].dispatch("click");
+assert.equal(nodes.choices.scrollTop,96);
+assert.equal(nodes.choices.children[1].children.at(-1).textContent," <1/2> ");
 assert.equal(nodes.submit.disabled,true);
 assert.equal(nodes.count.textContent,"1/2 SELECTED");
 assert.equal(nodes.choices.children[1].attrs["aria-pressed"],"true");
 nodes.choices.children[3].dispatch("click");
+assert.equal(nodes.choices.scrollTop,96);
+assert.equal(nodes.choices.children[3].children.at(-1).textContent," <2/2> ");
 assert.equal(nodes.submit.disabled,false);
 assert.equal(nodes.footCount.textContent,"2/2 SELECTED");
 nodes.submit.dispatch("click");
@@ -127,7 +132,9 @@ first.message({type:"state",revision:1,
     {cards:["SRE mit Root","Zusätzliche Downtime"]},
     {cards:["Datenbank über Nacht","Der eine DNS-Server"]}]},
   private:{isCzar:true,submitted:false,hand:cards}});
+nodes.candidateList.scrollTop=42;
 nodes.candidateList.children[0].dispatch("click");
+assert.equal(nodes.candidateList.scrollTop,42);
 assert.equal(nodes.confirmJudge.disabled,false);
 nodes.confirmJudge.dispatch("click");
 assert.deepEqual(first.sent.at(-1),{
