@@ -197,6 +197,9 @@ row = {
 src = root / "multi.jsonl"
 src.write_text(json.dumps(row) + "\n", encoding="utf-8")
 assert build_aws_study.build(src, root / "sd/trivia/aws/DOP-C02.dat")[0] == 1
+# Persist non-default domains BEFORE the study run, so the checkpoint and
+# .prefs agree when the simulated deep-sleep boot restores the session.
+(root / "sd/trivia/aws/DOP-C02.prefs").write_bytes(b"\x07")
 PY
 t=8200; s="$t:TAP:240,520,110"; shots=""
 add "TAP:240,145,110"
@@ -246,7 +249,7 @@ from pathlib import Path
 import sys
 root = Path(sys.argv[1])
 assert (root / "DOP-C02.state").read_bytes() == b"\x01"
-(root / "DOP-C02.prefs").write_bytes(b"\x03")
+assert (root / "DOP-C02.prefs").read_bytes() == b"\x07", "preconfigured domain mask changed"
 (root / "SAA-C03.state").write_bytes(b"\x05")
 # Leave the actual saved session in place. The simulator must resume it,
 # explicitly finish the session, and THEN allow a confirmed progress reset.
@@ -276,7 +279,7 @@ def digest(name):
 assert digest("resetAsk") != digest("resetNo"), "confirmation and study menu identical"
 assert digest("resetAsk") != digest("resetYes"), "confirm screen remains after reset"
 assert (root / "DOP-C02.state").read_bytes() == b"\x00", "selected deck progress was not reset"
-assert (root / "DOP-C02.prefs").read_bytes() == b"\x03", "reset altered domain filters"
+assert (root / "DOP-C02.prefs").read_bytes() == b"\x07", "reset altered domain filters"
 assert (root / "SAA-C03.state").read_bytes() == b"\x05", "reset modified another deck"
 assert (root / "DOP-C02.dat").stat().st_size > 0, "reset deleted question pack"
 assert not list(root.glob("DOP-C02.session?")), "reset left resumable checkpoint behind"
