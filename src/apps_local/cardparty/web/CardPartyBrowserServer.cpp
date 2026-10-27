@@ -82,6 +82,7 @@ bool Server::begin(Mode mode) {
     tickets_[i] = SessionTicket{};
   }
   sessions_.reset();
+  for (bool& connected : liveSocket_) connected = false;
   ssid_.clear(); ip_.clear(); url_.clear(); password_[0] = 0;
   if (!devModePaused_) { devmode::pause(); devModePaused_ = true; }
   const bool networkOk = mode == Mode::Hotspot ? startHotspot() : startWifi();
@@ -95,8 +96,11 @@ bool Server::begin(Mode mode) {
   ws_.begin();
   ws_.enableHeartbeat(5000,3000,2);
   ws_.onEvent([this](uint8_t client, WStype_t type, uint8_t* payload, size_t length) {
-    if (type == WStype_DISCONNECTED) onDisconnect(client);
-    else if (type == WStype_TEXT) onMessage(client,payload,length);
+    if (type == WStype_CONNECTED) liveSocket_[client] = true;
+    else if (type == WStype_DISCONNECTED) {
+      liveSocket_[client] = false;
+      onDisconnect(client);
+    } else if (type == WStype_TEXT && liveSocket_[client]) onMessage(client,payload,length);
   });
   running_ = true;
   LOG_INF("CARDPARTY", "Game server ready at %s", url_.c_str());
@@ -124,6 +128,7 @@ void Server::stop() {
     socket_[i] = kNoConnection;
   }
   sessions_.reset();
+  for (bool& connected : liveSocket_) connected = false;
   if (devModePaused_) {
     devmode::resume();
     devModePaused_ = false;
