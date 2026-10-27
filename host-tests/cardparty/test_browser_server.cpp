@@ -86,8 +86,7 @@ int main() {
   assert(game.publicView().phase==Phase::Lobby);
   const size_t marker=ws.messages.size();
   send(ws,3,R"({"type":"join","name":"Not connected"})");
-  assert(ws.messages.size()==marker+1);
-  assert(ws.messages.back().find("\"type\":\"error\"")!=std::string::npos);
+  assert(ws.messages.size()==marker); // unconnected socket is silently ignored
   // Binary frames are dropped rather than interpreted as JSON.
   ws.event(WStype_BIN,0,R"({"type":"join","name":"attacker"})");
   assert(game.publicView().players[3].seated==false);
