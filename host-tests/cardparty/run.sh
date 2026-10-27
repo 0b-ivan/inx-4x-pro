@@ -20,3 +20,4 @@ c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2 \
   test_browser_server.cpp -o /tmp/cardparty-host-tests/test_browser_server
 /tmp/cardparty-host-tests/test_browser_server
 node test_browser_page.cjs
+python3 test_x4pro_ws_capacity.py
