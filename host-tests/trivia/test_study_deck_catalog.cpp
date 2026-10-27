@@ -26,6 +26,15 @@ int main() {
   assert(std::strcmp(path, "/trivia/aws/DOP-C02.dat") == 0);
   assert(catalog.path(0, ".state", path, sizeof(path)));
   assert(std::strcmp(path, "/trivia/aws/DOP-C02.state") == 0);
+  // Resumable sessions are a separate, tightly whitelisted per-pack file.
+  for (const char* ext : {".session0", ".session1"}) {
+    assert(catalog.path(0, ext, path, sizeof(path)));
+    char expected[90];
+    std::snprintf(expected, sizeof(expected), "/trivia/aws/DOP-C02%s", ext);
+    assert(std::strcmp(path, expected) == 0);
+  }
+  assert(!catalog.path(0, ".session2", path, sizeof(path)));
+  assert(!catalog.path(0, ".session0/../prefs", path, sizeof(path)));
   assert(catalog.path(2, ".dat", path, sizeof(path)));
   assert(std::strcmp(path, "/trivia/aws/SAA-C03.dat") == 0);
   assert(catalog.path(1, ".dat", path, sizeof(path)));

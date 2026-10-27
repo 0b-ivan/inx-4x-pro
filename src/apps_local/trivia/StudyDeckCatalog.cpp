@@ -20,7 +20,8 @@ bool validSlug(const char* s) {
 bool validExtension(const char* ext) {
   return ext && (!std::strcmp(ext, ".dat") || !std::strcmp(ext, ".state") ||
                  !std::strcmp(ext, ".state.id") || !std::strcmp(ext, ".prefs") ||
-                 !std::strcmp(ext, ".topics"));
+                 !std::strcmp(ext, ".topics") ||
+                 !std::strcmp(ext, ".session0") || !std::strcmp(ext, ".session1"));
 }
 } // namespace
 
