@@ -68,6 +68,17 @@ int main() {
   assert(devmode::depth==2);
   assert(std::string(server.url()).find("/cardparty")!=std::string::npos);
   auto& ws=*WebSocketsServer::instance;
+  // The ESP32 library must enforce Origin during WebSocket upgrade, not
+  // merely after CONNECTED when a seat ticket might already be created.
+  assert(ws.requiredHeaders.size()==1);
+  assert(ws.requiredHeaders[0]=="Origin");
+  assert(ws.wouldAcceptOrigin("http://192.168.4.1"));
+  assert(ws.wouldAcceptOrigin("http://192.168.4.1:80"));
+  assert(!ws.wouldAcceptOrigin(nullptr));
+  assert(!ws.wouldAcceptOrigin("https://192.168.4.1"));
+  assert(!ws.wouldAcceptOrigin("http://attacker.example"));
+  assert(!ws.wouldAcceptOrigin("null"));
+  assert(!ws.wouldAcceptOrigin("http://192.168.4.1.evil.example"));
   auto& http=*WebServer::instance;
   assert(http.routes.find("/cardparty")!=http.routes.end());
   http.routes.at("/cardparty")();
@@ -158,6 +169,8 @@ int main() {
     WiFi.mode(WIFI_STA);
     assert(eight.begin(Server::Mode::ExistingWifi));
     auto& bus=*WebSocketsServer::instance;
+    assert(bus.wouldAcceptOrigin("http://192.168.4.1"));
+    assert(!bus.wouldAcceptOrigin("http://external.example"));
     std::string keys[8];
     for(int i=0;i<8;++i) {
       bus.event(WStype_CONNECTED,static_cast<uint8_t>(i));
