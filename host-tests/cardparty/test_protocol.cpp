@@ -66,7 +66,6 @@ static void rejected() {
   CHECK(!decode("{\"type\":\"judge\",\"token\":\""+t+"\",\"revision\":0,\"selected\":true}",c));
   CHECK(!decode("{\"type\":\"judge\",\"token\":\""+t+"\",\"revision\":4294967296,\"selected\":0}",c));
   CHECK(!decode("{\"type\":\"resume\",\"token\":\""+t+"\",\"type\":\"join\"}",c));
-  CHECK(!decode("{\"type\":\"resume\",\"token\":\""+t+"\"}\0",c)); // literal terminates before NUL
   std::string withNul="{\"type\":\"join\",\"name\":\"A\"}";
   withNul.push_back('\0');
   CHECK(!decode(withNul,c));
