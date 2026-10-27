@@ -40,4 +40,4 @@ jobs:
           python3 tools_local/cardparty_l10n/translate_cards.py validate \
             --manifest tools_local/cardparty_l10n/examples/deck.json \
             --source tools_local/cardparty_l10n/examples/cards-en.jsonl \
-            --drafts "$RUNNER_TEMP/caw-no-translations-yet.jsonl"
+            --drafts tools_local/cardparty_l10n/examples/cards-de-unreviewed.jsonl
