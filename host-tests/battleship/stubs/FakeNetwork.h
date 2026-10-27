@@ -105,7 +105,7 @@ struct WebServer {
   }
   int method() { return requestMethod; }
 };
-enum WStype_t { WStype_CONNECTED, WStype_DISCONNECTED, WStype_TEXT, WStype_BIN, WStype_FRAGMENT_TEXT_START };
+enum WStype_t { WStype_CONNECTED, WStype_DISCONNECTED, WStype_TEXT, WStype_BIN, WStype_FRAGMENT_TEXT_START, WStype_PING, WStype_PONG };
 struct WebSocketsServer {
   inline static WebSocketsServer* instance = nullptr;
   std::function<void(uint8_t, WStype_t, uint8_t*, size_t)> callback;
@@ -121,6 +121,14 @@ struct WebSocketsServer {
   int slotLimit = 0;
   bool strictDelivery = false;
   std::set<uint8_t> open;
+  // TCP back-pressure model: a stalled slot's send buffer is full. On the X4
+  // any write to it (frame, ping, close frame) blocks the loop for seconds,
+  // so the fake counts such writes instead of delivering them.
+  std::set<uint8_t> stalled;
+  int blockingWrites = 0;
+  std::vector<uint8_t> dropped, pinged;
+  // Browsers answer pings at protocol level unless the phone is gone.
+  std::set<uint8_t> silent;
   int accept() {
     const int limit = slotLimit ? slotLimit : 255;
     for (int i = 0; i < limit; ++i)
@@ -154,7 +162,26 @@ struct WebSocketsServer {
     closed = true;
     open.clear();
   }
+  bool writable(uint8_t client) const {
+    return !stalled.count(client) && (!strictDelivery || open.count(client));
+  }
+  // Library clientDisconnect() without a close frame: never blocks.
+  void drop(uint8_t client) {
+    if (strictDelivery && !open.count(client)) return;
+    dropped.push_back(client);
+    stalled.erase(client);
+    silent.erase(client);
+    event(WStype_DISCONNECTED, client);
+  }
+  bool sendPing(uint8_t client) {
+    if (stalled.count(client)) { ++blockingWrites; return false; }
+    if (strictDelivery && !open.count(client)) return false;
+    pinged.push_back(client);
+    if (!silent.count(client)) event(WStype_PONG, client);
+    return true;
+  }
   void disconnect(uint8_t client) {
+    if (stalled.count(client)) ++blockingWrites;  // close frame write
     if (strictDelivery && !open.count(client)) return;
     disconnected.push_back(client);
     // Simulate synchronous disconnect event: the server must have already
@@ -163,6 +190,7 @@ struct WebSocketsServer {
   }
   int connectedClients() { return clients; }
   bool sendTXT(uint8_t client, char* data, size_t size) {
+    if (stalled.count(client)) { ++blockingWrites; return false; }
     if (strictDelivery && !open.count(client)) return false;
     messages.emplace_back(data, size);
     recipients.push_back(client);
@@ -176,7 +204,7 @@ struct WebSocketsServer {
   }
   void event(WStype_t type, uint8_t client = 0, std::string payload = "") {
     if (type == WStype_CONNECTED) { ++clients; open.insert(client); }
-    if (type == WStype_DISCONNECTED) { --clients; open.erase(client); }
+    if (type == WStype_DISCONNECTED) { --clients; open.erase(client); stalled.erase(client); silent.erase(client); }
     callback(client, type, reinterpret_cast<uint8_t*>(payload.data()), payload.size());
   }
 };

@@ -5,6 +5,9 @@
 
 #include <WiFi.h>
 #include <esp_system.h>
+#if defined(ESP_PLATFORM)
+#include <sys/select.h>
+#endif
 #include <Logging.h>
 #include <cstring>
 #include "../../../DevMode.h"
@@ -29,6 +32,27 @@ const char* phaseName(Phase phase) {
   return "Lobby";
 }
 }  // namespace
+
+#if defined(ESP_PLATFORM)
+bool SocketServer::writable(uint8_t client) {
+  if (client >= WEBSOCKETS_SERVER_CLIENT_MAX) return false;
+  WSclient_t& c = _clients[client];
+  if (!c.tcp || !c.tcp->connected()) return false;
+  const int fd = c.tcp->fd();
+  if (fd < 0) return false;
+  // lwIP reports writable while more than TCP_SNDLOWAT bytes are free
+  // (2873 of 5744 here), more than a typical ~2 KB state frame.
+  fd_set set;
+  FD_ZERO(&set);
+  FD_SET(fd, &set);
+  timeval now{0, 0};
+  return select(fd + 1, nullptr, &set, nullptr, &now) > 0 && FD_ISSET(fd, &set);
+}
+void SocketServer::drop(uint8_t client) {
+  if (client >= WEBSOCKETS_SERVER_CLIENT_MAX || !_clients[client].tcp) return;
+  clientDisconnect(&_clients[client]);  // fires WStype_DISCONNECTED
+}
+#endif
 
 Server::~Server() { stop(); }
 
@@ -85,7 +109,9 @@ bool Server::begin(Mode mode) {
   }
   sessions_.reset();
   for (bool& connected : liveSocket_) connected = false;
-  rejected_ = takeovers_ = idleClosed_ = sendFailures_ = 0;
+  for (uint8_t& p : pending_) p = 0;
+  for (uint8_t i=0;i<kTrackedSlots;++i) { unanswered_[i] = 0; stalledSince_[i] = 0; }
+  rejected_ = takeovers_ = idleClosed_ = sendFailures_ = deferred_ = dropped_ = 0;
   ssid_.clear(); ip_.clear(); url_.clear(); password_[0] = 0;
   if (!devModePaused_) { devmode::pause(); devModePaused_ = true; }
   const bool networkOk = mode == Mode::Hotspot ? startHotspot() : startWifi();
@@ -107,8 +133,13 @@ bool Server::begin(Mode mode) {
            value == (expected + ":80").c_str();
   }, kMandatoryHeaders, 1);
   ws_.begin();
-  ws_.enableHeartbeat(5000,3000,2);
+  // No library heartbeat: its ping and its timeout close frame both block on
+  // a stalled peer. heartbeat() pings only writable sockets.
   ws_.onEvent([this](uint8_t client, WStype_t type, uint8_t* payload, size_t length) {
+    if (client < kTrackedSlots && type != WStype_DISCONNECTED) {
+      unanswered_[client] = 0;  // any frame from the browser proves liveness
+      stalledSince_[client] = 0;
+    }
     if (type == WStype_CONNECTED) {
       liveSocket_[client] = true;
       if (client < kTrackedSlots) connectedAt_[client] = millis();
@@ -118,7 +149,7 @@ bool Server::begin(Mode mode) {
     } else if (type == WStype_TEXT && liveSocket_[client]) onMessage(client,payload,length);
   });
   running_ = true;
-  lastDiagLog_ = millis();
+  lastDiagLog_ = lastPing_ = millis();
   LOG_INF("CARDPARTY", "Game server ready at %s (reset reason %d)", url_.c_str(),
           static_cast<int>(esp_reset_reason()));
   return true;
@@ -149,6 +180,7 @@ void Server::stop() {
   for(uint8_t i=0;i<kPlayers;++i) {
     tickets_[i] = SessionTicket{};
     socket_[i] = kNoConnection;
+    pending_[i] = 0;
   }
   sessions_.reset();
   for (bool& connected : liveSocket_) connected = false;
@@ -161,9 +193,42 @@ void Server::loop() {
   http_.handleClient();
   ws_.loop();
   const uint32_t now = millis();
+  flushPending();
+  if (static_cast<uint32_t>(now - lastPing_) >= kPingMs) heartbeat(now);
   closeIdleSockets(now);
   releaseExpiredTurns(now);
   if (static_cast<uint32_t>(now - lastDiagLog_) >= kDiagLogMs) logDiagnostics(now);
+}
+void Server::closeSocket(uint8_t client) {
+  // The close frame is a write too: a stalled peer is dropped without it.
+  if (ws_.writable(client)) ws_.disconnect(client);
+  else ws_.drop(client);
+}
+void Server::flushPending() {
+  for (uint8_t seat=0; seat<kPlayers; ++seat) {
+    if (!pending_[seat] || socket_[seat]==kNoConnection) continue;
+    if (ws_.writable(static_cast<uint8_t>(socket_[seat]))) sendState(seat, pending_[seat]==2);
+  }
+}
+void Server::heartbeat(uint32_t now) {
+  lastPing_ = now;
+  for (uint8_t client=0; client<kTrackedSlots; ++client) {
+    if (!liveSocket_[client]) continue;
+    if (!ws_.writable(client)) {
+      if (!stalledSince_[client]) stalledSince_[client] = now | 1;  // 0 = not stalled
+      if (static_cast<uint32_t>(now - stalledSince_[client]) < kStallDropMs) continue;
+    } else {
+      stalledSince_[client] = 0;
+      if (unanswered_[client] < kMissedPings) {
+        ++unanswered_[client];
+        ws_.sendPing(client);  // the browser's pong resets unanswered_
+        continue;
+      }
+    }
+    ++dropped_;
+    ws_.drop(client);  // DISCONNECTED clears liveSocket_ and the seat
+    liveSocket_[client] = false;
+  }
 }
 void Server::closeIdleSockets(uint32_t now) {
   // A socket that never joined or resumed (join screen left open, rejected
@@ -173,7 +238,7 @@ void Server::closeIdleSockets(uint32_t now) {
     if (!liveSocket_[client] || sessions_.seatOf(client) != kNone) continue;
     if (static_cast<uint32_t>(now - connectedAt_[client]) < kAuthGraceMs) continue;
     ++idleClosed_;
-    ws_.disconnect(client);  // DISCONNECTED clears liveSocket_
+    closeSocket(client);  // DISCONNECTED clears liveSocket_
     liveSocket_[client] = false;
   }
 }
@@ -206,6 +271,7 @@ Server::Diagnostics Server::diagnostics() const {
   d.resetReason = static_cast<uint8_t>(esp_reset_reason());
   d.rejected = rejected_; d.takeovers = takeovers_;
   d.idleClosed = idleClosed_; d.sendFailures = sendFailures_;
+  d.deferred = deferred_; d.dropped = dropped_;
   return d;
 }
 void Server::logDiagnostics(uint32_t now) {
@@ -214,11 +280,11 @@ void Server::logDiagnostics(uint32_t now) {
   (void)d;  // LOG_INF compiles away at LOG_LEVEL 0
   LOG_INF("CARDPARTY",
           "diag heap=%u min=%u maxblk=%u psram=%u ws=%u ap=%u seats=%u/%u "
-          "rej=%u takeover=%u idle=%u sendfail=%u reset=%u",
+          "rej=%u takeover=%u idle=%u sendfail=%u defer=%u drop=%u reset=%u",
           static_cast<unsigned>(d.freeHeap), static_cast<unsigned>(d.minFreeHeap),
           static_cast<unsigned>(d.maxAllocHeap), static_cast<unsigned>(d.freePsram),
           d.sockets, d.stations, d.connected, d.seated, d.rejected, d.takeovers,
-          d.idleClosed, d.sendFailures, d.resetReason);
+          d.idleClosed, d.sendFailures, d.deferred, d.dropped, d.resetReason);
 }
 void Server::sendGamePage() {
   http_.sendHeader("Content-Encoding","gzip");
@@ -241,11 +307,18 @@ void Server::sendError(uint8_t client, const char* reason) {
   char response[96]={};
   JsonWriter w(response,sizeof(response));
   w.raw("{\"type\":\"error\",\"message\":");w.quoted(reason);w.raw("}");
-  if(w.ok())ws_.sendTXT(client,response,w.size());
+  if(w.ok() && ws_.writable(client))ws_.sendTXT(client,response,w.size());
 }
 
 void Server::sendState(uint8_t seat, bool welcome) {
   if (!running_ || seat >= kPlayers || socket_[seat]==kNoConnection) return;
+  if (pending_[seat]==2) welcome=true;  // a held-back ticket is never replaced by plain state
+  if (!ws_.writable(static_cast<uint8_t>(socket_[seat]))) {
+    if (pending_[seat] < (welcome ? 2 : 1)) pending_[seat] = welcome ? 2 : 1;
+    ++deferred_;
+    return;
+  }
+  pending_[seat] = 0;
   HandView privateView{};
   uint32_t revision=0;
   if (!sessions_.privateHand(socket_[seat],tickets_[seat].secret,privateView,revision)) return;
@@ -341,7 +414,7 @@ void Server::onDisconnect(uint8_t client) {
   sessions_.disconnect(client);
   if(seat!=kNone && game_.held(seat)) heldSince_[seat]=millis();
   for(uint8_t i=0;i<kPlayers;++i)
-    if(socket_[i]==client)socket_[i]=kNoConnection;
+    if(socket_[i]==client) { socket_[i]=kNoConnection; pending_[i]=0; }
   publishAll();
 }
 void Server::onMessage(uint8_t client,const uint8_t* bytes,size_t size) {
@@ -383,7 +456,7 @@ void Server::onMessage(uint8_t client,const uint8_t* bytes,size_t size) {
       // prior socket cannot disconnect the replacement seat.
       if(previousSocket!=kNoConnection && previousSocket!=client) {
         ++takeovers_;
-        ws_.disconnect(static_cast<uint8_t>(previousSocket));
+        closeSocket(static_cast<uint8_t>(previousSocket));
       }
     }
   } else if(command.kind==Kind::Submit) {
@@ -397,7 +470,7 @@ void Server::onMessage(uint8_t client,const uint8_t* bytes,size_t size) {
       // The browser must discard stale sessionStorage tickets when the X4
       // starts a fresh game. Otherwise it keeps retrying a dead session.
       char expired[]="{\"type\":\"expired\"}";
-      ws_.sendTXT(client,expired,sizeof(expired)-1);
+      if(ws_.writable(client)) ws_.sendTXT(client,expired,sizeof(expired)-1);
     } else {
       sendError(client);
       // Duplicate or stale moves: resync the authenticated seat so its

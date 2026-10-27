@@ -1,5 +1,6 @@
 #!/bin/sh
-# Freestanding C++17 rules/seat/wire protocol, network adapter, 8-browser stress and browser smoke.
+# Freestanding C++17 rules/seat/wire protocol, network adapter, 8-browser stress,
+# TCP back-pressure and browser smoke.
 set -eu
 cd "$(dirname "$0")"
 mkdir -p /tmp/cardparty-host-tests
@@ -24,6 +25,11 @@ c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2 \
   test_stress.cpp -o /tmp/cardparty-host-tests/test_stress
 /tmp/cardparty-host-tests/test_stress
 /tmp/cardparty-host-tests/test_browser_server
+c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2 \
+  -I../battleship/stubs -I/tmp/cardparty-host-tests \
+  ../../src/apps_local/cardparty/web/CardPartyBrowserServer.cpp \
+  test_backpressure.cpp -o /tmp/cardparty-host-tests/test_backpressure
+/tmp/cardparty-host-tests/test_backpressure
 c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2 \
   -I../battleship/stubs -I/tmp/cardparty-host-tests \
   ../../src/apps_local/cardparty/web/CardPartyBrowserServer.cpp \
