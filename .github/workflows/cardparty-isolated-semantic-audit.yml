@@ -1,5 +1,5 @@
 # ISOLATED, ONE-SHOT editorial review. No PR, no merge, no crossplay build.
-# Third opt-in attempt: relax parameter routing after confirmed provider 404; local schema gate remains strict.
+# One-card re-audit: restore report and recheck two refined cards after final-clause test fix.
 # The branch is not targeted by the normal CrossPlay pull_request workflow.
 name: CardParty 20-card independent meaning/humor review
 
