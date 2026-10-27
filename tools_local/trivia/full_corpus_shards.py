@@ -57,6 +57,8 @@ def translate(args):
     done={r["id"]:r for r in cached}
     byid={r["id"]:r for r in src}
     for row in cached:
+        if row["id"] not in byid:
+            raise ValueError("Unknown translated checkpoint ID")
         validate_record(byid[row["id"]],row,allow_draft=True)
     quarantines=load(args.quarantine)
     failures={r["id"] for r in quarantines}
@@ -70,7 +72,8 @@ def translate(args):
     if not (set(done)|failures)<=expected:
         raise ValueError("Checkpoint contains source IDs outside this shard")
     key=os.getenv("OPENROUTER_API_KEY")
-    if not key: raise ValueError("OpenRouter key missing")
+    if (set(done)|failures)!=expected and not key:
+        raise ValueError("OpenRouter key missing")
     for i in positions:
         original=src[i]
         ident=original["id"]
