@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <initializer_list>
 #include "CardPartyCore.h"
 #include "CardPartySessions.h"
 using namespace cardparty;
@@ -97,13 +98,18 @@ void unsubmittedDisconnectMayFinishRound() {
   assert(s.join(1,"Alice",b.bytes,tb));
   assert(s.join(2,"Bob",c.bytes,tc));
   assert(s.hostStart());
-  // Bob is disconnected BEFORE submitting: once Alice submits, the round
-  // may advance instead of hanging forever on a player who disappeared.
+  // Bob is disconnected BEFORE submitting. His turn is held (screen lock,
+  // app switch) so Alice's answer alone does not skip him...
   assert(s.disconnect(2));
   const auto v=g.publicView();
-  assert(v.phase==Phase::Playing && v.expected==1);
+  assert(v.phase==Phase::Playing && v.expected==2 && g.held(tc.seat));
   const uint8_t slots[]={0,1,2};
   assert(s.submit(1,b.bytes,0,slots,v.pick));
+  assert(g.publicView().phase==Phase::Playing);
+  // ...until the transport's grace window releases it; then the round
+  // advances instead of hanging forever on a player who disappeared.
+  assert(g.releaseTurn(tc.seat));
+  assert(!g.releaseTurn(tc.seat));
   const auto judging=g.publicView();
   assert(judging.phase==Phase::Judging && judging.expected==1);
   assert(judging.submitted==1 && judging.plays==2);
@@ -143,10 +149,42 @@ void multipleSubmittedDisconnectsStillWaitForRemainingSeats() {
   assert(g.judge(0,0));
   assert(g.nextRound() && g.phase()==Phase::Finished);
 }
+void heldTurnReturnsBeforeGrace() {
+  Fixture f;
+  Game g;
+  assert(g.configure(f.deck,Rules{5,2,true},0x2024));
+  for(const char* n:{"Czar","Alice","Bob"}) assert(g.join(n)!=kNone);
+  assert(g.start());
+  const auto v=g.publicView();
+  const uint8_t alice=static_cast<uint8_t>((v.czar+1)%3), bob=static_cast<uint8_t>((v.czar+2)%3);
+  const uint8_t slots[]={0,1,2};
+  assert(g.submit(alice,slots,v.pick));
+  // Bob locks his phone: held, round waits.
+  assert(g.connected(bob,false) && g.held(bob));
+  assert(g.phase()==Phase::Playing && g.publicView().expected==2);
+  // He returns within the grace window and answers normally.
+  assert(g.connected(bob,true) && !g.held(bob));
+  assert(g.submit(bob,slots,v.pick));
+  assert(g.phase()==Phase::Judging && g.publicView().plays==3);
+  // The Czar and players who already answered are never held.
+  assert(g.connected(alice,false) && !g.held(alice));
+  assert(g.connected(v.czar,false) && !g.held(v.czar));
+  // The host may still close a stalled round at any time.
+  Game h;
+  assert(h.configure(f.deck,Rules{5,2,true},0x2025));
+  for(const char* n:{"Czar","Alice","Bob"}) assert(h.join(n)!=kNone);
+  assert(h.start());
+  const auto w=h.publicView();
+  const uint8_t a2=static_cast<uint8_t>((w.czar+1)%3), b2=static_cast<uint8_t>((w.czar+2)%3);
+  assert(h.submit(a2,slots,w.pick));
+  assert(h.connected(b2,false) && h.held(b2));
+  assert(h.closeSubmissions() && h.phase()==Phase::Judging);
+}
 } // namespace
 int main() {
   submittedPlayerDisconnectMustNotSkipOtherPlayer();
   unsubmittedDisconnectMayFinishRound();
   multipleSubmittedDisconnectsStillWaitForRemainingSeats();
-  std::puts("cardparty disconnect regression: submitted/unsent/Czar/8-seat transitions PASS");
+  heldTurnReturnsBeforeGrace();
+  std::puts("cardparty disconnect regression: submitted/unsent/held-turn/Czar/8-seat transitions PASS");
 }

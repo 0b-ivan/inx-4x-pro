@@ -81,7 +81,8 @@ void disconnectAndBounds(){
   auto a=g.join("A"),b=g.join("B"),c=g.join("C");
   CHECK(g.start());const uint8_t slots[]={0,1,2};
   CHECK(!g.closeSubmissions());CHECK(g.submit(b,slots,g.publicView().pick));
-  CHECK(g.connected(c,false));CHECK(g.phase()==Phase::Judging);
+  CHECK(g.connected(c,false));CHECK(g.phase()==Phase::Playing);CHECK(g.held(c));
+  CHECK(g.releaseTurn(c));CHECK(g.phase()==Phase::Judging);
   CHECK(!g.submit(c,slots,g.publicView().pick));CHECK(g.connected(c,true));
   CHECK(g.judge(a,0));CHECK(g.nextRound());CHECK(g.publicView().czar==b);
   CHECK(g.abortRound());CHECK(g.publicView().aborted);

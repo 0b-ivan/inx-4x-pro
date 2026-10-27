@@ -85,6 +85,7 @@ bool Server::begin(Mode mode) {
   }
   sessions_.reset();
   for (bool& connected : liveSocket_) connected = false;
+  rejected_ = takeovers_ = idleClosed_ = sendFailures_ = 0;
   ssid_.clear(); ip_.clear(); url_.clear(); password_[0] = 0;
   if (!devModePaused_) { devmode::pause(); devModePaused_ = true; }
   const bool networkOk = mode == Mode::Hotspot ? startHotspot() : startWifi();
@@ -108,14 +109,18 @@ bool Server::begin(Mode mode) {
   ws_.begin();
   ws_.enableHeartbeat(5000,3000,2);
   ws_.onEvent([this](uint8_t client, WStype_t type, uint8_t* payload, size_t length) {
-    if (type == WStype_CONNECTED) liveSocket_[client] = true;
-    else if (type == WStype_DISCONNECTED) {
+    if (type == WStype_CONNECTED) {
+      liveSocket_[client] = true;
+      if (client < kTrackedSlots) connectedAt_[client] = millis();
+    } else if (type == WStype_DISCONNECTED) {
       liveSocket_[client] = false;
       onDisconnect(client);
     } else if (type == WStype_TEXT && liveSocket_[client]) onMessage(client,payload,length);
   });
   running_ = true;
-  LOG_INF("CARDPARTY", "Game server ready at %s", url_.c_str());
+  lastDiagLog_ = millis();
+  LOG_INF("CARDPARTY", "Game server ready at %s (reset reason %d)", url_.c_str(),
+          static_cast<int>(esp_reset_reason()));
   return true;
 }
 
@@ -155,6 +160,65 @@ void Server::loop() {
   if (dnsRunning_) dns_.processNextRequest();
   http_.handleClient();
   ws_.loop();
+  const uint32_t now = millis();
+  closeIdleSockets(now);
+  releaseExpiredTurns(now);
+  if (static_cast<uint32_t>(now - lastDiagLog_) >= kDiagLogMs) logDiagnostics(now);
+}
+void Server::closeIdleSockets(uint32_t now) {
+  // A socket that never joined or resumed (join screen left open, rejected
+  // ninth player, stale tab) must not hold one of the bounded server slots.
+  // The browser reconnects on demand when its user presses JOIN.
+  for (uint8_t client=0; client<kTrackedSlots; ++client) {
+    if (!liveSocket_[client] || sessions_.seatOf(client) != kNone) continue;
+    if (static_cast<uint32_t>(now - connectedAt_[client]) < kAuthGraceMs) continue;
+    ++idleClosed_;
+    ws_.disconnect(client);  // DISCONNECTED clears liveSocket_
+    liveSocket_[client] = false;
+  }
+}
+void Server::releaseExpiredTurns(uint32_t now) {
+  bool changed=false;
+  for (uint8_t seat=0; seat<kPlayers; ++seat) {
+    if (!game_.held(seat)) continue;
+    if (static_cast<uint32_t>(now - heldSince_[seat]) < kTurnGraceMs) continue;
+    changed = game_.releaseTurn(seat) || changed;
+  }
+  if (changed) publishAll();
+}
+Server::Diagnostics Server::diagnostics() const {
+  Diagnostics d{};
+  if (!running_) return d;
+  d.valid = true;
+  d.freeHeap = ESP.getFreeHeap();
+  d.minFreeHeap = ESP.getMinFreeHeap();
+  d.maxAllocHeap = ESP.getMaxAllocHeap();
+  d.freePsram = ESP.getFreePsram();
+  uint8_t sockets = 0;
+  for (uint8_t i=0; i<kTrackedSlots; ++i) if (liveSocket_[i]) ++sockets;
+  d.sockets = sockets;
+  d.stations = mode_ == Mode::Hotspot ? static_cast<uint8_t>(WiFi.softAPgetStationNum()) : 0;
+  const PublicView v = game_.publicView();
+  for (const auto& p : v.players) {
+    if (p.seated) ++d.seated;
+    if (p.seated && p.connected) ++d.connected;
+  }
+  d.resetReason = static_cast<uint8_t>(esp_reset_reason());
+  d.rejected = rejected_; d.takeovers = takeovers_;
+  d.idleClosed = idleClosed_; d.sendFailures = sendFailures_;
+  return d;
+}
+void Server::logDiagnostics(uint32_t now) {
+  lastDiagLog_ = now;
+  const Diagnostics d = diagnostics();
+  (void)d;  // LOG_INF compiles away at LOG_LEVEL 0
+  LOG_INF("CARDPARTY",
+          "diag heap=%u min=%u maxblk=%u psram=%u ws=%u ap=%u seats=%u/%u "
+          "rej=%u takeover=%u idle=%u sendfail=%u reset=%u",
+          static_cast<unsigned>(d.freeHeap), static_cast<unsigned>(d.minFreeHeap),
+          static_cast<unsigned>(d.maxAllocHeap), static_cast<unsigned>(d.freePsram),
+          d.sockets, d.stations, d.connected, d.seated, d.rejected, d.takeovers,
+          d.idleClosed, d.sendFailures, d.resetReason);
 }
 void Server::sendGamePage() {
   http_.sendHeader("Content-Encoding","gzip");
@@ -173,9 +237,11 @@ void Server::configureRoutes() {
   });
   routesConfigured_=true;
 }
-void Server::sendError(uint8_t client) {
-  char response[]="{\"type\":\"error\",\"message\":\"REQUEST REJECTED\"}";
-  ws_.sendTXT(client,response,sizeof(response)-1);
+void Server::sendError(uint8_t client, const char* reason) {
+  char response[96]={};
+  JsonWriter w(response,sizeof(response));
+  w.raw("{\"type\":\"error\",\"message\":");w.quoted(reason);w.raw("}");
+  if(w.ok())ws_.sendTXT(client,response,w.size());
 }
 
 void Server::sendState(uint8_t seat, bool welcome) {
@@ -259,15 +325,21 @@ void Server::sendState(uint8_t seat, bool welcome) {
     w.raw("}");
   }
   w.raw("]}}");
-  if(w.ok())ws_.sendTXT(static_cast<uint8_t>(socket_[seat]),message_,w.size());
-  else LOG_ERR("CARDPARTY","Outgoing view exceeded bounded buffer");
+  if(!w.ok()) {
+    ++sendFailures_;
+    LOG_ERR("CARDPARTY","Outgoing view exceeded bounded buffer");
+  } else if(!ws_.sendTXT(static_cast<uint8_t>(socket_[seat]),message_,w.size())) {
+    ++sendFailures_;
+  }
 }
 void Server::publishAll() {
   for(uint8_t i=0;i<kPlayers;++i)
     if(socket_[i]!=kNoConnection)sendState(i,false);
 }
 void Server::onDisconnect(uint8_t client) {
+  const uint8_t seat=sessions_.seatOf(client);
   sessions_.disconnect(client);
+  if(seat!=kNone && game_.held(seat)) heldSince_[seat]=millis();
   for(uint8_t i=0;i<kPlayers;++i)
     if(socket_[i]==client)socket_[i]=kNoConnection;
   publishAll();
@@ -286,6 +358,13 @@ void Server::onMessage(uint8_t client,const uint8_t* bytes,size_t size) {
       tickets_[ticket.seat]=ticket;
       socket_[ticket.seat]=client;
       sendState(ticket.seat,true);
+    } else {
+      ++rejected_;
+      // Not secret: tells the player why, without revealing any seat data.
+      sendError(client, sessions_.seatOf(client)!=kNone ? "ALREADY JOINED" :
+                        game_.phase()!=Phase::Lobby ? "GAME ALREADY RUNNING" :
+                        game_.lobbyFull() ? "SESSION FULL" : "REQUEST REJECTED");
+      return;
     }
   } else if(command.kind==Kind::Resume) {
     uint8_t fresh[kTicketBytes]={};
@@ -302,8 +381,10 @@ void Server::onMessage(uint8_t client,const uint8_t* bytes,size_t size) {
       // one of the bounded X4 WebSocket slots indefinitely.
       // Ownership has already moved, so a late DISCONNECTED event from the
       // prior socket cannot disconnect the replacement seat.
-      if(previousSocket!=kNoConnection && previousSocket!=client)
+      if(previousSocket!=kNoConnection && previousSocket!=client) {
+        ++takeovers_;
         ws_.disconnect(static_cast<uint8_t>(previousSocket));
+      }
     }
   } else if(command.kind==Kind::Submit) {
     accepted=sessions_.submit(client,command.secret,command.revision,command.slots,command.count);
@@ -311,12 +392,19 @@ void Server::onMessage(uint8_t client,const uint8_t* bytes,size_t size) {
     accepted=sessions_.judge(client,command.secret,command.revision,command.selected);
   }
   if(!accepted) {
+    ++rejected_;
     if(command.kind==Kind::Resume) {
       // The browser must discard stale sessionStorage tickets when the X4
       // starts a fresh game. Otherwise it keeps retrying a dead session.
       char expired[]="{\"type\":\"expired\"}";
       ws_.sendTXT(client,expired,sizeof(expired)-1);
-    } else sendError(client);
+    } else {
+      sendError(client);
+      // Duplicate or stale moves: resync the authenticated seat so its
+      // browser re-enables controls with the current revision and phase.
+      const uint8_t seat=sessions_.authenticatedSeat(client,command.secret);
+      if(seat!=kNone && socket_[seat]==client) sendState(seat,false);
+    }
     return;
   }
   publishAll();
@@ -335,6 +423,10 @@ bool Server::hostClose() {
 }
 bool Server::hostAbort() {
   if(!sessions_.hostAbort())return false;
+  publishAll();return true;
+}
+bool Server::hostRematch() {
+  if(!sessions_.hostRematch())return false;
   publishAll();return true;
 }
 }} // namespace cardparty::web
@@ -414,5 +506,7 @@ bool Server::hostStart(){return sessions_.hostStart();}
 bool Server::hostNext(){return sessions_.hostNext();}
 bool Server::hostClose(){return sessions_.hostClose();}
 bool Server::hostAbort(){return sessions_.hostAbort();}
+bool Server::hostRematch(){return sessions_.hostRematch();}
+Server::Diagnostics Server::diagnostics() const {return Diagnostics{};}
 }} // namespace cardparty::web
 #endif

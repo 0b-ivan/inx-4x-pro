@@ -32,7 +32,23 @@ class Server final {
   bool hostNext();
   bool hostAbort();
   bool hostClose();
+  bool hostRematch();
   bool running() const { return running_; }
+
+  // Field telemetry for the hardware acceptance run. Contains counts only:
+  // never tickets, names or cards.
+  struct Diagnostics {
+    bool valid=false;
+    uint32_t freeHeap=0, minFreeHeap=0, maxAllocHeap=0, freePsram=0;
+    uint8_t sockets=0, stations=0, seated=0, connected=0, resetReason=0;
+    uint16_t rejected=0, takeovers=0, idleClosed=0, sendFailures=0;
+  };
+  Diagnostics diagnostics() const;
+  // Unauthenticated sockets are closed after this, freeing a bounded slot.
+  static constexpr uint32_t kAuthGraceMs=20000;
+  static constexpr uint32_t kDiagLogMs=15000;
+  // A pending answerer who drops keeps the round open this long.
+  static constexpr uint32_t kTurnGraceMs=30000;
   bool hotspot() const { return mode_ == Mode::Hotspot; }
   const char* ssid() const { return ssid_.c_str(); }
   const char* password() const { return password_; }
@@ -49,7 +65,10 @@ class Server final {
   void onDisconnect(uint8_t client);
   void sendState(uint8_t seat, bool welcome);
   void publishAll();
-  void sendError(uint8_t client);
+  void sendError(uint8_t client, const char* reason="REQUEST REJECTED");
+  void closeIdleSockets(uint32_t now);
+  void releaseExpiredTurns(uint32_t now);
+  void logDiagnostics(uint32_t now);
   void fillSecret(uint8_t secret[kTicketBytes]);
   void releaseDevMode();
   WebServer http_{80};
@@ -61,6 +80,11 @@ class Server final {
   SessionTicket tickets_[kPlayers]={};
   uint32_t socket_[kPlayers]={};
   bool liveSocket_[256]={}; // WebSocket client slot must be connected
+  static constexpr uint8_t kTrackedSlots=16;
+  uint32_t connectedAt_[kTrackedSlots]={};
+  uint32_t lastDiagLog_=0;
+  uint32_t heldSince_[kPlayers]={};
+  uint16_t rejected_=0, takeovers_=0, idleClosed_=0, sendFailures_=0;
 #endif
   Game& game_;
   Sessions& sessions_;

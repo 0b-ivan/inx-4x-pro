@@ -127,7 +127,11 @@ int main() {
   assert(game.publicView().phase==Phase::Playing);
   const size_t beforeReplay=ws.messages.size();
   send(ws,1,"{\"type\":\"submit\",\"token\":\""+tokens[1]+"\",\"revision\":0,\"slots\":[0]}");
-  assert(ws.messages.size()==beforeReplay+1);
+  // Rejected replay: error, then a resync of the authenticated seat only.
+  assert(ws.messages.size()==beforeReplay+2);
+  assert(ws.messages[beforeReplay].find("\"type\":\"error\"")!=std::string::npos);
+  assert(ws.recipients.back()==1);
+  assert(ws.messages.back().find("\"type\":\"state\",\"revision\":1")!=std::string::npos);
   assert(game.publicView().submitted==1);
 
   send(ws,2,"{\"type\":\"submit\",\"token\":\""+tokens[2]+"\",\"revision\":0,\"slots\":[0]}");

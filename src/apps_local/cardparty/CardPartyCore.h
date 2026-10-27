@@ -57,10 +57,15 @@ class Game {
     for (auto& play:pile_) play=Play{};
     return true;
   }
-  uint8_t join(const char* name) {
-    if (phase_!=Phase::Lobby || !deck_ || !name) return kNone;
+  static bool validName(const char* name) {
+    if (!name) return false;
     size_t n=0; while (name[n] && n<=23) ++n;
-    if (!n || n>23) return kNone;
+    return n>0 && n<=23;
+  }
+  bool lobbyFull() const { return phase_==Phase::Lobby && count_>=kPlayers; }
+  uint8_t join(const char* name) {
+    if (phase_!=Phase::Lobby || !deck_ || !validName(name)) return kNone;
+    size_t n=0; while (name[n] && n<23) ++n;
     for (uint8_t i=0;i<kPlayers;++i) if (!players_[i].seated) {
       players_[i]=Player{}; Player& p=players_[i];
       std::memcpy(p.name,name,n); p.name[n]=0;
@@ -72,9 +77,22 @@ class Game {
     if (phase_!=Phase::Lobby || !valid(seat)) return false;
     players_[seat]=Player{}; --count_; return true;
   }
+  // A pending answerer who drops keeps their turn open ("held") until the
+  // transport calls releaseTurn() after its grace window, or until the host
+  // closes submissions. Phone browsers drop WebSockets on every screen lock
+  // or app switch; the slowest player must not be skipped by a 2 s blip.
   bool connected(uint8_t seat, bool value) {
     if (!valid(seat)) return false;
-    players_[seat].connected=value;
+    Player& p=players_[seat];
+    p.connected=value;
+    p.held=!value && phase_==Phase::Playing && seat!=czar_ && !p.submitted;
+    if (phase_==Phase::Playing) maybeJudge();
+    return true;
+  }
+  bool held(uint8_t seat) const { return valid(seat) && players_[seat].held; }
+  bool releaseTurn(uint8_t seat) {
+    if (!valid(seat) || !players_[seat].held) return false;
+    players_[seat].held=false;
     if (phase_==Phase::Playing) maybeJudge();
     return true;
   }
@@ -141,6 +159,28 @@ class Game {
       while(p.size<rules_.hand){const uint16_t c=draw();if(c==kNoCard)return false;p.hand[p.size++]=c;}
     czar_=next(czar_); ++round_; return beginRound();
   }
+  // Same seats and names, fresh match: hands, points and round state reset.
+  // Keeps the network session alive so phones need not rejoin the hotspot.
+  bool rematch() {
+    if (phase_!=Phase::Finished || !deck_) return false;
+    phase_=Phase::Lobby; round_=0; prompt_=kNoCard; czar_=kNone; pick_=draw_=0;
+    plays_=0; selected_=kNone; winner_=kNone; aborted_=false;
+    for (auto& play:pile_) play=Play{};
+    for (auto& p:players_) {
+      if (!p.seated) continue;
+      Player fresh{}; fresh.seated=true; fresh.connected=p.connected;
+      std::memcpy(fresh.name,p.name,sizeof(fresh.name));
+      p=fresh;
+    }
+    return true;
+  }
+  // Lobby seat whose browser is gone; reclaimable when the lobby is full.
+  uint8_t disconnectedLobbySeat() const {
+    if (phase_!=Phase::Lobby) return kNone;
+    for (uint8_t i=0;i<kPlayers;++i)
+      if (players_[i].seated && !players_[i].connected) return i;
+    return kNone;
+  }
   PublicView publicView() const {
     PublicView v{};v.phase=phase_;v.czar=czar_;v.round=round_;v.prompt=prompt_;
     v.pick=pick_;v.draw=draw_;v.submitted=humanPlays();v.expected=expected();
@@ -173,7 +213,7 @@ class Game {
   Phase phase() const{return phase_;}
  private:
   struct Player {
-    bool seated=false,connected=false,submitted=false; char name[24]={};
+    bool seated=false,connected=false,submitted=false,held=false; char name[24]={};
     uint16_t hand[kHandMax]={}; uint8_t size=0;
     uint8_t selected[kPickMax]={kNone,kNone,kNone};uint16_t points=0;
   };
@@ -207,11 +247,11 @@ class Game {
     // *still* count toward the round's expected answer total. Otherwise
     // dropping the Wi-Fi link after submitting could prematurely advance
     // to Judging while another connected player has not yet answered.
-    // Players who left before submitting no longer block the round.
+    // Players who left before submitting block only while their turn is held.
     uint8_t n=0;
     for(uint8_t i=0;i<kPlayers;++i)
       if(i!=czar_ && players_[i].seated &&
-         (players_[i].connected || players_[i].submitted)) ++n;
+         (players_[i].connected || players_[i].submitted || players_[i].held)) ++n;
     return n;
   }
   uint8_t humanPlays() const {uint8_t n=0;for(uint8_t i=0;i<plays_;++i)if(pile_[i].author!=kRando)++n;return n;}
@@ -232,7 +272,7 @@ class Game {
     prompt_=(n==prompt_&&deck_->promptsCount>1)?static_cast<uint16_t>((n+1)%deck_->promptsCount):n;
     pick_=deck_->prompts[prompt_].pick;draw_=deck_->prompts[prompt_].draw;
     for(uint8_t i=0;i<kPlayers;++i)if(players_[i].seated) {
-      Player& p=players_[i];p.submitted=false;for(auto& slot:p.selected)slot=kNone;
+      Player& p=players_[i];p.submitted=false;p.held=false;for(auto& slot:p.selected)slot=kNone;
       if(i==czar_)continue;
       for(uint8_t j=0;j<draw_;++j){uint16_t c=draw();if(c==kNoCard||p.size>=kHandMax)return false;p.hand[p.size++]=c;}
     }

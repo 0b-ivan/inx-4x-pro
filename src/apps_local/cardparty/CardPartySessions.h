@@ -37,7 +37,15 @@ class Sessions final {
   bool join(uint32_t connection, const char* name,
             const uint8_t freshSecret[kTicketBytes], SessionTicket& ticket) {
     if (connection == kNoConnection || !freshSecret || !validSecret(freshSecret) ||
-        connectionInUse(connection) || secretInUse(freshSecret)) return false;
+        connectionInUse(connection) || secretInUse(freshSecret) ||
+        !Game::validName(name)) return false;
+    // A full lobby may reclaim a seat whose browser is gone (tab switched,
+    // QR opened in a second browser). Live seats are never displaced.
+    if (game_.lobbyFull()) {
+      const uint8_t ghost = game_.disconnectedLobbySeat();
+      if (ghost == kNone || !game_.leaveLobby(ghost)) return false;
+      seats_[ghost] = Seat{};
+    }
     const uint8_t seat = game_.join(name);
     if (seat == kNone) return false;
     Seat& state = seats_[seat];
@@ -71,12 +79,16 @@ class Sessions final {
               const uint8_t freshSecret[kTicketBytes], SessionTicket& ticket) {
     if (connection == kNoConnection || !oldSecret || !freshSecret ||
         !validSecret(oldSecret) || !validSecret(freshSecret) ||
-        connectionInUse(connection) || secretInUse(freshSecret)) return false;
+        secretInUse(freshSecret)) return false;
+    const uint8_t bound = seatOf(connection);
 
     for (uint8_t i = 0; i < kPlayers; ++i) {
       Seat& state = seats_[i];
       if (!state.registered || !sameSecret(state.secret, oldSecret))
         continue;
+      // One connection never controls two seats; re-proving the own seat on
+      // the same socket is harmless and simply rotates the ticket.
+      if (bound != kNone && bound != i) return false;
       // The connection itself does not establish identity: possession of the
       // 128-bit ticket authorizes a handover, even while the previous socket
       // is still considered live. Subsequent frames from that old socket
@@ -137,6 +149,22 @@ class Sessions final {
   bool hostNext() { return game_.nextRound(); }
   bool hostClose() { return game_.closeSubmissions(); }
   bool hostAbort() { return game_.abortRound(); }
+  // Seat bindings and tickets survive so every phone lands in the new lobby.
+  bool hostRematch() { return game_.rematch(); }
+
+  // Seat proven by BOTH the live connection and its current ticket.
+  uint8_t authenticatedSeat(uint32_t connection, const uint8_t secret[kTicketBytes]) const {
+    return authenticate(connection, secret);
+  }
+
+  // Seat bound to a live connection, or kNone.
+  uint8_t seatOf(uint32_t connection) const {
+    if (connection == kNoConnection) return kNone;
+    for (uint8_t i = 0; i < kPlayers; ++i)
+      if (seats_[i].registered && seats_[i].connected &&
+          seats_[i].connection == connection) return i;
+    return kNone;
+  }
 
   PublicView publicView() const { return game_.publicView(); }
 
@@ -161,11 +189,7 @@ class Sessions final {
     return diff == 0;
   }
 
-  bool connectionInUse(uint32_t connection) const {
-    for (const auto& s : seats_)
-      if (s.registered && s.connected && s.connection == connection) return true;
-    return false;
-  }
+  bool connectionInUse(uint32_t connection) const { return seatOf(connection) != kNone; }
 
   bool secretInUse(const uint8_t* secret) const {
     for (const auto& s : seats_)
