@@ -201,6 +201,46 @@ hardware correctness.
   `v1.16.13-rc.20261027.ge3bdea3c` is immutable and does *not* contain
   these hardening changes. A new OTA must be independently approved.
 
+## Session lifecycle and slot hardening (2026-10-27, second pass)
+
+Found by code review of the reconnect path and reproduced in
+`host-tests/cardparty/test_stress.cpp` before fixing:
+
+| Defect | Effect on a real 8-phone table | Fix |
+|---|---|---|
+| Lobby seat of a vanished browser (QR opened in-app, then in Safari) stays seated forever | 8 seats used by 7 people; the eighth cannot join | A full lobby reclaims a *disconnected* lobby seat; live seats are never displaced; the reclaimed ticket answers `expired` |
+| Socket that never joins (join screen left open, refused ninth player) holds a library slot and reconnects every 1.5 s | Three idle tabs exhaust the 10 slots; seated players cannot reconnect | X4 closes sockets that are not bound to a seat after `kAuthGraceMs` (20 s); the browser reconnects only while it holds a ticket, otherwise on JOIN |
+| Last pending answerer locks the phone → immediate `DISCONNECTED` → round jumps to Judging | The slowest player is skipped by a 2 s app switch | Pending answerer's turn is *held* for `kTurnGraceMs` (30 s). Back in time: plays normally. Otherwise the round advances; the host can still close submissions at any time |
+| X4 BACK ended a running session immediately | One stray press kills the party for everyone | Second BACK within 7 s required once players are seated |
+| New match = hotspot restart with a new random password | Every phone must rejoin Wi-Fi and rescan the QR | `[ REMATCH ]` keeps network, seats, names and tickets; scores and hands reset; phones land in the lobby |
+| Rejected submit/judge (duplicate, stale revision) only returned `error` | Button stays disabled until the next broadcast | Authenticated seat gets an immediate state resync after the error |
+| Browser limited names by UTF-16 length, server by 23 bytes | `Jürgen-Schäfer-Müller` failed with a generic error | Browser checks UTF-8 bytes; server explains `SESSION FULL`, `GAME ALREADY RUNNING`, `ALREADY JOINED` |
+| No telemetry while CardParty pauses DevMode | Heap/watchdog acceptance not measurable | `Server::diagnostics()`: heap, min heap, largest block, PSRAM, sockets, AP stations, seats, rejects, takeovers, idle closes, send failures, reset reason. Serial `CARDPARTY diag …` every 15 s; one `SYS H…K M…K WS.. AP..` line on the X4 footer, repainted only with normal game refreshes |
+
+Diagnostics never include tickets, names or cards.
+
+### Stress test model
+
+`test_stress.cpp` drives the real `Server`, `Sessions` and `Game` with eight
+browser clients against a fake transport that models what matters on the X4
+Pro: ten numbered slots (`WEBSOCKETS_SERVER_CLIENT_MAX=10`), lowest-free slot
+reuse, refusal when full, and frames to closed slots being lost. Three seeds,
+ten rounds each with the real demo deck, reloads (overlapping and clean) in
+Lobby/Playing/Judging/Reveal, duplicate submits and judge replays, a rematch,
+plus dedicated ghost-seat, held-turn and same-socket resume cases. After every
+step it checks: one socket per seat, every seat bound to an open slot, no slot
+leak, at most one human point per round, hands identical across reloads, and
+that every ticket only ever travels to the socket it was issued to. Worst
+measured state frame: ~2.2 KB of the 6 KB bound.
+
+Mutation check: removing the takeover `ws_.disconnect` or the idle-socket
+close each fails the suite (>130 failed checks).
+
+**Not proven by this test:** radio behaviour, TCP back-pressure of a half-dead
+phone (a blocking `sendTXT` stalls the loop), heap under real TLS-less
+traffic, e-ink refresh. See
+[cards-against-whatever-hardware-acceptance.md](cards-against-whatever-hardware-acceptance.md).
+
 ## Milestone 1 implementation and remaining acceptance gates
 
 ### Implemented on the feature branch
@@ -236,6 +276,8 @@ hardware correctness.
       Rando entry, hidden authors, real czar scoring and ten complete rounds.
 - [ ] Eight real/browser clients soak including disconnects, socket exhaustion,
       reconnect-token rollover, shared-local-network risks and stall recovery.
+      Procedure and pass criteria:
+      [hardware acceptance plan](cards-against-whatever-hardware-acceptance.md).
 - [ ] Browser viewport/scroll/keyboard snapshots 320 px, 390 px and desktop;
       long German text, RTL not required unless localization supports it.
 - [ ] Resolve any device-specific payload limits or refresh defects.
