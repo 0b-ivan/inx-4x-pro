@@ -61,6 +61,8 @@ def translate(args):
     quarantines=load(args.quarantine)
     failures={r["id"] for r in quarantines}
     for row in quarantines:
+        if row["id"] not in byid:
+            raise ValueError("Unknown quarantine checkpoint ID")
         if row.get("source_hash")!=source_hash(byid[row["id"]]):
             raise ValueError("Quarantine checkpoint source hash mismatch")
     if len(done)!=len(cached) or len(failures)!=len(quarantines) or (set(done)&failures):
