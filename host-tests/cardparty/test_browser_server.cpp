@@ -178,8 +178,9 @@ int main() {
   assert(game.publicView().players[1].connected);
   send(ws,4,"{\"type\":\"submit\",\"token\":\""+tokens[1]+"\",\"revision\":1,\"slots\":[0]}");
   assert(ws.messages.back().find("\"type\":\"error\"")!=std::string::npos);
+  const size_t disconnectedAt=ws.messages.size();
   send(ws,1,"{\"type\":\"submit\",\"token\":\""+renewed+"\",\"revision\":1,\"slots\":[0]}");
-  assert(ws.messages.back().find("\"type\":\"error\"")!=std::string::npos);
+  assert(ws.messages.size()==disconnectedAt); // disconnected sockets get no reply
 
   server.stop();
   assert(!server.running());
