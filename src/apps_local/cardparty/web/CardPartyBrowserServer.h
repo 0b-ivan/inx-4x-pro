@@ -75,7 +75,6 @@ class Server final {
   WebSocketsServer ws_{81};
   DNSServer dns_;
   bool routesConfigured_=false, dnsRunning_=false, devModePaused_=false;
-  uint8_t passwordIndex_=0;
   char message_[6144]={};
   SessionTicket tickets_[kPlayers]={};
   uint32_t socket_[kPlayers]={};
