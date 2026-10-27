@@ -2,6 +2,7 @@
 // The native host simulates users, not real Wi-Fi / devices.
 #include <cassert>
 #include <cstdio>
+#include <initializer_list>
 #include "CardPartyCore.h"
 #include "CardPartyDemoDeck.h"
 using namespace cardparty;
