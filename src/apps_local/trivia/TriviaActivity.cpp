@@ -1019,8 +1019,13 @@ void TriviaActivity::routeAction(const int action, const int value) {
       awsNextPage();
       break;
     case triviaui::ActionAwsNextQuestion:
-      if ((view_ == View::AwsExplanation || view_ == View::AwsSummary) &&
-          awsHasQuestion_) awsDeal();
+      if (view_ == View::AwsExplanation || view_ == View::AwsSummary) {
+        // Completing every missed-question retry must not strand the NEXT
+        // button in an empty review queue. Continue with ordinary study.
+        if (view_ == View::AwsSummary && awsReviewMissed_ &&
+            awsMissedCount() == 0) awsReviewMissed_ = false;
+        awsDeal();
+      }
       break;
     case triviaui::ActionAwsGlossaryTerm:
       if (view_ == View::AwsGlossary && value >= 0 &&
