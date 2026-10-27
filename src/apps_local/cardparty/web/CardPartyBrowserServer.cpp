@@ -302,7 +302,15 @@ void Server::onMessage(uint8_t client,const uint8_t* bytes,size_t size) {
   } else if(command.kind==Kind::Judge) {
     accepted=sessions_.judge(client,command.secret,command.revision,command.selected);
   }
-  if(!accepted) {sendError(client);return;}
+  if(!accepted) {
+    if(command.kind==Kind::Resume) {
+      // The browser must discard stale sessionStorage tickets when the X4
+      // starts a fresh game. Otherwise it keeps retrying a dead session.
+      char expired[]="{\"type\":\"expired\"}";
+      ws_.sendTXT(client,expired,sizeof(expired)-1);
+    } else sendError(client);
+    return;
+  }
   publishAll();
 }
 bool Server::hostStart() {
