@@ -95,8 +95,8 @@ def translate(args):
                     raise
                 errors.append(str(err)[:200])
             except urllib.error.HTTPError as err:
-                if err.code in (401,402,403):
-                    raise RuntimeError("OpenRouter blocked HTTP "+str(err.code))
+                if err.code in (401,402,403,404):
+                    raise RuntimeError("OpenRouter blocked HTTP "+str(err.code)+"; check model/provider availability and request parameters")
                 if err.code==429 or err.code>=500:
                     if attempt==1: raise
                     time.sleep(9)
