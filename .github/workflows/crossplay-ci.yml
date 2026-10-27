@@ -356,6 +356,22 @@ jobs:
             "$PACKS/SAA-C03-DEMO.dat" "$PACKS/SAA-C03-DEMO.topics" \
             --repo "$GITHUB_REPOSITORY" --clobber
 
+      - name: Verify Nightly retention policy
+        shell: bash
+        run: python3 -m unittest discover -s host-tests/release -p 'test_release_retention.py' -v
+
+      - name: Prune superseded feature Nightlies (stable and data releases excluded)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Delete only verified old feature prereleases after this exact new
+          # build has passed and the new tag is publicly available.
+          python3 scripts_local/release_retention.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --protect-tag "$NIGHTLY_TAG" \
+            --keep-study 3 --keep-connect-four 2 \
+            --min-age-hours 4 --apply
+
   # Manual prerelease on main only, gated by the same three CI jobs.
   # Never publish prereleases from pull requests or old feature branches.
   nightly-release:
