@@ -310,14 +310,79 @@ bool Server::hostAbort() {
 }
 }} // namespace cardparty::web
 #else
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
 namespace cardparty { namespace web {
+namespace {
+// SDL scenario tests use the real game rules but entirely simulated seats:
+// no TCP listener, no Wi-Fi, no credentials or real browser sessions.
+bool submitSimulatedHands(Game& game) {
+  const auto v = game.publicView();
+  if (v.phase != Phase::Playing) return false;
+  const uint8_t slots[kPickMax]={0,1,2};
+  for (uint8_t i=0;i<kPlayers;++i) {
+    if (!v.players[i].seated || i==v.czar) continue;
+    if (!game.submit(i,slots,v.pick)) return false;
+  }
+  return game.phase()==Phase::Judging;
+}
+bool judgeSimulatedRound(Game& game) {
+  if (!submitSimulatedHands(game)) return false;
+  const auto v=game.publicView();
+  return game.judge(v.czar,0) && game.phase()==Phase::Reveal;
+}
+}
 Server::~Server()=default;
-bool Server::begin(Mode m) {mode_=m;running_=false;return false;}
+bool Server::begin(Mode m) {
+  mode_=m;
+  const char* scenario=std::getenv("CROSSPLAY_SIM_CARDPARTY_STATE");
+  // A normal simulator launch remains unchanged: CardParty HTTP/WebSocket
+  // cannot run through the hardware WiFi classes, by design.
+  if (!scenario || !*scenario || std::strcmp(scenario,"setup")==0) {
+    running_=false;
+    return false;
+  }
+  if (game_.phase()!=Phase::Lobby) return false;
+  sessions_.reset();
+  ssid_="SIMULATED-CAW";
+  ip_="192.0.2.1";  // RFC5737 documentation IP (not routable)
+  url_="http://192.0.2.1/cardparty";
+  std::memcpy(password_,"SIMULATOR-ONLY",15);
+  password_[15]=0;
+  for (const char* name:{"ADA","BERT","CYRA"}) {
+    if (game_.join(name)==kNone) return false;
+  }
+  if (std::strcmp(scenario,"lobby")==0) {
+    running_=true;
+  } else if (std::strcmp(scenario,"collect")==0) {
+    running_=game_.start();
+  } else if (std::strcmp(scenario,"judge")==0) {
+    running_=game_.start() && submitSimulatedHands(game_);
+  } else if (std::strcmp(scenario,"reveal")==0) {
+    running_=game_.start() && judgeSimulatedRound(game_);
+  } else if (std::strcmp(scenario,"finished")==0) {
+    running_=game_.start();
+    // Same ten-round game state transitions as the real production engine.
+    for (int round=0;running_ && round<10;++round) {
+      running_=judgeSimulatedRound(game_) && game_.nextRound();
+    }
+    running_=running_ && game_.phase()==Phase::Finished;
+  }
+  if (running_) {
+    std::printf("CARDPARTY_SIM_STATE=%s PHASE=%u ROUND=%u\n",
+                scenario,static_cast<unsigned>(game_.phase()),game_.round());
+  } else {
+    std::printf("CARDPARTY_SIM_FIXTURE_FAILED=%s\n",scenario);
+  }
+  return running_;
+}
 void Server::loop(){}
-void Server::stop(){running_=false;}
-bool Server::hostStart(){return false;}
-bool Server::hostNext(){return false;}
-bool Server::hostClose(){return false;}
-bool Server::hostAbort(){return false;}
+void Server::stop(){running_=false;password_[0]=0;ssid_.clear();ip_.clear();url_.clear();}
+bool Server::hostStart(){return sessions_.hostStart();}
+bool Server::hostNext(){return sessions_.hostNext();}
+bool Server::hostClose(){return sessions_.hostClose();}
+bool Server::hostAbort(){return sessions_.hostAbort();}
 }} // namespace cardparty::web
 #endif
