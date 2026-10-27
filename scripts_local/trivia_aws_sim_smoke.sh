@@ -112,7 +112,11 @@ assert images[8] != images[9], "Completed retry did not open summary screen"
 state = (root / "DOP-C02.state").read_bytes()
 assert state == b"\x01", f"Review Missed did not clear MISSED flag: {state.hex()}"
 assert len((root / "DOP-C02.state.id").read_bytes()) == 4, "no pack identity stamp"
-assert not (root / "SAA-C03.state").exists(), "Switching to DOP-C02 touched another certificate"
+assert not (root / "SAA-C03.state").exists(), "Studying DOP-C02 touched SAA-C03"
+# The chosen certificate is restored from this preference on a subsequent
+# simulator/device boot, rather than relying on SD directory enumeration.
+chosen = (root.parent / "study-selected").read_text(encoding="ascii")
+assert chosen == "DOP-C02", f"Wrong saved certificate after first session: {chosen!r}"
 text = log.read_text(errors="replace")
 assert "Autostart into TRIVIA" in text, "Trivia Activity not entered"
 print("PASS X4 Pro AWS study SDL: menu -> wrong -> Review Missed -> correct, progress persisted")
@@ -149,6 +153,10 @@ assert d == b"\x01", f"Opening SAA-C03 altered DOP-C02 progress: {d.hex()}"
 assert s == b"\x01", f"SAA-C03 should have independent correct-answer progress: {s.hex()}"
 assert (root / "DOP-C02.state.id").exists()
 assert (root / "SAA-C03.state.id").exists()
+chosen = (root.parent / "study-selected").read_text(encoding="ascii")
+assert chosen == "SAA-C03", f"Selected certificate was not persisted: {chosen!r}"
+assert (root / "DOP-C02.state.id").read_bytes() != (root / "SAA-C03.state.id").read_bytes(), (
+    "Different certification packs must have different content identities")
 assert (screenshots / "saa-menu.bmp").stat().st_size > 1000
 assert (screenshots / "saa-correct.bmp").stat().st_size > 1000
 print("PASS X4 Pro AWS study SDL: DOP-C02 and SAA-C03 independent selections/progress")
