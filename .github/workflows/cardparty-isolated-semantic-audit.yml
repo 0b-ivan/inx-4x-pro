@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: cardparty-isolated-audit
@@ -42,6 +43,19 @@ jobs:
             --manifest tools_local/cardparty_l10n/examples/deck.json \
             --source tools_local/cardparty_l10n/examples/cards-en.jsonl \
             --drafts tools_local/cardparty_l10n/examples/cards-de-editorial-proposed.jsonl
+      - name: Restore first two verified GPT-5.4 reviews without new API charges
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download 40578551810 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name cardparty-gpt54-semantic-audit-unreviewed \
+            --dir "$RUNNER_TEMP"
+          test "$(wc -l < "$RUNNER_TEMP/cardparty-independent-semantic-review.jsonl")" -eq 2
+          echo "Reusing 2 completed model reviews with source and candidate hash verification"
+
       - name: Independently review meaning, humor, context and deck grammar
         shell: bash
         env:
