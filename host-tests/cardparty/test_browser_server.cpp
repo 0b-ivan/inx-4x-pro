@@ -96,6 +96,15 @@ int main() {
     assert(ws.messages.back().find("\"type\":\"state\"")!=std::string::npos);
   }
   assert(game.publicView().phase==Phase::Lobby);
+  // An old tab tries to resume a ticket belonging to a previous match.
+  // The browser must receive "expired" and return to JOIN, not retry forever.
+  ws.event(WStype_CONNECTED,9);
+  const size_t staleAt=ws.messages.size();
+  send(ws,9,R"({"type":"resume","token":"ffffffffffffffffffffffffffffffff"})");
+  assert(ws.messages.size()==staleAt+1);
+  assert(ws.recipients.back()==9);
+  assert(ws.messages.back()==R"({"type":"expired"})");
+  ws.event(WStype_DISCONNECTED,9);
   const size_t marker=ws.messages.size();
   send(ws,3,R"({"type":"join","name":"Not connected"})");
   assert(ws.messages.size()==marker); // unconnected socket is silently ignored
