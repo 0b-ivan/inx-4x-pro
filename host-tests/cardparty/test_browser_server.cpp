@@ -147,5 +147,49 @@ int main() {
   server.stop();
   devmode::resume();
   assert(devmode::depth==0);
-  std::puts("cardparty X4 server: HTTP, seats, auth, anonymous scoring, reconnect and cleanup OK");
+
+  // Actual 8-seat transport/score boundary: 7 human plays + Rando = 8.
+  // The ninth socket may observe HTTP but must not claim a ninth game seat.
+  {
+    Game many;
+    assert(many.configure(fixture.deck, Rules{5,1,true}, 789));
+    Sessions group(many);
+    Server eight(many,group,fixture.deck);
+    WiFi.mode(WIFI_STA);
+    assert(eight.begin(Server::Mode::ExistingWifi));
+    auto& bus=*WebSocketsServer::instance;
+    std::string keys[8];
+    for(int i=0;i<8;++i) {
+      bus.event(WStype_CONNECTED,static_cast<uint8_t>(i));
+      const size_t mark=bus.messages.size();
+      send(bus,i,std::string("{\"type\":\"join\",\"name\":\"") + char('A'+i) + "\"}");
+      keys[i]=lastWelcome(bus,mark,i);
+      assert(keys[i].size()==32);
+      assert(hasPrivateFor(bus,i));
+    }
+    bus.event(WStype_CONNECTED,8);
+    const size_t before=bus.messages.size();
+    send(bus,8,R"({"type":"join","name":"Ninth"})");
+    assert(bus.messages.size()==before+1);
+    assert(bus.messages.back().find("\"type\":\"error\"")!=std::string::npos);
+    assert(eight.hostStart());
+    assert(many.publicView().expected==7);
+    for(int i=1;i<8;++i) {
+      send(bus,i,"{\"type\":\"submit\",\"token\":\""+keys[i]+"\",\"revision\":0,\"slots\":[0]}");
+    }
+    const auto view=many.publicView();
+    assert(view.phase==Phase::Judging);
+    assert(view.plays==8);
+    for(uint8_t i=0;i<view.plays;++i)
+      assert(view.pile[i].author==kNone);
+    assert(bus.messages.back().find("\"private\":")!=std::string::npos);
+    send(bus,0,"{\"type\":\"judge\",\"token\":\""+keys[0]+"\",\"revision\":0,\"selected\":7}");
+    assert(many.publicView().phase==Phase::Reveal);
+    assert(eight.hostNext());
+    assert(many.publicView().phase==Phase::Finished);
+    eight.stop();
+    assert(WiFi.currentMode==WIFI_STA);
+    assert(devmode::depth==0);
+  }
+  std::puts("cardparty X4 server: HTTP, 3-8 seats, auth, anonymous scoring, reconnect and cleanup OK");
 }
