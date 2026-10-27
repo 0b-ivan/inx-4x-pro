@@ -33,3 +33,36 @@ jobs:
         run: |
           c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2             -Isrc/apps_local/cardparty             host-tests/cardparty/test_sd_pack.cpp -o /tmp/cardparty-sd-pack-test
           /tmp/cardparty-sd-pack-test
+
+  firmware:
+    name: Compile X4 Pro firmware (no OTA)
+    needs: reader-and-compiler
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: latest
+      - name: Install firmware toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv pip install --system -U 'https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip'
+          uv pip install --system -U 'littlefs-python>=0.16.0' 'fatfs-ng>=0.1.14' 'pyyaml>=6.0.2' \
+            'rich-click>=1.8.6' 'zopfli>=0.2.2' 'intelhex>=2.3.0' 'rich>=14.0.0' 'urllib3<2' \
+            'cryptography>=45.0.3' 'certifi>=2025.8.3' 'ecdsa>=0.19.1' 'bitstring>=4.3.1' \
+            'reedsolo>=1.5.3,<1.8' 'esp-idf-size>=2.0.0' 'esp-coredump>=1.14.0'
+      - name: Cache toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: cardparty-sd-pio-x4pro-v1
+      - name: Compile new Activity, HalStorage, Game and SD loader
+        run: python3 -m platformio run -e x4pro
