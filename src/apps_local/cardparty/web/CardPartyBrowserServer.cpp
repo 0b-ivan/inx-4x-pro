@@ -293,9 +293,17 @@ void Server::onMessage(uint8_t client,const uint8_t* bytes,size_t size) {
     SessionTicket ticket{};
     accepted=sessions_.resume(client,command.secret,fresh,ticket);
     if(accepted) {
+      const uint32_t previousSocket=socket_[ticket.seat];
       tickets_[ticket.seat]=ticket;
       socket_[ticket.seat]=client;
       sendState(ticket.seat,true);
+      // Revoke AND release the stale connection. Authentication alone
+      // invalidates its ticket, but a still-live socket otherwise consumes
+      // one of the bounded X4 WebSocket slots indefinitely.
+      // Ownership has already moved, so a late DISCONNECTED event from the
+      // prior socket cannot disconnect the replacement seat.
+      if(previousSocket!=kNoConnection && previousSocket!=client)
+        ws_.disconnect(static_cast<uint8_t>(previousSocket));
     }
   } else if(command.kind==Kind::Submit) {
     accepted=sessions_.submit(client,command.secret,command.revision,command.slots,command.count);
