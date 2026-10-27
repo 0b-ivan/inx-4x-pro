@@ -47,7 +47,6 @@ constexpr const char* kStudyAssetBase =
     "https://github.com/0b-ivan/inx-4x-pro/releases/download/trivia-study-packs/";
 constexpr const char* kStudyCatalogTemp = "/trivia/study-catalog.part";
 constexpr uint32_t kStudyPathCapacity = 96;
-constexpr uint32_t kAwsPageCharacters = 260;
 
 // A ByteSource over a HalFile. Every read seeks first: an index entry and the
 // record it points at are in different places, so sequential reads are the
@@ -707,6 +706,7 @@ void TriviaActivity::runPackDownload() {
 void TriviaActivity::go(const View next) {
   view_ = next;
   interactionsReady_ = false;
+  awsLayoutReady_ = false;
   flashOnNextPaint_ = true;  // a mode change is a page turn, so spend the flash
   requestUpdate();
 }
@@ -763,7 +763,7 @@ void TriviaActivity::awsDeal() {
   awsCurrent_ = index;
   awsHaveLast_ = true;
   awsHasQuestion_ = true;
-  awsPageStart_ = 0;
+  awsResetPages();
   awsOption_ = 0;
   awsSelected_ = 0;
   awsSummaryScroll_ = 0;
@@ -781,15 +781,29 @@ const char* TriviaActivity::awsPageSource() const {
   }
 }
 
-void TriviaActivity::awsBuildPage() {
+void TriviaActivity::awsResetPages() {
+  awsPageIndex_ = 0;
+  awsPageStarts_[0] = 0;
+  awsPageLength_ = 0;
+  awsMore_ = false;
+  awsLayoutReady_ = false;
+}
+
+void TriviaActivity::awsBuildPage(fui::DrawTarget& target, const fui::Rect& viewport) {
   const char* text = awsPageSource();
-  const trivia::AwsTextPage page = trivia::awsTextPage(
-      text, awsPageStart_, kAwsPageCharacters);
-  uint32_t bytes = page.length;
-  if (bytes >= sizeof(awsPageBuffer_)) bytes = sizeof(awsPageBuffer_) - 1;
-  if (bytes != 0) std::memcpy(awsPageBuffer_, text + page.start, bytes);
-  awsPageBuffer_[bytes] = '\0';
-  awsMore_ = page.more;
+  const uint32_t total = static_cast<uint32_t>(std::strlen(text));
+  awsTextRect_ = viewport;
+  uint32_t start = awsPageStarts_[awsPageIndex_];
+  if (start > total) start = total;
+  // A codepoint is never split by the fitter; this only guards a stale offset.
+  while (start > 0 && (static_cast<uint8_t>(text[start]) & 0xC0u) == 0x80u) --start;
+  const triviaui::AwsTextFit fit = triviaui::awsFitText(
+      target, toybox::kBodyFont, text + start, awsTextRect_, sizeof(awsPageBuffer_) - 1);
+  if (fit.length != 0) std::memcpy(awsPageBuffer_, text + start, fit.length);
+  awsPageBuffer_[fit.length] = '\0';
+  awsPageLength_ = fit.length;
+  awsMore_ = fit.more;
+  awsLayoutReady_ = true;
 }
 
 void TriviaActivity::awsSubmit() {
@@ -803,31 +817,31 @@ void TriviaActivity::awsSubmit() {
   } else {
     awsState_.setFlag(awsCurrent_, trivia::kAwsMissed);
   }
-  awsPageStart_ = 0;
+  awsResetPages();
   go(View::AwsExplanation);
 }
 
-void TriviaActivity::awsNextPage() {
-  if (!awsHasQuestion_) return;
-  const trivia::AwsTextPage page =
-      trivia::awsTextPage(awsPageSource(), awsPageStart_, kAwsPageCharacters);
-  if (page.more && page.length > 0) {
-    awsPageStart_ += page.length;
+void TriviaActivity::awsNextPage(const bool fromSwipe) {
+  if (!awsHasQuestion_ || !awsLayoutReady_) return;
+  if (awsMore_ && awsPageLength_ > 0 && awsPageIndex_ + 1 < kAwsMaxPages) {
+    const uint32_t next = awsPageStarts_[awsPageIndex_] + awsPageLength_;
+    awsPageStarts_[++awsPageIndex_] = static_cast<uint16_t>(next);
+    awsLayoutReady_ = false;
     requestUpdate();
     return;
   }
   if (view_ == View::AwsQuestion) {
-    awsPageStart_ = 0;
+    awsResetPages();
     go(View::AwsOption);
   } else if (view_ == View::AwsOption) {
     if (awsOption_ + 1 < awsQuestion_.optionCount()) {
       ++awsOption_;
-      awsPageStart_ = 0;
+      awsResetPages();
       requestUpdate();
-    } else {
+    } else if (!fromSwipe) {
       awsSubmit();
     }
-  } else if (view_ == View::AwsExplanation) {
+  } else if (view_ == View::AwsExplanation && !fromSwipe) {
     awsDeal();
   }
 }
@@ -835,16 +849,9 @@ void TriviaActivity::awsNextPage() {
 void TriviaActivity::awsPreviousPage() {
   if (view_ != View::AwsOption && view_ != View::AwsQuestion &&
       view_ != View::AwsExplanation) return;
-  if (awsPageStart_ > 0) {
-    uint32_t previous = 0, cursor = 0;
-    while (cursor < awsPageStart_) {
-      previous = cursor;
-      const trivia::AwsTextPage page =
-          trivia::awsTextPage(awsPageSource(), cursor, kAwsPageCharacters);
-      if (page.length == 0) break;
-      cursor += page.length;
-    }
-    awsPageStart_ = previous;
+  if (awsPageIndex_ > 0) {
+    --awsPageIndex_;
+    awsLayoutReady_ = false;
     requestUpdate();
     return;
   }
@@ -853,10 +860,10 @@ void TriviaActivity::awsPreviousPage() {
   if (view_ != View::AwsOption) return;
   if (awsOption_ > 0) {
     --awsOption_;
-    awsPageStart_ = 0;
+    awsResetPages();
     requestUpdate();
   } else {
-    awsPageStart_ = 0;
+    awsResetPages();
     go(View::AwsQuestion);
   }
 }
@@ -864,9 +871,10 @@ void TriviaActivity::awsPreviousPage() {
 void TriviaActivity::openAwsGlossary() {
   if (view_ != View::AwsQuestion && view_ != View::AwsOption &&
       view_ != View::AwsExplanation) return;
-  awsBuildPage();
+  // awsPageBuffer_ holds exactly the page on screen (see awsBuildPage). With no
+  // match the glossary still opens and says so, rather than ignoring the hold.
+  if (!awsLayoutReady_) return;
   awsGlossaryCount_ = trivia::awsGlossaryMatches(awsPageBuffer_, awsGlossaryMatches_);
-  if (!awsGlossaryCount_) return;
   awsGlossaryReturn_ = view_;
   go(View::AwsGlossary);
 }
@@ -1038,13 +1046,20 @@ void TriviaActivity::routeAction(const int action, const int value) {
       if (view_ == View::AwsGlossaryDetail) go(View::AwsGlossary);
       else if (view_ == View::AwsGlossary) go(awsGlossaryReturn_);
       break;
+    case triviaui::ActionAwsGlossaryResume:
+      // The page index is untouched by the glossary, so this re-renders the
+      // very page the hold came from, with the answer selection intact.
+      if (view_ == View::AwsGlossary || view_ == View::AwsGlossaryDetail) go(awsGlossaryReturn_);
+      break;
     case triviaui::ActionAwsPageBack:
       awsPreviousPage();
       break;
     case triviaui::ActionAwsToggleOption:
       if (view_ == View::AwsOption && awsHasQuestion_) {
         const uint8_t bit = static_cast<uint8_t>(1u << awsOption_);
-        awsSelected_ = awsQuestion_.multiple()
+        // Single choice replaces the mark, or clears it when the marked
+        // option is tapped again -- the button reads UNMARK in that state.
+        awsSelected_ = awsQuestion_.multiple() || awsSelected_ == bit
                           ? static_cast<uint8_t>(awsSelected_ ^ bit) : bit;
         requestUpdate();
       }
@@ -1150,17 +1165,21 @@ void TriviaActivity::loop() {
     }
     if (view_ == View::AwsQuestion || view_ == View::AwsOption ||
         view_ == View::AwsExplanation) {
-      if (swipe == MappedInputManager::SwipeDir::Up) awsNextPage();
-      else if (swipe == MappedInputManager::SwipeDir::Down) awsPreviousPage();
+      if (swipe == MappedInputManager::SwipeDir::Up) awsNextPage(true);
+      else if (swipe == MappedInputManager::SwipeDir::Down && awsLayoutReady_) awsPreviousPage();
       return;
     }
   }
-  if (view_ == View::AwsQuestion || view_ == View::AwsOption ||
-      view_ == View::AwsExplanation) {
+  if ((view_ == View::AwsQuestion || view_ == View::AwsOption ||
+       view_ == View::AwsExplanation) && awsLayoutReady_) {
+    // Claim a hold only inside the painted text. wasScreenLongPress() also
+    // swallows the lift, so claiming it over a footer button would turn a slow
+    // press of GRADE or NEXT into nothing at all.
     int heldX = 0, heldY = 0;
-    if (mappedInput.wasScreenLongPress(heldX, heldY)) {
-      if (heldX >= 16 && heldX < 464 && heldY >= 150 && heldY < 650)
-        openAwsGlossary();
+    const fui::Rect& t = awsTextRect_;
+    if (mappedInput.isScreenTouchHeld(heldX, heldY) && heldX >= t.x && heldX < t.right() &&
+        heldY >= t.y && heldY < t.bottom() && mappedInput.wasScreenLongPress(heldX, heldY)) {
+      openAwsGlossary();
       return;
     }
   }
@@ -1195,17 +1214,22 @@ void TriviaActivity::render(RenderLock&&) {
   const bool prose = view_ == View::Quizmaster || view_ == View::Solo || view_ == View::Notice ||
                      studyText || view_ == View::AwsDomains ||
                      view_ == View::AwsGlossaryDetail;
-  // Reading serif 14px for ordinary questions, 11px for long scenarios.
-  // Never shrink below 11px: additional content is paged/swiped instead.
-  const bool compact = studyText && std::strlen(awsPageSource()) > 520;
-  const toybox::Faces faces = compact
-      ? toybox::Faces{toybox::kButtonFontId, toybox::kReadingSmallFontId,
-                      toybox::kDisplayFontId}
-      : prose ? toybox::readingChromeFaces() : toybox::proseMenuFaces();
-  auto target = toybox::makeTarget(renderer, faces);
+  auto target = toybox::makeTarget(renderer, prose ? toybox::readingChromeFaces()
+                                                  : toybox::proseMenuFaces());
   const fui::InputSnapshot noInput{};
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions_);
   toybox::Screen screen(frame);
+  if (studyText) {
+    // Reading serif 14px whenever the whole text fits one page at 14px; 11px
+    // (the floor) for longer texts. Beyond one 11px page the text is paged,
+    // never shrunk further. Decided per text, so every page of it keeps one size.
+    const fui::Rect viewport = triviaui::awsStudyTextViewport(screen);
+    const bool compact = triviaui::awsFitText(target, toybox::kBodyFont, awsPageSource(), viewport,
+                                              sizeof(awsPageBuffer_) - 1)
+                             .more;
+    if (compact) target.setFont(fui::GfxRendererTarget::FONT_BODY, toybox::kReadingSmallFontId);
+    awsBuildPage(target, viewport);
+  }
 
   switch (view_) {
     case View::Notice: {
@@ -1311,7 +1335,6 @@ void TriviaActivity::render(RenderLock&&) {
     case View::AwsQuestion:
     case View::AwsOption:
     case View::AwsExplanation: {
-      awsBuildPage();
       triviaui::AwsPageModel model;
       model.german = I18N.getLanguage() == Language::DE;
       model.text = awsPageBuffer_;

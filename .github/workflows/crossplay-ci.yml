@@ -167,12 +167,17 @@ jobs:
       - name: AWS Trivia study/review touch smoke (synthetic SD pack)
         run: bash scripts_local/trivia_aws_sim_smoke.sh
 
+      - name: AWS Trivia study reader UX smoke (paging, hold glossary, no swipe grading)
+        run: bash scripts_local/trivia_aws_sim_ux.sh
+
       - name: Upload AWS study simulator captures
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: aws-study-simulator-debug
-          path: .pio/aws-study-ui-smoke/
+          path: |
+            .pio/aws-study-ui-smoke/
+            .pio/aws-study-ux-smoke/
           if-no-files-found: ignore
 
       - name: Upload Biscuit UI screenshots

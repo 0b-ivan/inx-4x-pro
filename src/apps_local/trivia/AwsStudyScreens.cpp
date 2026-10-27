@@ -2,6 +2,7 @@
 #include "TriviaScreens.h"
 
 #include <cstdio>
+#include <cstring>
 
 namespace triviaui {
 namespace {
@@ -93,9 +94,15 @@ void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* st
   screen.target().fill({static_cast<int16_t>(body.x + kMargin), static_cast<int16_t>(top + 36),
                         static_cast<int16_t>(body.width - 2 * kMargin), 2},
                        fui::Paint::solid(fui::Color::Black));
-  prose(screen, {static_cast<int16_t>(body.x + kMargin), static_cast<int16_t>(top + 54),
-                 static_cast<int16_t>(body.width - 2 * kMargin),
-                 static_cast<int16_t>(footer(screen) - top - 136)}, model.text);
+  // Top-aligned: layoutText centres its block, so the rect is shrunk to the
+  // wrapped height. A short last page then continues where the reader's eye is.
+  fui::Rect text = awsTextViewport(body);
+  const uint8_t lines = awsTextLines(screen.target(), toybox::kBodyFont, text.height);
+  fui::TextStyle s = style(toybox::kBodyFont, fui::TextAlign::Left);
+  s.maxLines = lines;
+  const int16_t used = fui::measureWrappedText(screen.target(), model.text, s, text.width).height;
+  if (used > 0 && used < text.height) text.height = used;
+  screen.target().text(text, model.text, s);
   // The action above the footer must never overlap text. The permanent
   // gesture hint also tells first-time touchscreen users how to navigate.
   label(screen, {static_cast<int16_t>(body.x + kMargin),
@@ -104,6 +111,98 @@ void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* st
 }
 
 }  // namespace
+
+fui::Rect awsStudyTextViewport(toybox::Screen screen) {
+  // The same reservations chrome() makes, on a copy: the caller's screen and
+  // the frame are untouched, and nothing is drawn.
+  toybox::absoluteChrome(screen);
+  screen.takeTop(screen.theme().headerHeight);
+  return awsTextViewport(screen.body());
+}
+
+fui::Rect awsTextViewport(const fui::Rect& body) {
+  const int16_t top = static_cast<int16_t>(body.y + 20);
+  const int16_t footerTop = static_cast<int16_t>(body.bottom() - 96);
+  return {static_cast<int16_t>(body.x + kMargin), static_cast<int16_t>(top + 54),
+          static_cast<int16_t>(body.width - 2 * kMargin),
+          static_cast<int16_t>(footerTop - top - 136)};
+}
+
+uint8_t awsTextLines(const fui::DrawTarget& target, const fui::FontId font, const int16_t height) {
+  const int16_t lineHeight = target.lineHeight(font);
+  const int lines = lineHeight > 0 ? height / lineHeight : 1;
+  return static_cast<uint8_t>(lines < 1 ? 1 : (lines > 16 ? 16 : lines));
+}
+
+AwsTextFit awsFitText(const fui::DrawTarget& target, const fui::FontId font, const char* text,
+                      const fui::Rect& viewport, const uint32_t maxBytes) {
+  AwsTextFit fit;
+  if (!text || !*text || viewport.empty() || maxBytes == 0) return fit;
+  // Same constants and the same pass-1 decisions as fui::layoutText, so the
+  // prefix returned here is exactly what text() draws without an ellipsis.
+  constexpr uint16_t kMaxLineBytes = 220;
+  const fui::TextStyle s = style(font, fui::TextAlign::Left);
+  const uint8_t maxLines = awsTextLines(target, font, viewport.height);
+  char buf[kMaxLineBytes + 1];
+  const auto widthOf = [&](const char* start, const uint16_t len) {
+    std::memcpy(buf, start, len);
+    buf[len] = '\0';
+    return target.measureText(font, buf, s).width;
+  };
+  const char* p = text;
+  uint8_t lines = 0;
+  while (*p != '\0' && lines < maxLines) {
+    const char* const before = p;
+    while (*p == ' ') ++p;
+    if (*p == '\0') break;
+    if (*p == '\n') {
+      ++p;
+    } else {
+      const char* const lineStart = p;
+      uint16_t fitLen = 0;
+      const char* scan = p;
+      while (true) {
+        const char* wordEnd = scan;
+        while (*wordEnd != '\0' && *wordEnd != ' ' && *wordEnd != '\n') ++wordEnd;
+        const auto candidate = static_cast<uint16_t>(
+            wordEnd - lineStart > kMaxLineBytes + 1 ? kMaxLineBytes + 1 : wordEnd - lineStart);
+        if (candidate > kMaxLineBytes || widthOf(lineStart, candidate) > viewport.width) break;
+        fitLen = candidate;
+        if (*wordEnd == '\0' || *wordEnd == '\n') break;
+        scan = wordEnd + 1;
+        while (*scan == ' ') ++scan;
+        if (*scan == '\0' || *scan == '\n') break;
+      }
+      if (fitLen == 0) {
+        uint16_t len = 0;
+        while (lineStart[len] != '\0' && lineStart[len] != ' ' && lineStart[len] != '\n') {
+          auto next = static_cast<uint16_t>(len + 1);
+          while ((static_cast<uint8_t>(lineStart[next]) & 0xC0u) == 0x80u) ++next;
+          if (next > kMaxLineBytes || (len > 0 && widthOf(lineStart, next) > viewport.width)) break;
+          len = next;
+        }
+        fitLen = len > 0 ? len : 1;
+      }
+      p = lineStart + fitLen;
+      if (*p == '\n') ++p;
+    }
+    if (static_cast<uint32_t>(p - text) > maxBytes) {
+      p = before;  // keep the page within the caller's buffer, whole lines only
+      break;
+    }
+    ++lines;
+  }
+  if (p == text) {
+    // A viewport or buffer too small for one line must still make progress.
+    uint32_t n = 1;
+    while (n < maxBytes && (static_cast<uint8_t>(text[n]) & 0xC0u) == 0x80u) ++n;
+    p = text + n;
+  }
+  while (*p == ' ' && static_cast<uint32_t>(p - text) < maxBytes) ++p;
+  fit.length = static_cast<uint32_t>(p - text);
+  fit.more = *p != '\0';
+  return fit;
+}
 
 void buildAwsSummary(toybox::Screen& screen, const AwsSummaryModel& model) {
   chrome(screen, model.german ? "LERNERGEBNIS" : "STUDY RESULTS");
@@ -322,6 +421,13 @@ void buildAwsGlossary(toybox::Screen& screen, const AwsGlossaryModel& model) {
           model.term ? model.term : "AWS");
     prose(screen, {x, static_cast<int16_t>(body.y + 90), w, 415},
           model.description);
+  } else if (model.count == 0) {
+    // A hold always answers, so the reader knows the gesture registered.
+    label(screen, {x, static_cast<int16_t>(body.y + 14), w, 40},
+          model.german ? "KEIN AWS-BEGRIFF" : "NO AWS TERM");
+    prose(screen, {x, static_cast<int16_t>(body.y + 90), w, 200},
+          model.german ? "Auf dieser Textseite wurde kein Begriff aus dem Offline-Glossar erkannt."
+                       : "No term from the offline glossary was found on this text page.");
   } else {
     label(screen, {x, static_cast<int16_t>(body.y + 14), w, 40},
           model.german ? "ERKANNTE BEGRIFFE" : "RECOGNIZED TERMS");
@@ -331,7 +437,7 @@ void buildAwsGlossary(toybox::Screen& screen, const AwsGlossaryModel& model) {
     }
   }
   footerPair(screen, model.german ? "ZURUECK" : "BACK", ActionAwsGlossaryBack,
-             model.german ? "WEITER LERNEN" : "RESUME", ActionAwsGlossaryBack);
+             model.german ? "WEITER LERNEN" : "RESUME", ActionAwsGlossaryResume);
 }
 
 }  // namespace triviaui

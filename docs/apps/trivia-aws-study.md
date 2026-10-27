@@ -87,8 +87,17 @@ hochgeladen oder veröffentlicht.**
   oder Erklärung. **Wischen nach unten** kehrt zur vorherigen Textseite zurück.
   Auf Antwortkarten führt der Rückweg gegebenenfalls zur vorherigen Antwort.
   Die Bedienelemente am unteren Rand bleiben sichtbar.
-- Schriftgröße: Leseschrift 14 px, bei langen Szenarien mindestens 11 px;
-  längere Texte bleiben seitenweise abrufbar, statt weiter zu schrumpfen.
+- **Wischen gibt nie ab und springt nie weiter:** Auf der letzten Antwort
+  bzw. am Ende der Erklärung bleibt ein Hochwischen ohne Wirkung. Bewertet
+  wird nur über **PRUEFEN / GRADE** bzw. **JETZT PRUEFEN**, die nächste Frage
+  kommt nur über **NAECHSTE / NEXT QUESTION**.
+- Schriftgröße: Leseschrift 14 px, wenn der ganze Text auf eine Seite passt,
+  sonst 11 px (Untergrenze). Darüber hinaus wird geblättert, nie weiter
+  verkleinert. Eine Seite wird mit den echten Glyphenbreiten umbrochen und
+  füllt den Textbereich (bis 16 Zeilen) ohne Auslassungszeichen; der Text
+  steht oben bündig.
+- Einfachauswahl: **WAEHLEN** ersetzt die Markierung, ein erneutes Tippen
+  (**ABWAEHLEN**) hebt sie auf. Mehrfachauswahl: jede Antwort einzeln an/aus.
 - Bereits ausgewählte Antworten können auf **jeder Antwortseite** über
   **JETZT PRUEFEN / GRADE NOW** bewertet werden. Ohne Markierung wird
   nicht versehentlich abgegeben.
@@ -97,7 +106,12 @@ hochgeladen oder veröffentlicht.**
   kann hoch-/runtergewischt werden und bietet ebenfalls **NAECHSTE / NEXT**.
 - **Lange auf den Text drücken** öffnet das Offline-Glossar mit den auf der
   aktuellen Textseite gefundenen AWS-Diensten. Den gewünschten Begriff in
-  der Liste antippen, Erklärung lesen und zurück zur Frage gelangen.
+  der Liste antippen, Erklärung lesen. **ZURUECK** führt zur Begriffsliste,
+  **WEITER LERNEN** direkt zurück auf dieselbe Textseite; Auswahl und
+  Seitenposition bleiben erhalten. Erkannt werden auch Kurzformen wie
+  „IAM-Rolle“, „S3-Bucket“ oder „Lambda“. Ohne Treffer meldet das Glossar
+  „KEIN AWS-BEGRIFF“, statt den Druck zu ignorieren. Ein langer Druck auf
+  die Schaltflächen unten zählt als normaler Tipp.
   Kein WLAN erforderlich. Die Glossartexte sind eigenständig formuliert und
   gehören nicht zu den gekauften Prüfungsfragen.
 - Die Touch-Steuerung funktioniert als **seitenweises Wisch-Scrolling**,
@@ -138,6 +152,7 @@ in deinem privaten Verzeichnis und auf deiner persönlichen SD-Karte.
 host-tests/trivia/run.sh
 host-tests/ui/run.sh
 bash scripts_local/trivia_aws_sim_smoke.sh
+bash scripts_local/trivia_aws_sim_ux.sh   # Blättern, Glossar, Wischen ohne Abgabe
 ```
 
 CI prüft die Paketauswahl, gültige/ungültige Dateinamen, isolierte Zustandsdateien,

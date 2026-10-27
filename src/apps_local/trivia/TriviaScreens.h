@@ -57,7 +57,7 @@ enum : fui::ActionId {
   ActionAwsNextQuestion = 27,
   ActionAwsGlossaryTerm = 28,
   ActionAwsGlossaryBack = 29,
-  ActionAwsGlossaryLookup = 30,
+  ActionAwsGlossaryResume = 30,  // straight back to the study page, from list or detail
 };
 
 enum class MenuRow : int { Quizmaster = 0, Solo, Difficulty, Count };

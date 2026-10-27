@@ -48,12 +48,16 @@ class TriviaActivity final : public Activity {
   bool studyPath(const char* ext, char* out, uint32_t capacity) const;
   void awsDeal();
   void awsSubmit();
-  void awsNextPage();
+  // fromSwipe: a swipe only turns text pages and walks question -> options;
+  // it never grades the last option or leaves an explanation.
+  void awsNextPage(bool fromSwipe = false);
   void awsPreviousPage();
+  void awsResetPages();
   void openAwsGlossary();
   uint32_t awsMissedCount() const;
   const char* awsPageSource() const;
-  void awsBuildPage();
+  // Lays out the visible page with the real fonts; called from render().
+  void awsBuildPage(freeink::ui::DrawTarget& target, const freeink::ui::Rect& viewport);
   void saveAwsDomains() const;
   void onWifiChosen(bool connected);
   void runPackDownload();
@@ -90,7 +94,16 @@ class TriviaActivity final : public Activity {
   trivia::AwsChooser awsChooser_;
   trivia::Score awsScore_;
   uint32_t awsCurrent_ = 0;
-  uint32_t awsPageStart_ = 0;
+  // Start offset of every page already shown for the current text, so BACK
+  // and a downward swipe return to exactly the page the reader saw.
+  static constexpr uint8_t kAwsMaxPages = 64;
+  uint16_t awsPageStarts_[kAwsMaxPages] = {};
+  uint8_t awsPageIndex_ = 0;
+  uint32_t awsPageLength_ = 0;
+  // True once render() has laid out the current page; page turns and the
+  // glossary hold act only on a layout the reader has actually seen.
+  bool awsLayoutReady_ = false;
+  freeink::ui::Rect awsTextRect_{};
   uint8_t awsSummaryScroll_ = 0;
   View awsGlossaryReturn_ = View::AwsQuestion;
   uint8_t awsGlossaryMatches_[trivia::kAwsGlossaryMaxMatches] = {};
@@ -105,7 +118,7 @@ class TriviaActivity final : public Activity {
   bool awsHaveLast_ = false;
   bool awsAnswerCorrect_ = false;
   bool awsMore_ = false;
-  char awsPageBuffer_[1200] = {};
+  char awsPageBuffer_[1400] = {};
 
   trivia::Pack pack_;
   trivia::PackState state_;

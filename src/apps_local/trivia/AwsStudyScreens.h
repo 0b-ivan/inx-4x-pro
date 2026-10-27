@@ -71,6 +71,25 @@ struct AwsGlossaryModel {
 };
 void buildAwsGlossary(toybox::Screen& screen, const AwsGlossaryModel& model);
 
+// The study text viewport inside screen.body(). The painter and the pager use
+// the same rect, so a page is cut exactly where the wrapped text would end.
+fui::Rect awsTextViewport(const fui::Rect& body);
+// The viewport a study page builder will use, from a screen that has not had
+// its chrome taken yet (render() fits the page before building the screen).
+fui::Rect awsStudyTextViewport(toybox::Screen screen);
+// Lines of `font` that fit in `height`, clamped to FreeInkUI's 16-line cap.
+uint8_t awsTextLines(const fui::DrawTarget& target, fui::FontId font, int16_t height);
+
+struct AwsTextFit {
+  uint32_t length = 0;  // bytes of text that wrap into the viewport
+  bool more = false;    // text remains after this page
+};
+// Mirrors fui::layoutText's greedy word wrap: the returned prefix renders in
+// the viewport without an ellipsis. Never splits a UTF-8 codepoint, always
+// makes progress, and never returns more than maxBytes.
+AwsTextFit awsFitText(const fui::DrawTarget& target, fui::FontId font, const char* text,
+                      const fui::Rect& viewport, uint32_t maxBytes);
+
 void buildAwsSummary(toybox::Screen& screen, const AwsSummaryModel& model);
 void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model);
 void buildAwsDomains(toybox::Screen& screen, const AwsDomainsModel& model);

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <FreeInkUI.h>
+#include <FreeInkUICore.h>
 #include "../../src/apps_local/trivia/AwsGlossary.h"
 #include "../../src/apps_local/trivia/AwsStudyScreens.h"
 #include "../../src/apps_local/trivia/TriviaScreens.h"
@@ -232,7 +233,43 @@ void testAwsGlossary() {
   render(detail, model, &triviaui::buildAwsGlossary);
   assert(detail.draw.contains(model.term));
   assert(detail.draw.contains(model.description));
-  assert(detail.tap(360, 750).action == triviaui::ActionAwsGlossaryBack);
+  // RESUME returns straight to the study page from the detail as well;
+  // BACK steps to the term list.
+  assert(detail.tap(360, 750).action == triviaui::ActionAwsGlossaryResume);
+  assert(detail.tap(80, 750).action == triviaui::ActionAwsGlossaryBack);
+  assert(choices.tap(360, 750).action == triviaui::ActionAwsGlossaryResume);
+  // A hold on a page without a known term still answers, with RESUME.
+  for (bool german : {false, true}) {
+    triviaui::AwsGlossaryModel none;
+    none.german = german;
+    Rendered nothing;
+    render(nothing, none, &triviaui::buildAwsGlossary);
+    assert(nothing.draw.contains(german ? "KEIN AWS-BEGRIFF" : "NO AWS TERM"));
+    assert(nothing.tap(230, 190).action == 0);
+    assert(nothing.tap(360, 750).action == triviaui::ActionAwsGlossaryResume);
+  }
+  // Short service names are recognised in running (also German) text.
+  {
+    uint8_t m[trivia::kAwsGlossaryMaxMatches] = {};
+    const uint8_t n = trivia::awsGlossaryMatches(
+        "Die IAM-Rolle darf in den S3-Bucket schreiben; Lambda liest die SQS-Queue.", m);
+    assert(n == 4);
+    bool iam = false, s3 = false, lambda = false, sqs = false;
+    for (uint8_t i = 0; i < n; ++i) {
+      const std::string t = trivia::kAwsGlossary[m[i]].term;
+      iam |= t == "AWS IAM"; s3 |= t == "Amazon S3";
+      lambda |= t == "AWS Lambda"; sqs |= t == "Amazon SQS";
+    }
+    assert(iam && s3 && lambda && sqs);
+    assert(!trivia::awsContainsTerm("DIAMOND and MS3X", "IAM"));
+    assert(!trivia::awsContainsTerm("MS3X", "S3"));
+    // Every entry's match token is a whole word of its own displayed term,
+    // so a page naming the full service always lists it.
+    for (const auto& e : trivia::kAwsGlossary) assert(trivia::awsContainsTerm(e.term, e.match));
+    // At most six matches even when the page names more services.
+    uint8_t six[trivia::kAwsGlossaryMaxMatches] = {};
+    assert(trivia::awsGlossaryMatches("S3 EC2 Lambda EKS ECS Fargate RDS DynamoDB", six) == 6);
+  }
   assert(trivia::awsContainsTerm("aws lambda, and AWS LAMBDA.", "AWS Lambda"));
   assert(!trivia::awsContainsTerm("AWS LambdaFunction", "AWS Lambda"));
   assert(!trivia::awsContainsTerm("unused term", "AWS Lambda"));
@@ -272,7 +309,107 @@ void testStudyDeckList() {
   assert(online.tap(365, 750).action == triviaui::ActionStudyOnline);
 }
 
+// Concatenating every page must give back the text, with nothing lost or
+// repeated, and each page must render with no ellipsis.
+std::string pageThrough(const char* text, const fui::Rect& viewport, const uint32_t cap,
+                        int& pages) {
+  RecordingTarget metric;
+  std::string joined;
+  pages = 0;
+  const char* p = text;
+  while (*p) {
+    const triviaui::AwsTextFit fit =
+        triviaui::awsFitText(metric, toybox::kBodyFont, p, viewport, cap);
+    assert(fit.length > 0 && fit.length <= cap);
+    assert(fit.more == (p[fit.length] != '\0'));
+    // No torn UTF-8 at either end of a page.
+    assert((static_cast<uint8_t>(p[fit.length]) & 0xC0u) != 0x80u);
+    const std::string page(p, fit.length);
+    fui::TextStyle s;
+    s.font = toybox::kBodyFont;
+    s.maxLines = triviaui::awsTextLines(metric, toybox::kBodyFont, viewport.height);
+    bool ellipsis = false;
+    int lines = 0;
+    fui::layoutText(metric, viewport, page.c_str(), s, [&](const char* line, fui::Rect) {
+      ellipsis |= std::strstr(line, fui::TEXT_ELLIPSIS) != nullptr;
+      ++lines;
+    });
+    assert(!ellipsis);
+    assert(lines <= s.maxLines);
+    joined += page;
+    p += fit.length;
+    ++pages;
+    assert(pages < 500);
+  }
+  return joined;
+}
+
+std::string squash(const std::string& in) {
+  std::string out;
+  for (const char c : in) if (c != ' ' && c != '\n') out += c;
+  return out;
+}
+
+void testAwsTextPaging() {
+  // The pager runs before the builder takes its chrome; both must agree on
+  // the rect, or a page cut for one height is drawn into another and ends
+  // in an ellipsis (seen in the simulator with a 16- vs 15-line mismatch).
+  {
+    RecordingTarget draw;
+    toybox::Interactions interactions;
+    fui::DeviceContext context{};
+    context.width = 480; context.height = 800; context.hasTouch = true;
+    context.hasButtons = true;
+    fui::InputSnapshot empty{};
+    toybox::Frame frame(draw, context, empty, interactions);
+    toybox::Screen screen(frame);
+    const fui::Rect before = triviaui::awsStudyTextViewport(screen);
+    triviaui::AwsPageModel model{};
+    model.text = "Synthetic question text.";
+    triviaui::buildAwsQuestion(screen, model);
+    const fui::Rect after = triviaui::awsTextViewport(screen.body());
+    assert(before.x == after.x && before.y == after.y &&
+           before.width == after.width && before.height == after.height);
+  }
+  const fui::Rect body{0, 76, 480, 710};
+  const fui::Rect viewport = triviaui::awsTextViewport(body);
+  // The text area sits between the status rule and the gesture hint, and
+  // never reaches the footer row or the GRADE NOW / NEXT QUESTION button.
+  assert(viewport.y >= body.y + 74 && viewport.bottom() <= body.bottom() - 96 - 50);
+  RecordingTarget metric;
+  const uint8_t lines = triviaui::awsTextLines(metric, toybox::kBodyFont, viewport.height);
+  assert(lines >= 10 && lines <= 16);
+
+  std::string longScenario;
+  for (int i = 0; i < 40; ++i)
+    longScenario += "Ein Unternehmen nutzt Amazon S3, IAM-Rollen und AWS CodeDeploy fuer "
+                    "Bereitstellungen ueber mehrere Regionen (café, naïve, Größe). ";
+  longScenario += "arn:aws:iam::123456789012:role/" + std::string(400, 'x') + " Ende.\n\nNeuer Absatz.";
+  int pages = 0;
+  const std::string joined = pageThrough(longScenario.c_str(), viewport, 1399, pages);
+  assert(squash(joined) == squash(longScenario));
+  assert(joined == longScenario);  // byte-exact: offsets stack without gaps
+  // A page is a screenful, not a fixed 260 characters: 12 x 56 cols ~ 670.
+  assert(pages <= static_cast<int>(longScenario.size() / 400) + 2);
+
+  // A buffer smaller than the viewport still pages whole lines, without loss.
+  const std::string tight = pageThrough(longScenario.c_str(), viewport, 120, pages);
+  assert(tight == longScenario);
+
+  // Short text: one page, nothing more.
+  const triviaui::AwsTextFit one =
+      triviaui::awsFitText(metric, toybox::kBodyFont, "Kurz.", viewport, 1399);
+  assert(one.length == 5 && !one.more);
+  // Degenerate inputs never stall the pager.
+  assert(triviaui::awsFitText(metric, toybox::kBodyFont, "", viewport, 1399).length == 0);
+  const fui::Rect tiny{0, 0, 4, 2};
+  const triviaui::AwsTextFit forced =
+      triviaui::awsFitText(metric, toybox::kBodyFont, "\xC3\xA4" "bc", tiny, 1399);
+  assert(forced.length == 2 && forced.more);
+}
+
 int main() {
+  testAwsTextPaging();
   testStudyDeckList();
   testAwsSummary();
   testAwsGlossary();
