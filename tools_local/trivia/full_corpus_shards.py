@@ -55,8 +55,14 @@ def translate(args):
     expected={src[i]["id"] for i in positions}
     cached=load(args.out)
     done={r["id"]:r for r in cached}
+    byid={r["id"]:r for r in src}
+    for row in cached:
+        validate_record(byid[row["id"]],row,allow_draft=True)
     quarantines=load(args.quarantine)
     failures={r["id"] for r in quarantines}
+    for row in quarantines:
+        if row.get("source_hash")!=source_hash(byid[row["id"]]):
+            raise ValueError("Quarantine checkpoint source hash mismatch")
     if len(done)!=len(cached) or len(failures)!=len(quarantines) or (set(done)&failures):
         raise ValueError("Duplicated or overlapping checkpoint rows")
     if not (set(done)|failures)<=expected:
