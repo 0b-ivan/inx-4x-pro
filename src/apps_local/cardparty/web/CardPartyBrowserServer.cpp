@@ -14,7 +14,9 @@ namespace cardparty { namespace web {
 namespace {
 constexpr const char* kSsid = "CrossPlay-CAW";
 constexpr const char* kPath = "/cardparty";
-constexpr uint8_t kMaxClients = 8;
+// Eight players, plus limited station headroom for reconnect handshakes.
+// The Game and Sessions classes still enforce the strict eight-seat limit.
+constexpr uint8_t kMaxClients = 10;
 constexpr uint16_t kDnsPort = 53;
 const char* phaseName(Phase phase) {
   switch (phase) {
