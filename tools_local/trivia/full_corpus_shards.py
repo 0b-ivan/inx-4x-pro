@@ -75,6 +75,7 @@ def translate(args):
     key=os.getenv("OPENROUTER_API_KEY")
     if (set(done)|failures)!=expected and not key:
         raise ValueError("OpenRouter key missing")
+    preferred_model=MODEL
     for i in positions:
         original=src[i]
         ident=original["id"]
@@ -88,7 +89,7 @@ def translate(args):
             continue
         errors=[]
         accepted=None
-        active_model=MODEL
+        active_model=preferred_model
         for attempt in range(3):
             instruction=("" if attempt==0 else
                 "HARD DISPLAY RETRY: Previous German result exceeded Quizmaster "
@@ -112,6 +113,7 @@ def translate(args):
                     # A Qwen provider may not support the required strict JSON schema.
                     # Fall back to the provider/model used by the validated pilot.
                     active_model=FALLBACK_MODEL
+                    preferred_model=FALLBACK_MODEL
                     print("OPENROUTER_FALLBACK shard={} id={} reason=HTTP404".format(args.shard,ident),flush=True)
                     continue
                 if err.code in (401,402,403,404):
