@@ -42,5 +42,7 @@ class CardPartyActivity final : public Activity {
   Stage stage_=Stage::Choice;
   bool ownsOrientation_=false;
   uint32_t fingerprint_=0;
+  bool abortArmed_=false;
+  uint32_t abortArmedAt_=0;
   char report_[90]={};
 };
