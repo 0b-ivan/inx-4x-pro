@@ -255,7 +255,7 @@ assert (root / "DOP-C02.prefs").read_bytes() == b"\x07", "preconfigured domain m
 # explicitly finish the session, and THEN allow a confirmed progress reset.
 
 PY
-t=8200; s="$t:TAP:80,750,110"; shots=""  # resumed explanation -> END -> summary
+t=8200; s="$t:TAP:80,750,110"; shots="7600:$out/resetResumed.bmp"  # assert original explanation was restored
 add "TAP:80,750,110"                  # summary MENU -> deck menu (checkpoint cleared)
 add "TAP:240,620,110"; shot resetAsk  # selected deck -> reset confirmation
 add "TAP:80,750,110";  shot resetNo   # cancel -> menu, nothing erased
@@ -276,6 +276,7 @@ import hashlib, sys
 root, out = map(Path, sys.argv[1:])
 def digest(name):
     return hashlib.sha256((out / f"{name}.bmp").read_bytes()).digest()
+assert digest("resetResumed") == digest("mreview"), "resume failed before reset flow; do not mistake a menu for a confirmation"
 assert digest("resetAsk") != digest("resetNo"), "confirmation and study menu identical"
 assert digest("resetAsk") != digest("resetYes"), "confirm screen remains after reset"
 assert (root / "DOP-C02.state").read_bytes() == b"\x00", "selected deck progress was not reset"
@@ -351,6 +352,88 @@ if digest("ungradedResumed.bmp")!=digest("ungradedBoth.bmp"):
     raise AssertionError("Standby lost ungraded marks or current answer card")
 assert (root/"DOP-C02.state").read_bytes()==b"\x01", "resume graded an ungraded question"
 print("PASS AWS standby resume of ungraded multi-select: marked answers and option restored")
+PY
+
+# Fault injection against the REAL on-disk checkpoints. First corrupt just
+# the newest checksum so the alternate valid generation MUST recover the exact
+# screen and marks. Then truncate BOTH slots: the app must enter the menu, not
+# apply torn data or assign a grade. Keep original slots for the bank-swap test.
+python3 - "$tmp/sd/trivia/aws" "$tmp/session-backup" <<'PY'
+from pathlib import Path
+import struct, sys
+root, backup = map(Path, sys.argv[1:])
+backup.mkdir()
+slots = sorted(root.glob("DOP-C02.session?"))
+assert len(slots) == 2, "expected two alternate checkpoints before fault injection"
+for p in slots:
+    raw = p.read_bytes()
+    assert len(raw) == 48 and raw[:8] == b"AWSSESS1", "invalid baseline checkpoint"
+    (backup / p.name).write_bytes(raw)
+latest = max(slots, key=lambda p: struct.unpack_from("<I", p.read_bytes(), 32)[0])
+other = next(p for p in slots if p != latest)
+old = other.read_bytes()
+assert old[9] == 2 and old[10] == 1 and old[11] in (1, 3), (
+    f"unexpected alternate slot before checksum injection: {old[9:12].hex()}")
+(backup / "expected.txt").write_text(
+    "ungradedBoth.bmp" if old[11] == 3 else "ungradedB.bmp", encoding="ascii")
+broken = bytearray(latest.read_bytes())
+broken[11] ^= 0x40  # Change marks without recomputing the FNV checksum.
+latest.write_bytes(broken)
+PY
+if ! env CROSSPLAY_AUTOSTART=TRIVIA CROSSPOINT_SIM_SD="$tmp/sd" \
+  CROSSPOINT_SIM_INPUT_SCRIPT="14500:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="11600:$out/corruptFallback.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 25s "$bin" >"$out/corrupt-fallback.log" 2>&1; then
+  echo "FAIL: corrupt newest slot did not recover alternate"; tail -60 "$out/corrupt-fallback.log"; exit 1
+fi
+python3 - "$tmp/sd/trivia/aws" "$tmp/session-backup" "$out" <<'PY'
+from pathlib import Path
+import hashlib, sys
+root, backup, out = map(Path, sys.argv[1:])
+def digest(p): return hashlib.sha256(p.read_bytes()).digest()
+expected = backup.joinpath("expected.txt").read_text(encoding="ascii")
+assert digest(out / "corruptFallback.bmp") == digest(out / expected), (
+    "corrupt newest slot failed to restore the exact prior valid answer view")
+assert (root / "DOP-C02.state").read_bytes() == b"\x01", (
+    "fallback changed persistent seen/missed progress")
+assert "Resumed study question" in (out / "corrupt-fallback.log").read_text(errors="replace"), (
+    "fallback screenshot matched but no checkpoint was restored")
+print("PASS AWS checkpoint corruption: newest FNV mismatch falls back to alternate generation")
+PY
+
+python3 - "$tmp/sd/trivia/aws" <<'PY'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+slots = sorted(root.glob("DOP-C02.session?"))
+assert len(slots) == 2
+for slot in slots:
+    slot.write_bytes(slot.read_bytes()[:13])  # Two torn writes.
+PY
+if ! env CROSSPLAY_AUTOSTART=TRIVIA CROSSPOINT_SIM_SD="$tmp/sd" \
+  CROSSPOINT_SIM_INPUT_SCRIPT="14500:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="11600:$out/corruptBothHome.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 25s "$bin" >"$out/corrupt-both.log" 2>&1; then
+  echo "FAIL: invalid slots did not safely return to menu"; tail -60 "$out/corrupt-both.log"; exit 1
+fi
+python3 - "$tmp/sd/trivia/aws" "$tmp/session-backup" "$out" <<'PY'
+from pathlib import Path
+import hashlib, sys
+root, backup, out = map(Path, sys.argv[1:])
+def digest(p): return hashlib.sha256(p.read_bytes()).digest()
+assert digest(out / "corruptBothHome.bmp") not in (
+    digest(out / "ungradedB.bmp"), digest(out / "ungradedBoth.bmp")), (
+    "both invalid checkpoint slots still displayed an answer card")
+log = (out / "corrupt-both.log").read_text(errors="replace")
+assert "Autostart into TRIVIA" in log and "Resumed study question" not in log, (
+    "invalid slots must not report restored session")
+assert (root / "DOP-C02.state").read_bytes() == b"\x01", (
+    "invalid checkpoint reset durable learning progress")
+for original in backup.glob("DOP-C02.session?"):
+    (root / original.name).write_bytes(original.read_bytes())
+print("PASS AWS checkpoint corruption: two truncated slots safely return to menu")
 PY
 
 # Bank replacement is a deliberate hard boundary: never restore answers from a
