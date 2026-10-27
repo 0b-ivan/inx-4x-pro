@@ -51,7 +51,7 @@ class Server final {
   void publishAll();
   void sendError(uint8_t client);
   void fillSecret(uint8_t secret[kTicketBytes]);
-  void endRadio();
+  void releaseDevMode();
   WebServer http_{80};
   WebSocketsServer ws_{81};
   DNSServer dns_;
