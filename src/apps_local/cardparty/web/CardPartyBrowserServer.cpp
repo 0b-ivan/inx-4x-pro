@@ -1,4 +1,5 @@
 #include "CardPartyBrowserServer.h"
+
 #include "CardPartyProtocol.h"
 
 #ifndef SIMULATOR
@@ -9,11 +10,14 @@
 #include <sys/select.h>
 #endif
 #include <Logging.h>
+
 #include <cstring>
+
 #include "../../../DevMode.h"
 #include "CardPartyPageHtml.generated.h"
 
-namespace cardparty { namespace web {
+namespace cardparty {
+namespace web {
 namespace {
 constexpr const char* kSsid = "CrossPlay-CAW";
 constexpr const char* kPath = "/cardparty";
@@ -23,11 +27,16 @@ constexpr uint8_t kMaxClients = 10;
 constexpr uint16_t kDnsPort = 53;
 const char* phaseName(Phase phase) {
   switch (phase) {
-    case Phase::Lobby: return "Lobby";
-    case Phase::Playing: return "Playing";
-    case Phase::Judging: return "Judging";
-    case Phase::Reveal: return "Reveal";
-    case Phase::Finished: return "Finished";
+    case Phase::Lobby:
+      return "Lobby";
+    case Phase::Playing:
+      return "Playing";
+    case Phase::Judging:
+      return "Judging";
+    case Phase::Reveal:
+      return "Reveal";
+    case Phase::Finished:
+      return "Finished";
   }
   return "Lobby";
 }
@@ -59,10 +68,9 @@ Server::~Server() { stop(); }
 void Server::fillSecret(uint8_t secret[kTicketBytes]) {
   // Hardware RNG, independent from the deterministic card-shuffle PRNG.
   // Called after WiFi radio has been enabled so ESP32's entropy is available.
-  for (size_t i=0; i<kTicketBytes; i+=4) {
-    const uint32_t word=esp_random();
-    for (size_t j=0;j<4 && i+j<kTicketBytes;++j)
-      secret[i+j]=static_cast<uint8_t>(word >> (8*j));
+  for (size_t i = 0; i < kTicketBytes; i += 4) {
+    const uint32_t word = esp_random();
+    for (size_t j = 0; j < 4 && i + j < kTicketBytes; ++j) secret[i + j] = static_cast<uint8_t>(word >> (8 * j));
   }
 }
 
@@ -103,17 +111,26 @@ bool Server::begin(Mode mode) {
   if (running_) return true;
   if (game_.phase() != Phase::Lobby) return false;
   mode_ = mode;
-  for (uint8_t i=0;i<kPlayers;++i) {
+  for (uint8_t i = 0; i < kPlayers; ++i) {
     socket_[i] = kNoConnection;
     tickets_[i] = SessionTicket{};
   }
   sessions_.reset();
   for (bool& connected : liveSocket_) connected = false;
   for (uint8_t& p : pending_) p = 0;
-  for (uint8_t i=0;i<kTrackedSlots;++i) { unanswered_[i] = 0; stalledSince_[i] = 0; }
+  for (uint8_t i = 0; i < kTrackedSlots; ++i) {
+    unanswered_[i] = 0;
+    stalledSince_[i] = 0;
+  }
   rejected_ = takeovers_ = idleClosed_ = sendFailures_ = deferred_ = dropped_ = 0;
-  ssid_.clear(); ip_.clear(); url_.clear(); password_[0] = 0;
-  if (!devModePaused_) { devmode::pause(); devModePaused_ = true; }
+  ssid_.clear();
+  ip_.clear();
+  url_.clear();
+  password_[0] = 0;
+  if (!devModePaused_) {
+    devmode::pause();
+    devModePaused_ = true;
+  }
   const bool networkOk = mode == Mode::Hotspot ? startHotspot() : startWifi();
   if (!networkOk) {
     releaseDevMode();
@@ -126,12 +143,13 @@ bool Server::begin(Mode mode) {
   // A native client could forge Origin: this is cross-site protection, not
   // a replacement for per-seat tokens or transport encryption.
   static const char* kMandatoryHeaders[] = {"Origin"};
-  ws_.onValidateHttpHeader([this](String header, String value) {
-    if (!header.equalsIgnoreCase("Origin")) return true;
-    const std::string expected = std::string("http://") + ip_;
-    return value == expected.c_str() ||
-           value == (expected + ":80").c_str();
-  }, kMandatoryHeaders, 1);
+  ws_.onValidateHttpHeader(
+      [this](String header, String value) {
+        if (!header.equalsIgnoreCase("Origin")) return true;
+        const std::string expected = std::string("http://") + ip_;
+        return value == expected.c_str() || value == (expected + ":80").c_str();
+      },
+      kMandatoryHeaders, 1);
   ws_.begin();
   // No library heartbeat: its ping and its timeout close frame both block on
   // a stalled peer. heartbeat() pings only writable sockets.
@@ -146,12 +164,12 @@ bool Server::begin(Mode mode) {
     } else if (type == WStype_DISCONNECTED) {
       liveSocket_[client] = false;
       onDisconnect(client);
-    } else if (type == WStype_TEXT && liveSocket_[client]) onMessage(client,payload,length);
+    } else if (type == WStype_TEXT && liveSocket_[client])
+      onMessage(client, payload, length);
   });
   running_ = true;
   lastDiagLog_ = lastPing_ = millis();
-  LOG_INF("CARDPARTY", "Game server ready at %s (reset reason %d)", url_.c_str(),
-          static_cast<int>(esp_reset_reason()));
+  LOG_INF("CARDPARTY", "Game server ready at %s (reset reason %d)", url_.c_str(), static_cast<int>(esp_reset_reason()));
   return true;
 }
 
@@ -177,7 +195,7 @@ void Server::stop() {
     WiFi.mode(WIFI_OFF);
   }
   password_[0] = 0;
-  for(uint8_t i=0;i<kPlayers;++i) {
+  for (uint8_t i = 0; i < kPlayers; ++i) {
     tickets_[i] = SessionTicket{};
     socket_[i] = kNoConnection;
     pending_[i] = 0;
@@ -201,18 +219,20 @@ void Server::loop() {
 }
 void Server::closeSocket(uint8_t client) {
   // The close frame is a write too: a stalled peer is dropped without it.
-  if (ws_.writable(client)) ws_.disconnect(client);
-  else ws_.drop(client);
+  if (ws_.writable(client))
+    ws_.disconnect(client);
+  else
+    ws_.drop(client);
 }
 void Server::flushPending() {
-  for (uint8_t seat=0; seat<kPlayers; ++seat) {
-    if (!pending_[seat] || socket_[seat]==kNoConnection) continue;
-    if (ws_.writable(static_cast<uint8_t>(socket_[seat]))) sendState(seat, pending_[seat]==2);
+  for (uint8_t seat = 0; seat < kPlayers; ++seat) {
+    if (!pending_[seat] || socket_[seat] == kNoConnection) continue;
+    if (ws_.writable(static_cast<uint8_t>(socket_[seat]))) sendState(seat, pending_[seat] == 2);
   }
 }
 void Server::heartbeat(uint32_t now) {
   lastPing_ = now;
-  for (uint8_t client=0; client<kTrackedSlots; ++client) {
+  for (uint8_t client = 0; client < kTrackedSlots; ++client) {
     if (!liveSocket_[client]) continue;
     if (!ws_.writable(client)) {
       if (!stalledSince_[client]) stalledSince_[client] = now | 1;  // 0 = not stalled
@@ -234,7 +254,7 @@ void Server::closeIdleSockets(uint32_t now) {
   // A socket that never joined or resumed (join screen left open, rejected
   // ninth player, stale tab) must not hold one of the bounded server slots.
   // The browser reconnects on demand when its user presses JOIN.
-  for (uint8_t client=0; client<kTrackedSlots; ++client) {
+  for (uint8_t client = 0; client < kTrackedSlots; ++client) {
     if (!liveSocket_[client] || sessions_.seatOf(client) != kNone) continue;
     if (static_cast<uint32_t>(now - connectedAt_[client]) < kAuthGraceMs) continue;
     ++idleClosed_;
@@ -243,8 +263,8 @@ void Server::closeIdleSockets(uint32_t now) {
   }
 }
 void Server::releaseExpiredTurns(uint32_t now) {
-  bool changed=false;
-  for (uint8_t seat=0; seat<kPlayers; ++seat) {
+  bool changed = false;
+  for (uint8_t seat = 0; seat < kPlayers; ++seat) {
     if (!game_.held(seat)) continue;
     if (static_cast<uint32_t>(now - heldSince_[seat]) < kTurnGraceMs) continue;
     changed = game_.releaseTurn(seat) || changed;
@@ -260,7 +280,8 @@ Server::Diagnostics Server::diagnostics() const {
   d.maxAllocHeap = ESP.getMaxAllocHeap();
   d.freePsram = ESP.getFreePsram();
   uint8_t sockets = 0;
-  for (uint8_t i=0; i<kTrackedSlots; ++i) if (liveSocket_[i]) ++sockets;
+  for (uint8_t i = 0; i < kTrackedSlots; ++i)
+    if (liveSocket_[i]) ++sockets;
   d.sockets = sockets;
   d.stations = mode_ == Mode::Hotspot ? static_cast<uint8_t>(WiFi.softAPgetStationNum()) : 0;
   const PublicView v = game_.publicView();
@@ -269,9 +290,12 @@ Server::Diagnostics Server::diagnostics() const {
     if (p.seated && p.connected) ++d.connected;
   }
   d.resetReason = static_cast<uint8_t>(esp_reset_reason());
-  d.rejected = rejected_; d.takeovers = takeovers_;
-  d.idleClosed = idleClosed_; d.sendFailures = sendFailures_;
-  d.deferred = deferred_; d.dropped = dropped_;
+  d.rejected = rejected_;
+  d.takeovers = takeovers_;
+  d.idleClosed = idleClosed_;
+  d.sendFailures = sendFailures_;
+  d.deferred = deferred_;
+  d.dropped = dropped_;
   return d;
 }
 void Server::logDiagnostics(uint32_t now) {
@@ -282,37 +306,38 @@ void Server::logDiagnostics(uint32_t now) {
           "diag heap=%u min=%u maxblk=%u psram=%u ws=%u ap=%u seats=%u/%u "
           "rej=%u takeover=%u idle=%u sendfail=%u defer=%u drop=%u reset=%u",
           static_cast<unsigned>(d.freeHeap), static_cast<unsigned>(d.minFreeHeap),
-          static_cast<unsigned>(d.maxAllocHeap), static_cast<unsigned>(d.freePsram),
-          d.sockets, d.stations, d.connected, d.seated, d.rejected, d.takeovers,
-          d.idleClosed, d.sendFailures, d.deferred, d.dropped, d.resetReason);
+          static_cast<unsigned>(d.maxAllocHeap), static_cast<unsigned>(d.freePsram), d.sockets, d.stations, d.connected,
+          d.seated, d.rejected, d.takeovers, d.idleClosed, d.sendFailures, d.deferred, d.dropped, d.resetReason);
 }
 void Server::sendGamePage() {
-  http_.sendHeader("Content-Encoding","gzip");
-  http_.sendHeader("Cache-Control","no-store");
-  http_.sendHeader("Cross-Origin-Resource-Policy","same-origin");
-  http_.sendHeader("X-Frame-Options","DENY");
-  http_.send_P(200,"text/html",CardPartyPageHtml,CardPartyPageHtmlCompressedSize);
+  http_.sendHeader("Content-Encoding", "gzip");
+  http_.sendHeader("Cache-Control", "no-store");
+  http_.sendHeader("Cross-Origin-Resource-Policy", "same-origin");
+  http_.sendHeader("X-Frame-Options", "DENY");
+  http_.send_P(200, "text/html", CardPartyPageHtml, CardPartyPageHtmlCompressedSize);
 }
 void Server::configureRoutes() {
-  if(routesConfigured_) return;
-  http_.on(kPath,HTTP_GET,[this]{sendGamePage();});
-  http_.on("/",HTTP_GET,[this]{sendGamePage();});
-  http_.onNotFound([this]{
+  if (routesConfigured_) return;
+  http_.on(kPath, HTTP_GET, [this] { sendGamePage(); });
+  http_.on("/", HTTP_GET, [this] { sendGamePage(); });
+  http_.onNotFound([this] {
     // Avoid silently serving the game at arbitrary paths on existing Wi-Fi.
-    http_.send(404,"text/plain","Not Found");
+    http_.send(404, "text/plain", "Not Found");
   });
-  routesConfigured_=true;
+  routesConfigured_ = true;
 }
 void Server::sendError(uint8_t client, const char* reason) {
-  char response[96]={};
-  JsonWriter w(response,sizeof(response));
-  w.raw("{\"type\":\"error\",\"message\":");w.quoted(reason);w.raw("}");
-  if(w.ok() && ws_.writable(client))ws_.sendTXT(client,response,w.size());
+  char response[96] = {};
+  JsonWriter w(response, sizeof(response));
+  w.raw("{\"type\":\"error\",\"message\":");
+  w.quoted(reason);
+  w.raw("}");
+  if (w.ok() && ws_.writable(client)) ws_.sendTXT(client, response, w.size());
 }
 
 void Server::sendState(uint8_t seat, bool welcome) {
-  if (!running_ || seat >= kPlayers || socket_[seat]==kNoConnection) return;
-  if (pending_[seat]==2) welcome=true;  // a held-back ticket is never replaced by plain state
+  if (!running_ || seat >= kPlayers || socket_[seat] == kNoConnection) return;
+  if (pending_[seat] == 2) welcome = true;  // a held-back ticket is never replaced by plain state
   if (!ws_.writable(static_cast<uint8_t>(socket_[seat]))) {
     if (pending_[seat] < (welcome ? 2 : 1)) pending_[seat] = welcome ? 2 : 1;
     ++deferred_;
@@ -320,266 +345,307 @@ void Server::sendState(uint8_t seat, bool welcome) {
   }
   pending_[seat] = 0;
   HandView privateView{};
-  uint32_t revision=0;
-  if (!sessions_.privateHand(socket_[seat],tickets_[seat].secret,privateView,revision)) return;
-  PublicView v=game_.publicView();
-  JsonWriter w(message_,sizeof(message_));
-  char token[33]={};
-  if(welcome) {
-    encodeSecret(tickets_[seat].secret,token);
-    w.raw("{\"type\":\"welcome\",\"token\":");w.quoted(token);
-    w.raw(",\"revision\":");w.num(revision);
+  uint32_t revision = 0;
+  if (!sessions_.privateHand(socket_[seat], tickets_[seat].secret, privateView, revision)) return;
+  PublicView v = game_.publicView();
+  JsonWriter w(message_, sizeof(message_));
+  char token[33] = {};
+  if (welcome) {
+    encodeSecret(tickets_[seat].secret, token);
+    w.raw("{\"type\":\"welcome\",\"token\":");
+    w.quoted(token);
+    w.raw(",\"revision\":");
+    w.num(revision);
   } else {
-    w.raw("{\"type\":\"state\",\"revision\":");w.num(revision);
+    w.raw("{\"type\":\"state\",\"revision\":");
+    w.num(revision);
   }
-  w.raw(",\"game\":{\"phase\":");w.quoted(phaseName(v.phase));
-  w.raw(",\"round\":");w.num(v.round);
-  w.raw(",\"pick\":");w.num(v.pick);
-  w.raw(",\"draw\":");w.num(v.draw);
-  w.raw(",\"czar\":");w.num(v.czar);
+  w.raw(",\"game\":{\"phase\":");
+  w.quoted(phaseName(v.phase));
+  w.raw(",\"round\":");
+  w.num(v.round);
+  w.raw(",\"pick\":");
+  w.num(v.pick);
+  w.raw(",\"draw\":");
+  w.num(v.draw);
+  w.raw(",\"czar\":");
+  w.num(v.czar);
   w.raw(",\"czarName\":");
-  if(v.czar<kPlayers) w.quoted(v.players[v.czar].name);
-  else w.quoted("");
+  if (v.czar < kPlayers)
+    w.quoted(v.players[v.czar].name);
+  else
+    w.quoted("");
   w.raw(",\"promptText\":");
-  if(v.prompt<deck_.promptsCount) w.quoted(deck_.prompts[v.prompt].text);
-  else w.quoted("");
-  w.raw(",\"submitted\":");w.num(v.submitted);
-  w.raw(",\"expected\":");w.num(v.expected);
+  if (v.prompt < deck_.promptsCount)
+    w.quoted(deck_.prompts[v.prompt].text);
+  else
+    w.quoted("");
+  w.raw(",\"submitted\":");
+  w.num(v.submitted);
+  w.raw(",\"expected\":");
+  w.num(v.expected);
   w.raw(",\"players\":[");
-  for(uint8_t i=0;i<kPlayers;++i) {
-    if(i)w.raw(",");
-    const PublicPlayer& p=v.players[i];
-    w.raw("{\"seated\":");w.boolean(p.seated);
-    w.raw(",\"connected\":");w.boolean(p.connected);
-    w.raw(",\"name\":");w.quoted(p.name);
-    w.raw(",\"points\":");w.num(p.points);
+  for (uint8_t i = 0; i < kPlayers; ++i) {
+    if (i) w.raw(",");
+    const PublicPlayer& p = v.players[i];
+    w.raw("{\"seated\":");
+    w.boolean(p.seated);
+    w.raw(",\"connected\":");
+    w.boolean(p.connected);
+    w.raw(",\"name\":");
+    w.quoted(p.name);
+    w.raw(",\"points\":");
+    w.num(p.points);
     w.raw("}");
   }
   w.raw("],\"submissions\":[");
-  for(uint8_t i=0;i<v.plays;++i) {
-    if(i)w.raw(",");
+  for (uint8_t i = 0; i < v.plays; ++i) {
+    if (i) w.raw(",");
     w.raw("{\"cards\":[");
-    for(uint8_t j=0;j<v.pick;++j) {
-      if(j)w.raw(",");
-      const uint16_t id=v.pile[i].cards[j];
-      w.quoted(id<deck_.answersCount?deck_.answers[id].text:"");
+    for (uint8_t j = 0; j < v.pick; ++j) {
+      if (j) w.raw(",");
+      const uint16_t id = v.pile[i].cards[j];
+      w.quoted(id < deck_.answersCount ? deck_.answers[id].text : "");
     }
     w.raw("]}");
   }
   w.raw("],\"winnerName\":");
-  if (v.winner==kRando) w.quoted("RANDO CARDRISSIAN");
-  else if(v.winner<kPlayers)w.quoted(v.players[v.winner].name);
-  else w.quoted("");
+  if (v.winner == kRando)
+    w.quoted("RANDO CARDRISSIAN");
+  else if (v.winner < kPlayers)
+    w.quoted(v.players[v.winner].name);
+  else
+    w.quoted("");
   w.raw(",\"winningText\":");
-  if(v.selected<v.plays) {
+  if (v.selected < v.plays) {
     // No author identities or submitted cards leak before the reveal:
     // the public view deliberately zeroes the pile in other phases.
-    char winnerText[256]={};
-    size_t used=0;
-    for(uint8_t i=0;i<v.pick;++i){
-      const uint16_t id=v.pile[v.selected].cards[i];
-      const char* line=id<deck_.answersCount?deck_.answers[id].text:"";
-      const size_t len=std::strlen(line);
-      if(used+len+4>=sizeof(winnerText))break;
-      if(used){winnerText[used++]=' ';winnerText[used++]='/';winnerText[used++]=' ';}
-      std::memcpy(winnerText+used,line,len);
-      used+=len;winnerText[used]=0;
+    w.raw("\"");
+    for (uint8_t i = 0; i < v.pick; ++i) {
+      const uint16_t id = v.pile[v.selected].cards[i];
+      const char* line = id < deck_.answersCount ? deck_.answers[id].text : "";
+      if (i) w.raw(" / ");
+      w.escaped(line);
     }
-    w.quoted(winnerText);
-  } else w.quoted("");
-  w.raw("},\"private\":{\"isCzar\":");w.boolean(privateView.judge);
-  w.raw(",\"submitted\":");w.boolean(privateView.submitted);
+    w.raw("\"");
+  } else
+    w.quoted("");
+  w.raw("},\"private\":{\"isCzar\":");
+  w.boolean(privateView.judge);
+  w.raw(",\"submitted\":");
+  w.boolean(privateView.submitted);
   w.raw(",\"hand\":[");
-  for(uint8_t i=0;i<privateView.size;++i) {
-    if(i)w.raw(",");
-    const uint16_t id=privateView.cards[i];
+  for (uint8_t i = 0; i < privateView.size; ++i) {
+    if (i) w.raw(",");
+    const uint16_t id = privateView.cards[i];
     w.raw("{\"text\":");
-    w.quoted(id<deck_.answersCount?deck_.answers[id].text:"");
+    w.quoted(id < deck_.answersCount ? deck_.answers[id].text : "");
     w.raw("}");
   }
   w.raw("]}}");
-  if(!w.ok()) {
+  if (!w.ok()) {
     ++sendFailures_;
-    LOG_ERR("CARDPARTY","Outgoing view exceeded bounded buffer");
-  } else if(!ws_.sendTXT(static_cast<uint8_t>(socket_[seat]),message_,w.size())) {
+    LOG_ERR("CARDPARTY", "Outgoing view exceeded bounded buffer");
+  } else if (!ws_.sendTXT(static_cast<uint8_t>(socket_[seat]), message_, w.size())) {
     ++sendFailures_;
   }
 }
 void Server::publishAll() {
-  for(uint8_t i=0;i<kPlayers;++i)
-    if(socket_[i]!=kNoConnection)sendState(i,false);
+  for (uint8_t i = 0; i < kPlayers; ++i)
+    if (socket_[i] != kNoConnection) sendState(i, false);
 }
 void Server::onDisconnect(uint8_t client) {
-  const uint8_t seat=sessions_.seatOf(client);
+  const uint8_t seat = sessions_.seatOf(client);
   sessions_.disconnect(client);
-  if(seat!=kNone && game_.held(seat)) heldSince_[seat]=millis();
-  for(uint8_t i=0;i<kPlayers;++i)
-    if(socket_[i]==client) { socket_[i]=kNoConnection; pending_[i]=0; }
+  if (seat != kNone && game_.held(seat)) heldSince_[seat] = millis();
+  for (uint8_t i = 0; i < kPlayers; ++i)
+    if (socket_[i] == client) {
+      socket_[i] = kNoConnection;
+      pending_[i] = 0;
+    }
   publishAll();
 }
-void Server::onMessage(uint8_t client,const uint8_t* bytes,size_t size) {
+void Server::onMessage(uint8_t client, const uint8_t* bytes, size_t size) {
   if (!running_) return;
   Command command{};
-  if(!parse(bytes,size,command)){sendError(client);return;}
-  bool accepted=false;
-  if(command.kind==Kind::Join) {
-    uint8_t secret[kTicketBytes]={};
+  if (!parse(bytes, size, command)) {
+    sendError(client);
+    return;
+  }
+  bool accepted = false;
+  if (command.kind == Kind::Join) {
+    uint8_t secret[kTicketBytes] = {};
     fillSecret(secret);
     SessionTicket ticket{};
-    accepted=sessions_.join(client,command.name,secret,ticket);
-    if(accepted) {
-      tickets_[ticket.seat]=ticket;
-      socket_[ticket.seat]=client;
-      sendState(ticket.seat,true);
+    accepted = sessions_.join(client, command.name, secret, ticket);
+    if (accepted) {
+      tickets_[ticket.seat] = ticket;
+      socket_[ticket.seat] = client;
+      sendState(ticket.seat, true);
     } else {
       ++rejected_;
       // Not secret: tells the player why, without revealing any seat data.
-      sendError(client, sessions_.seatOf(client)!=kNone ? "ALREADY JOINED" :
-                        game_.phase()!=Phase::Lobby ? "GAME ALREADY RUNNING" :
-                        game_.lobbyFull() ? "SESSION FULL" : "REQUEST REJECTED");
+      sendError(client, sessions_.seatOf(client) != kNone ? "ALREADY JOINED"
+                        : game_.phase() != Phase::Lobby   ? "GAME ALREADY RUNNING"
+                        : game_.lobbyFull()               ? "SESSION FULL"
+                                                          : "REQUEST REJECTED");
       return;
     }
-  } else if(command.kind==Kind::Resume) {
-    uint8_t fresh[kTicketBytes]={};
+  } else if (command.kind == Kind::Resume) {
+    uint8_t fresh[kTicketBytes] = {};
     fillSecret(fresh);
     SessionTicket ticket{};
-    accepted=sessions_.resume(client,command.secret,fresh,ticket);
-    if(accepted) {
-      const uint32_t previousSocket=socket_[ticket.seat];
-      tickets_[ticket.seat]=ticket;
-      socket_[ticket.seat]=client;
-      sendState(ticket.seat,true);
+    accepted = sessions_.resume(client, command.secret, fresh, ticket);
+    if (accepted) {
+      const uint32_t previousSocket = socket_[ticket.seat];
+      tickets_[ticket.seat] = ticket;
+      socket_[ticket.seat] = client;
+      sendState(ticket.seat, true);
       // Revoke AND release the stale connection. Authentication alone
       // invalidates its ticket, but a still-live socket otherwise consumes
       // one of the bounded X4 WebSocket slots indefinitely.
       // Ownership has already moved, so a late DISCONNECTED event from the
       // prior socket cannot disconnect the replacement seat.
-      if(previousSocket!=kNoConnection && previousSocket!=client) {
+      if (previousSocket != kNoConnection && previousSocket != client) {
         ++takeovers_;
         closeSocket(static_cast<uint8_t>(previousSocket));
       }
     }
-  } else if(command.kind==Kind::Submit) {
-    accepted=sessions_.submit(client,command.secret,command.revision,command.slots,command.count);
-  } else if(command.kind==Kind::Judge) {
-    accepted=sessions_.judge(client,command.secret,command.revision,command.selected);
+  } else if (command.kind == Kind::Submit) {
+    accepted = sessions_.submit(client, command.secret, command.revision, command.slots, command.count);
+  } else if (command.kind == Kind::Judge) {
+    accepted = sessions_.judge(client, command.secret, command.revision, command.selected);
   }
-  if(!accepted) {
+  if (!accepted) {
     ++rejected_;
-    if(command.kind==Kind::Resume) {
+    if (command.kind == Kind::Resume) {
       // The browser must discard stale sessionStorage tickets when the X4
       // starts a fresh game. Otherwise it keeps retrying a dead session.
-      char expired[]="{\"type\":\"expired\"}";
-      if(ws_.writable(client)) ws_.sendTXT(client,expired,sizeof(expired)-1);
+      char expired[] = "{\"type\":\"expired\"}";
+      if (ws_.writable(client)) ws_.sendTXT(client, expired, sizeof(expired) - 1);
     } else {
       sendError(client);
       // Duplicate or stale moves: resync the authenticated seat so its
       // browser re-enables controls with the current revision and phase.
-      const uint8_t seat=sessions_.authenticatedSeat(client,command.secret);
-      if(seat!=kNone && socket_[seat]==client) sendState(seat,false);
+      const uint8_t seat = sessions_.authenticatedSeat(client, command.secret);
+      if (seat != kNone && socket_[seat] == client) sendState(seat, false);
     }
     return;
   }
   publishAll();
 }
 bool Server::hostStart() {
-  if(!sessions_.hostStart())return false;
-  publishAll();return true;
+  if (!sessions_.hostStart()) return false;
+  publishAll();
+  return true;
 }
 bool Server::hostNext() {
-  if(!sessions_.hostNext())return false;
-  publishAll();return true;
+  if (!sessions_.hostNext()) return false;
+  publishAll();
+  return true;
 }
 bool Server::hostClose() {
-  if(!sessions_.hostClose())return false;
-  publishAll();return true;
+  if (!sessions_.hostClose()) return false;
+  publishAll();
+  return true;
 }
 bool Server::hostAbort() {
-  if(!sessions_.hostAbort())return false;
-  publishAll();return true;
+  if (!sessions_.hostAbort()) return false;
+  publishAll();
+  return true;
 }
 bool Server::hostRematch() {
-  if(!sessions_.hostRematch())return false;
-  publishAll();return true;
+  if (!sessions_.hostRematch()) return false;
+  publishAll();
+  return true;
 }
-}} // namespace cardparty::web
+}  // namespace web
+}  // namespace cardparty
 #else
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
 
-namespace cardparty { namespace web {
+namespace cardparty {
+namespace web {
 namespace {
 // SDL scenario tests use the real game rules but entirely simulated seats:
 // no TCP listener, no Wi-Fi, no credentials or real browser sessions.
 bool submitSimulatedHands(Game& game) {
   const auto v = game.publicView();
   if (v.phase != Phase::Playing) return false;
-  const uint8_t slots[kPickMax]={0,1,2};
-  for (uint8_t i=0;i<kPlayers;++i) {
-    if (!v.players[i].seated || i==v.czar) continue;
-    if (!game.submit(i,slots,v.pick)) return false;
+  const uint8_t slots[kPickMax] = {0, 1, 2};
+  for (uint8_t i = 0; i < kPlayers; ++i) {
+    if (!v.players[i].seated || i == v.czar) continue;
+    if (!game.submit(i, slots, v.pick)) return false;
   }
-  return game.phase()==Phase::Judging;
+  return game.phase() == Phase::Judging;
 }
 bool judgeSimulatedRound(Game& game) {
   if (!submitSimulatedHands(game)) return false;
-  const auto v=game.publicView();
-  return game.judge(v.czar,0) && game.phase()==Phase::Reveal;
+  const auto v = game.publicView();
+  return game.judge(v.czar, 0) && game.phase() == Phase::Reveal;
 }
-}
-Server::~Server()=default;
+}  // namespace
+Server::~Server() = default;
 bool Server::begin(Mode m) {
-  mode_=m;
-  const char* scenario=std::getenv("CROSSPLAY_SIM_CARDPARTY_STATE");
+  mode_ = m;
+  const char* scenario = std::getenv("CROSSPLAY_SIM_CARDPARTY_STATE");
   // A normal simulator launch remains unchanged: CardParty HTTP/WebSocket
   // cannot run through the hardware WiFi classes, by design.
-  if (!scenario || !*scenario || std::strcmp(scenario,"setup")==0) {
-    running_=false;
+  if (!scenario || !*scenario || std::strcmp(scenario, "setup") == 0) {
+    running_ = false;
     return false;
   }
-  if (game_.phase()!=Phase::Lobby) return false;
+  if (game_.phase() != Phase::Lobby) return false;
   sessions_.reset();
-  ssid_="SIMULATED-CAW";
-  ip_="192.0.2.1";  // RFC5737 documentation IP (not routable)
-  url_="http://192.0.2.1/cardparty";
-  std::memcpy(password_,"SIMULATOR-ONLY",15);
-  password_[15]=0;
-  for (const char* name:{"ADA","BERT","CYRA"}) {
-    if (game_.join(name)==kNone) return false;
+  ssid_ = "SIMULATED-CAW";
+  ip_ = "192.0.2.1";  // RFC5737 documentation IP (not routable)
+  url_ = "http://192.0.2.1/cardparty";
+  std::memcpy(password_, "SIMULATOR-ONLY", 15);
+  password_[15] = 0;
+  for (const char* name : {"ADA", "BERT", "CYRA"}) {
+    if (game_.join(name) == kNone) return false;
   }
-  if (std::strcmp(scenario,"lobby")==0) {
-    running_=true;
-  } else if (std::strcmp(scenario,"collect")==0) {
-    running_=game_.start();
-  } else if (std::strcmp(scenario,"judge")==0) {
-    running_=game_.start() && submitSimulatedHands(game_);
-  } else if (std::strcmp(scenario,"reveal")==0) {
-    running_=game_.start() && judgeSimulatedRound(game_);
-  } else if (std::strcmp(scenario,"finished")==0) {
-    running_=game_.start();
+  if (std::strcmp(scenario, "lobby") == 0) {
+    running_ = true;
+  } else if (std::strcmp(scenario, "collect") == 0) {
+    running_ = game_.start();
+  } else if (std::strcmp(scenario, "judge") == 0) {
+    running_ = game_.start() && submitSimulatedHands(game_);
+  } else if (std::strcmp(scenario, "reveal") == 0) {
+    running_ = game_.start() && judgeSimulatedRound(game_);
+  } else if (std::strcmp(scenario, "finished") == 0) {
+    running_ = game_.start();
     // Same ten-round game state transitions as the real production engine.
-    for (int round=0;running_ && round<10;++round) {
-      running_=judgeSimulatedRound(game_) && game_.nextRound();
+    for (int round = 0; running_ && round < 10; ++round) {
+      running_ = judgeSimulatedRound(game_) && game_.nextRound();
     }
-    running_=running_ && game_.phase()==Phase::Finished;
+    running_ = running_ && game_.phase() == Phase::Finished;
   }
   if (running_) {
-    std::printf("CARDPARTY_SIM_STATE=%s PHASE=%u ROUND=%u\n",
-                scenario,static_cast<unsigned>(game_.phase()),game_.publicView().round);
+    std::printf("CARDPARTY_SIM_STATE=%s PHASE=%u ROUND=%u\n", scenario, static_cast<unsigned>(game_.phase()),
+                game_.publicView().round);
   } else {
-    std::printf("CARDPARTY_SIM_FIXTURE_FAILED=%s\n",scenario);
+    std::printf("CARDPARTY_SIM_FIXTURE_FAILED=%s\n", scenario);
   }
   return running_;
 }
-void Server::loop(){}
-void Server::stop(){running_=false;password_[0]=0;ssid_.clear();ip_.clear();url_.clear();}
-bool Server::hostStart(){return sessions_.hostStart();}
-bool Server::hostNext(){return sessions_.hostNext();}
-bool Server::hostClose(){return sessions_.hostClose();}
-bool Server::hostAbort(){return sessions_.hostAbort();}
-bool Server::hostRematch(){return sessions_.hostRematch();}
-Server::Diagnostics Server::diagnostics() const {return Diagnostics{};}
-}} // namespace cardparty::web
+void Server::loop() {}
+void Server::stop() {
+  running_ = false;
+  password_[0] = 0;
+  ssid_.clear();
+  ip_.clear();
+  url_.clear();
+}
+bool Server::hostStart() { return sessions_.hostStart(); }
+bool Server::hostNext() { return sessions_.hostNext(); }
+bool Server::hostClose() { return sessions_.hostClose(); }
+bool Server::hostAbort() { return sessions_.hostAbort(); }
+bool Server::hostRematch() { return sessions_.hostRematch(); }
+Server::Diagnostics Server::diagnostics() const { return Diagnostics{}; }
+}  // namespace web
+}  // namespace cardparty
 #endif
