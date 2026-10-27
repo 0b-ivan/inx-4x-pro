@@ -92,6 +92,17 @@ bool Server::begin(Mode mode) {
   }
   configureRoutes();
   http_.begin();
+  // Reject cross-site WebSocket handshakes before issuing any player ticket.
+  // Browsers set Origin for the document, i.e. HTTP port 80, not WS port 81.
+  // A native client could forge Origin: this is cross-site protection, not
+  // a replacement for per-seat tokens or transport encryption.
+  static const char* kMandatoryHeaders[] = {"Origin"};
+  ws_.onValidateHttpHeader([this](String header, String value) {
+    if (!header.equalsIgnoreCase("Origin")) return true;
+    const std::string expected = std::string("http://") + ip_;
+    return value == expected.c_str() ||
+           value == (expected + ":80").c_str();
+  }, kMandatoryHeaders, 1);
   ws_.begin();
   ws_.enableHeartbeat(5000,3000,2);
   ws_.onEvent([this](uint8_t client, WStype_t type, uint8_t* payload, size_t length) {
