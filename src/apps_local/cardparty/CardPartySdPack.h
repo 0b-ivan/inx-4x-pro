@@ -1,6 +1,17 @@
 #pragma once
 // Versioned read-only CAW SD pack. No Arduino dependency: host-testable.
 // A release flag is only a safety gate, NOT proof of rights or authenticity.
+//
+// Format 2 (little endian):
+//   header  32 bytes: magic "XCAWPK2\0", u16 format, u16 flags, u16 prompts,
+//           u16 answers, u32 body bytes, u32 body CRC-32, u32 deck version,
+//           u8 categories, 3 zero bytes
+//   meta    title, license, license URL, rights holder, source URL:
+//           each u16 length + UTF-8 + NUL
+//   cats    per category: u8 flags (1 = on by default, 2 = adult), u16 length
+//           + UTF-8 name + NUL
+//   prompts u16 length, u8 pick, u8 draw, u16 category mask, UTF-8, NUL
+//   answers u16 length, u16 category mask, UTF-8, NUL
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -11,8 +22,14 @@
 namespace cardparty { namespace sdpack {
 constexpr uint32_t kMaxPackBytes=192u*1024u;
 constexpr uint16_t kMaxPromptBytes=384, kMaxAnswerBytes=160;
+constexpr uint16_t kMaxMetaBytes=200, kMaxCategoryNameBytes=24;
+constexpr uint8_t kMaxCategories=16;
 constexpr uint32_t kHeaderBytes=32;
-constexpr uint16_t kFormatVersion=1, kReleasedFlag=1;
+constexpr uint16_t kFormatVersion=2, kReleasedFlag=1;
+constexpr uint8_t kCategoryDefaultOn=1, kCategoryAdult=2;
+constexpr uint8_t kMetaFields=5;
+
+struct Category { const char* name=nullptr; bool defaultOn=false, adult=false; };
 
 class ByteSource {
  public:
@@ -77,64 +94,118 @@ class Pack final {
     if(size<kHeaderBytes || size>kMaxPackBytes)return false;
     uint8_t header[kHeaderBytes]={};
     if(!source.read(0,header,kHeaderBytes))return false;
-    const uint8_t magic[8]={'X','C','A','W','P','K','1',0};
+    const uint8_t magic[8]={'X','C','A','W','P','K','2',0};
     if(std::memcmp(magic,header,8)!=0||read16(header+8)!=kFormatVersion)return false;
     const uint16_t flags=read16(header+10);
-    if((flags & ~kReleasedFlag)!=0||(!allowDraft && !(flags & kReleasedFlag)))return false;
+    const bool released=(flags & kReleasedFlag)!=0;
+    if((flags & ~kReleasedFlag)!=0||(!allowDraft && !released))return false;
     const uint16_t pCount=read16(header+12),aCount=read16(header+14);
     if(!pCount||pCount>4096||aCount<32||aCount>4096)return false;
     const uint32_t bytes=read32(header+16);
-    if(bytes!=size-kHeaderBytes||read32(header+24)==0||read32(header+28)!=0)return false;
+    const uint8_t cCount=header[28];
+    if(bytes!=size-kHeaderBytes||read32(header+24)==0||cCount>kMaxCategories||
+       header[29]||header[30]||header[31])return false;
     std::unique_ptr<uint8_t[]> blob(new(std::nothrow)uint8_t[bytes]);
     std::unique_ptr<Prompt[]> prompts(new(std::nothrow)Prompt[pCount]);
     std::unique_ptr<Answer[]> answers(new(std::nothrow)Answer[aCount]);
-    if(!blob||!prompts||!answers||!source.read(kHeaderBytes,blob.get(),bytes))return false;
+    std::unique_ptr<uint16_t[]> promptMasks(new(std::nothrow)uint16_t[pCount]);
+    std::unique_ptr<uint16_t[]> answerMasks(new(std::nothrow)uint16_t[aCount]);
+    if(!blob||!prompts||!answers||!promptMasks||!answerMasks||
+       !source.read(kHeaderBytes,blob.get(),bytes))return false;
     if(crc32(blob.get(),bytes)!=read32(header+20))return false;
     uint32_t offset=0;
-    for(uint16_t i=0;i<pCount;++i) {
-      if(bytes-offset<4)return false;
-      const uint16_t n=read16(blob.get()+offset);
-      const uint8_t pick=blob[offset+2],draw=blob[offset+3];
-      offset+=4;
-      if(!n||n>kMaxPromptBytes||bytes-offset<=n||pick<1||pick>3||
-         draw>2||blob[offset+n]!=0||!validText(blob.get()+offset,n))return false;
-      const char* text=reinterpret_cast<const char*>(blob.get()+offset);
-      const uint8_t placeholdersFound=placeholdersCount(text,n);
-      // No slots: question stands alone; answers display separately.
-      if(placeholdersFound && placeholdersFound!=pick)return false;
-      prompts[i]=Prompt{text,pick,draw};
-      offset+=n+1;
-    }
-    for(uint16_t i=0;i<aCount;++i) {
+    // Length-prefixed, NUL-terminated UTF-8; empty only where allowed.
+    auto text=[&](uint16_t maxBytes,bool allowEmpty,const char*& out)->bool {
       if(bytes-offset<2)return false;
       const uint16_t n=read16(blob.get()+offset);
       offset+=2;
-      if(!n||n>kMaxAnswerBytes||bytes-offset<=n||
+      if(n>maxBytes||bytes-offset<=n||blob[offset+n]!=0)return false;
+      if(n?!validText(blob.get()+offset,n):!allowEmpty)return false;
+      out=reinterpret_cast<const char*>(blob.get()+offset);
+      offset+=n+1;
+      return true;
+    };
+    const char* meta[kMetaFields]={};
+    for(uint8_t i=0;i<kMetaFields;++i)
+      // A released pack must carry its attribution; drafts may leave it out.
+      if(!text(kMaxMetaBytes,!released,meta[i]))return false;
+    Category categories[kMaxCategories]={};
+    for(uint8_t i=0;i<cCount;++i) {
+      if(bytes-offset<1)return false;
+      const uint8_t catFlags=blob[offset++];
+      if(catFlags & ~(kCategoryDefaultOn|kCategoryAdult))return false;
+      if(!text(kMaxCategoryNameBytes,false,categories[i].name))return false;
+      categories[i].adult=(catFlags & kCategoryAdult)!=0;
+      // Adult content is never on until the host switches it on.
+      categories[i].defaultOn=(catFlags & kCategoryDefaultOn)!=0 && !categories[i].adult;
+    }
+    const uint16_t validMask=static_cast<uint16_t>((1u<<cCount)-1u);
+    for(uint16_t i=0;i<pCount;++i) {
+      if(bytes-offset<6)return false;
+      const uint16_t n=read16(blob.get()+offset);
+      const uint8_t pick=blob[offset+2],draw=blob[offset+3];
+      const uint16_t mask=read16(blob.get()+offset+4);
+      offset+=6;
+      if(!n||n>kMaxPromptBytes||bytes-offset<=n||pick<1||pick>3||draw>2||
+         (mask & ~validMask)||blob[offset+n]!=0||!validText(blob.get()+offset,n))return false;
+      const char* str=reinterpret_cast<const char*>(blob.get()+offset);
+      const uint8_t placeholdersFound=placeholders(str,n);
+      // No slots: question stands alone; answers display separately.
+      if(placeholdersFound && placeholdersFound!=pick)return false;
+      prompts[i]=Prompt{str,pick,draw};
+      promptMasks[i]=mask;
+      offset+=n+1;
+    }
+    for(uint16_t i=0;i<aCount;++i) {
+      if(bytes-offset<4)return false;
+      const uint16_t n=read16(blob.get()+offset);
+      const uint16_t mask=read16(blob.get()+offset+2);
+      offset+=4;
+      if(!n||n>kMaxAnswerBytes||bytes-offset<=n||(mask & ~validMask)||
          blob[offset+n]!=0||!validText(blob.get()+offset,n))return false;
-      const char* text=reinterpret_cast<const char*>(blob.get()+offset);
-      if(placeholdersCount(text,n))return false;
-      answers[i]=Answer{text};
+      const char* str=reinterpret_cast<const char*>(blob.get()+offset);
+      if(placeholders(str,n))return false;
+      answers[i]=Answer{str};
+      answerMasks[i]=mask;
       offset+=n+1;
     }
     if(offset!=bytes)return false;
     // Atomic commit: corrupt or truncated new pack never replaces a good one.
     blob_=std::move(blob);prompts_=std::move(prompts);answers_=std::move(answers);
+    promptMasks_=std::move(promptMasks);answerMasks_=std::move(answerMasks);
     deck_=Deck{prompts_.get(),pCount,answers_.get(),aCount};
+    for(uint8_t i=0;i<kMetaFields;++i)meta_[i]=meta[i];
+    for(uint8_t i=0;i<kMaxCategories;++i)categories_[i]=categories[i];
+    categoryCount_=cCount;
     version_=read32(header+24);
+    crc_=read32(header+20);
     return true;
   }
   const Deck& deck() const{return deck_;}
   uint32_t version() const{return version_;}
+  // Identifies the exact pack content, e.g. to key a saved category choice.
+  uint32_t crc() const{return crc_;}
   bool ready() const{return deck_.promptsCount>0&&deck_.answersCount>0;}
+  uint8_t categoryCount() const{return categoryCount_;}
+  const Category& category(uint8_t i) const{return categories_[i<kMaxCategories?i:0];}
+  uint16_t promptMask(uint16_t i) const{return i<deck_.promptsCount?promptMasks_[i]:0;}
+  uint16_t answerMask(uint16_t i) const{return i<deck_.answersCount?answerMasks_[i]:0;}
+  const char* title() const{return meta_[0];}
+  const char* license() const{return meta_[1];}
+  const char* licenseUrl() const{return meta_[2];}
+  const char* rightsHolder() const{return meta_[3];}
+  const char* sourceUrl() const{return meta_[4];}
  private:
-  static uint8_t placeholdersCount(const char* text,uint16_t n){
-    return sdpack::placeholders(text,n);
-  }
   std::unique_ptr<uint8_t[]> blob_;
   std::unique_ptr<Prompt[]> prompts_;
   std::unique_ptr<Answer[]> answers_;
+  std::unique_ptr<uint16_t[]> promptMasks_;
+  std::unique_ptr<uint16_t[]> answerMasks_;
   Deck deck_{};
-  uint32_t version_=0;
+  const char* meta_[kMetaFields]={"","","","",""};
+  Category categories_[kMaxCategories]={};
+  uint8_t categoryCount_=0;
+  uint32_t version_=0, crc_=0;
 };
 
 }} // namespace cardparty::sdpack

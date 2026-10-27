@@ -12,7 +12,10 @@ import zlib
 import build_sd_pack as pack
 
 def fixture():
-    manifest={"deck_id":"original-qa","version":2,"source_locale":"de",
+    manifest={"deck_id":"original-qa","version":2,"source_locale":"de","title":"QA Grundspiel",
+              "categories":[{"id":"basis","name":"Basis"},
+                            {"id":"boese","name":"Böse"},
+                            {"id":"fsk-18","name":"FSK 18","default_on":False,"adult":True}],
               "license":"CC0-1.0","rights_status":"verified",
               "editorial_status":"approved","rights_holder":"Fixture Author",
               "source_url":"https://example.org","license_url":"https://creativecommons.org/publicdomain/zero/1.0/"}
@@ -69,9 +72,9 @@ class SdPackTests(unittest.TestCase):
     def test_valid_payload_crc_sha_and_slots(self):
         manifest,cards=fixture()
         data,receipt=pack.validate(manifest,cards)
-        magic,v,flags,prompts,answers,n,crc,deckver,reserved=pack.HEADER.unpack_from(data)
-        self.assertEqual((magic,v,flags,prompts,answers,deckver,reserved),
-                         (pack.MAGIC,1,1,2,100,2,0))
+        magic,v,flags,prompts,answers,n,crc,deckver,cats=pack.HEADER.unpack_from(data)
+        self.assertEqual((magic,v,flags,prompts,answers,deckver,cats),
+                         (pack.MAGIC,2,1,2,100,2,3))
         self.assertEqual(n,len(data)-pack.HEADER.size)
         self.assertEqual(crc,zlib.crc32(data[pack.HEADER.size:]))
         self.assertEqual(receipt["sha256"],hashlib.sha256(data).hexdigest())
@@ -112,6 +115,39 @@ class SdPackTests(unittest.TestCase):
             pack.validate({**manifest,"deck_id":"../secrets"},cards)
         altered=copy.deepcopy(cards);altered[0]["pick"]=True
         with self.assertRaises(pack.PackError):pack.validate(manifest,altered)
+
+    def test_categories_become_masks_and_adult_starts_off(self):
+        manifest,cards=fixture()
+        cards[0]["categories"]=["boese","fsk-18"]
+        cards[-1]["categories"]=["basis"]
+        data,receipt=pack.validate(manifest,cards)
+        self.assertEqual([c["id"] for c in receipt["categories"]],["basis","boese","fsk-18"])
+        self.assertEqual(receipt["title"],"QA Grundspiel")
+        # Prompt 0 carries bits 1|2, the last answer bit 0.
+        first=struct.pack("<HBBH",len("Ohne Lücke?".encode()),1,0,0b110)+"Ohne Lücke?".encode()
+        self.assertIn(first,data)
+        last=cards[-1]["text"].encode()
+        self.assertIn(struct.pack("<HH",len(last),0b001)+last,data)
+        self.assertIn("Böse".encode(),data)
+
+    def test_category_rules(self):
+        manifest,cards=fixture()
+        bad=copy.deepcopy(cards);bad[0]["categories"]=["unknown"]
+        with self.assertRaisesRegex(pack.PackError,"unknown category"):pack.validate(manifest,bad)
+        bad=copy.deepcopy(cards);bad[0]["categories"]="boese"
+        with self.assertRaises(pack.PackError):pack.validate(manifest,bad)
+        adult_on=copy.deepcopy(manifest);adult_on["categories"][2]["default_on"]=True
+        with self.assertRaisesRegex(pack.PackError,"off by default"):pack.validate(adult_on,cards)
+        dup=copy.deepcopy(manifest);dup["categories"].append({"id":"basis","name":"Zwei"})
+        with self.assertRaises(pack.PackError):pack.validate(dup,cards)
+        many=copy.deepcopy(manifest)
+        many["categories"]=[{"id":f"cat-{i}","name":f"K{i}"} for i in range(17)]
+        with self.assertRaises(pack.PackError):pack.validate(many,cards)
+        long_name=copy.deepcopy(manifest);long_name["categories"][0]["name"]="x"*25
+        with self.assertRaises(pack.PackError):pack.validate(long_name,cards)
+        no_title={k:v for k,v in manifest.items() if k!="title"}
+        with self.assertRaises(pack.PackError):pack.validate(no_title,cards)
+        pack.validate(no_title,cards,draft=True)  # drafts may lack attribution
 
 if __name__=="__main__":
     unittest.main()
