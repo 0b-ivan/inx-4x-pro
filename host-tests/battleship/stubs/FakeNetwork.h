@@ -41,8 +41,12 @@ struct IPAddress {
 struct FakeWifi {
   bool available = true;
   int currentMode = 0;
+  int maxSoftApClients = 0;
   void mode(int mode) { currentMode = mode; }
-  bool softAP(const char*, const char*, int, bool, int) { return available; }
+  bool softAP(const char*, const char*, int, bool, int maxClients) {
+    maxSoftApClients = maxClients;
+    return available;
+  }
   void softAPdisconnect(bool) {}
   IPAddress softAPIP() { return {}; }
   IPAddress localIP() { return {}; }
