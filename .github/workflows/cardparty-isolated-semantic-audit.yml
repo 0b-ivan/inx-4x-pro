@@ -1,5 +1,5 @@
 # ISOLATED, ONE-SHOT editorial review. No PR, no merge, no crossplay build.
-# One-card re-audit: restore report and recheck two refined cards after final-clause test fix.
+# One-card recheck: correct ß casefold false-positive; reuse 19 unaffected assessments.
 # The branch is not targeted by the normal CrossPlay pull_request workflow.
 name: CardParty 20-card independent meaning/humor review
 
@@ -49,7 +49,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh run download 40579005481 \
+          gh run download 40579934593 \
             --repo "$GITHUB_REPOSITORY" \
             --name cardparty-gpt54-semantic-audit-unreviewed \
             --dir "$RUNNER_TEMP"
