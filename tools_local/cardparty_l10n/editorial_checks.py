@@ -13,7 +13,6 @@ from translate_cards import CardError, load_drafts, load_source
 
 _CASE_TRAPS = re.compile(r"\b(?:wegen|durch|beinhaltet|hat|haben|ersetzt)\s+____\b", re.I)
 _END_SENTENCE = re.compile(r"[.!?]\s*$")
-_TAG = re.compile(r"\[\d+\]\s+____")
 
 
 def lint_card(source, translated):
@@ -45,7 +44,7 @@ def lint_card(source, translated):
                 "id": ident, "severity": "warning", "code": "punctuation_after_blank",
                 "detail": "Sentence-final punctuation immediately after a blank may collide with answer punctuation.",
             })
-        if source["pick"] > 1 and len(_TAG.findall(target)) < source["pick"]:
+        if source["pick"] > 1 and target.count(" | ") != source["pick"] - 1:
             issues.append({
                 "id": ident, "severity": "warning", "code": "multi_pick_composition",
                 "detail": "Consider separately labeled standalone selection slots to avoid case/conjunction mismatch.",
