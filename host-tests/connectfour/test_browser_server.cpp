@@ -82,9 +82,16 @@ int main() {
   // revision, not remain stuck on the prior winner.
   for (int i=0; i<2; ++i) {
     assert(server.deviceDrop(3));
-    clockMs=static_cast<uint32_t>(700+i*200);
+    // The seat applies a 100ms anti-spam window after authenticated resume.
+    clockMs=static_cast<uint32_t>(800+i*250);
     const std::string moveAgain=std::string(R"(["drop",")")+fresh+R"(",)"+std::to_string(server.round().revision())+",4]";
+    // The old socket cannot play after the private seat has moved.
+    const uint32_t before=server.round().revision();
+    ws.event(WStype_TEXT,2,moveAgain);
+    assert(server.round().revision()==before);
+    assert(ws.messages.back().find("error")!=std::string::npos);
     ws.event(WStype_TEXT,3,moveAgain);
+    assert(server.round().revision()==before+1);
     assert(server.round().game().turn==connectfour::kLight);
   }
   assert(server.deviceDrop(3));
