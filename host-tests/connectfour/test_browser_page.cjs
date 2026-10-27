@@ -2,6 +2,11 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const html=fs.readFileSync('../../src/apps_local/connectfour/web/ConnectFourBrowserPage.html','utf8');
+// Accessibility and visual contract: discs must not rely on a shade difference.
+assert.match(html,/class="coin x4" aria-hidden="true">X</);
+assert.match(html,/class="coin browser" aria-hidden="true">B</);
+assert.match(html,/repeating-linear-gradient\(135deg/);
+assert.match(html,/\.cell\.last\.winning/);
 const ids=['status','detail','move-note','join','rematch','board','columns'];
 function element() {
   return {textContent:'',hidden:false,disabled:false,children:[],className:'',attrs:{},
@@ -51,12 +56,19 @@ const state=(phase,r,turn,board='0'.repeat(42),outcome=0,last=[-1,-1])=>({type:'
   const x4='1'+'0'.repeat(41);
   ws.onmessage({data:JSON.stringify(state('playing',1,2,x4,0,[0,0]))});
   assert.equal(elements.columns.children[1].disabled,false);
+  assert.equal(elements.board.children[35].textContent,'X');
+  assert.match(elements.board.children[35].attrs['aria-label'],/last move/);
   assert.equal(elements.status.attrs['data-state'],'turn');
   assert.match(elements['move-note'].textContent,/LAST DISC · X4 PRO → COLUMN 1/);
   elements.columns.children[1].onclick();
   assert.deepEqual(sent[1],['drop',first,1,1]);
   const both='1'+'0'.repeat(5)+'2'+'0'.repeat(35);
   ws.onmessage({data:JSON.stringify(state('playing',2,1,both,0,[1,0]))});
+  assert.equal(elements.board.children[35].textContent,'X');
+  assert.equal(elements.board.children[36].textContent,'B');
+  assert.ok(elements.board.children[36].className.includes('browser'));
+  assert.match(elements.board.children[36].attrs['aria-label'],/last move/);
+  assert.equal(elements.board.children[1].textContent,''); // Empty holes have no glyph.
   assert.equal(elements.columns.children[1].disabled,true);
   ws.close();assert.ok(retry);
   retry();await flush();assert.equal(sockets.length,2);
@@ -68,11 +80,14 @@ const state=(phase,r,turn,board='0'.repeat(42),outcome=0,last=[-1,-1])=>({type:'
   assert.match(elements.status.textContent,/X4 PRO WINS/);
   assert.equal(elements.status.attrs['data-state'],'finished');
   assert.equal(elements.board.children.filter(cell=>cell.className.includes('winning')).length,4);
+  assert.equal(elements.board.children.filter(cell=>cell.className.includes('winning') && cell.textContent==='X').length,4);
+  assert.equal(elements.board.children[35].attrs['aria-label'].includes('winning four'),true);
   assert.equal(elements.rematch.hidden,false);
   elements.rematch.onclick();assert.deepEqual(sent[3],['rematch',second,7]);
   restored.onmessage({data:JSON.stringify(state('playing',8,1))});
   assert.equal(elements.rematch.hidden,true);
   assert.equal(elements.board.children.filter(cell=>cell.className.includes('winning')).length,0);
+  assert.equal(elements.board.children.filter(cell=>cell.textContent!=='').length,0);
   assert.equal(elements.board.children.length,42);
   listeners.pagehide();assert.equal(retry,null);
   console.log('Connect Four browser page: board, accessible column moves, X4 turn, reconnect/resume and rematch passed');

@@ -19,3 +19,8 @@ The Wi-Fi QR code uses `WIFI:T:nopass;S:CrossPlay-ConnectFour;;`. Nearby devices
 
 
 A browser refresh may create a new WebSocket before the previous one has closed. The private resume capability can transfer exclusive seat ownership to the new socket; stale sockets are no longer allowed to mutate game state. Public bootstrap tokens alone never authorize a takeover.
+
+
+## Browser coin legibility (October 27)
+
+X4 discs are solid ivory with a dark `X` glyph. Browser discs have a high-contrast dark fill with a light `B` glyph and diagonal hatching. Both styles retain distinctive borders and match their exact legend counterparts. Empty holes have no glyph. The latest move has an outer ring; winning four discs have a thicker double-outline and an inset marker. Styles adapt to light/dark colour schemes while preserving distinguishability independent of hue. The DOM test asserts glyphs, legend, hatching, last-move accessibility and winner/rematch markers. No protocol, storage or device gameplay changes.
