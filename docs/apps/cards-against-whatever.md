@@ -171,6 +171,34 @@ bounded wire-command format. Host tests exercise the protocol and simulated
 Wi-Fi/WebSocket server, but these do **not** prove real smartphone or X4
 hardware correctness.
 
+## Network security and socket capacity hardening (2026-10-27)
+
+- The X4 Pro firmware build now sets `WEBSOCKETS_SERVER_CLIENT_MAX=10`
+  in `[x4pro_common]` (used by device/release environments). The
+  arduinoWebSockets library otherwise defaults to **5 simultaneous client
+  sockets**, insufficient for eight real human players. Two extra sockets
+  provide reconnect/handshake headroom; ESP32 heap use must still be measured
+  on physical hardware.
+- WebSocket upgrade requests must include a browser `Origin` matching
+  `http://<device-IP>` (port `:80` is also accepted). The embedded
+  arduinoWebSockets `onValidateHttpHeader` hook rejects absent or foreign
+  Origins **during the HTTP handshake**, before assigning a seat/token.
+  The QR code uses the device-IP URL; alternative hostnames are not currently
+  supported for cross-origin handshakes.
+- A native client can spoof an Origin header, so this is **cross-site
+  WebSocket hijacking mitigation**, not transport encryption or network
+  access control. All client actions still require a seat-bound 128-bit token.
+  The shared-LAN mode uses `ws://` without TLS; a protected local hotspot
+  is preferable. Treat untrusted LANs as out-of-scope until a secure
+  transport is designed and tested.
+- Native server tests exercise accepted localhost-IP Origins and rejected
+  missing/foreign Origins; the host test runner also checks the physical
+  X4 Pro `platformio.ini` socket-capacity build flag so a stub cannot hide
+  an accidental return to the library default.
+- Changes are in **Draft PR #47 only**. Prior Nightly
+  `v1.16.13-rc.20261027.ge3bdea3c` is immutable and does *not* contain
+  these hardening changes. A new OTA must be independently approved.
+
 ## Milestone 1 implementation and remaining acceptance gates
 
 ### Implemented on the feature branch
