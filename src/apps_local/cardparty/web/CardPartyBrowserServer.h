@@ -60,6 +60,7 @@ class Server final {
   char message_[6144]={};
   SessionTicket tickets_[kPlayers]={};
   uint32_t socket_[kPlayers]={};
+  bool liveSocket_[256]={}; // WebSocket client slot must be connected
 #endif
   Game& game_;
   Sessions& sessions_;
