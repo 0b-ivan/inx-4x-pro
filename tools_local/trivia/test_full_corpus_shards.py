@@ -29,10 +29,10 @@ class ResumeTests(unittest.TestCase):
             args=SimpleNamespace(source="unused",seed="unused",shard=0,
                 out=str(out),quarantine=str(base/"quarantine.jsonl"),
                 ledger=str(base/"usage.jsonl"),summary=str(base/"summary.json"))
-            with patch.object(shards,"originals",return_value=source), \\
-                 patch.object(shards,"verify_seed",return_value={}), \\
-                 patch.object(shards,"validate_record"), \\
-                 patch.object(shards,"translate_one") as paid, \\
+            with patch.object(shards,"originals",return_value=source), \
+                 patch.object(shards,"verify_seed",return_value={}), \
+                 patch.object(shards,"validate_record"), \
+                 patch.object(shards,"translate_one") as paid, \
                  patch.dict("os.environ",{},clear=True):
                 shards.translate(args)
                 paid.assert_not_called()
