@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>C/A/W — CrossPlay</title>
+<style>
+:root{color-scheme:dark;--ink:#fff;--paper:#000;--line:1px solid #fff;font-family:ui-monospace,Menlo,"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:#000;color:#fff}
+body{font-size:16px;line-height:1.4}
+button,input{font:inherit;border-radius:0}
+button{cursor:pointer;background:#000;color:#fff;border:1px solid #fff;min-height:48px;padding:9px 14px}
+button:disabled{cursor:not-allowed;border-style:dashed;opacity:1}
+button:focus-visible,input:focus-visible{outline:2px solid #fff;outline-offset:3px}
+button[aria-pressed="true"]{background:#fff;color:#000}
+button[aria-pressed="true"]:focus-visible{outline:2px solid #000;outline-offset:-5px}
+input{background:#000;border:1px solid #fff;color:#fff;padding:12px;width:100%;font-size:16px;min-height:48px}
+.shell{width:min(100%,720px);margin:0 auto;min-height:100dvh;padding:20px 16px max(16px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:16px}
+.mast{display:flex;justify-content:space-between;gap:12px;align-items:baseline;font-size:12px;letter-spacing:.03em}
+.brand{font-weight:700;white-space:nowrap}
+.rule{border:0;border-top:1px solid #fff;width:100%;margin:0}
+.meta{display:flex;justify-content:space-between;gap:10px;font-size:13px;flex-wrap:wrap}
+main{flex:1;display:flex;flex-direction:column;min-height:0}
+section[hidden]{display:none!important}
+section{display:flex;flex-direction:column;gap:14px;min-height:0;flex:1}
+.eyebrow{font-size:12px;letter-spacing:.05em;margin:0}
+h1,h2,p{margin:0}
+h1{font-size:clamp(22px,6vw,30px);font-weight:500;line-height:1.25;overflow-wrap:anywhere}
+h2{font-size:18px;font-weight:500}
+.notice{border:1px solid #fff;padding:12px;white-space:pre-wrap}
+.stack{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center;min-height:44px}
+.prompt{border-block:1px solid #fff;padding:14px 0;flex:0 1 auto;max-height:min(30dvh,240px);overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#fff #000;scrollbar-width:thin}
+.prompt h1{padding-block:12px}
+.choice-list{display:flex;flex-direction:column;gap:0;overflow-y:auto;flex:1;min-height:120px;max-height:48dvh;overscroll-behavior:contain;scrollbar-color:#fff #000;scrollbar-width:thin;border-top:1px solid #fff}
+.choice{display:block;width:100%;text-align:left;padding:13px 10px;border:0;border-bottom:1px solid #fff;min-height:56px;white-space:normal;overflow-wrap:anywhere;line-height:1.4}
+.choice .ord{display:inline-block;width:4ch;white-space:nowrap;vertical-align:top}
+.choice .body{display:inline}
+.footer{position:sticky;bottom:0;background:#000;padding:12px 0 max(8px,env(safe-area-inset-bottom));border-top:1px solid #fff;display:flex;gap:12px;align-items:center;justify-content:space-between;z-index:1}
+.footer button{flex:0 0 auto}
+.secondary{font-size:13px}
+.list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:0}
+.list li{border-bottom:1px solid #fff;padding:12px 0;overflow-wrap:anywhere}
+.field{display:flex;flex-direction:column;gap:8px}
+.grow{flex:1}
+[role="status"]{min-height:1.4em}
+@media(min-width:650px){.shell{padding:32px 24px}.prompt{max-height:245px}}
+@media(max-height:540px){.prompt{max-height:28dvh}.shell{gap:9px;padding-top:12px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="mast" aria-label="Cards Against Whatever">
+    <span class="brand">C / A / W</span><span id="connection" role="status" aria-live="polite">OFFLINE</span>
+  </header>
+  <hr class="rule">
+  <div class="meta"><span id="session">SESSION 01</span><span id="round">ROUND —</span></div>
+  <main>
+    <section id="join">
+      <p class="eyebrow">/// JOIN GAME</p>
+      <h1>CARDS AGAINST WHATEVER</h1>
+      <p class="secondary">Der X4 Pro ist der Spielleiter. Dein Telefon ist deine Kartenhand.</p>
+      <form id="joinForm" class="stack">
+        <label class="field" for="nick"><span>PLAYER NAME</span>
+          <input id="nick" type="text" required minlength="1" maxlength="23" autocomplete="nickname" spellcheck="false" placeholder="DEIN NAME">
+        </label>
+        <button type="submit" id="joinButton">[ JOIN SESSION ]</button>
+      </form>
+      <p class="secondary" id="joinHint" role="status" aria-live="polite">CONNECT TO X4 TO JOIN</p>
+    </section>
+    <section id="lobby" hidden>
+      <p class="eyebrow">/// LOBBY</p>
+      <h1>WAITING FOR PLAYERS</h1>
+      <p class="secondary">Die Partie wird auf dem X4 gestartet.</p>
+      <ul id="roster" class="list" aria-label="Players"></ul>
+    </section>
+    <section id="play" hidden>
+      <p class="eyebrow" id="playMeta">/// SELECT RESPONSE</p>
+      <div class="prompt" tabindex="0" role="region" aria-label="Aktuelle Frage, scrollbar">
+        <p class="eyebrow">CURRENT PROMPT</p>
+        <h1 id="promptText"></h1>
+      </div>
+      <div class="row"><span class="eyebrow">YOUR HAND</span><span class="secondary" id="count">0/1 SELECTED</span></div>
+      <div id="choices" class="choice-list" tabindex="0" role="region" aria-label="Antwortkarten, scrollbar"></div>
+      <div class="footer">
+        <span class="secondary" id="footCount">0/1 SELECTED</span>
+        <button id="submit" type="button" disabled>[ SUBMIT ]</button>
+      </div>
+    </section>
+    <section id="waiting" hidden>
+      <p class="eyebrow">/// RESPONSE SENT</p>
+      <h1>WAITING FOR THE OTHERS</h1>
+      <p id="waitingCount" role="status" aria-live="polite">WAITING...</p>
+    </section>
+    <section id="judging" hidden>
+      <p class="eyebrow">/// JUDGING</p>
+      <h1 id="judgeHeader">CHOOSE THE WINNER</h1>
+      <p id="judgePrompt" class="secondary"></p>
+      <div id="candidateList" class="choice-list" tabindex="0" role="region" aria-label="Anonyme Antworten, scrollbar"></div>
+      <div class="footer">
+        <span class="secondary" id="judgeSelection">NONE SELECTED</span>
+        <button id="confirmJudge" type="button" disabled>[ CONFIRM ]</button>
+      </div>
+    </section>
+    <section id="result" hidden>
+      <p class="eyebrow">/// REVEAL</p>
+      <h1 id="winner"></h1>
+      <div id="winnerText" class="notice"></div>
+      <p class="secondary">Nächste Runde wird auf dem X4 gestartet.</p>
+      <ul id="scores" class="list" aria-label="Scores"></ul>
+    </section>
+  </main>
+  <hr class="rule">
+  <div class="meta"><span>LOCAL MULTIPLAYER</span><span>NO CLOUD REQUIRED</span></div>
+</div>
+<script>
+"use strict";
+// PRE-INTEGRATION CLIENT. Server wire protocol is provisional and must be
+// aligned with a strict bounded ESP32 parser before firmware registration.
+// Neither a browser name nor seat ID authorizes a game action.
+(() => {
+  const $ = id => document.getElementById(id);
+  const screens = ["join", "lobby", "play", "waiting", "judging", "result"];
+  const state = {socket:null, ticket:null, revision:0, selection:[], judging:null,
+                 snapshot:null, personal:null};
+  const saved = sessionStorage.getItem("caw.session.token");
+  if (saved && /^[0-9a-f]{32}$/.test(saved)) state.ticket = saved;
+  function show(name) { for(const s of screens) $(s).hidden = s !== name; }
+  function status(text) { $("connection").textContent = text; }
+  function text(id, value) { $(id).textContent = value == null ? "" : String(value); }
+  function command(type, args = {}) {
+    if (!state.socket || state.socket.readyState !== WebSocket.OPEN || !state.ticket) return false;
+    state.socket.send(JSON.stringify({type,token:state.ticket,revision:state.revision,...args}));
+    return true;
+  }
+  function escapeText(value) { return String(value == null ? "" : value); }
+  function rowButton(n, label, pressed, onClick) {
+    const btn=document.createElement("button");
+    btn.type="button"; btn.className="choice"; btn.setAttribute("aria-pressed",String(pressed));
+    const mark=document.createElement("span");mark.className="ord";
+    mark.textContent="["+String(n).padStart(2,"0")+"]";
+    const body=document.createElement("span");body.className="body";
+    body.textContent=escapeText(label);
+    btn.append(mark,body);btn.addEventListener("click",onClick);
+    return btn;
+  }
+  function choices() {
+    const personal=state.personal||{}, game=state.snapshot||{};
+    const cards=Array.isArray(personal.hand)?personal.hand:[];
+    const pick=Number(game.pick)||1;
+    const list=$("choices");list.replaceChildren();
+    text("promptText",game.promptText||"");
+    text("playMeta","/// SELECT RESPONSE / CZAR "+(game.czarName||"?"));
+    for(let i=0;i<cards.length;i++){
+      const selected=state.selection.indexOf(i);
+      const label=cards[i].text||"";
+      const item=rowButton(i+1,label,selected>=0,()=>{
+        const old=state.selection.indexOf(i);
+        if(old>=0)state.selection.splice(old,1);
+        else if(state.selection.length<pick)state.selection.push(i);
+        choices();
+      });
+      if(selected>=0)item.setAttribute("aria-label","Position "+(selected+1)+" von "+pick+": "+label);
+      list.append(item);
+    }
+    const counter=state.selection.length+"/"+pick+" SELECTED";
+    text("count",counter);text("footCount",counter);
+    $("submit").disabled=state.selection.length!==pick;
+  }
+  function candidateRows() {
+    const game=state.snapshot||{};
+    const list=$("candidateList");list.replaceChildren();
+    const candidates=Array.isArray(game.submissions)?game.submissions:[];
+    const canJudge=!!(state.personal&&state.personal.isCzar);
+    text("judgePrompt",game.promptText||"");
+    for(let i=0;i<candidates.length;i++){
+      const answer=candidates[i];
+      const label=Array.isArray(answer.cards)?answer.cards.join(" / "):answer.text||"";
+      const btn=rowButton(i+1,label,state.judging===i,()=>{
+        if(!canJudge)return;
+        state.judging=i;candidateRows();
+      });
+      btn.disabled=!canJudge;list.append(btn);
+    }
+    text("judgeSelection",state.judging==null?"NONE SELECTED":"["+String(state.judging+1).padStart(2,"0")+"] SELECTED");
+    $("confirmJudge").disabled=!canJudge||state.judging==null;
+    text("judgeHeader",canJudge?"CHOOSE THE WINNER":"THE CZAR IS JUDGING");
+  }
+  function render() {
+    const game=state.snapshot||{},personal=state.personal||{};
+    text("round","ROUND "+(game.round||"—"));
+    text("session",game.sessionLabel||"SESSION 01");
+    if(!state.ticket){show("join");return;}
+    if(game.phase==="Lobby"||game.phase==="lobby"){
+      show("lobby");const list=$("roster");list.replaceChildren();
+      for(const player of (game.players||[])){
+        if(!player.seated)continue;
+        const li=document.createElement("li");
+        li.textContent=player.name+(player.connected?"  / CONNECTED":"  / DISCONNECTED");
+        list.append(li);
+      }
+    } else if(game.phase==="Playing"||game.phase==="playing"){
+      state.judging=null;
+      if(personal.isCzar||personal.submitted){
+        show("waiting");
+        text("waitingCount",(game.submitted||0)+"/"+(game.expected||0)+" RECEIVED");
+      } else {show("play");choices();}
+    } else if(game.phase==="Judging"||game.phase==="judging"){
+      show("judging");candidateRows();
+    } else if(game.phase==="Reveal"||game.phase==="reveal"||game.phase==="Finished"||game.phase==="finished"){
+      show("result");
+      text("winner",game.winnerName||"ROUND COMPLETE");
+      text("winnerText",game.winningText||"Awaiting next round");
+      const list=$("scores");list.replaceChildren();
+      for(const player of (game.players||[])){
+        if(!player.seated)continue;
+        const li=document.createElement("li");
+        li.textContent=player.name+"  /  "+(player.points||0)+" PT";
+        list.append(li);
+      }
+    } else show("join");
+  }
+  function connect() {
+    const hostname=location.hostname||"192.168.4.1";
+    const url="ws://"+hostname+":81/cardparty";
+    const socket=new WebSocket(url);
+    state.socket=socket;
+    status("CONNECTING");
+    socket.addEventListener("open",()=>{
+      status("LOCAL / CONNECTED");
+      if(state.ticket) socket.send(JSON.stringify({type:"resume",token:state.ticket}));
+    });
+    socket.addEventListener("message",event=>{
+      let msg;
+      try {msg=JSON.parse(event.data);} catch {return;}
+      if(!msg||typeof msg!=="object")return;
+      if(msg.type==="welcome"){
+        if(!/^[0-9a-f]{32}$/.test(msg.token||""))return;
+        state.ticket=msg.token;
+        sessionStorage.setItem("caw.session.token",msg.token);
+        state.revision=Number.isSafeInteger(msg.revision)?msg.revision:0;
+        state.selection=[];state.judging=null;
+        if(msg.game)state.snapshot=msg.game;
+        if(msg.private)state.personal=msg.private;
+        render();
+      } else if(msg.type==="state"){
+        if(msg.game)state.snapshot=msg.game;
+        if(msg.private)state.personal=msg.private;
+        if(Number.isSafeInteger(msg.revision))state.revision=msg.revision;
+        if(msg.game && msg.game.phase!=="Playing" && msg.game.phase!=="playing")state.selection=[];
+        render();
+      } else if(msg.type==="error"){
+        text("joinHint","ERROR: "+escapeText(msg.message||"REQUEST REJECTED"));
+      } else if(msg.type==="expired"){
+        state.ticket=null;sessionStorage.removeItem("caw.session.token");
+        state.personal=null;state.snapshot=null;render();
+      }
+    });
+    socket.addEventListener("close",()=>{if(state.socket===socket){status("DISCONNECTED");setTimeout(connect,1500);}});
+    socket.addEventListener("error",()=>{status("CONNECTION ERROR");});
+  }
+  $("joinForm").addEventListener("submit",ev=>{
+    ev.preventDefault();
+    const name=$("nick").value.trim();
+    if(!name||name.length>23)return;
+    if(!state.socket||state.socket.readyState!==WebSocket.OPEN){
+      text("joinHint","ERROR: NO CONNECTION TO X4");return;
+    }
+    state.socket.send(JSON.stringify({type:"join",name}));
+    text("joinHint","JOIN REQUEST SENT");
+  });
+  $("submit").addEventListener("click",()=>{
+    const expected=(state.snapshot||{}).pick||1;
+    if(state.selection.length!==expected)return;
+    if(command("submit",{slots:[...state.selection]}))$("submit").disabled=true;
+  });
+  $("confirmJudge").addEventListener("click",()=>{
+    if(state.judging==null)return;
+    if(command("judge",{selected:state.judging}))$("confirmJudge").disabled=true;
+  });
+  show("join");connect();
+})();
+</script>
+</body>
+</html>
