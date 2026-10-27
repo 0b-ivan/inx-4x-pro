@@ -100,11 +100,22 @@ def ask(key, card, candidate, all_sources):
             return json.loads(content)
         except (urllib.error.HTTPError, urllib.error.URLError,
                 TimeoutError, ValueError, KeyError) as error:
-            if attempt == 2:
-                # Never emit raw HTTP errors: backend bodies may contain
-                # sensitive provider context.
+            status = getattr(error, "code", None)
+            if isinstance(error, urllib.error.HTTPError):
+                # Log only the provider's status and bounded sanitized error
+                # type/message; never print Authorization headers or API key.
+                raw = error.read(4096).decode("utf-8", errors="replace")
+                try:
+                    problem = json.loads(raw).get("error", {})
+                    clue = str(problem.get("message", "unknown error"))
+                except (ValueError, AttributeError):
+                    clue = "provider returned no JSON error details"
+                clue = clue.replace(key, "[REDACTED]")
+                clue = re.sub(r"sk-[A-Za-z0-9_-]+", "[REDACTED]", clue)
+                print(f"MODEL_HTTP_STATUS {status}: {clue[:260]}", flush=True)
+            if status in (400, 401, 402, 403, 404, 422) or attempt == 2:
                 raise RuntimeError(f"OpenRouter failed on {card['id']}: "
-                                   f"{type(error).__name__}") from None
+                                   f"{type(error).__name__} status={status}") from None
             time.sleep(2 ** attempt)
 
 def validate(source, candidate, review):
