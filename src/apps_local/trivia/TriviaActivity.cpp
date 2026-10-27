@@ -311,6 +311,110 @@ bool TriviaActivity::awsResetProgress() {
   return true;
 }
 
+namespace {
+bool readAwsSessionSlot(const char* path, const uint32_t fingerprint, const uint32_t count,
+                        trivia::AwsSession& out) {
+  HalFile file = Storage.open(path, O_RDONLY);
+  if (!file.isOpen() || file.size() != trivia::kAwsSessionBytes) return false;
+  uint8_t raw[trivia::kAwsSessionBytes] = {};
+  if (file.read(raw, sizeof(raw)) != static_cast<int>(sizeof(raw))) return false;
+  return trivia::decodeAwsSession(raw, sizeof(raw), fingerprint, count, out);
+}
+} // namespace
+
+bool TriviaActivity::saveAwsSession() {
+  if (!awsInstalled_ || !awsSessionActive_ || !awsHaveLast_ ||
+      awsCurrent_ >= awsPack_.count()) return false;
+  trivia::AwsSession snap;
+  snap.fingerprint = awsPack_.fingerprint();
+  snap.count = awsPack_.count();
+  snap.current = awsCurrent_;
+  snap.generation = awsSessionGeneration_ + 1;
+  snap.asked = static_cast<uint32_t>(awsScore_.asked);
+  snap.right = static_cast<uint32_t>(awsScore_.right);
+  snap.option = awsOption_;
+  snap.selected = awsSelected_;
+  snap.page = awsPageIndex_;
+  snap.review = awsReviewMissed_ ? 1 : 0;
+  snap.correct = awsAnswerCorrect_ ? 1 : 0;
+  snap.hasQuestion = awsHasQuestion_ ? 1 : 0;
+  snap.haveLast = awsHaveLast_ ? 1 : 0;
+  snap.summaryScroll = awsSummaryScroll_;
+  snap.domains = awsDomains_;
+  switch (view_) {
+    case View::AwsQuestion: snap.view = trivia::kAwsSessionQuestion; break;
+    case View::AwsOption: snap.view = trivia::kAwsSessionOption; break;
+    case View::AwsExplanation: snap.view = trivia::kAwsSessionExplanation; break;
+    case View::AwsSummary: snap.view = trivia::kAwsSessionSummary; break;
+    default: return false;
+  }
+  if (!trivia::awsSessionValid(snap, snap.fingerprint, snap.count)) return false;
+  char path[kStudyPathCapacity] = {};
+  if (!studyPath((snap.generation & 1u) ? ".session1" : ".session0",
+                 path, sizeof(path))) return false;
+  uint8_t bytes[trivia::kAwsSessionBytes] = {};
+  trivia::encodeAwsSession(snap, bytes);
+  HalFile out;
+  if (!Storage.openFileForWrite("TRIVIA", path, out) ||
+      out.write(bytes, sizeof(bytes)) != sizeof(bytes)) {
+    LOG_ERR("TRIVIA", "Failed to save AWS study session");
+    return false;
+  }
+  out.flush();
+  out.close();
+  awsSessionGeneration_ = snap.generation;
+  return true;
+}
+
+bool TriviaActivity::restoreAwsSession() {
+  if (!awsInstalled_) return false;
+  char path0[kStudyPathCapacity] = {}, path1[kStudyPathCapacity] = {};
+  if (!studyPath(".session0", path0, sizeof(path0)) ||
+      !studyPath(".session1", path1, sizeof(path1))) return false;
+  trivia::AwsSession a, b;
+  const bool va = readAwsSessionSlot(path0, awsPack_.fingerprint(), awsPack_.count(), a);
+  const bool vb = readAwsSessionSlot(path1, awsPack_.fingerprint(), awsPack_.count(), b);
+  if (!va && !vb) return false;
+  const trivia::AwsSession& s =
+      va && (!vb || trivia::awsSessionNewer(a.generation, b.generation)) ? a : b;
+  if (!awsPack_.read(s.current, awsQuestion_)) return false;
+  if (s.option >= awsQuestion_.optionCount() ||
+      (s.selected >> awsQuestion_.optionCount()) != 0) return false;
+  if (s.view == trivia::kAwsSessionExplanation &&
+      (s.hasQuestion == 0 || s.selected == 0 ||
+       awsQuestion_.evaluate(s.selected) != (s.correct != 0))) return false;
+  if (s.domains != awsDomains_ ||
+      (awsDomains_ & (1u << (awsQuestion_.domain() - 1))) == 0) return false;
+  awsCurrent_ = s.current;
+  awsSessionGeneration_ = s.generation;
+  awsScore_.asked = static_cast<int>(s.asked);
+  awsScore_.right = static_cast<int>(s.right);
+  awsOption_ = s.option;
+  awsSelected_ = s.selected;
+  awsReviewMissed_ = s.review != 0;
+  awsAnswerCorrect_ = s.correct != 0;
+  awsHasQuestion_ = s.hasQuestion != 0;
+  awsHaveLast_ = true;
+  awsSummaryScroll_ = s.summaryScroll;
+  awsResetPages();
+  awsPageIndex_ = s.page;
+  switch (s.view) {
+    case trivia::kAwsSessionQuestion: view_ = View::AwsQuestion; break;
+    case trivia::kAwsSessionOption: view_ = View::AwsOption; break;
+    case trivia::kAwsSessionExplanation: view_ = View::AwsExplanation; break;
+    default: view_ = View::AwsSummary; break;
+  }
+  awsSessionActive_ = true;
+  return true;
+}
+
+void TriviaActivity::clearAwsSession() {
+  char slot0[kStudyPathCapacity] = {}, slot1[kStudyPathCapacity] = {};
+  if (studyPath(".session0", slot0, sizeof(slot0))) Storage.remove(slot0);
+  if (studyPath(".session1", slot1, sizeof(slot1))) Storage.remove(slot1);
+  awsSessionGeneration_ = 0;
+}
+
 void TriviaActivity::saveAwsDomains() const {
   HalFile prefs;
   char path[kStudyPathCapacity] = {};
