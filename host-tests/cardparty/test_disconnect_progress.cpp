@@ -36,7 +36,7 @@ void submittedPlayerDisconnectMustNotSkipOtherPlayer() {
   Game g;
   assert(g.configure(f.deck,Rules{5,3,true},0x137acafe));
   Sessions sessions(g);
-  const Key a(10), b(40), c(70), fresh(100);
+  const Key a(10), b(40), c(70), fresh(100), rogue(160);
   SessionTicket ta{},tb{},tc{},renewed{};
   assert(sessions.join(10,"Judge",a.bytes,ta));
   assert(sessions.join(11,"Alice",b.bytes,tb));
@@ -69,7 +69,7 @@ void submittedPlayerDisconnectMustNotSkipOtherPlayer() {
   // or the old token. Resume preserves the seat but rotates the secret.
   assert(sessions.disconnect(10));
   assert(!sessions.judge(10,a.bytes,0,0));
-  assert(!sessions.resume(13,b.bytes,fresh.bytes,renewed));
+  assert(!sessions.resume(13,rogue.bytes,fresh.bytes,renewed));
   assert(sessions.resume(13,a.bytes,fresh.bytes,renewed));
   assert(renewed.seat==ta.seat);
   assert(!sessions.judge(13,a.bytes,0,0));
