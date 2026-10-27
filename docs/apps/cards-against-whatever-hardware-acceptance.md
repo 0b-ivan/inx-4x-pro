@@ -122,8 +122,10 @@ ends the session.
 the lobby without rejoining Wi-Fi or rescanning, scores 0, same names; start
 and play 3 rounds. Heap leak threshold checked here.
 
-**T11 — Existing Wi-Fi mode.** `[02] EXISTING WI-FI`, 3+ phones on the same
-network. Pass: join and one round. Note: unencrypted `ws://` on a shared LAN
+**T11 — Existing Wi-Fi mode.** `[02] EXISTING WI-FI` with dev mode off:
+the system network picker opens (saved networks connect directly), then the
+lobby. 3+ phones on the same network. Pass: join and one round; after
+leaving the app the X4's Wi-Fi is off again. Note: unencrypted `ws://` on a shared LAN
 is not accepted as secure; only use a trusted network.
 
 **T12 — Soak.** Leave 8 phones connected in the lobby or a running round for

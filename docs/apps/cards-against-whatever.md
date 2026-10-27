@@ -50,8 +50,8 @@ wordmark, artwork, exact screen layouts, or other copyrighted branding.
 - X4 Pro e-ink: only black/white pixels. Use white paper + black type where
   it significantly improves long-term viewing and ghosting; shared design
   language does not require identical inverted screen polarity.
-- Native X4 panel is 800x480 LANDSCAPE. Do not assume portrait support
-  without implementing display and touch rotation.
+- The X4 Pro is used upright: the renderer's default Portrait orientation
+  (480x800, display and touch rotated) is what every shelf app uses.
 - Monospace: system mono / Menlo / Consolas. No CDN fonts.
 - Text-first editorial/terminal layout: abbreviated all-caps metadata,
   numbered options, thin horizontal rules, tight but intentional spacing.
@@ -87,7 +87,9 @@ wordmark, artwork, exact screen layouts, or other copyrighted branding.
 
 ### E-ink game-master UI
 
-- 800x480 landscape, full-width large legible question.
+- 480x800 portrait like every other shelf app: the X4 Pro is held upright,
+  and a landscape-only screen made the host turn the device mid-shelf.
+  Question wraps by measured width, up to 9 rows.
 - Header: C/A/W / ROUND 02 / CZAR MAX.
 - Footer: 3/5 ANSWERS SUBMITTED, optionally a compact progress indicator.
 - QR lobby: large QR with quiet zone, readable local URL / code, roster.
@@ -119,7 +121,7 @@ wordmark, artwork, exact screen layouts, or other copyrighted branding.
 - Visible list position and independently operable scroll areas.
 - No clipping behind sticky footer or system virtual keyboard.
 - Precise anonymous response secrecy, reconnect and offline assets.
-- Simulator screenshots for 800x480 X4 and real hardware validation.
+- Simulator screenshots for the 480x800 X4 Pro and real hardware validation.
 
 ## Shared design system
 
@@ -291,8 +293,8 @@ traffic, e-ink refresh. See
 4. `web/CardPartyBrowserServer.{h,cpp}`: HTTP 80 serves locally embedded
    `/cardparty`; port 81 serves WebSockets, 8-seat authorization and
    per-connection hands. X4 physically controls start/next/close/abort.
-5. `CardPartyActivity.{h,cpp}`: X4 800×480 e-ink host view and QR lobby,
-   WPA2 hotspot (unique generated password), existing-Wi-Fi choice,
+5. `CardPartyActivity.{h,cpp}`: X4 480×800 portrait e-ink host view and QR lobby,
+   WPA2 hotspot (unique generated password), existing Wi-Fi via the system network picker,
    progress, phase and winner; terminal-style UI, Games shelf registration.
 6. `CardPartyDemoDeck.h`: original German sample cards; no third-party
    card-content licensing assumptions.
