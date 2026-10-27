@@ -14,6 +14,7 @@
 #include "AwsStudyPack.h"
 #include "AwsStudyScreens.h"
 #include "AwsGlossary.h"
+#include "AwsSession.h"
 #include "StudyDeckCatalog.h"
 #include "TriviaPackLocale.h"
 #include "TriviaScreens.h"
@@ -53,6 +54,9 @@ class TriviaActivity final : public Activity {
   void awsNextPage(bool fromSwipe = false);
   void awsPreviousPage(bool fromSwipe = false);
   bool awsResetProgress();
+  bool saveAwsSession();
+  bool restoreAwsSession();
+  void clearAwsSession();
   void awsResetPages();
   void openAwsGlossary(int x, int y);
   uint32_t awsMissedCount() const;
@@ -95,6 +99,8 @@ class TriviaActivity final : public Activity {
   trivia::AwsChooser awsChooser_;
   trivia::Score awsScore_;
   uint32_t awsCurrent_ = 0;
+  uint32_t awsSessionGeneration_ = 0;
+  bool awsSessionActive_ = false;
   // Start offset of every page already shown for the current text, so BACK
   // and a downward swipe return to exactly the page the reader saw.
   static constexpr uint8_t kAwsMaxPages = 64;
