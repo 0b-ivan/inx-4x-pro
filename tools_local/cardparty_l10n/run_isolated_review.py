@@ -171,21 +171,46 @@ if __name__ == "__main__":
     drafts = load_drafts(DRAFTS, manifest, sources)
     if len(sources) != 20 or set(sources) != set(drafts):
         raise SystemExit("Exact 20-card original pilot required")
-    # No reuse of stale reports: this is an isolated 20-card run.
-    REPORT.unlink(missing_ok=True)
-    CANDIDATES.unlink(missing_ok=True)
+    # Resume completed model reviews from a previous GitHub Actions artifact
+    # without spending again on unchanged source/German cards.
     totals = {"accept": 0, "revise": 0, "manual_review": 0}
+    processed = set()
+    if REPORT.exists():
+        for line in REPORT.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            ident = row["id"]
+            if (ident in processed or ident not in drafts or
+                    row["source_hash"] != drafts[ident]["source_hash"] or
+                    row["candidate_hash"] != digest(drafts[ident]) or
+                    row["model"] != MODEL or row["human_approved"] is not False):
+                raise SystemExit("Stale/invalid prior review report; refusing resume")
+            processed.add(ident)
+            totals[row["model_review"]["decision"]] += 1
     with REPORT.open("a", encoding="utf-8") as output, CANDIDATES.open(
             "a", encoding="utf-8") as candidates:
         for card_id, card in sources.items():
+            if card_id in processed:
+                continue
             draft = drafts[card_id]
+            result = ask(key, card, draft, sources)
             try:
-                result = ask(key, card, draft, sources)
                 proposal = validate(card, draft, result)
-            except (ValueError, RuntimeError) as error:
-                # Preserve evidence of failure and avoid fabricating approval.
-                print(f"FAILED {card_id}: {type(error).__name__}", flush=True)
-                raise
+            except (ValueError, KeyError, TypeError) as error:
+                # An uncertain/inconsistent model verdict must not terminate
+                # the entire paid audit. Capture its raw diagnosis as MANUAL
+                # and DO NOT include the suggestion in exportable proposals.
+                print(f"MANUAL {card_id}: local semantic validation rejected proposal", flush=True)
+                if not isinstance(result, dict):
+                    raise
+                result["decision"] = "manual_review"
+                issues = result.get("issues")
+                if not isinstance(issues, list):
+                    issues = []
+                issues.append(f"local_validation:{type(error).__name__}:{str(error)[:120]}")
+                result["issues"] = issues
+                proposal = draft
             item = {
                 "id": card_id, "source_hash": draft["source_hash"],
                 "candidate_hash": digest(draft), "model": MODEL,
@@ -196,5 +221,5 @@ if __name__ == "__main__":
             if result["decision"] != "manual_review":
                 candidates.write(json.dumps(proposal, ensure_ascii=False) + "\n")
                 candidates.flush()
-            print(f"REVIEW {len(sources)}: {card_id} = {result['decision']}", flush=True)
-    print(f"RESULT 20/20 {totals}, independent GPT-5.4 model only; human approval REQUIRED")
+            print(f"REVIEW 20: {card_id} = {result['decision']}", flush=True)
+    print(f"RESULT {sum(totals.values())}/20 {totals}, independent GPT-5.4 only; human approval REQUIRED")
