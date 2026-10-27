@@ -95,7 +95,12 @@ void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* st
                        fui::Paint::solid(fui::Color::Black));
   prose(screen, {static_cast<int16_t>(body.x + kMargin), static_cast<int16_t>(top + 54),
                  static_cast<int16_t>(body.width - 2 * kMargin),
-                 static_cast<int16_t>(footer(screen) - top - 70)}, model.text);
+                 static_cast<int16_t>(footer(screen) - top - 136)}, model.text);
+  // The action above the footer must never overlap text. The permanent
+  // gesture hint also tells first-time touchscreen users how to navigate.
+  label(screen, {static_cast<int16_t>(body.x + kMargin),
+                 static_cast<int16_t>(footer(screen) - 49), 224, 40},
+        model.german ? "WISCHEN | AWS HALTEN" : "SWIPE | HOLD AWS");
 }
 
 }  // namespace
