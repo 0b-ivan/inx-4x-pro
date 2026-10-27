@@ -57,6 +57,8 @@ Quelldatei, unabhängig von deutschen Menüs.
 
 ## Öffentliche GitHub-Fragenpakete
 
+**Standby / Sitzung fortsetzen:** Der X4 Pro startet nach Deep Sleep den Controller neu. Eine aktive AWS-Fragensession wird deshalb auf der SD-Karte in zwei abwechselnden, jeweils prüfsummengeschützten Dateien `<ZERTIFIKAT>.session0` und `.session1` gesichert. Beim Aufwecken stellt Trivia die letzte Frage, angekreuzte Antworten, Textseite, Lernmodus und bisherigen Rundenscore wieder her. Eine bereits bewertete Antwort wird nicht erneut bewertet. Die Checkpoints werden nur für die passende unveränderte Fragenbank (Fingerprint und Frageanzahl) gelesen. `LERNSTAND LOESCHEN` entfernt auch die zugehörigen Sessiondateien; der ausdrücklich beendete Durchgang verliert beim Verlassen der Zusammenfassung den Wiederaufnahmestand. Ohne SD-Karte ist eine dauerhafte Wiederaufnahme nicht möglich.
+
 Das öffentliche Nightly-OTA enthält **keine** Fragenbank. Im Gerät:
 
 1. **TRIVIA → STUDY PACKS → GITHUB** wählen.

@@ -52,6 +52,10 @@ PY
 python3 "$TOOLS/test_de_pack.py"
 python3 test_de_ota_contract.py
 
+# Deep sleep is an MCU reset; checkpoints must survive restart and reject corrupt SD writes.
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC   test_aws_session.cpp -o "$BUILD_DIR/test_aws_session"
+"$BUILD_DIR/test_aws_session"
+
 # AWS binary format, exact multi-select grading, domain filters and pagination.
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC \
   test_aws_pack.cpp "$SRC/AwsStudyPack.cpp" "$SRC/TriviaCore.cpp" -o "$BUILD_DIR/test_aws_pack"
