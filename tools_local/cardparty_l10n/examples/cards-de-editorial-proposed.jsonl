@@ -1,0 +1,20 @@
+{"id":"prompt-001","source_hash":"ba01d088fbeb6281e9ce103df1b652e17f0fc9879ba1e2a52f330b1afe21f0c0","locale":"de","text":"Das Deployment ist fehlgeschlagen. Der Grund: ____","reviewed":false}
+{"id":"prompt-002","source_hash":"cbcd8dd8f3fca7af055db028e0da6e06188682b2b1d1017a49cea56d4bb9b92c","locale":"de","text":"Im Postmortem steht als Hauptursache: ____","reviewed":false}
+{"id":"prompt-003","source_hash":"e2d1cbeac9c0e3184a488cf5aeeb41ffba3c6b65c4fe800ec78ed1c67a47aec2","locale":"de","text":"Das neue Onboarding beinhaltet zwei Dinge: [1] ____ | [2] ____","reviewed":false}
+{"id":"prompt-004","source_hash":"afa41ce700f4f34ea1b235183d9163559e15889bf26505e4d57c739462384e34","locale":"de","text":"Das Sicherheits-Audit hat drei Dinge aufgedeckt: [1] ____ | [2] ____ | [3] ____","reviewed":false}
+{"id":"prompt-005","source_hash":"d546060b96a2866324b61723e89eda245a697722b03b9ca6a5942be934f482be","locale":"de","text":"Was hat den Bürodrucker endlich repariert? ____","reviewed":false}
+{"id":"prompt-006","source_hash":"7aebc0dbb7836e623457def83dbf56c152486e4afe205fe6ae1433563524284f","locale":"de","text":"Wir nennen es Innovation. Vorher: ____ | Nachher: ____","reviewed":false}
+{"id":"answer-001","source_hash":"490adff5342d5372814d2b8072ae5a89c4719669f7e30e118b7b653e0e1415c9","locale":"de","text":"Eine Kaffeemaschine, auf der Kubernetes läuft","reviewed":false}
+{"id":"answer-002","source_hash":"7630ae284f115e3fb52765f9db9df83674eb99bde09392620927ca9c07c1bf3e","locale":"de","text":"Ein Praktikant mit Administratorrechten","reviewed":false}
+{"id":"answer-003","source_hash":"1a995a0a41add281d313ff18e0f9fb755dc5d4aa108fc4364db023e1a83ffd50","locale":"de","text":"Ein Server namens FINAL-FINAL","reviewed":false}
+{"id":"answer-004","source_hash":"1bd33b7387b3fdb1c649e9ba2dbf87f913007c24a7f4e00b68b6dfeeef461ef1","locale":"de","text":"Eine undokumentierte Firewall-Regel","reviewed":false}
+{"id":"answer-005","source_hash":"3e06b2e0c9b0d353cc6c65cb9b4c3ed32be461c646acde56b89a94bdb1796b9b","locale":"de","text":"Ein DNS-Eintrag auf einer Serviette","reviewed":false}
+{"id":"answer-006","source_hash":"dcfebe810f340805ec0f1775d9a463967b0d21e6e0d8292e110811b94e231717","locale":"de","text":"Eine Änderungsanfrage, die von einer Zimmerpflanze genehmigt wurde","reviewed":false}
+{"id":"answer-007","source_hash":"ff44bfdd282ae6e7a7233a9387e3fd9e60d53309ea631005a0c015e4a85e8e75","locale":"de","text":"Sechs identische Kabel und keine Beschriftung","reviewed":false}
+{"id":"answer-008","source_hash":"3d37962aea90db63310dae4a61707a1dc727ad9d0bab02d5c084a112e5036b7a","locale":"de","text":"Ein Backup in einer vergessenen Schublade","reviewed":false}
+{"id":"answer-009","source_hash":"d791a6e0ff58b63abb868878fa1c2ebfe3a2cd956f043fa12077618aff5cd377","locale":"de","text":"Ein Alarm, der nur an Feiertagen losgeht","reviewed":false}
+{"id":"answer-010","source_hash":"8746814a612884113afc56117698f49274d576733551c4cd0a5d82dabe2d8456","locale":"de","text":"Eine Datenbankabfrage ohne WHERE-Klausel","reviewed":false}
+{"id":"answer-011","source_hash":"9a2345985964c9680e1c1c23c975e2ea271ea49b8076798cdc2417d7a2e63afc","locale":"de","text":"Noch ein Dashboard, das niemand öffnet","reviewed":false}
+{"id":"answer-012","source_hash":"8f3c6874a855642bb2537042a115ce1e9c69b9685ca06f97be2080a0894e30f0","locale":"de","text":"Eine besonders ambitionierte Tabellenkalkulation","reviewed":false}
+{"id":"answer-013","source_hash":"411c7b1c99194bea898eab780509652fe217f923d9f8d771fc20f2abde8845c7","locale":"de","text":"Ein automatisierter Prozess, der drei Anrufe erfordert","reviewed":false}
+{"id":"answer-014","source_hash":"c934fbb9bf909419a1e51c9f5f775ec0e695506fc6ab2537caad3ad138afc317","locale":"de","text":"Ein Zertifikat, das während der Demo abgelaufen ist","reviewed":false}
