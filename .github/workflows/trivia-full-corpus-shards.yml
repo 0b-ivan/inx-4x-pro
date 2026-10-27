@@ -114,8 +114,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/trivia-full-shard"
           # Previous run is the original translation run, including its failed-job rerun.
           # A missing artifact means this shard has no checkpoint to restore.
-          if gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/40336915883/artifacts?per_page=100" \
-            --jq '.artifacts[].name' | grep -Fxq "trivia-de-shard-$SHARD_ID"; then
+          artifact_names="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/40336915883/artifacts?per_page=100" \
+            --jq '.artifacts[].name')"
+          if grep -Fxq "trivia-de-shard-$SHARD_ID" <<< "$artifact_names"; then
             gh run download 40336915883 --repo "$GITHUB_REPOSITORY" \
               --name "trivia-de-shard-$SHARD_ID" \
               --dir "$RUNNER_TEMP/trivia-full-shard"
