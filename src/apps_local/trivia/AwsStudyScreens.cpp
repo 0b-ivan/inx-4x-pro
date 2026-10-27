@@ -1,8 +1,10 @@
 #include "AwsStudyScreens.h"
 #include "TriviaScreens.h"
+#include "AwsGlossary.h"
 
 #include <cstdio>
 #include <cstring>
+#include <cctype>
 
 namespace triviaui {
 namespace {
@@ -86,6 +88,63 @@ const char* domainName(const int i) {
   return i >= 0 && i < 6 ? names[i] : "";
 }
 
+
+bool termAt(const char* line, const size_t pos, const char* term) {
+  if (!line || !term || (pos > 0 &&
+      trivia::awsAsciiWordChar(static_cast<unsigned char>(line[pos - 1])))) return false;
+  size_t i = 0;
+  while (term[i] && line[pos + i] &&
+         std::tolower(static_cast<unsigned char>(line[pos + i])) ==
+         std::tolower(static_cast<unsigned char>(term[i]))) ++i;
+  return term[i] == '\0' &&
+         !trivia::awsAsciiWordChar(static_cast<unsigned char>(line[pos + i]));
+}
+
+void dottedTerms(toybox::Screen& screen, const fui::Rect& text, const fui::TextStyle& style,
+                 const AwsPageModel& model) {
+  if (!model.termHitCount || !model.termHits) return;
+  *model.termHitCount = 0;
+  const auto& target = screen.target();
+  // Work from the SDK's actual wrapped glyph runs, not byte columns: this
+  // keeps underlines and taps aligned with proportional fonts and UTF-8.
+  fui::layoutText(target, text, model.text, style, [&](const char* run, fui::Rect line) {
+    const size_t len = std::strlen(run);
+    for (size_t pos = 0; pos < len; ++pos) {
+      for (uint8_t i = 0; i < sizeof(trivia::kAwsGlossary) /
+                                    sizeof(trivia::kAwsGlossary[0]); ++i) {
+        if (*model.termHitCount >= kAwsInlineTermHits) return;
+        const auto& entry = trivia::kAwsGlossary[i];
+        if (!termAt(run, pos, entry.match)) continue;
+        const size_t termLen = std::strlen(entry.match);
+        char prefix[224] = {};
+        if (pos >= sizeof(prefix) || pos + termLen > len) continue;
+        std::memcpy(prefix, run, pos);
+        const int16_t px = target.measureText(style.font, prefix, style).width;
+        const int16_t pw = target.measureText(style.font, entry.match, style).width;
+        if (pw <= 0) continue;
+        const int16_t x = static_cast<int16_t>(line.x + px);
+        if (x < text.x || x >= text.right()) continue;
+        const int16_t w = static_cast<int16_t>(x + pw > text.right() ?
+                                                text.right() - x : pw);
+        if (w < 4) continue;
+        // Dotted baseline offers a standard reader-style hint without
+        // altering the underlying question text or font rasterization.
+        const int16_t y = static_cast<int16_t>(line.bottom() - 2);
+        for (int16_t dot = 0; dot < w; dot += 5)
+          screen.target().fill({static_cast<int16_t>(x + dot), y, 2, 1},
+                               fui::Paint::solid(fui::Color::Black));
+        const fui::Rect hit{x, line.y, w, line.height};
+        model.termHits[*model.termHitCount] = AwsTermHit{hit, i};
+        ++*model.termHitCount;
+        if (!model.glossaryOverlay)
+          screen.frame().hit(hit, ActionAwsGlossaryTerm, i);
+        pos += termLen - 1;
+        break;
+      }
+    }
+  });
+}
+
 void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* status) {
   const fui::Rect body = screen.body();
   const int16_t top = static_cast<int16_t>(body.y + 20);
@@ -103,6 +162,7 @@ void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* st
   const int16_t used = fui::measureWrappedText(screen.target(), model.text, s, text.width).height;
   if (used > 0 && used < text.height) text.height = used;
   screen.target().text(text, model.text, s);
+  dottedTerms(screen, text, s, model);
   // E-ink-friendly reader scrollbar: page position is stable and the rail is
   // tappable, with six jump targets instead of continuous redraw while moving.
   const fui::Rect rail{static_cast<int16_t>(text.x + text.width + 5),
@@ -341,13 +401,14 @@ void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model) {
              "START", ActionAwsBegin);
 }
 
-void buildAwsResetConfirm(toybox::Screen& screen, const char* deckName, const bool german) {
+void buildAwsResetConfirm(toybox::Screen& screen, const AwsResetConfirmModel& model) {
+  const bool german = model.german;
   chrome(screen, german ? "LERNSTAND ZURUECKSETZEN" : "RESET STUDY PROGRESS");
   const auto body = screen.body();
   const int16_t x = static_cast<int16_t>(body.x + kMargin);
   const int16_t w = static_cast<int16_t>(body.width - 2 * kMargin);
   label(screen, {x, static_cast<int16_t>(body.y + 80), w, 62},
-        deckName ? deckName : "STUDY PACK");
+        model.deckName ? model.deckName : "STUDY PACK");
   prose(screen, {x, static_cast<int16_t>(body.y + 190), w, 190},
         german ? "Alle gesehenen Fragen und Fehler-Markierungen in diesem Paket werden geloescht. Fragen und Bereichsfilter bleiben erhalten."
                : "All seen and missed-question marks for THIS pack will be cleared. Questions and topic filters are kept.");
@@ -458,6 +519,33 @@ void buildAwsExplanation(toybox::Screen& screen, const AwsPageModel& model) {
                     static_cast<int16_t>(footer(screen) - 50), 190, 43},
            model.german ? "NAECHSTE FRAGE" : "NEXT QUESTION", ActionAwsNextQuestion);
   }
+}
+
+
+void buildAwsInlineGlossary(toybox::Screen& screen, const AwsPageModel& model) {
+  if (!model.glossaryOverlay) return;
+  const auto body = screen.body();
+  // Overlay is drawn AFTER the question and footer. The backdrop consumes
+  // touches outside it; a dismiss never selects or grades an underlying answer.
+  screen.frame().hit({0, 0, 480, 800}, ActionAwsGlossaryResume);
+  const fui::Rect panel{static_cast<int16_t>(body.x + 20),
+                        static_cast<int16_t>(body.y + 166),
+                        static_cast<int16_t>(body.width - 40), 338};
+  screen.target().fill(panel, fui::Paint::solid(fui::Color::White));
+  screen.target().stroke(panel, fui::Paint::solid(fui::Color::Black), 3);
+  const fui::Rect header{static_cast<int16_t>(panel.x + 4),
+                         static_cast<int16_t>(panel.y + 4),
+                         static_cast<int16_t>(panel.width - 8), 56};
+  screen.target().fill(header, fui::Paint::solid(fui::Color::Black));
+  label(screen, header, model.glossaryTitle ? model.glossaryTitle : "AWS", true);
+  prose(screen, {static_cast<int16_t>(panel.x + 18),
+                 static_cast<int16_t>(panel.y + 82),
+                 static_cast<int16_t>(panel.width - 36), 173},
+        model.glossaryBody ? model.glossaryBody : "");
+  button(screen, {static_cast<int16_t>(panel.x + 70),
+                  static_cast<int16_t>(panel.bottom() - 64),
+                  static_cast<int16_t>(panel.width - 140), 46},
+         model.german ? "SCHLIESSEN" : "CLOSE", ActionAwsGlossaryResume);
 }
 
 void buildAwsGlossary(toybox::Screen& screen, const AwsGlossaryModel& model) {

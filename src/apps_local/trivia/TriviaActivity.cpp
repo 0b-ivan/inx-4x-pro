@@ -811,6 +811,8 @@ void TriviaActivity::awsResetPages() {
   awsPageStarts_[0] = 0;
   awsPageLength_ = 0;
   awsMore_ = false;
+  awsGlossaryOpen_ = false;
+  awsTermHitCount_ = 0;
   awsLayoutReady_ = false;
 }
 
@@ -908,18 +910,21 @@ void TriviaActivity::awsPreviousPage(const bool fromSwipe) {
   }
 }
 
-void TriviaActivity::openAwsGlossary() {
-  if (view_ != View::AwsQuestion && view_ != View::AwsOption &&
-      view_ != View::AwsExplanation) return;
-  // awsPageBuffer_ holds exactly the page on screen (see awsBuildPage). With no
-  // match the glossary still opens and says so, rather than ignoring the hold.
-  if (!awsLayoutReady_) return;
-  awsGlossaryCount_ = trivia::awsGlossaryMatches(awsPageBuffer_, awsGlossaryMatches_);
-  awsGlossaryReturn_ = view_;
-  go(View::AwsGlossary);
+void TriviaActivity::openAwsGlossary(const int x, const int y) {
+  if (!awsLayoutReady_ || awsGlossaryOpen_) return;
+  for (uint8_t i = 0; i < awsTermHitCount_; ++i) {
+    if (!awsTermHits_[i].rect.contains(x, y)) continue;
+    awsGlossarySelected_ = awsTermHits_[i].glossaryIndex;
+    awsGlossaryOpen_ = true;
+    requestUpdate();  // don't change view, answer or scroll offset
+    return;
+  }
 }
 
 void TriviaActivity::routeAction(const int action, const int value) {
+  // The inline dictionary is modal: background buttons must never submit or
+  // discard anything while its panel is visible.
+  if (awsGlossaryOpen_ && action != triviaui::ActionAwsGlossaryResume) return;
   switch (action) {
     case triviaui::ActionGetPack:
       // The radio first. Entering the TLS stack with WiFi never started is not
@@ -1098,8 +1103,16 @@ void TriviaActivity::routeAction(const int action, const int value) {
       }
       break;
     case triviaui::ActionAwsGlossaryTerm:
-      if (view_ == View::AwsGlossary && value >= 0 &&
-          value < awsGlossaryCount_) {
+      if ((view_ == View::AwsQuestion || view_ == View::AwsOption ||
+           view_ == View::AwsExplanation) &&
+          value >= 0 &&
+          value < static_cast<int>(sizeof(trivia::kAwsGlossary) /
+                                   sizeof(trivia::kAwsGlossary[0]))) {
+        awsGlossarySelected_ = static_cast<uint8_t>(value);
+        awsGlossaryOpen_ = true;
+        requestUpdate();
+      } else if (view_ == View::AwsGlossary && value >= 0 &&
+                 value < awsGlossaryCount_) {
         awsGlossarySelected_ = static_cast<uint8_t>(value);
         go(View::AwsGlossaryDetail);
       }
@@ -1109,9 +1122,13 @@ void TriviaActivity::routeAction(const int action, const int value) {
       else if (view_ == View::AwsGlossary) go(awsGlossaryReturn_);
       break;
     case triviaui::ActionAwsGlossaryResume:
-      // The page index is untouched by the glossary, so this re-renders the
-      // very page the hold came from, with the answer selection intact.
-      if (view_ == View::AwsGlossary || view_ == View::AwsGlossaryDetail) go(awsGlossaryReturn_);
+      if (awsGlossaryOpen_) {
+        awsGlossaryOpen_ = false;
+        flashOnNextPaint_ = true;  // clear the old E-ink overlay to avoid ghosting
+        requestUpdate();
+      } else if (view_ == View::AwsGlossary || view_ == View::AwsGlossaryDetail) {
+        go(awsGlossaryReturn_);
+      }
       break;
     case triviaui::ActionAwsPageBack:
       awsPreviousPage();
@@ -1213,7 +1230,12 @@ void TriviaActivity::loop() {
 
   // SDK recognizes swipes and long presses independently of ordinary taps.
   // Work only in the text viewport, never on the fixed footer controls.
-  const auto swipe = mappedInput.wasSwipe();
+  if (awsGlossaryOpen_) {
+    // Swiping over the glossary is ignored, preserving the underlying question.
+    if (mappedInput.wasSwipe() != MappedInputManager::SwipeDir::None) return;
+  }
+  const auto swipe = awsGlossaryOpen_ ? MappedInputManager::SwipeDir::None
+                                     : mappedInput.wasSwipe();
   if (swipe != MappedInputManager::SwipeDir::None) {
     if (view_ == View::AwsSummary) {
       if (swipe == MappedInputManager::SwipeDir::Up && !awsSummaryScroll_) {
@@ -1258,9 +1280,10 @@ void TriviaActivity::loop() {
     // press of GRADE or NEXT into nothing at all.
     int heldX = 0, heldY = 0;
     const fui::Rect& t = awsTextRect_;
-    if (mappedInput.isScreenTouchHeld(heldX, heldY) && heldX >= t.x && heldX < t.right() &&
+    if (!awsGlossaryOpen_ && mappedInput.isScreenTouchHeld(heldX, heldY) &&
+        heldX >= t.x && heldX < t.right() &&
         heldY >= t.y && heldY < t.bottom() && mappedInput.wasScreenLongPress(heldX, heldY)) {
-      openAwsGlossary();
+      openAwsGlossary(heldX, heldY);
       return;
     }
   }
@@ -1378,8 +1401,10 @@ void TriviaActivity::render(RenderLock&&) {
     }
     case View::AwsResetConfirm: {
       const auto* deck = deckCatalog_.at(selectedDeck_);
-      triviaui::buildAwsResetConfirm(screen, deck ? deck->slug : "STUDY PACK",
-                                     I18N.getLanguage() == Language::DE);
+      triviaui::AwsResetConfirmModel model;
+      model.deckName = deck ? deck->slug : "STUDY PACK";
+      model.german = I18N.getLanguage() == Language::DE;
+      triviaui::buildAwsResetConfirm(screen, model);
       break;
     }
     case View::AwsSummary: {
@@ -1435,6 +1460,14 @@ void TriviaActivity::render(RenderLock&&) {
       model.more = awsMore_;
       model.pageIndex = awsPageIndex_;
       model.pageCount = awsPageCount_;
+      model.termHits = awsTermHits_;
+      model.termHitCount = &awsTermHitCount_;
+      model.glossaryOverlay = awsGlossaryOpen_;
+      if (awsGlossaryOpen_) {
+        const auto& entry = trivia::kAwsGlossary[awsGlossarySelected_];
+        model.glossaryTitle = entry.term;
+        model.glossaryBody = model.german ? entry.de : entry.en;
+      }
       model.correctAnswer = awsAnswerCorrect_;
       model.hasQuestion = awsHasQuestion_;
       if (view_ == View::AwsQuestion) {
@@ -1444,6 +1477,7 @@ void TriviaActivity::render(RenderLock&&) {
       } else {
         triviaui::buildAwsExplanation(screen, model);
       }
+      if (awsGlossaryOpen_) triviaui::buildAwsInlineGlossary(screen, model);
       break;
     }
     case View::Quizmaster: {

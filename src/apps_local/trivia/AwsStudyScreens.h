@@ -34,6 +34,12 @@ struct AwsDomainsModel {
   uint8_t enabled = trivia::kAwsAllDomains;
 };
 
+struct AwsTermHit {
+  fui::Rect rect{};
+  uint8_t glossaryIndex = 0;
+};
+constexpr uint8_t kAwsInlineTermHits = 10;
+
 struct AwsPageModel {
   bool german = false;
   const char* text = "";
@@ -52,7 +58,13 @@ struct AwsPageModel {
   bool correctAnswer = false;
   uint8_t pageIndex = 0;
   uint8_t pageCount = 1;
+  AwsTermHit* termHits = nullptr;  // screen-space hit boxes for long press
+  uint8_t* termHitCount = nullptr;
+  bool glossaryOverlay = false;
+  const char* glossaryTitle = nullptr;
+  const char* glossaryBody = nullptr;
 };
+void buildAwsInlineGlossary(toybox::Screen& screen, const AwsPageModel& model);
 
 struct AwsSummaryModel {
   bool german = false;
@@ -72,7 +84,11 @@ struct AwsGlossaryModel {
   const char* term = nullptr;
 };
 void buildAwsGlossary(toybox::Screen& screen, const AwsGlossaryModel& model);
-void buildAwsResetConfirm(toybox::Screen& screen, const char* deckName, bool german);
+struct AwsResetConfirmModel {
+  const char* deckName = "STUDY PACK";
+  bool german = false;
+};
+void buildAwsResetConfirm(toybox::Screen& screen, const AwsResetConfirmModel& model);
 
 // The study text viewport inside screen.body(). The painter and the pager use
 // the same rect, so a page is cut exactly where the wrapped text would end.

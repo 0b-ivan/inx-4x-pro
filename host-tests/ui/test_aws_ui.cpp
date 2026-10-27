@@ -92,7 +92,10 @@ void testAwsReset() {
   assert(home.tap(240, 620).action == triviaui::ActionAwsResetPrompt);
   Rendered confirm;
   // Test confirmation actions separately: the screen must never reset on entry.
-  render(confirm, "DOP-C02", &triviaui::buildAwsResetConfirm);
+  triviaui::AwsResetConfirmModel prompt;
+  prompt.deckName = "DOP-C02";
+  prompt.german = true;
+  render(confirm, prompt, &triviaui::buildAwsResetConfirm);
   assert(confirm.draw.contains("DOP-C02"));
   assert(confirm.tap(85, 750).action == triviaui::ActionAwsResetCancel);
   assert(confirm.tap(370, 750).action == triviaui::ActionAwsResetConfirm);
@@ -178,6 +181,47 @@ void testAwsOptionsAndGrading() {
     render(out, m, &triviaui::buildAwsOption);
     assert(out.draw.contains("UNMARK"));
   }
+}
+
+void testAwsInlineGlossary() {
+  triviaui::AwsPageModel m;
+  m.text = "Amazon S3 speichert Objekte mit AWS Lambda.";
+  m.pageCount = 2;
+  triviaui::AwsTermHit hit[triviaui::kAwsInlineTermHits] = {};
+  uint8_t count = 0;
+  m.termHits = hit;
+  m.termHitCount = &count;
+  Rendered page;
+  render(page, m, &triviaui::buildAwsQuestion);
+  assert(count >= 2);
+  bool foundS3 = false;
+  bool foundLambda = false;
+  for (uint8_t i = 0; i < count; ++i) {
+    const auto result = page.tap(hit[i].rect.x + 2, hit[i].rect.y + 3);
+    assert(result.action == triviaui::ActionAwsGlossaryTerm);
+    assert(result.value == hit[i].glossaryIndex);
+    foundS3 |= std::strcmp(trivia::kAwsGlossary[hit[i].glossaryIndex].term, "Amazon S3") == 0;
+    foundLambda |= std::strcmp(trivia::kAwsGlossary[hit[i].glossaryIndex].term, "AWS Lambda") == 0;
+  }
+  assert(foundS3 && foundLambda);
+  m.glossaryOverlay = true;
+  m.glossaryTitle = "Amazon S3";
+  m.glossaryBody = "Objektspeicher in AWS.";
+  Rendered dialog;
+  // Overlay must be built after underlying question controls.
+  fui::DeviceContext context{};
+  context.width = 480; context.height = 800; context.hasTouch = true;
+  context.hasButtons = true;
+  fui::InputSnapshot empty{};
+  toybox::Frame frame(dialog.draw, context, empty, dialog.interactions);
+  toybox::Screen screen(frame);
+  triviaui::buildAwsQuestion(screen, m);
+  triviaui::buildAwsInlineGlossary(screen, m);
+  assert(dialog.draw.contains("Amazon S3"));
+  assert(dialog.draw.contains("Objektspeicher in AWS."));
+  assert(dialog.tap(240, 750).action == triviaui::ActionAwsGlossaryResume);
+  assert(dialog.tap(240, 580).action == triviaui::ActionAwsGlossaryResume);
+  assert(!dialog.interactions.overflowed());
 }
 
 void testAwsExplanation() {
@@ -431,6 +475,7 @@ int main() {
   testAwsGlossary();
   testAwsMenu();
   testAwsReset();
+  testAwsInlineGlossary();
   testAwsDomains();
   testAwsQuestion();
   testAwsOptionsAndGrading();

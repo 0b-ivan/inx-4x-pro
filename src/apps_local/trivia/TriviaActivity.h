@@ -54,7 +54,7 @@ class TriviaActivity final : public Activity {
   void awsPreviousPage(bool fromSwipe = false);
   bool awsResetProgress();
   void awsResetPages();
-  void openAwsGlossary();
+  void openAwsGlossary(int x, int y);
   uint32_t awsMissedCount() const;
   const char* awsPageSource() const;
   // Lays out the visible page with the real fonts; called from render().
@@ -111,6 +111,9 @@ class TriviaActivity final : public Activity {
   uint8_t awsGlossaryMatches_[trivia::kAwsGlossaryMaxMatches] = {};
   uint8_t awsGlossaryCount_ = 0;
   uint8_t awsGlossarySelected_ = 0;
+  bool awsGlossaryOpen_ = false;
+  triviaui::AwsTermHit awsTermHits_[triviaui::kAwsInlineTermHits] = {};
+  uint8_t awsTermHitCount_ = 0;
   uint8_t awsOption_ = 0;
   uint8_t awsSelected_ = 0;
   uint8_t awsDomains_ = trivia::kAwsAllDomains;

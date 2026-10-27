@@ -83,9 +83,12 @@ hochgeladen oder veröffentlicht.**
 
 ## Bedienung per Touch und Offline-Glossar
 
-- **Wischen nach oben** zeigt die nächste Textseite einer Frage, Antwort
-  oder Erklärung. **Wischen nach unten** kehrt zur vorherigen Textseite zurück.
-  Auf Antwortkarten führt der Rückweg gegebenenfalls zur vorherigen Antwort.
+- **Fragen und Erklärungen:** Hoch-/runterwischen scrollt seitenweise durch
+  lange Texte. Die sichtbare Scrollleiste zeigt Seite und Position; sechs
+  berührbare Bereiche auf der Leiste erlauben das Springen zu Textabschnitten.
+  Das vermeidet flackerndes Pixel-für-Pixel-Scrollen auf dem E-Ink-Display.
+- **Antworten:** Links-/rechtswischen wechselt die Antwortkarte. Hoch-/
+  runterwischen scrollt nur lange Antworttexte, niemals zur nächsten Antwort.
   Die Bedienelemente am unteren Rand bleiben sichtbar.
 - **Wischen gibt nie ab und springt nie weiter:** Auf der letzten Antwort
   bzw. am Ende der Erklärung bleibt ein Hochwischen ohne Wirkung. Bewertet
@@ -104,19 +107,20 @@ hochgeladen oder veröffentlicht.**
 - Auf der **ersten Erklärungsseite** gibt es einen direkten Einstieg zur
   nächsten Frage, selbst wenn die Erklärung länger ist. Die Rundenübersicht
   kann hoch-/runtergewischt werden und bietet ebenfalls **NAECHSTE / NEXT**.
-- **Lange auf den Text drücken** öffnet das Offline-Glossar mit den auf der
-  aktuellen Textseite gefundenen AWS-Diensten. Den gewünschten Begriff in
-  der Liste antippen, Erklärung lesen. **ZURUECK** führt zur Begriffsliste,
-  **WEITER LERNEN** direkt zurück auf dieselbe Textseite; Auswahl und
-  Seitenposition bleiben erhalten. Erkannt werden auch Kurzformen wie
-  „IAM-Rolle“, „S3-Bucket“ oder „Lambda“. Ohne Treffer meldet das Glossar
-  „KEIN AWS-BEGRIFF“, statt den Druck zu ignorieren. Ein langer Druck auf
-  die Schaltflächen unten zählt als normaler Tipp.
-  Kein WLAN erforderlich. Die Glossartexte sind eigenständig formuliert und
-  gehören nicht zu den gekauften Prüfungsfragen.
-- Die Touch-Steuerung funktioniert als **seitenweises Wisch-Scrolling**,
-  nicht als animiertes Pixel-Scrolling. Das reduziert E-Ink-Aktualisierungen
-  und hält den Text stabil lesbar.
+- **Inline-AWS-Glossar:** Erkannte Fachwörter (auch „IAM-Rolle“,
+  „S3-Bucket“ und „Lambda“) sind gepunktet unterstrichen. Direktes Antippen
+  oder langes Halten auf dem markierten Wort öffnet eine kurze Begriffserklärung
+  als **Overlay über der aktuellen Frage/Antwort/Erklärung**, keine eigene
+  Navigationsseite. Schließen oder außerhalb tippen kehrt unverändert an dieselbe
+  Textstelle und Antwortauswahl zurück. Unbekannte Wörter öffnen kein Glossar.
+  Kein WLAN erforderlich; die Erklärungen liegen lokal auf dem Gerät.
+- **Lernstand zurücksetzen:** Im Menü des gewählten Zertifikats
+  „LERNSTAND LOESCHEN“ auswählen und explizit bestätigen. Nur die gesehen-/
+  falsch-Markierungen des aktuellen Pakets werden zurückgesetzt. Die Fragen,
+  Bereicheinstellung, Fingerprint und Lernstände anderer Zertifikate bleiben.
+- Die vertikale Textnavigation erfolgt weiterhin E-Ink-gerecht in Seiten,
+  mit sichtbarem Scrollindikator und Sprungzielen statt animiertem Pixel-Scrolling.
+  Nach Schließen des Glossars erzwingt die App einen vollen Refresh gegen Ghosting.
 
 ## Lernstand
 
