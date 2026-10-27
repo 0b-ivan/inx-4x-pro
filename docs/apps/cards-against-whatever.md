@@ -177,8 +177,10 @@ hardware correctness.
   in `[x4pro_common]` (used by device/release environments). The
   arduinoWebSockets library otherwise defaults to **5 simultaneous client
   sockets**, insufficient for eight real human players. Two extra sockets
-  provide reconnect/handshake headroom; ESP32 heap use must still be measured
-  on physical hardware.
+  provide reconnect/handshake headroom; the local Wi-Fi hotspot also
+  permits up to 10 associated stations while the game stays capped at eight
+  authenticated player seats. ESP32 heap and real station capacity still
+  require hardware soak testing.
 - WebSocket upgrade requests must include a browser `Origin` matching
   `http://<device-IP>` (port `:80` is also accepted). The embedded
   arduinoWebSockets `onValidateHttpHeader` hook rejects absent or foreign
