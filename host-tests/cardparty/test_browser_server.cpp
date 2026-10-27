@@ -65,6 +65,7 @@ int main() {
   assert(server.running()&&server.hotspot());
   assert(std::strlen(server.password())==16);
   assert(WiFi.currentMode==WIFI_AP);
+  assert(WiFi.maxSoftApClients>=9 && WiFi.maxSoftApClients<=10);
   assert(devmode::depth==2);
   assert(std::string(server.url()).find("/cardparty")!=std::string::npos);
   auto& ws=*WebSocketsServer::instance;
