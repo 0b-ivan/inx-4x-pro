@@ -7,6 +7,9 @@ on:
       - feature/cardparty-sd-pack-importer-20261027
     paths:
       - '.github/workflows/cardparty-sd-pack-qa.yml'
+      - 'src/apps_local/cardparty/**'
+      - 'tools_local/cardparty_l10n/**'
+      - 'host-tests/cardparty/**'
 
 permissions:
   contents: read
@@ -31,8 +34,11 @@ jobs:
         run: python3 -m unittest discover -s tools_local/cardparty_l10n -p 'test_*.py' -v
       - name: Compile real CardPartyCore and SD reader with warnings as errors
         run: |
-          c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2             -Isrc/apps_local/cardparty             host-tests/cardparty/test_sd_pack.cpp -o /tmp/cardparty-sd-pack-test
-          /tmp/cardparty-sd-pack-test
+          for name in sd_pack text_wrap; do
+            c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2 \
+              -Isrc/apps_local/cardparty host-tests/cardparty/test_$name.cpp -o /tmp/cardparty-$name-test
+            /tmp/cardparty-$name-test
+          done
 
   firmware:
     name: Compile X4 Pro firmware (no OTA)

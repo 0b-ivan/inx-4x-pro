@@ -1,7 +1,9 @@
 # Cards Against Whatever – SD Pack Importer (isolated review branch)
 
-Status: native host tests pending, physical X4 hardware NOT tested, no OTA,
-no PR #47 update, no merge. This is only an isolated feature branch.
+Status: firmware, native host, browser and SDL SD integration checks passed
+locally on the importer branch. Physical X4 hardware is NOT tested; no OTA,
+PR #47 update or merge. See [the QA record](cardparty-sd-pack-qa-2026-10-27.md)
+for revisions, evidence and the remaining hardware gates.
 
 ## Implemented
 
@@ -69,9 +71,25 @@ and atomic activation have been implemented and reviewed.
 
 Run Python offline unit suite and host C++ SD loader tests. An isolated
 GitHub Actions workflow, CardParty isolated SD pack QA, runs exactly those
-checks and does not restart firmware CrossPlay CI.
+offline/compiler checks and a full x4pro firmware build. Its branch/path
+filters include importer source and tests, so source-only fixes run QA too.
+It does not restart firmware CrossPlay CI or publish OTA.
 
-Hardware tasks still open: firmware compilation for x4pro, SD read/memory
+The offline suite also builds synthetic packages through the CLI, reads them
+with the production C++ loader and independently decodes the real eight-seat
+server's JSON. Pick 1-3, Draw 0-2, full-length escaped UTF-8 cards, private
+hands, judging and complete winner text are checked. Run the real Activity
+with isolated synthetic SD cards after building the simulator:
+
+    python3 scripts_local/cardparty_sd_pack_smoke.py \
+      --binary .pio/build/simulator_x4_pro/program \
+      --out qa-artifacts/cardparty-sd/sdl --all-states
+
+This verifies SD selection, a long UTF-8 word, missing/draft/corrupt/truncated/
+oversize fallbacks and six distinct application phases. The simulator uses
+fake seats; it does not exercise physical SD or Wi-Fi clients.
+
+Hardware tasks still open: SD read/memory
 measurements, mobile/e-ink glyph and overflow checks, actual 3-8 player
 sessions, power-loss recovery. No OTA or production release is warranted.
 

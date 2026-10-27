@@ -107,7 +107,8 @@ async function shot(page, vp, phase) {
 }
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(process.env.CARDPARTY_BROWSER_CHANNEL ?
+    { channel: process.env.CARDPARTY_BROWSER_CHANNEL } : {});
   try {
     for (const vp of viewports) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height },

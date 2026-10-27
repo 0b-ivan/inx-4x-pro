@@ -9,9 +9,11 @@
 #include <WebSocketsServer.h>
 #endif
 #include "../CardPartyCore.h"
+#include "../CardPartySdPack.h"
 #include "../CardPartySessions.h"
 
-namespace cardparty { namespace web {
+namespace cardparty {
+namespace web {
 
 #ifndef SIMULATOR
 #if defined(ESP_PLATFORM)
@@ -37,8 +39,7 @@ using SocketServer = WebSocketsServer;  // host fake models writable()/drop()
 class Server final {
  public:
   enum class Mode : uint8_t { ExistingWifi, Hotspot };
-  Server(Game& game, Sessions& sessions, const Deck& deck)
-    : game_(game), sessions_(sessions), deck_(deck) {}
+  Server(Game& game, Sessions& sessions, const Deck& deck) : game_(game), sessions_(sessions), deck_(deck) {}
   ~Server();
   Server(const Server&) = delete;
   Server& operator=(const Server&) = delete;
@@ -57,23 +58,23 @@ class Server final {
   // Field telemetry for the hardware acceptance run. Contains counts only:
   // never tickets, names or cards.
   struct Diagnostics {
-    bool valid=false;
-    uint32_t freeHeap=0, minFreeHeap=0, maxAllocHeap=0, freePsram=0;
-    uint8_t sockets=0, stations=0, seated=0, connected=0, resetReason=0;
-    uint16_t rejected=0, takeovers=0, idleClosed=0, sendFailures=0;
-    uint16_t deferred=0, dropped=0;
+    bool valid = false;
+    uint32_t freeHeap = 0, minFreeHeap = 0, maxAllocHeap = 0, freePsram = 0;
+    uint8_t sockets = 0, stations = 0, seated = 0, connected = 0, resetReason = 0;
+    uint16_t rejected = 0, takeovers = 0, idleClosed = 0, sendFailures = 0;
+    uint16_t deferred = 0, dropped = 0;
   };
   Diagnostics diagnostics() const;
   // Unauthenticated sockets are closed after this, freeing a bounded slot.
-  static constexpr uint32_t kAuthGraceMs=20000;
-  static constexpr uint32_t kDiagLogMs=15000;
+  static constexpr uint32_t kAuthGraceMs = 20000;
+  static constexpr uint32_t kDiagLogMs = 15000;
   // A pending answerer who drops keeps the round open this long.
-  static constexpr uint32_t kTurnGraceMs=30000;
+  static constexpr uint32_t kTurnGraceMs = 30000;
   // Liveness: writable sockets are pinged; a socket that misses this many
   // pings in a row, or stays unwritable this long, is dropped.
-  static constexpr uint32_t kPingMs=5000;
-  static constexpr uint8_t kMissedPings=2;
-  static constexpr uint32_t kStallDropMs=15000;
+  static constexpr uint32_t kPingMs = 5000;
+  static constexpr uint8_t kMissedPings = 2;
+  static constexpr uint32_t kStallDropMs = 15000;
   bool hotspot() const { return mode_ == Mode::Hotspot; }
   const char* ssid() const { return ssid_.c_str(); }
   const char* password() const { return password_; }
@@ -90,7 +91,7 @@ class Server final {
   void onDisconnect(uint8_t client);
   void sendState(uint8_t seat, bool welcome);
   void publishAll();
-  void sendError(uint8_t client, const char* reason="REQUEST REJECTED");
+  void sendError(uint8_t client, const char* reason = "REQUEST REJECTED");
   void closeSocket(uint8_t client);
   void flushPending();
   void heartbeat(uint32_t now);
@@ -102,32 +103,38 @@ class Server final {
   WebServer http_{80};
   SocketServer ws_{81};
   DNSServer dns_;
-  bool routesConfigured_=false, dnsRunning_=false, devModePaused_=false;
-  char message_[6144]={};
-  SessionTicket tickets_[kPlayers]={};
-  uint32_t socket_[kPlayers]={};
-  bool liveSocket_[256]={}; // WebSocket client slot must be connected
-  static constexpr uint8_t kTrackedSlots=16;
-  uint32_t connectedAt_[kTrackedSlots]={};
-  uint32_t lastDiagLog_=0;
-  uint32_t heldSince_[kPlayers]={};
+  bool routesConfigured_ = false, dnsRunning_ = false, devModePaused_ = false;
+  // Printable SD text and names can double under JSON escaping. Include all
+  // plays, the largest private hand, winner text, prompt and fixed wire fields.
+  static constexpr size_t kMessageBytes =
+      2048 + 2 * (sdpack::kMaxPromptBytes + (kPileMax * kPickMax + kHandMax + kPickMax) * sdpack::kMaxAnswerBytes +
+                  (kPlayers + 2) * 23);
+  char message_[kMessageBytes] = {};
+  SessionTicket tickets_[kPlayers] = {};
+  uint32_t socket_[kPlayers] = {};
+  bool liveSocket_[256] = {};  // WebSocket client slot must be connected
+  static constexpr uint8_t kTrackedSlots = 16;
+  uint32_t connectedAt_[kTrackedSlots] = {};
+  uint32_t lastDiagLog_ = 0;
+  uint32_t heldSince_[kPlayers] = {};
   // State frames are full snapshots: a seat whose socket is not writable
   // keeps one pending frame (2 = welcome with token) and gets the latest
   // state once it drains.
-  uint8_t pending_[kPlayers]={};
-  uint8_t unanswered_[kTrackedSlots]={};
-  uint32_t stalledSince_[kTrackedSlots]={};
-  uint32_t lastPing_=0;
-  uint16_t rejected_=0, takeovers_=0, idleClosed_=0, sendFailures_=0;
-  uint16_t deferred_=0, dropped_=0;
+  uint8_t pending_[kPlayers] = {};
+  uint8_t unanswered_[kTrackedSlots] = {};
+  uint32_t stalledSince_[kTrackedSlots] = {};
+  uint32_t lastPing_ = 0;
+  uint16_t rejected_ = 0, takeovers_ = 0, idleClosed_ = 0, sendFailures_ = 0;
+  uint16_t deferred_ = 0, dropped_ = 0;
 #endif
   Game& game_;
   Sessions& sessions_;
   const Deck& deck_;
-  Mode mode_=Mode::ExistingWifi;
-  bool running_=false;
-  std::string ssid_, ip_,url_;
-  char password_[17]={};
+  Mode mode_ = Mode::ExistingWifi;
+  bool running_ = false;
+  std::string ssid_, ip_, url_;
+  char password_[17] = {};
 };
 
-}} // namespace cardparty::web
+}  // namespace web
+}  // namespace cardparty

@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import struct
 import tempfile
+from urllib.parse import urlsplit
 import zlib
 
 MAGIC=b"XCAWPK1\0"
@@ -38,7 +39,29 @@ def load_cards(path):
                 raise PackError(f"invalid JSONL line {n}") from exc
     return out
 
+def metadata_text(value):
+    if not isinstance(value,str) or not value.strip():
+        return False
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return not any(ord(ch)<32 or ord(ch)==127 for ch in value)
+
+def web_url(value):
+    if not metadata_text(value) or any(ch.isspace() for ch in value):
+        return False
+    try:
+        url=urlsplit(value)
+        return (url.scheme in ("https","http") and bool(url.hostname) and
+                url.username is None and url.password is None and
+                (url.port is None or 1<=url.port<=65535))
+    except ValueError:
+        return False
+
 def validate(manifest,cards,*,draft=False):
+    if not isinstance(manifest,dict):
+        raise PackError("manifest must be an object")
     name=manifest.get("deck_id","")
     if not isinstance(name,str) or not ID.fullmatch(name):
         raise PackError("unsafe deck_id")
@@ -48,26 +71,26 @@ def validate(manifest,cards,*,draft=False):
     if type(version) is not int or not 1<=version<=0xffffffff:
         raise PackError("invalid deck version")
     licence=manifest.get("license")
-    if not draft and licence not in LICENSES:
+    if not draft and (not isinstance(licence,str) or licence not in LICENSES):
         raise PackError("unverified content license")
     if not draft and (
         manifest.get("rights_status")!="verified" or
         manifest.get("editorial_status")!="approved" or
-        not manifest.get("rights_holder") or
-        not manifest.get("source_url") or
-        not manifest.get("license_url")
+        not metadata_text(manifest.get("rights_holder")) or
+        not web_url(manifest.get("source_url")) or
+        not web_url(manifest.get("license_url"))
     ):
         raise PackError("human rights/editorial approval, attribution and license URL are mandatory")
     if not isinstance(cards,list) or len(cards)<33:
         raise PackError("at least 1 prompt and 32 answers required")
-    if not draft and any(c.get("reviewed") is not True for c in cards):
-        raise PackError("all cards require explicit human review")
     ids=set()
     prompts=[]
     answers=[]
     for card in cards:
         if not isinstance(card,dict):
             raise PackError("non-object card")
+        if not draft and card.get("reviewed") is not True:
+            raise PackError("all cards require explicit human review")
         cid=card.get("id")
         if not isinstance(cid,str) or not ID.fullmatch(cid) or cid in ids:
             raise PackError("invalid or duplicated card id")
@@ -77,7 +100,10 @@ def validate(manifest,cards,*,draft=False):
             raise PackError("missing text")
         if any(ord(ch)<32 or ord(ch)==127 for ch in text):
             raise PackError("control characters, NUL or multiline card")
-        raw=text.encode("utf-8")
+        try:
+            raw=text.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise PackError("invalid Unicode card text") from exc
         kind=card.get("kind")
         if kind=="prompt":
             pick,draw=card.get("pick",1),card.get("draw",0)
@@ -121,7 +147,10 @@ def main():
     ap.add_argument("--out",type=Path,required=True)
     ap.add_argument("--draft",action="store_true",help="produces a test-only, firmware-rejected pack")
     args=ap.parse_args()
-    blob,receipt=validate(load_json(args.manifest),load_cards(args.cards),draft=args.draft)
+    try:
+        blob,receipt=validate(load_json(args.manifest),load_cards(args.cards),draft=args.draft)
+    except (PackError,OSError,UnicodeError,json.JSONDecodeError) as exc:
+        ap.error(str(exc))
     args.out.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=args.out.parent,prefix=".caw-",delete=False) as f:
         temp=Path(f.name)

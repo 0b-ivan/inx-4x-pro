@@ -1,7 +1,12 @@
 """Offline safety regressions for immutable CAW SD pack compiler."""
 import copy
 import hashlib
+import json
+from pathlib import Path
 import struct
+import subprocess
+import sys
+import tempfile
 import unittest
 import zlib
 import build_sd_pack as pack
@@ -18,6 +23,49 @@ def fixture():
     return manifest,cards
 
 class SdPackTests(unittest.TestCase):
+    def test_release_metadata_has_real_text_and_web_urls(self):
+        manifest,cards=fixture()
+        for field in ("rights_holder","source_url","license_url"):
+            for value in ("  ",True,42,["placeholder"],{"value":"placeholder"},"bad\ud800"):
+                with self.subTest(field=field,value=value),self.assertRaises(pack.PackError):
+                    pack.validate({**manifest,field:value},cards)
+        for field in ("source_url","license_url"):
+            for value in ("no-url","file:///tmp/license","https://", "https://bad host/",
+                          "https://user:secret@example.org/", "https://example.org:bad/"):
+                with self.subTest(field=field,value=value),self.assertRaises(pack.PackError):
+                    pack.validate({**manifest,field:value},cards)
+        for value in ([],{},True):
+            with self.subTest(license=value),self.assertRaises(pack.PackError):
+                pack.validate({**manifest,"license":value},cards)
+
+    def test_malformed_objects_and_unicode_raise_pack_error(self):
+        manifest,cards=fixture()
+        for draft in (False,True):
+            for value in (None,[],1,"manifest"):
+                with self.subTest(manifest=value,draft=draft),self.assertRaises(pack.PackError):
+                    pack.validate(value,cards,draft=draft)
+            for value in (None,[],1,"card"):
+                with self.subTest(card=value,draft=draft),self.assertRaises(pack.PackError):
+                    pack.validate(manifest,cards[:-1]+[value],draft=draft)
+            altered=copy.deepcopy(cards);altered[0]["text"]="broken \ud800"
+            with self.assertRaises(pack.PackError):pack.validate(manifest,altered,draft=draft)
+
+    def test_cli_rejects_invalid_input_without_replacing_existing_pack(self):
+        manifest,cards=fixture()
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);out=root/"active.dat"
+            out.write_bytes(b"previous pack")
+            mp=root/"deck.json";cp=root/"cards.jsonl"
+            for bad_manifest,bad_cards in (([],cards),(manifest,cards[:-1]+[None])):
+                mp.write_text(json.dumps(bad_manifest),encoding="utf-8")
+                cp.write_text("\n".join(map(json.dumps,bad_cards)),encoding="utf-8")
+                result=subprocess.run([sys.executable,pack.__file__,"--manifest",str(mp),
+                                       "--cards",str(cp),"--out",str(out)],capture_output=True,text=True)
+                self.assertEqual(result.returncode,2,result.stderr)
+                self.assertNotIn("Traceback",result.stderr)
+                self.assertEqual(out.read_bytes(),b"previous pack")
+                self.assertFalse(out.with_suffix(".receipt.json").exists())
+
     def test_valid_payload_crc_sha_and_slots(self):
         manifest,cards=fixture()
         data,receipt=pack.validate(manifest,cards)
