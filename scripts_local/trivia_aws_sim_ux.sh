@@ -248,15 +248,12 @@ root = Path(sys.argv[1])
 assert (root / "DOP-C02.state").read_bytes() == b"\x01"
 (root / "DOP-C02.prefs").write_bytes(b"\x03")
 (root / "SAA-C03.state").write_bytes(b"\x05")
-# This scenario specifically starts from the pack menu to test the reset UI.
-# The preceding multi-answer round is deliberately not resumed here; the
-# separate restart check above tests that resume behavior.
-for session in root.glob("DOP-C02.session?"):
-    session.unlink()
+# Leave the actual saved session in place. The simulator must resume it,
+# explicitly finish the session, and THEN allow a confirmed progress reset.
 
 PY
-t=8200; s="$t:TAP:240,520,110"; shots=""
-add "TAP:240,145,110"                 # packs -> DOP-C02
+t=8200; s="$t:TAP:80,750,110"; shots=""  # resumed explanation -> END -> summary
+add "TAP:80,750,110"                  # summary MENU -> deck menu (checkpoint cleared)
 add "TAP:240,620,110"; shot resetAsk  # selected deck -> reset confirmation
 add "TAP:80,750,110";  shot resetNo   # cancel -> menu, nothing erased
 add "TAP:240,620,110"                 # enter confirmation again
