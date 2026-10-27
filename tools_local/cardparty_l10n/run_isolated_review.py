@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""One-time, independent OpenRouter content/humor review. Never autoapprove."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import sys
+import time
+import urllib.error
+import urllib.request
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools_local/cardparty_l10n"))
+from translate_cards import load_source, load_drafts, validate_draft
+
+SOURCE = ROOT / "tools_local/cardparty_l10n/examples/cards-en.jsonl"
+MANIFEST = ROOT / "tools_local/cardparty_l10n/examples/deck.json"
+DRAFTS = ROOT / "tools_local/cardparty_l10n/examples/cards-de-editorial-proposed.jsonl"
+REPORT = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "cardparty-independent-semantic-review.jsonl"
+CANDIDATES = REPORT.with_name("cardparty-independent-approved-for-human-review.jsonl")
+MODEL = "openai/gpt-5.4"
+DIMENSIONS = ("meaning", "humor", "domain", "grammar", "composition")
+OPTIONS = ("pass", "fail", "uncertain")
+SCHEMA = {
+  "type": "json_schema", "json_schema": {
+    "name": "cardparty_independent_review", "strict": True,
+    "schema": {"type": "object", "properties": {
+      "source_meaning": {"type": "string"},
+      "humor_mechanism": {"type": "string"},
+      "technical_context": {"type": "string"},
+      "ratings": {"type": "object",
+        "properties": {k: {"type": "string", "enum": list(OPTIONS)} for k in DIMENSIONS},
+        "required": list(DIMENSIONS), "additionalProperties": False},
+      "decision": {"type": "string", "enum": ["accept", "revise", "manual_review"]},
+      "proposed_text": {"type": "string"},
+      "issues": {"type": "array", "items": {"type": "string"}},
+      "explanation": {"type": "string"}
+    }, "required": ["source_meaning", "humor_mechanism", "technical_context",
+                      "ratings", "decision", "proposed_text", "issues", "explanation"],
+       "additionalProperties": False}
+  }
+}
+PROMPT = """Independent German bilingual editorial review of an original licensed
+absurdist IT/sysadmin party card. You DID NOT create this translation.
+First reason about the exact ORIGINAL meaning, technical/domain referent and
+humor mechanism. Then evaluate the German candidate for five dimensions:
+meaning, humor, domain, grammar and composition. Rate all pass/fail/uncertain
+for the FINAL proposed_text. If any uncertainty or failure remains,
+decision=manual_review and clearly explain. If accept, do not change the text
+and give no issues. If revise, repair issues, explicitly describe them, and
+only mark pass when confident that the proposed_text preserves original sense,
+comedic incongruity and timing. Do not blindly optimize just grammar. Never
+invent facts, a new joke or a new character. Respect original numbers/timing
+and literal '____' placeholders. Prompt blanks must match Pick 1/2/3 and must
+work with uninflected nominative noun-phrase answer cards. Answer cards must
+be nominative phrases WITHOUT terminal punctuation. Pick-2/3 order matters.
+In the tech deck: an alarm that ONLY rings on public holidays is a
+misconfigured monitoring ALARM that goes off exclusively on holidays,
+not a bedside alarm clock/Wecker; don't weaken 'only' to 'sometimes/also'.
+If true semantic equivalence is uncertain, flag manual_review.
+Output valid JSON matching the supplied schema only."""
+
+def digest(row):
+    payload = {key: row[key] for key in ("id", "source_hash", "locale", "text")}
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                     separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+def ask(key, card, candidate, all_sources):
+    input_data = {
+        "source": card, "german_candidate": candidate["text"],
+        "deck_genre": "absurd IT, Linux/sysadmin, office party game",
+        "deck_prompts": [c["text"] for c in all_sources.values()
+                         if c["kind"] == "prompt"],
+        "deck_answers": [c["text"] for c in all_sources.values()
+                         if c["kind"] == "answer"],
+    }
+    payload = {"model": MODEL, "temperature": 0, "max_tokens": 1400,
+               "response_format": SCHEMA, "provider": {"require_parameters": True},
+               "messages": [
+                  {"role": "system", "content": PROMPT},
+                  {"role": "user", "content": json.dumps(input_data, ensure_ascii=False)}
+               ]}
+    request = urllib.request.Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Authorization": "Bearer " + key, "Content-Type": "application/json",
+                 "HTTP-Referer": "https://github.com/0b-ivan/inx-4x-pro",
+                 "X-Title": "CAW Independent Semantic Editorial Audit"},
+        method="POST")
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=100) as response:
+                result = json.load(response)
+            content = result["choices"][0]["message"]["content"]
+            if isinstance(content, list):
+                content = "".join(x.get("text", "") for x in content
+                                  if isinstance(x, dict))
+            return json.loads(content)
+        except (urllib.error.HTTPError, urllib.error.URLError,
+                TimeoutError, ValueError, KeyError) as error:
+            if attempt == 2:
+                # Never emit raw HTTP errors: backend bodies may contain
+                # sensitive provider context.
+                raise RuntimeError(f"OpenRouter failed on {card['id']}: "
+                                   f"{type(error).__name__}") from None
+            time.sleep(2 ** attempt)
+
+def validate(source, candidate, review):
+    if not isinstance(review, dict) or set(review) != {
+       "source_meaning", "humor_mechanism", "technical_context",
+       "ratings", "decision", "proposed_text", "issues", "explanation"}:
+        raise ValueError("review object violates schema")
+    ratings = review["ratings"]
+    if not isinstance(ratings, dict) or set(ratings) != set(DIMENSIONS):
+        raise ValueError("missing rubric fields")
+    if any(rating not in OPTIONS for rating in ratings.values()):
+        raise ValueError("invalid rubric rating")
+    if not isinstance(review["issues"], list):
+        raise ValueError("issues is not an array")
+    for field in ("source_meaning", "humor_mechanism", "technical_context", "explanation"):
+        if not isinstance(review[field], str) or not review[field].strip():
+            raise ValueError(f"missing editorial context: {field}")
+    value = review["proposed_text"]
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("missing review proposal")
+    proposed = dict(candidate, text=value, reviewed=False)
+    validate_draft(
+        manifest, source, proposed
+    )
+    if source["kind"] == "answer" and value.rstrip().endswith((".", "?", "!")):
+        raise ValueError("terminal punctuation in answer")
+    if "public holidays" in source["text"].lower() and "alarm" in source["text"].lower():
+        low = value.casefold()
+        if "wecker" in low or "feiertag" not in low or not re.search(
+                r"\b(nur|ausschließlich|einzig|bloß)\b", low):
+            raise ValueError("holiday-only monitoring alarm sense lost")
+        if re.search(r"\bnicht\s+nur\b", low):
+            raise ValueError("exclusive timing inverted")
+    if review["decision"] == "accept":
+        if value != candidate["text"] or review["issues"]:
+            raise ValueError("silent rewrite of accepted card")
+    if review["decision"] == "revise" and not review["issues"]:
+        raise ValueError("unexplained rewrite")
+    if review["decision"] != "manual_review" and any(
+            grade != "pass" for grade in ratings.values()):
+        raise ValueError("unresolved issue cannot pass independent audit")
+    return proposed
+
+if __name__ == "__main__":
+    key = os.getenv("OPENROUTER_API_KEY")
+    if not key:
+        raise SystemExit("Missing OPENROUTER_API_KEY repository secret")
+    manifest, sources = load_source(MANIFEST, SOURCE)
+    drafts = load_drafts(DRAFTS, manifest, sources)
+    if len(sources) != 20 or set(sources) != set(drafts):
+        raise SystemExit("Exact 20-card original pilot required")
+    # No reuse of stale reports: this is an isolated 20-card run.
+    REPORT.unlink(missing_ok=True)
+    CANDIDATES.unlink(missing_ok=True)
+    totals = {"accept": 0, "revise": 0, "manual_review": 0}
+    with REPORT.open("a", encoding="utf-8") as output, CANDIDATES.open(
+            "a", encoding="utf-8") as candidates:
+        for card_id, card in sources.items():
+            draft = drafts[card_id]
+            try:
+                result = ask(key, card, draft, sources)
+                proposal = validate(card, draft, result)
+            except (ValueError, RuntimeError) as error:
+                # Preserve evidence of failure and avoid fabricating approval.
+                print(f"FAILED {card_id}: {type(error).__name__}", flush=True)
+                raise
+            item = {
+                "id": card_id, "source_hash": draft["source_hash"],
+                "candidate_hash": digest(draft), "model": MODEL,
+                "model_review": result, "human_approved": False}
+            output.write(json.dumps(item, ensure_ascii=False) + "\n")
+            output.flush()
+            totals[result["decision"]] += 1
+            if result["decision"] != "manual_review":
+                candidates.write(json.dumps(proposal, ensure_ascii=False) + "\n")
+                candidates.flush()
+            print(f"REVIEW {len(sources)}: {card_id} = {result['decision']}", flush=True)
+    print(f"RESULT 20/20 {totals}, independent GPT-5.4 model only; human approval REQUIRED")
