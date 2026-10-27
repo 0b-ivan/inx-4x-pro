@@ -85,6 +85,33 @@ jobs:
       - name: Stack fits its task
         run: python3 scripts_local/stack_budget.py --build-dir ".pio/build/${{ matrix.environment }}"
 
+      # A downloadable *application-only* firmware for physical PR testing.
+      # Not a GitHub Release and not advertised through the device OTA updater.
+      - name: Package verified X4 Pro PR test firmware
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=".pio/build/${{ matrix.environment }}/firmware.bin"
+          test -s "$APP"
+          MAGIC="$(head -c 1 "$APP" | od -An -tx1 | tr -d '[:space:]')"
+          test "$MAGIC" = "e9"
+          grep -aFq 'CROSSPOINT-BOARD-V1:x4pro;' "$APP"
+          mkdir -p dist/pr-test
+          cp "$APP" dist/pr-test/firmware.bin
+          (cd dist/pr-test && sha256sum firmware.bin > firmware.bin.sha256)
+          printf 'Source commit: %s\nPlatformIO environment: %s\nImage: ESP32-S3 X4 Pro application only\nInstall using Developer Mode; not a full-flash image or a public OTA release.\n' \
+            "$GITHUB_SHA" "${{ matrix.environment }}" > dist/pr-test/BUILD-INFO.txt
+
+      - name: Upload X4 Pro PR firmware for device testing
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: x4pro-pr-test-${{ github.sha }}
+          path: dist/pr-test/
+          if-no-files-found: error
+          retention-days: 7
+
   simulator:
     name: simulator (x4 pro)
     runs-on: ubuntu-latest
