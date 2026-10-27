@@ -100,14 +100,14 @@ jobs:
           mkdir -p dist/pr-test
           cp "$APP" dist/pr-test/firmware.bin
           (cd dist/pr-test && sha256sum firmware.bin > firmware.bin.sha256)
-          printf 'Source commit: %s\nPlatformIO environment: %s\nImage: ESP32-S3 X4 Pro application only\nInstall using Developer Mode; not a full-flash image or a public OTA release.\n' \
-            "$GITHUB_SHA" "${{ matrix.environment }}" > dist/pr-test/BUILD-INFO.txt
+          printf 'PR source commit: %s\nCI merge commit: %s\nPlatformIO environment: %s\nImage: ESP32-S3 X4 Pro application only\nInstall using Developer Mode; not a full-flash image or a public OTA release.\n' \
+            "${{ github.event.pull_request.head.sha }}" "$GITHUB_SHA" "${{ matrix.environment }}" > dist/pr-test/BUILD-INFO.txt
 
       - name: Upload X4 Pro PR firmware for device testing
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: x4pro-pr-test-${{ github.sha }}
+          name: x4pro-pr-test-${{ github.event.pull_request.head.sha }}
           path: dist/pr-test/
           if-no-files-found: error
           retention-days: 7
