@@ -102,6 +102,7 @@ struct WebSocketsServer {
   std::function<bool(String,String)> headerValidator;
   std::vector<std::string> requiredHeaders;
   int clients = 0;
+  std::vector<uint8_t> disconnected;
   bool closed = false;
   explicit WebSocketsServer(int) { instance = this; }
   void begin() { closed = false; }
@@ -125,6 +126,12 @@ struct WebSocketsServer {
   void close() {
     clients = 0;
     closed = true;
+  }
+  void disconnect(uint8_t client) {
+    disconnected.push_back(client);
+    // Simulate synchronous disconnect event: the server must have already
+    // moved authenticated seat ownership to the new socket.
+    event(WStype_DISCONNECTED, client);
   }
   int connectedClients() { return clients; }
   void sendTXT(uint8_t client, char* data, size_t size) {
