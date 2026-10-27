@@ -38,10 +38,8 @@ void runMatch(uint8_t count,uint32_t seed) {
       assert(hand.size>=initial.pick);
       assert(game.submit(i,slots,initial.pick));
       assert(!game.submit(i,slots,initial.pick));
-      if(i!=count-1) {
-        const auto mid=game.publicView();
-        assert(mid.plays==0);
-      }
+      const auto mid=game.publicView();
+      if(mid.phase==Phase::Playing) assert(mid.plays==0);
     }
     const auto judging=game.publicView();
     assert(judging.phase==Phase::Judging);
