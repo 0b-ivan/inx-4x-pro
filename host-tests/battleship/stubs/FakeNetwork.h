@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cctype>
 #include <cstdlib>
 #include <functional>
 #include <map>
@@ -23,6 +24,15 @@ struct String {
   const char* c_str() const { return value.c_str(); }
   int toInt() const { return std::atoi(value.c_str()); }
   bool operator==(const char* rhs) const { return value == (rhs ? rhs : ""); }
+  bool equalsIgnoreCase(const char* rhs) const {
+    if (!rhs) return false;
+    const std::string s(rhs);
+    if (s.size()!=value.size()) return false;
+    for(size_t i=0;i<s.size();++i)
+      if(std::tolower(static_cast<unsigned char>(s[i])) !=
+         std::tolower(static_cast<unsigned char>(value[i]))) return false;
+    return true;
+  }
 };
 
 struct IPAddress {
@@ -85,11 +95,24 @@ struct WebSocketsServer {
   std::function<void(uint8_t, WStype_t, uint8_t*, size_t)> callback;
   std::vector<std::string> messages;
   std::vector<int> recipients;
+  std::function<bool(String,String)> headerValidator;
+  std::vector<std::string> requiredHeaders;
   int clients = 0;
   bool closed = false;
   explicit WebSocketsServer(int) { instance = this; }
   void begin() { closed = false; }
   void enableHeartbeat(int, int, int) {}
+  template <class F>
+  void onValidateHttpHeader(F fn, const char* const* mandatory, size_t count) {
+    headerValidator = fn;
+    requiredHeaders.clear();
+    for(size_t i=0;i<count;++i) requiredHeaders.emplace_back(mandatory[i]);
+  }
+  // Simulates library handshake validation: missing required Origin rejects.
+  bool wouldAcceptOrigin(const char* origin) const {
+    if (!origin) return requiredHeaders.empty();
+    return !headerValidator || headerValidator(String("Origin"), String(origin));
+  }
   template <class F>
   void onEvent(F fn) {
     callback = fn;
