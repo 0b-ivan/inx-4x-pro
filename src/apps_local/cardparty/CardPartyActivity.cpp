@@ -4,6 +4,7 @@
 #include <Logging.h>
 #include <WiFi.h>
 #include <algorithm>
+#include <initializer_list>
 #include <cstdio>
 #include <cstring>
 #include <utility>
@@ -242,14 +243,14 @@ void CardPartyActivity::drawBase(const char* section) {
 void CardPartyActivity::drawChoice() {
   drawBase("SETUP");
   renderer.drawText(UI_10_FONT_ID,kGutter,92,"CARDS AGAINST WHATEVER",true);
-  renderer.drawText(SMALL_FONT_ID,kGutter,125,"X4 = GAME MASTER  /  PHONES = CARDS",true);
+  renderer.drawText(SMALL_FONT_ID,kGutter,118,"X4 = GAME MASTER  /  PHONES = CARDS",true);
   const int width=renderer.getScreenWidth();
   renderer.drawRect(kGutter,145,width-2*kGutter,86,2,true);
-  renderer.drawText(UI_10_FONT_ID,kGutter+20,174,"[01] CREATE HOTSPOT",true);
-  renderer.drawText(SMALL_FONT_ID,kGutter+20,205,"LOCAL / PASSWORD PROTECTED",true);
+  renderer.drawText(UI_10_FONT_ID,kGutter+20,166,"[01] CREATE HOTSPOT",true);
+  renderer.drawText(SMALL_FONT_ID,kGutter+20,198,"LOCAL / PASSWORD PROTECTED",true);
   renderer.drawRect(kGutter,240,width-2*kGutter,85,2,true);
-  renderer.drawText(UI_10_FONT_ID,kGutter+20,270,"[02] EXISTING WI-FI",true);
-  renderer.drawText(SMALL_FONT_ID,kGutter+20,304,"PICK A NETWORK / SAME AS PLAYERS",true);
+  renderer.drawText(UI_10_FONT_ID,kGutter+20,261,"[02] EXISTING WI-FI",true);
+  renderer.drawText(SMALL_FONT_ID,kGutter+20,293,"PICK A NETWORK / SAME AS PLAYERS",true);
   renderer.drawText(SMALL_FONT_ID,kGutter,renderer.getScreenHeight()-35,"BACK  /  CANCEL",true);
 }
 void CardPartyActivity::drawLobby() {
@@ -297,7 +298,8 @@ void CardPartyActivity::drawLobby() {
   drawDiagnostics();
 }
 // Greedy word wrap by measured width; returns the y below the last row.
-int CardPartyActivity::drawWrapped(int fontId,const char* text,int x,int y,int maxWidth,int lineStep,int maxRows) {
+// With draw=false it only counts, so a caller can pick the largest font that fits.
+int CardPartyActivity::drawWrapped(int fontId,const char* text,int x,int y,int maxWidth,int lineStep,int maxRows,bool draw) {
   if(!text)return y;
   char line[160]={};
   char candidate[160]={};
@@ -318,7 +320,7 @@ int CardPartyActivity::drawWrapped(int fontId,const char* text,int x,int y,int m
     len+=copy;
     candidate[len]=0;
     if(used && renderer.getTextWidth(fontId,candidate)>maxWidth) {
-      renderer.drawText(fontId,x,y+row*lineStep,line,true);
+      if(draw)renderer.drawText(fontId,x,y+row*lineStep,line,true);
       ++row;
       used=std::min(n,static_cast<int>(sizeof(line))-1);
       std::memcpy(line,word,used);
@@ -328,7 +330,7 @@ int CardPartyActivity::drawWrapped(int fontId,const char* text,int x,int y,int m
       used=len;
     }
   }
-  if(used && row<maxRows) { renderer.drawText(fontId,x,y+row*lineStep,line,true); ++row; }
+  if(used && row<maxRows) { if(draw)renderer.drawText(fontId,x,y+row*lineStep,line,true); ++row; }
   return y+row*lineStep;
 }
 void CardPartyActivity::drawGame() {
@@ -344,17 +346,63 @@ void CardPartyActivity::drawGame() {
   renderer.fillRect(kGutter,140,width-2*kGutter,1,true);
   renderer.drawText(SMALL_FONT_ID,kGutter,156,"/// PROMPT",true);
   const cp::Deck& deck=cp::demoDeck();
-  if(v.prompt<deck.promptsCount)
-    drawWrapped(UI_10_FONT_ID,deck.prompts[v.prompt].text,kGutter,190,width-2*kGutter,38,9);
-  renderer.fillRect(kGutter,540,width-2*kGutter,1,true);
+  const int textWidth=width-2*kGutter;
+  if(v.prompt<deck.promptsCount) {
+    // Read from across the table: the largest cut in which every word and
+    // every row fits. The Toybox cuts are ASCII-only, so any UTF-8 prompt
+    // goes straight to the UI font.
+    const char* prompt=deck.prompts[v.prompt].text;
+    constexpr int kPromptTop=186, kPromptBottom=470;
+    bool ascii=true;
+    for(const char* c=prompt;*c;++c) if(static_cast<unsigned char>(*c)>=0x80) { ascii=false; break; }
+    int font=UI_10_FONT_ID;
+    int step=34;
+    for(const int candidate:{toybox::kDisplayFontId,toybox::kUiFontId}) {
+      if(!ascii) break;
+      const int lineStep=renderer.getLineHeight(candidate)+6;
+      const int rows=(kPromptBottom-kPromptTop)/lineStep;
+      if(drawWrapped(candidate,prompt,kGutter,kPromptTop,textWidth,lineStep,rows+1,false)>kPromptTop+rows*lineStep)
+        continue;
+      bool wordsFit=true;
+      char word[64]={};
+      for(const char* c=prompt;*c && wordsFit;) {
+        while(*c==' ')++c;
+        size_t n=0;
+        while(c[n] && c[n]!=' ')++n;
+        const size_t copy=std::min(n,sizeof(word)-1);
+        std::memcpy(word,c,copy);
+        word[copy]=0;
+        wordsFit=renderer.getTextWidth(candidate,word)<=textWidth;
+        c+=n;
+      }
+      if(!wordsFit) continue;
+      font=candidate;
+      step=lineStep;
+      break;
+    }
+    drawWrapped(font,prompt,kGutter,kPromptTop,textWidth,step,(kPromptBottom-kPromptTop)/step);
+  }
+  renderer.fillRect(kGutter,480,width-2*kGutter,1,true);
   if(v.phase==cp::Phase::Playing || v.phase==cp::Phase::Judging) {
     std::snprintf(status,sizeof(status),"%u / %u ANSWERS RECEIVED",v.submitted,v.expected);
-    renderer.drawText(UI_10_FONT_ID,kGutter,558,status,true);
+    renderer.drawText(UI_10_FONT_ID,kGutter,498,status,true);
   } else if(v.phase==cp::Phase::Reveal || v.phase==cp::Phase::Finished) {
     const char* winner=v.winner==cp::kRando?"RANDO CARDRISSIAN":
         v.winner<cp::kPlayers?v.players[v.winner].name:"NO WINNER";
-    renderer.drawText(SMALL_FONT_ID,kGutter,556,"/// ROUND WINNER",true);
-    renderer.drawText(UI_10_FONT_ID,kGutter,584,winner,true);
+    renderer.drawText(SMALL_FONT_ID,kGutter,494,"/// ROUND WINNER",true);
+    renderer.drawText(UI_10_FONT_ID,kGutter,520,winner,true);
+    if(v.selected<v.plays) {
+      // The winning card(s), in play order, joined like the phones show them.
+      char answer[300]={};
+      size_t used=0;
+      for(uint8_t i=0;i<v.pick;++i) {
+        const uint16_t id=v.pile[v.selected].cards[i];
+        const char* text=id<deck.answersCount?deck.answers[id].text:"";
+        used+=std::snprintf(answer+used,sizeof(answer)-used,"%s%s",i?" / ":"",text);
+        if(used>=sizeof(answer)-1)break;
+      }
+      drawWrapped(UI_10_FONT_ID,answer,kGutter,556,textWidth,30,4);
+    }
   }
   const int bottom=renderer.getScreenHeight()-72;
   renderer.fillRect(kGutter,bottom-4,width-2*kGutter,2,true);

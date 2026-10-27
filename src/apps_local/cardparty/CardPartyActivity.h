@@ -35,7 +35,7 @@ class CardPartyActivity final : public Activity {
   void drawLobby();
   void drawGame();
   void drawError();
-  int drawWrapped(int fontId,const char* text,int x,int y,int maxWidth,int lineStep,int maxRows);
+  int drawWrapped(int fontId,const char* text,int x,int y,int maxWidth,int lineStep,int maxRows,bool draw=true);
   void drawDiagnostics();
   bool matchInProgress() const;
   void leave();
