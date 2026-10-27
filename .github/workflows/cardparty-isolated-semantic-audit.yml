@@ -1,5 +1,5 @@
 # ISOLATED, ONE-SHOT editorial review. No PR, no merge, no crossplay build.
-# Second opt-in attempt: diagnose upstream OpenRouter model response safely.
+# Third opt-in attempt: relax parameter routing after confirmed provider 404; local schema gate remains strict.
 # The branch is not targeted by the normal CrossPlay pull_request workflow.
 name: CardParty 20-card independent meaning/humor review
 
