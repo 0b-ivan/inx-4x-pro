@@ -49,12 +49,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh run download 40578551810 \
+          gh run download 40579005481 \
             --repo "$GITHUB_REPOSITORY" \
             --name cardparty-gpt54-semantic-audit-unreviewed \
             --dir "$RUNNER_TEMP"
-          test "$(wc -l < "$RUNNER_TEMP/cardparty-independent-semantic-review.jsonl")" -eq 2
-          echo "Reusing 2 completed model reviews with source and candidate hash verification"
+          test "$(wc -l < "$RUNNER_TEMP/cardparty-independent-semantic-review.jsonl")" -eq 20
+          echo "Reusing valid old model reviews; changed candidates must be re-evaluated"
 
       - name: Independently review meaning, humor, context and deck grammar
         shell: bash
