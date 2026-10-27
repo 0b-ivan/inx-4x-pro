@@ -846,7 +846,12 @@ void TriviaActivity::awsPreviousPage() {
     }
     awsPageStart_ = previous;
     requestUpdate();
-  } else if (awsOption_ > 0) {
+    return;
+  }
+  // A downward swipe on page one of the question or explanation must not
+  // accidentally change option index or restart the question.
+  if (view_ != View::AwsOption) return;
+  if (awsOption_ > 0) {
     --awsOption_;
     awsPageStart_ = 0;
     requestUpdate();
