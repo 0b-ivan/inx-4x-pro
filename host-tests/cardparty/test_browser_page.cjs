@@ -159,4 +159,30 @@ assert.equal(store.get("caw.session.token"),token2);
 second.message({type:"expired"});
 assert.equal(store.get("caw.session.token"),undefined);
 assert.equal(nodes.join.hidden,false);
-console.log("cardparty browser: DOM/socket flow, auth token rotation, Pick 2, judgment, reveal OK");
+// The X4 releases a socket that never (re)joins; a ticketless page stays
+// idle instead of reconnecting every 1.5 s and holding a server slot.
+second.close();
+assert.equal(timers.length,0);
+assert.equal(nodes.connection.textContent,"IDLE / JOIN TO CONNECT");
+// 24 UTF-8 bytes (three umlauts) exceed the X4's 23-byte seat name.
+nodes.nick.value="J\u00fcrgen-Sch\u00e4fer-M\u00fcller";
+nodes.joinForm.dispatch("submit",{preventDefault(){}});
+assert.match(nodes.joinHint.textContent,/NAME TOO LONG/);
+assert.equal(sockets.length,2);
+// JOIN reconnects on demand and sends the join once the socket opens.
+nodes.nick.value="J\u00fcrgen";
+nodes.joinForm.dispatch("submit",{preventDefault(){}});
+assert.equal(sockets.length,3);
+assert.equal(nodes.joinHint.textContent,"CONNECTING TO X4");
+const third=sockets[2];third.open();
+assert.deepEqual(third.sent[0],{type:"join",name:"J\u00fcrgen"});
+// A specific rejection reason from the X4 is shown verbatim.
+third.message({type:"error",message:"SESSION FULL"});
+assert.equal(nodes.joinHint.textContent,"ERROR: SESSION FULL");
+// A failed on-demand connection reports the error and does not loop.
+third.close();
+nodes.joinForm.dispatch("submit",{preventDefault(){}});
+const fourth=sockets[3];fourth.close();
+assert.equal(nodes.joinHint.textContent,"ERROR: NO CONNECTION TO X4");
+assert.equal(timers.length,0);
+console.log("cardparty browser: DOM/socket flow, auth token rotation, Pick 2, judgment, reveal, idle release, UTF-8 name limit OK");

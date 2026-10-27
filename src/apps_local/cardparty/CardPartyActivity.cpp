@@ -51,6 +51,8 @@ std::unique_ptr<Activity> CardPartyActivity::create(GfxRenderer& renderer, Mappe
 void CardPartyActivity::resetGame() {
   abortArmed_=false;
   abortArmedAt_=0;
+  backArmed_=false;
+  backArmedAt_=0;
   const auto rules=cp::Rules{5,10,true};
   if(!game_.configure(cp::demoDeck(),rules,toybox::seed())) {
     stage_=Stage::Failed;
@@ -118,12 +120,15 @@ void CardPartyActivity::handleTap(int x,int y) {
   if(stage_!=Stage::Hosted||x<0||x>width||y<height-90)return;
   const cp::Phase phase=game_.phase();
   if(phase==cp::Phase::Finished) {
-    server_.stop();
-    resetGame();
+    // Same hotspot, password and seats: phones land in the new lobby.
+    abortArmed_=backArmed_=false;
+    if(server_.hostRematch()) report_[0]=0;
+    else std::snprintf(report_,sizeof(report_),"ACTION NOT AVAILABLE");
     requestUpdate();
     return;
   }
   bool accepted=false;
+  backArmed_=false;
   if(phase==cp::Phase::Judging) {
     const uint32_t now=millis();
     if(!abortArmed_ || static_cast<uint32_t>(now-abortArmedAt_)>7000u) {
@@ -152,6 +157,17 @@ void CardPartyActivity::handleTap(int x,int y) {
 void CardPartyActivity::loop() {
   if(mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if(stage_==Stage::Choice) {leave();return;}
+    // One stray press must not end a party for everyone at the table.
+    if(stage_==Stage::Hosted && matchInProgress()) {
+      const uint32_t now=millis();
+      if(!backArmed_ || static_cast<uint32_t>(now-backArmedAt_)>7000u) {
+        backArmed_=true;
+        backArmedAt_=now;
+        std::snprintf(report_,sizeof(report_),"PRESS BACK AGAIN TO END SESSION");
+        requestUpdate();
+        return;
+      }
+    }
     server_.stop();
     resetGame();
     requestUpdate();
@@ -229,6 +245,7 @@ void CardPartyActivity::drawLobby() {
   renderer.fillRect(kGutter,bottom-4,width-2*kGutter,2,true);
   renderer.drawText(UI_10_FONT_ID,kGutter,bottom+8,connected>=3?"[ START GAME ]":"[ WAITING FOR 3 PLAYERS ]",true);
   if(report_[0])renderer.drawText(SMALL_FONT_ID,kGutter,bottom+42,report_,true);
+  drawDiagnostics();
 }
 void CardPartyActivity::drawPrompt(const char* sentence,int x,int y,int maxChars) {
   if(!sentence)return;
@@ -279,9 +296,28 @@ void CardPartyActivity::drawGame() {
   if(v.phase==cp::Phase::Playing)action="[ CLOSE SUBMISSIONS ]";
   if(v.phase==cp::Phase::Judging)action="[ ABORT STALLED ROUND ]";
   if(v.phase==cp::Phase::Reveal)action="[ NEXT ROUND ]";
-  if(v.phase==cp::Phase::Finished)action="[ NEW SESSION ]";
+  if(v.phase==cp::Phase::Finished)action="[ REMATCH ]   BACK x2 = END";
   renderer.drawText(UI_10_FONT_ID,kGutter,bottom+8,action,true);
   if(report_[0])renderer.drawText(SMALL_FONT_ID,kGutter,bottom+42,report_,true);
+  drawDiagnostics();
+}
+bool CardPartyActivity::matchInProgress() const {
+  if(game_.phase()!=cp::Phase::Lobby) return true;
+  for(const auto& p:game_.publicView().players) if(p.seated) return true;
+  return false;
+}
+void CardPartyActivity::drawDiagnostics() {
+  // Field telemetry for hardware acceptance; refreshed with each repaint,
+  // never on its own (no extra e-ink refreshes). Counts only, no secrets.
+  const cp::web::Server::Diagnostics d=server_.diagnostics();
+  if(!d.valid) return;
+  char line[64]={};
+  std::snprintf(line,sizeof(line),"SYS H%uK M%uK WS%02u AP%02u",
+                static_cast<unsigned>(d.freeHeap/1024),static_cast<unsigned>(d.minFreeHeap/1024),
+                d.sockets,d.stations);
+  const int width=renderer.getScreenWidth();
+  const int x=width-kGutter-renderer.getTextWidth(SMALL_FONT_ID,line);
+  renderer.drawText(SMALL_FONT_ID,x,renderer.getScreenHeight()-30,line,true);
 }
 void CardPartyActivity::drawError() {
   drawBase("ERROR");

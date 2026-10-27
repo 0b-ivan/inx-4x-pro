@@ -124,7 +124,13 @@ h2{font-size:18px;font-weight:500}
   const $ = id => document.getElementById(id);
   const screens = ["join", "lobby", "play", "waiting", "judging", "result"];
   const state = {socket:null, ticket:null, revision:0, selection:[], judging:null,
-                 snapshot:null, personal:null};
+                 snapshot:null, personal:null, pendingJoin:null};
+  // The X4 stores names as at most 23 UTF-8 bytes (umlauts count twice).
+  const kNameBytes = 23;
+  function utf8Length(value) {
+    return typeof TextEncoder === "function" ? new TextEncoder().encode(value).length
+      : unescape(encodeURIComponent(value)).length;
+  }
   const saved = sessionStorage.getItem("caw.session.token");
   if (saved && /^[0-9a-f]{32}$/.test(saved)) state.ticket = saved;
   function show(name) { for(const s of screens) $(s).hidden = s !== name; }
@@ -250,6 +256,11 @@ h2{font-size:18px;font-weight:500}
     socket.addEventListener("open",()=>{
       status("LOCAL / CONNECTED");
       if(state.ticket) socket.send(JSON.stringify({type:"resume",token:state.ticket}));
+      else if(state.pendingJoin){
+        socket.send(JSON.stringify({type:"join",name:state.pendingJoin}));
+        state.pendingJoin=null;
+        text("joinHint","JOIN REQUEST SENT");
+      }
     });
     socket.addEventListener("message",event=>{
       let msg;
@@ -277,15 +288,32 @@ h2{font-size:18px;font-weight:500}
         state.personal=null;state.snapshot=null;render();
       }
     });
-    socket.addEventListener("close",()=>{if(state.socket===socket){status("DISCONNECTED");setTimeout(connect,1500);}});
+    socket.addEventListener("close",()=>{
+      if(state.socket!==socket)return;
+      // Only a seated browser reconnects on its own. The X4 closes sockets
+      // that never join, so an idle join screen does not hold one of its
+      // few connection slots; JOIN reconnects on demand.
+      if(state.ticket){status("DISCONNECTED");setTimeout(connect,1500);}
+      else {
+        state.socket=null;status("IDLE / JOIN TO CONNECT");
+        if(state.pendingJoin){state.pendingJoin=null;text("joinHint","ERROR: NO CONNECTION TO X4");}
+      }
+    });
     socket.addEventListener("error",()=>{status("CONNECTION ERROR");});
   }
   $("joinForm").addEventListener("submit",ev=>{
     ev.preventDefault();
     const name=$("nick").value.trim();
-    if(!name||name.length>23)return;
+    if(!name)return;
+    if(utf8Length(name)>kNameBytes||/[<>]/.test(name)){
+      text("joinHint","ERROR: NAME TOO LONG (MAX 23 BYTES, UMLAUTE = 2) OR INVALID");return;
+    }
     if(!state.socket||state.socket.readyState!==WebSocket.OPEN){
-      text("joinHint","ERROR: NO CONNECTION TO X4");return;
+      // Socket was released while idle: reconnect, then join on open.
+      state.pendingJoin=name;
+      text("joinHint","CONNECTING TO X4");
+      if(!state.socket)connect();
+      return;
     }
     state.socket.send(JSON.stringify({type:"join",name}));
     text("joinHint","JOIN REQUEST SENT");

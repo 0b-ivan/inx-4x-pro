@@ -34,6 +34,8 @@ class CardPartyActivity final : public Activity {
   void drawGame();
   void drawError();
   void drawPrompt(const char* sentence,int x,int y,int maxChars);
+  void drawDiagnostics();
+  bool matchInProgress() const;
   void leave();
 
   cardparty::Game game_;
@@ -44,5 +46,7 @@ class CardPartyActivity final : public Activity {
   uint32_t fingerprint_=0;
   bool abortArmed_=false;
   uint32_t abortArmedAt_=0;
+  bool backArmed_=false;
+  uint32_t backArmedAt_=0;
   char report_[90]={};
 };
