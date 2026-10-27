@@ -184,12 +184,30 @@ jobs:
       - name: Install player host libraries
         run: sudo apt-get update && sudo apt-get install -y libwolfssl-dev
 
+      # Real Chromium for host-tests/cardparty/test_browser_viewport.cjs.
+      - name: Install Playwright Chromium
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=$RUNNER_TEMP/pw/node_modules" >> "$GITHUB_ENV"
+
       - name: Host tests
+        env:
+          CARDPARTY_REQUIRE_BROWSER: "1"
         run: |
           set -euo pipefail
           for suite in host-tests/*/run.sh; do
             bash "$suite"
           done
+
+      - name: Upload CardParty browser viewport screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardparty-browser-viewports
+          path: .pio/cardparty-browser-viewports/
+          if-no-files-found: ignore
 
       - name: Upload Biscuit native bitmap previews
         if: always()

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Freestanding C++17 rules/seat/wire protocol, network adapter, 8-browser stress,
-# TCP back-pressure and browser smoke.
+# TCP back-pressure, browser smoke and real-browser viewport layout.
 set -eu
 cd "$(dirname "$0")"
 mkdir -p /tmp/cardparty-host-tests
@@ -36,4 +36,5 @@ c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2 \
   test_stress.cpp -o /tmp/cardparty-host-tests/test_stress
 /tmp/cardparty-host-tests/test_stress
 node test_browser_page.cjs
+node test_browser_viewport.cjs
 python3 test_x4pro_ws_capacity.py
