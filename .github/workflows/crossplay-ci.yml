@@ -225,6 +225,132 @@ jobs:
           path: .pio/biscuit-native-previews/
           if-no-files-found: ignore
 
+
+  # Explicit user-requested PUBLIC feature-test Nightly. This job cannot
+  # publish unless firmware, simulator and all host regressions pass for PR #44.
+  # Published packs are ORIGINAL DEMO fixtures, never private Udemy questions.
+  study-nightly-release:
+    name: X4 Pro public study-feature Nightly OTA
+    needs: [firmware, simulator, host-tests]
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 44 &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: latest
+
+      - name: Compute tested public Nightly tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="$(awk '/^\[crossplay\]/{f=1;next} /^\[/{f=0} f && /^version *=/{print $3;exit}' platformio.ini)"
+          [[ "$BASE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          IFS=. read -r MAJOR MINOR PATCH <<< "$BASE"
+          SHORT_SHA="${SOURCE_SHA:0:8}"
+          NEXT="$MAJOR.$MINOR.$((PATCH + 1))-rc.$(date -u +%Y%m%d).g$SHORT_SHA"
+          echo "CROSSPLAY_NIGHTLY_VERSION=$NEXT" >> "$GITHUB_ENV"
+          echo "NIGHTLY_TAG=v$NEXT" >> "$GITHUB_ENV"
+
+      - name: Install validated X4 Pro release toolchain
+        shell: bash
+        run: |
+          uv pip install --system -U "$PIO_CORE_URL" esptool
+          uv pip install --system -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" \
+            "bitstring>=4.3.1" "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" \
+            "esp-coredump>=1.14.0"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-study-nightly-${{ hashFiles('platformio.ini') }}
+
+      - name: Build OTA-safe X4 Pro Nightly image
+        run: python3 -m platformio run -e gh_nightly_x4pro
+
+      - name: Check board identity, version, checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=".pio/build/gh_nightly_x4pro/firmware.bin"
+          test -s "$APP"
+          python3 -m esptool image-info "$APP" > /tmp/study-ota-image.txt
+          grep -Eq 'ESP32-S3|Chip ID: 9' /tmp/study-ota-image.txt
+          grep -aFq 'CROSSPOINT-BOARD-V1:x4pro;' "$APP"
+          grep -aFq "$CROSSPLAY_NIGHTLY_VERSION" "$APP"
+          mkdir -p dist
+          cp "$APP" dist/firmware.bin
+          (cd dist && sha256sum firmware.bin > firmware.bin.sha256)
+          cat > dist/notes.md <<EOF
+          Public **Xteink X4 Pro Nightly OTA**, tested feature branch at \`$SOURCE_SHA\`.
+
+          Version: \`$CROSSPLAY_NIGHTLY_VERSION\`. This firmware adds
+          certification study packs, Github download and local selection.
+          Navigate **Trivia > Study Packs > GITHUB** for free synthetic
+          DOP-C02-DEMO / SAA-C03-DEMO packs, or copy your private
+          DOP-C02.dat into \`/trivia/aws/\` on your SD card.
+
+          DEMO question files are expressly non-exam, original test fixtures.
+          No paid Udemy content is included in this public release.
+          X4 Pro application image only; no repartitioning or full-flash binary.
+          Keep a recovery copy before installing via OTA Nightly/Pre-release.
+          EOF
+
+      - name: Publish public firmware Nightly
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$NIGHTLY_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Nightly already exists; keeping immutable."
+          else
+            gh release create "$NIGHTLY_TAG" dist/firmware.bin dist/firmware.bin.sha256 \
+              --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+              --title "X4 Pro Nightly Study $NIGHTLY_TAG" --prerelease \
+              --notes-file dist/notes.md
+          fi
+
+      - name: Generate public original demo packs and catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools_local/trivia/make_public_demo_packs.py --out "$RUNNER_TEMP/study-public"
+          ls -lh "$RUNNER_TEMP/study-public"
+
+      - name: Publish public GitHub study catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKS="$RUNNER_TEMP/study-public"
+          if ! gh release view trivia-study-packs --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create trivia-study-packs \
+              --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+              --title "CrossPlay Public Study DEMO Packs" --prerelease \
+              --notes "Original demo questions only. No paid or licensed exam-bank content."
+          fi
+          gh release upload trivia-study-packs \
+            "$PACKS/catalog.txt" "$PACKS/README.txt" \
+            "$PACKS/DOP-C02-DEMO.dat" "$PACKS/DOP-C02-DEMO.topics" \
+            "$PACKS/SAA-C03-DEMO.dat" "$PACKS/SAA-C03-DEMO.topics" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
   # Manual prerelease on main only, gated by the same three CI jobs.
   # Never publish prereleases from pull requests or old feature branches.
   nightly-release:
@@ -329,7 +455,7 @@ jobs:
             dist/firmware.bin.sha256 \
             "dist/crossplay-${NIGHTLY_TAG}-x4pro.elf" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
+            --target "$SOURCE_SHA" \
             --title "X4 Pro Nightly ${NIGHTLY_TAG}" \
             --prerelease \
             --notes-file dist/release-notes.md

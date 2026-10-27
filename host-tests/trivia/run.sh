@@ -58,6 +58,27 @@ python3 test_de_ota_contract.py
 "$BUILD_DIR/test_aws_pack"
 python3 "$TOOLS/test_aws_study.py"
 
+# Publishing is gated against private-content leakage: generate only the two
+# synthetic public demo packs, validate manifest and binary format.
+python3 - "$TOOLS" <<'PY'
+import pathlib, struct, subprocess, sys, tempfile
+tools = pathlib.Path(sys.argv[1]).resolve()
+with tempfile.TemporaryDirectory(prefix="x4pro-public-demo-") as t:
+    out = pathlib.Path(t)
+    subprocess.run([sys.executable, str(tools / "make_public_demo_packs.py"),
+                    "--out", str(out)], check=True)
+    names = (out / "catalog.txt").read_text().splitlines()
+    assert names == ["AWS|DOP-C02-DEMO", "AWS|SAA-C03-DEMO"]
+    for cert in ("DOP-C02-DEMO", "SAA-C03-DEMO"):
+        raw = (out / (cert + ".dat")).read_bytes()
+        assert raw[:8] == b"XAWSDEV\x00"
+        assert struct.unpack_from("<I", raw, 12)[0] == 24
+        assert len((out / (cert + ".topics")).read_text().splitlines()) == 6
+        assert b"Udemy" not in raw and b"paid question" not in raw
+print("PASS public synthetic GitHub demo pack assets and catalog")
+PY
+
+
 # Certificate-named independent study pack catalogue (no private content).
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I$SRC \
   test_study_deck_catalog.cpp "$SRC/StudyDeckCatalog.cpp" \

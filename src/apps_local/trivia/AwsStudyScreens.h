@@ -9,6 +9,7 @@ namespace fui = freeink::ui;
 
 struct StudyDeckListModel {
   bool german = false;
+  bool remote = false;
   uint8_t total = 0;
   uint8_t offset = 0;
   uint8_t visible = 0;

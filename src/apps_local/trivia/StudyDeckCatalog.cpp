@@ -59,6 +59,15 @@ bool StudyDeckCatalog::addAwsFile(const char* filename) {
   return add(slug, true);
 }
 
+bool StudyDeckCatalog::addManifestLine(const char* line) {
+  if (!line) return false;
+  const bool aws = std::strncmp(line, "AWS|", 4) == 0;
+  const bool other = std::strncmp(line, "DECK|", 5) == 0;
+  if (!aws && !other) return false;
+  const char* slug = line + (aws ? 4 : 5);
+  return add(slug, aws);
+}
+
 int StudyDeckCatalog::find(const char* slug) const {
   if (!slug) return -1;
   for (uint8_t i = 0; i < count_; ++i) {

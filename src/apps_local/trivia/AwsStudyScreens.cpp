@@ -135,7 +135,9 @@ void buildAwsSummary(toybox::Screen& screen, const AwsSummaryModel& model) {
 }
 
 void buildStudyDeckList(toybox::Screen& screen, const StudyDeckListModel& model) {
-  chrome(screen, model.german ? "FRAGENPAKETE" : "STUDY PACKS");
+  chrome(screen, model.remote
+                     ? (model.german ? "GITHUB PAKETE" : "GITHUB PACKS")
+                     : (model.german ? "FRAGENPAKETE" : "STUDY PACKS"));
   const fui::Rect body = screen.body();
   const int16_t x = static_cast<int16_t>(body.x + kMargin);
   const int16_t w = static_cast<int16_t>(body.width - kMargin * 2);
@@ -143,14 +145,22 @@ void buildStudyDeckList(toybox::Screen& screen, const StudyDeckListModel& model)
     const int16_t y = static_cast<int16_t>(body.y + 24 + i * 89);
     const bool selected = model.current == model.indices[i];
     button(screen, {x, y, w, 76}, model.names[i],
-           ActionStudySelect, static_cast<int16_t>(model.indices[i]), selected);
+           model.remote ? ActionStudyRemoteSelect : ActionStudySelect,
+           static_cast<int16_t>(model.indices[i]), selected);
   }
   char status[48];
   std::snprintf(status, sizeof(status), model.german ? "%u PAKETE" : "%u PACKS",
                 static_cast<unsigned>(model.total));
   label(screen, {x, static_cast<int16_t>(footer(screen) - 32), w, 25}, status);
-  footerPair(screen, model.german ? "ZURUECK" : "TRIVIA", ActionAwsHome,
-             model.german ? "WEITERE" : "MORE PACKS", ActionStudyNextPage);
+  footerThree(screen,
+              model.remote ? (model.german ? "LOKAL" : "LOCAL")
+                           : (model.german ? "TRIVIA" : "TRIVIA"),
+              model.remote ? ActionStudyDecks : ActionAwsHome,
+              model.german ? "MEHR" : "MORE",
+              model.remote ? ActionStudyRemoteNextPage : ActionStudyNextPage,
+              model.remote ? (model.german ? "NEU LADEN" : "REFRESH")
+                           : "GITHUB",
+              ActionStudyOnline);
 }
 
 void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model) {

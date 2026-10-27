@@ -51,6 +51,9 @@ enum : fui::ActionId {
   ActionStudyDecks = 21,
   ActionStudySelect = 22,
   ActionStudyNextPage = 23,
+  ActionStudyOnline = 24,
+  ActionStudyRemoteSelect = 25,
+  ActionStudyRemoteNextPage = 26,
 };
 
 enum class MenuRow : int { Quizmaster = 0, Solo, Difficulty, Count };

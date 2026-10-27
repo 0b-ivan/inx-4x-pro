@@ -63,5 +63,20 @@ int main() {
   assert(!catalog.addFile("overflow.dat"));
   catalog.clear();
   assert(catalog.count() == 0 && catalog.find("linux-admin") < 0);
+  trivia::StudyDeckCatalog online;
+  assert(online.addManifestLine("AWS|DOP-C02-DEMO"));
+  assert(online.addManifestLine("AWS|SAA-C03-DEMO"));
+  assert(online.addManifestLine("DECK|LINUX-DEMO"));
+  assert(online.count() == 3);
+  assert(!online.addManifestLine("https://host/pack.dat"));
+  assert(!online.addManifestLine("AWS|../../secret"));
+  assert(!online.addManifestLine("AWS|DOP-C02-DEMO"));
+  assert(!online.addManifestLine("AWS|a.dat"));
+  assert(!online.addManifestLine("AWS|"));
+  assert(!online.addManifestLine("AWS|NAME|extra"));
+  assert(!online.addManifestLine("BOGUS|Linux"));
+  const int demo = online.find("DOP-C02-DEMO");
+  assert(demo >= 0 && online.path(static_cast<uint8_t>(demo), ".dat", path, sizeof(path)));
+  assert(std::strcmp(path, "/trivia/aws/DOP-C02-DEMO.dat") == 0);
   std::puts("PASS study deck catalog: independent paths, safe filenames, bounded count");
 }

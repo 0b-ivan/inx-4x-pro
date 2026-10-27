@@ -32,7 +32,7 @@ class TriviaActivity final : public Activity {
  private:
   enum class View : uint8_t {
     Menu, Quizmaster, Solo, AwsMenu, AwsDomains, AwsQuestion, AwsOption,
-    AwsExplanation, AwsSummary, StudyDecks, Notice
+    AwsExplanation, AwsSummary, StudyDecks, RemoteStudyDecks, Notice
   };
   // Which mode the HIDDEN notice came from. deal() decides whether it needs a
   // multiple-choice question by reading view_, so the notice has to put the
@@ -54,6 +54,10 @@ class TriviaActivity final : public Activity {
   void saveAwsDomains() const;
   void onWifiChosen(bool connected);
   void runPackDownload();
+  void onStudyWifiChosen(bool connected);
+  void runStudyCatalogFetch();
+  void runStudyPackFetch();
+  void startStudyFetch();
   void showNotice(const char* headline, const char* body, const char* actionLabel = nullptr,
                   freeink::ui::ActionId action = 0);
   bool ensureState(uint32_t count, const char* statePath);
@@ -68,6 +72,12 @@ class TriviaActivity final : public Activity {
   // An independent licensed/private study deck. Never mixes its state with
   // the public trivia pack or the separate German translation state.
   trivia::StudyDeckCatalog deckCatalog_;
+  trivia::StudyDeckCatalog remoteCatalog_;
+  enum class StudyFetch : uint8_t { None, Catalog, Pack };
+  StudyFetch studyFetch_ = StudyFetch::None;
+  uint8_t remoteSelected_ = 0;
+  uint8_t remotePage_ = 0;
+  bool studyDownloadQueued_ = false;
   uint8_t selectedDeck_ = 0;
   uint8_t deckPage_ = 0;
   char studyTopics_[trivia::kAwsDomains][40] = {};

@@ -55,6 +55,32 @@ Im Gerätemenü kannst du Fragen üben, Fehlerfragen wiederholen, Themen filtern
 und dir die Rundenauswertung ansehen. Die Fragen bleiben in der Sprache der
 Quelldatei, unabhängig von deutschen Menüs.
 
+## Öffentliche GitHub-Fragenpakete
+
+Das öffentliche Nightly-OTA enthält **keine** Fragenbank. Im Gerät:
+
+1. **TRIVIA → STUDY PACKS → GITHUB** wählen.
+2. WLAN verbinden; der X4 Pro liest `catalog.txt` aus dem öffentlichen
+   GitHub-Release `trivia-study-packs`.
+3. Unter den angebotenen Zertifikaten eines auswählen; die Firmware lädt
+   `<NAME>.dat` und optional `<NAME>.topics` direkt aus diesem Release.
+4. **PACKS** öffnen, das installierte Zertifikat auswählen und offline lernen.
+
+Das GitHub-Release enthält zunächst nur `DOP-C02-DEMO` und
+`SAA-C03-DEMO` mit jeweils 24 **originalen, synthetischen Testfragen**.
+Diese Demonstrationsfragen sind keine Prüfungsvorbereitung.
+
+Der öffentliche Katalog ist ein kleines ASCII-Dokument mit maximal
+zwölf Einträgen, jeweils `AWS|DOP-C02-DEMO` oder `DECK|LINUX-DEMO`.
+Weder URLs noch unzulässige Dateinamen werden daraus übernommen; die
+Download-URL ist fest auf das GitHub-Release begrenzt. Ein heruntergeladenes
+Paket wird vor der Installation als XAWSDEV-Datei geprüft. Bereits
+installierte Dateien werden bei einem Fehler nach Möglichkeit wiederhergestellt.
+
+Du kannst weiterhin dein persönliches `DOP-C02.dat` mit 150 Fragen direkt
+auf die SD-Karte legen. **Privat erworbene Fragen werden nicht über GitHub
+hochgeladen oder veröffentlicht.**
+
 ## Lernstand
 
 Es gibt **keine bereits vorhandenen Lernstände** für diese neuen Pakete.

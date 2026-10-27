@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
 #include "../../activities/network/WifiSelectionActivity.h"
 #include "../../components/UITheme.h"
@@ -39,6 +40,12 @@ constexpr const char* kGermanPartPath = "/trivia/pack-de.dat.part";
 // had chosen Level 4 back on "Any" with nothing on screen to say so.
 constexpr const char* kPrefsPath = "/trivia/prefs";
 constexpr const char* kSelectedStudyDeck = "/trivia/study-selected";
+// Public GitHub data packs only. Never publish proprietary exam questions.
+constexpr const char* kStudyCatalogUrl =
+    "https://github.com/0b-ivan/inx-4x-pro/releases/download/trivia-study-packs/catalog.txt";
+constexpr const char* kStudyAssetBase =
+    "https://github.com/0b-ivan/inx-4x-pro/releases/download/trivia-study-packs/";
+constexpr const char* kStudyCatalogTemp = "/trivia/study-catalog.part";
 constexpr uint32_t kStudyPathCapacity = 96;
 constexpr uint32_t kAwsPageCharacters = 260;
 
@@ -319,22 +326,12 @@ void TriviaActivity::onEnter() {
 
   const bool haveTrivia = openPack();
   scanStudyDecks();
-  // Discover certificate names at entry, but do NOT create progress files
-  // before the learner explicitly selects a deck in the menu.
-  const bool haveStudyDecks = deckCatalog_.count() != 0;
-  if (haveTrivia || haveStudyDecks) {
-    view_ = View::Menu;
-    LOG_INF("TRIVIA", "Available packs: trivia=%u certificates=%u",
-            static_cast<unsigned>(pack_.count()),
-            static_cast<unsigned>(deckCatalog_.count()));
-  } else {
-    showNotice("NO QUESTIONS",
-               I18N.getLanguage() == Language::DE
-                   ? "German questions are not installed. WiFi can fetch an early-access German pack."
-                   : "There is no question pack on this card yet. Connect to WiFi and fetch one; it is about 6MB.",
-               I18N.getLanguage() == Language::DE ? "GET GERMAN QUESTIONS" : "GET THE QUESTIONS",
-               triviaui::ActionGetPack);
-  }
+  // Opening Trivia on an empty card must still expose the GitHub-pack
+  // selector; creating state files is deferred until a deck is chosen.
+  view_ = View::Menu;
+  LOG_INF("TRIVIA", "Available packs: trivia=%u certificates=%u",
+          static_cast<unsigned>(haveTrivia ? pack_.count() : 0),
+          static_cast<unsigned>(deckCatalog_.count()));
 
   flashOnNextPaint_ = true;
   requestUpdate();
@@ -386,6 +383,160 @@ void TriviaActivity::onWifiChosen(const bool connected) {
   // Queued rather than run here: the download blocks for minutes, and this is
   // the result handler of the activity that is still unwinding.
   downloadQueued_ = true;
+}
+
+void TriviaActivity::onStudyWifiChosen(const bool connected) {
+  if (!connected) {
+    showNotice("NO WIFI", "Connect to WiFi to get the public GitHub packs.",
+               "TRY AGAIN", triviaui::ActionStudyOnline);
+    return;
+  }
+  studyDownloadQueued_ = true;
+}
+
+void TriviaActivity::startStudyFetch() {
+  if (WiFi.status() == WL_CONNECTED) {
+    studyDownloadQueued_ = true;
+    return;
+  }
+  WiFi.mode(WIFI_STA);
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+                         [this](const ActivityResult& r) {
+                           onStudyWifiChosen(!r.isCancelled);
+                         });
+}
+
+// Download only a small text catalog from this hardcoded GitHub release.
+// Filenames are parsed by the exact same slug validator as the SD catalog;
+// no remote URL, path, or unbounded collection is accepted from the network.
+void TriviaActivity::runStudyCatalogFetch() {
+  if (!Storage.exists("/trivia") && !Storage.mkdir("/trivia")) {
+    showNotice("CARD ERROR", "Cannot create /trivia on SD.",
+               "RETRY", triviaui::ActionStudyOnline);
+    return;
+  }
+  downloadCancel_ = false;
+  showNotice("GITHUB", "Fetching the public study pack list.", nullptr, 0);
+  requestUpdateAndWait();
+  const auto err = HttpDownloader::downloadToFile(kStudyCatalogUrl, kStudyCatalogTemp,
+                                                  nullptr, &downloadCancel_);
+  if (err != HttpDownloader::OK) {
+    Storage.remove(kStudyCatalogTemp);
+    showNotice("NETWORK ERROR", "GitHub catalog unavailable. Connect to WiFi and retry.",
+               "RETRY", triviaui::ActionStudyOnline);
+    return;
+  }
+  char bytes[1024] = {};
+  const size_t size = Storage.readFileToBuffer(kStudyCatalogTemp, bytes, sizeof(bytes));
+  Storage.remove(kStudyCatalogTemp);
+  if (size == 0 || size >= sizeof(bytes)) {
+    showNotice("BAD CATALOG", "GitHub list is empty or too large.",
+               "RETRY", triviaui::ActionStudyOnline);
+    return;
+  }
+  trivia::StudyDeckCatalog candidate;
+  char* cursor = bytes;
+  bool valid = true;
+  while (*cursor) {
+    char* end = std::strchr(cursor, '\n');
+    if (!end) { valid = false; break; }
+    *end = '\0';
+    if (end > cursor && end[-1] == '\r') end[-1] = '\0';
+    if (!candidate.addManifestLine(cursor)) { valid = false; break; }
+    cursor = end + 1;
+  }
+  if (!valid || candidate.count() == 0) {
+    showNotice("BAD CATALOG", "GitHub returned invalid pack names. No files were changed.",
+               "RETRY", triviaui::ActionStudyOnline);
+    return;
+  }
+  remoteCatalog_ = candidate;
+  remotePage_ = 0;
+  go(View::RemoteStudyDecks);
+}
+
+void TriviaActivity::runStudyPackFetch() {
+  const auto* entry = remoteCatalog_.at(remoteSelected_);
+  if (!entry) { go(View::RemoteStudyDecks); return; }
+  const char* directory = entry->aws ? trivia::kAwsStudyDeckFolder : trivia::kStudyDeckFolder;
+  if ((!Storage.exists("/trivia") && !Storage.mkdir("/trivia")) ||
+      (!Storage.exists(directory) && !Storage.mkdir(directory))) {
+    showNotice("CARD ERROR", "Cannot create study pack directory.", "PACKS",
+               triviaui::ActionStudyDecks);
+    return;
+  }
+  char pack[96], topics[96], part[112], topicPart[112], backup[112];
+  if (!remoteCatalog_.path(remoteSelected_, ".dat", pack, sizeof(pack)) ||
+      !remoteCatalog_.path(remoteSelected_, ".topics", topics, sizeof(topics)) ||
+      std::snprintf(part, sizeof(part), "%s.part", pack) >= static_cast<int>(sizeof(part)) ||
+      std::snprintf(topicPart, sizeof(topicPart), "%s.part", topics) >=
+          static_cast<int>(sizeof(topicPart)) ||
+      std::snprintf(backup, sizeof(backup), "%s.bak", pack) >= static_cast<int>(sizeof(backup)))
+    return;
+  const std::string url = std::string(kStudyAssetBase) + entry->slug + ".dat";
+  downloadCancel_ = false;
+  showNotice("DOWNLOADING", "Downloading the selected public study pack.", nullptr, 0);
+  requestUpdateAndWait();
+  const auto err = HttpDownloader::downloadToFile(url, part, nullptr, &downloadCancel_);
+  if (err != HttpDownloader::OK) {
+    Storage.remove(part);
+    showNotice("DOWNLOAD FAILED", "The previous questions were not changed.",
+               "PACKS", triviaui::ActionStudyDecks);
+    return;
+  }
+  // Validate before replacing a local pack. Never swap in an HTML error page,
+  // an XTRIVIA general-quiz pack, or an incomplete indexed file.
+  HalFile file;
+  if (!Storage.openFileForRead("TRIVIA", part, file)) {
+    Storage.remove(part);
+    showNotice("BAD PACK", "Downloaded data cannot be read.", "PACKS",
+               triviaui::ActionStudyDecks);
+    return;
+  }
+  FileSource source;
+  source.attach(file);
+  trivia::AwsPack candidate;
+  const bool valid = candidate.open(source) &&
+                     candidate.read(0, awsQuestion_) &&
+                     candidate.read(candidate.count() - 1, awsQuestion_);
+  file.close();
+  if (!valid) {
+    Storage.remove(part);
+    showNotice("BAD PACK", "GitHub file failed format validation.", "PACKS",
+               triviaui::ActionStudyDecks);
+    return;
+  }
+  Storage.remove(backup);
+  const bool hadOld = Storage.exists(pack);
+  if (hadOld && !Storage.rename(pack, backup)) {
+    Storage.remove(part);
+    showNotice("CARD ERROR", "Could not safeguard your installed pack.",
+               "PACKS", triviaui::ActionStudyDecks);
+    return;
+  }
+  if (!Storage.rename(part, pack)) {
+    if (hadOld) Storage.rename(backup, pack);
+    showNotice("CARD ERROR", "Could not install file; previous pack restored.",
+               "PACKS", triviaui::ActionStudyDecks);
+    return;
+  }
+  if (hadOld) Storage.remove(backup);
+
+  // Topic labels are a presentation sidecar. The pack remains usable even
+  // if this optional second GitHub asset is unavailable.
+  const std::string topicUrl = std::string(kStudyAssetBase) + entry->slug + ".topics";
+  if (HttpDownloader::downloadToFile(topicUrl, topicPart) == HttpDownloader::OK) {
+    Storage.remove(topics);
+    if (!Storage.rename(topicPart, topics)) Storage.remove(topicPart);
+  } else {
+    Storage.remove(topicPart);
+  }
+
+  scanStudyDecks();
+  char message[150];
+  std::snprintf(message, sizeof(message), "%s installed. Choose it under Study Packs.",
+                entry->slug);
+  showNotice("PACK READY", message, "PACKS", triviaui::ActionStudyDecks);
 }
 
 void TriviaActivity::runPackDownload() {
@@ -762,6 +913,26 @@ void TriviaActivity::routeAction(const int action, const int value) {
       deckPage_ = selectedDeck_ / trivia::kStudyDecksPerPage;
       go(View::StudyDecks);
       break;
+    case triviaui::ActionStudyOnline:
+      studyFetch_ = StudyFetch::Catalog;
+      startStudyFetch();
+      break;
+    case triviaui::ActionStudyRemoteNextPage:
+      if (view_ == View::RemoteStudyDecks && remoteCatalog_.count()) {
+        const uint8_t pages = (remoteCatalog_.count() + trivia::kStudyDecksPerPage - 1) /
+                              trivia::kStudyDecksPerPage;
+        remotePage_ = static_cast<uint8_t>((remotePage_ + 1) % pages);
+        requestUpdate();
+      }
+      break;
+    case triviaui::ActionStudyRemoteSelect:
+      if (view_ == View::RemoteStudyDecks &&
+          value >= 0 && value < remoteCatalog_.count()) {
+        remoteSelected_ = static_cast<uint8_t>(value);
+        studyFetch_ = StudyFetch::Pack;
+        startStudyFetch();
+      }
+      break;
     case triviaui::ActionStudyNextPage:
       if (view_ == View::StudyDecks && deckCatalog_.count()) {
         const uint8_t pages = (deckCatalog_.count() + trivia::kStudyDecksPerPage - 1) /
@@ -912,6 +1083,14 @@ void TriviaActivity::loop() {
   // Started from the action handler rather than inside it: the download blocks
   // for minutes and pumps input itself, which must not happen while an action
   // is still being routed.
+  if (studyDownloadQueued_) {
+    studyDownloadQueued_ = false;
+    const StudyFetch current = studyFetch_;
+    studyFetch_ = StudyFetch::None;
+    if (current == StudyFetch::Catalog) runStudyCatalogFetch();
+    else if (current == StudyFetch::Pack) runStudyPackFetch();
+    return;
+  }
   if (downloadQueued_) {
     downloadQueued_ = false;
     runPackDownload();
@@ -970,6 +1149,23 @@ void TriviaActivity::render(RenderLock&&) {
       model.seenCount = state_.seenCount();
       model.englishFallback = I18N.getLanguage() == Language::DE && !germanContent_;
       triviaui::buildMenu(screen, model);
+      break;
+    }
+    case View::RemoteStudyDecks: {
+      triviaui::StudyDeckListModel model;
+      model.german = I18N.getLanguage() == Language::DE;
+      model.remote = true;
+      model.total = remoteCatalog_.count();
+      model.offset = remotePage_ * trivia::kStudyDecksPerPage;
+      model.current = remoteSelected_;
+      for (uint8_t i = model.offset; i < remoteCatalog_.count() &&
+           model.visible < trivia::kStudyDecksPerPage; ++i) {
+        const auto* entry = remoteCatalog_.at(i);
+        model.indices[model.visible] = i;
+        model.names[model.visible] = entry ? entry->slug : "";
+        ++model.visible;
+      }
+      triviaui::buildStudyDeckList(screen, model);
       break;
     }
     case View::StudyDecks: {

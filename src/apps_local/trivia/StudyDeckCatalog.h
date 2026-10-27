@@ -26,6 +26,9 @@ class StudyDeckCatalog {
   // Accept only <slug>.dat, where slug contains [a-zA-Z0-9_-].
   bool addFile(const char* filename);
   bool addAwsFile(const char* filename);
+  // Lines in public GitHub catalog: AWS|CERTNAME or DECK|CERTNAME.
+  // Only a validated slug is ever permitted to become a downloaded path.
+  bool addManifestLine(const char* line);
   uint8_t count() const { return count_; }
   const StudyDeckEntry* at(uint8_t index) const {
     return index < count_ ? &entries_[index] : nullptr;

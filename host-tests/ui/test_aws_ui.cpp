@@ -216,7 +216,17 @@ void testStudyDeckList() {
     assert(event.value == i);
   }
   assert(out.tap(90, 750).action == triviaui::ActionAwsHome);
-  assert(out.tap(365, 750).action == triviaui::ActionStudyNextPage);
+  assert(out.tap(220, 750).action == triviaui::ActionStudyNextPage);
+  assert(out.tap(365, 750).action == triviaui::ActionStudyOnline);
+  triviaui::StudyDeckListModel remote = model;
+  remote.remote = true;
+  Rendered online;
+  render(online, remote, &triviaui::buildStudyDeckList);
+  assert(online.draw.contains("GITHUB PAKETE"));
+  assert(online.tap(240, 110).action == triviaui::ActionStudyRemoteSelect);
+  assert(online.tap(90, 750).action == triviaui::ActionStudyDecks);
+  assert(online.tap(220, 750).action == triviaui::ActionStudyRemoteNextPage);
+  assert(online.tap(365, 750).action == triviaui::ActionStudyOnline);
 }
 
 int main() {
