@@ -150,7 +150,12 @@ h2{font-size:18px;font-weight:500}
     const personal=state.personal||{}, game=state.snapshot||{};
     const cards=Array.isArray(personal.hand)?personal.hand:[];
     const pick=Number(game.pick)||1;
-    const list=$("choices");list.replaceChildren();
+    const list=$("choices");
+    const scrollOffset=list.scrollTop||0;
+    const focused=document.activeElement;
+    const focusedIndex=focused && focused.parentNode===list
+      ? Array.prototype.indexOf.call(list.children,focused) : -1;
+    list.replaceChildren();
     text("promptText",game.promptText||"");
     text("playMeta","/// SELECT RESPONSE / CZAR "+(game.czarName||"?"));
     for(let i=0;i<cards.length;i++){
@@ -162,16 +167,29 @@ h2{font-size:18px;font-weight:500}
         else if(state.selection.length<pick)state.selection.push(i);
         choices();
       });
-      if(selected>=0)item.setAttribute("aria-label","Position "+(selected+1)+" von "+pick+": "+label);
+      if(selected>=0){
+        // The selected *play order* is distinct from the card's hand index.
+        const order=document.createElement("span");
+        order.className="position";
+        order.textContent=" <"+(selected+1)+"/"+pick+"> ";
+        item.insertBefore(order,item.children[1]);
+        item.setAttribute("aria-label","Position "+(selected+1)+" von "+pick+": "+label);
+      }
       list.append(item);
     }
+    list.scrollTop=scrollOffset;
+    if(focusedIndex>=0 && list.children[focusedIndex] &&
+       typeof list.children[focusedIndex].focus==="function")
+      list.children[focusedIndex].focus({preventScroll:true});
     const counter=state.selection.length+"/"+pick+" SELECTED";
     text("count",counter);text("footCount",counter);
     $("submit").disabled=state.selection.length!==pick;
   }
   function candidateRows() {
     const game=state.snapshot||{};
-    const list=$("candidateList");list.replaceChildren();
+    const list=$("candidateList");
+    const scrollOffset=list.scrollTop||0;
+    list.replaceChildren();
     const candidates=Array.isArray(game.submissions)?game.submissions:[];
     const canJudge=!!(state.personal&&state.personal.isCzar);
     text("judgePrompt",game.promptText||"");
@@ -184,6 +202,7 @@ h2{font-size:18px;font-weight:500}
       });
       btn.disabled=!canJudge;list.append(btn);
     }
+    list.scrollTop=scrollOffset;
     text("judgeSelection",state.judging==null?"NONE SELECTED":"["+String(state.judging+1).padStart(2,"0")+"] SELECTED");
     $("confirmJudge").disabled=!canJudge||state.judging==null;
     text("judgeHeader",canJudge?"CHOOSE THE WINNER":"THE CZAR IS JUDGING");
