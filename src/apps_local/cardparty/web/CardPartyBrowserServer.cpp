@@ -1,0 +1,311 @@
+#include "CardPartyBrowserServer.h"
+#include "CardPartyProtocol.h"
+
+#ifndef SIMULATOR
+
+#include <WiFi.h>
+#include <esp_system.h>
+#include <Logging.h>
+#include <cstring>
+#include "../../../DevMode.h"
+#include "CardPartyPageHtml.generated.h"
+
+namespace cardparty { namespace web {
+namespace {
+constexpr const char* kSsid = "CrossPlay-CAW";
+constexpr const char* kPath = "/cardparty";
+constexpr uint8_t kMaxClients = 8;
+constexpr uint16_t kDnsPort = 53;
+const char* phaseName(Phase phase) {
+  switch (phase) {
+    case Phase::Lobby: return "Lobby";
+    case Phase::Playing: return "Playing";
+    case Phase::Judging: return "Judging";
+    case Phase::Reveal: return "Reveal";
+    case Phase::Finished: return "Finished";
+  }
+  return "Lobby";
+}
+}  // namespace
+
+Server::~Server() { stop(); }
+
+void Server::fillSecret(uint8_t secret[kTicketBytes]) {
+  // Hardware entropy, separate from the reproducible game shuffle seed.
+  esp_fill_random(secret, kTicketBytes);
+}
+
+bool Server::startHotspot() {
+  uint8_t entropy[kTicketBytes] = {};
+  fillSecret(entropy);
+  char hex[33] = {};
+  encodeSecret(entropy, hex);
+  std::memcpy(password_, hex, 16);
+  password_[16] = 0;
+  WiFi.mode(WIFI_AP);
+  delay(50);
+  if (!WiFi.softAP(kSsid, password_, 1, false, kMaxClients)) {
+    WiFi.mode(WIFI_OFF);
+    password_[0] = 0;
+    return false;
+  }
+  const IPAddress local = WiFi.softAPIP();
+  ssid_ = kSsid;
+  ip_ = local.toString().c_str();
+  url_ = std::string("http://") + ip_ + kPath;
+  dns_.setErrorReplyCode(DNSReplyCode::NoError);
+  dns_.start(kDnsPort, "*", local);
+  dnsRunning_ = true;
+  return true;
+}
+
+bool Server::startWifi() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+  password_[0] = 0;
+  ssid_ = WiFi.SSID().c_str();
+  ip_ = WiFi.localIP().toString().c_str();
+  url_ = std::string("http://") + ip_ + kPath;
+  return true;
+}
+
+bool Server::begin(Mode mode) {
+  if (running_) return true;
+  if (game_.phase() != Phase::Lobby) return false;
+  mode_ = mode;
+  for (uint8_t i=0;i<kPlayers;++i) {
+    socket_[i] = kNoConnection;
+    tickets_[i] = SessionTicket{};
+  }
+  sessions_.reset();
+  ssid_.clear(); ip_.clear(); url_.clear(); password_[0] = 0;
+  if (!devModePaused_) { devmode::pause(); devModePaused_ = true; }
+  const bool networkOk = mode == Mode::Hotspot ? startHotspot() : startWifi();
+  if (!networkOk) {
+    devmode::resume();
+    devModePaused_ = false;
+    return false;
+  }
+  configureRoutes();
+  http_.begin();
+  ws_.begin();
+  ws_.enableHeartbeat(5000,3000,2);
+  ws_.onEvent([this](uint8_t client, WStype_t type, uint8_t* payload, size_t length) {
+    if (type == WStype_DISCONNECTED) onDisconnect(client);
+    else if (type == WStype_TEXT) onMessage(client,payload,length);
+  });
+  running_ = true;
+  LOG_INF("CARDPARTY", "Game server ready at %s", url_.c_str());
+  return true;
+}
+
+void Server::stop() {
+  const bool active = running_ || dnsRunning_;
+  running_ = false;
+  if (active) {
+    ws_.close();
+    http_.stop();
+  }
+  if (dnsRunning_) {
+    dns_.stop();
+    dnsRunning_ = false;
+  }
+  if (active && mode_ == Mode::Hotspot) {
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_OFF);
+  }
+  password_[0] = 0;
+  for(uint8_t i=0;i<kPlayers;++i) {
+    tickets_[i] = SessionTicket{};
+    socket_[i] = kNoConnection;
+  }
+  sessions_.reset();
+  if (devModePaused_) {
+    devmode::resume();
+    devModePaused_ = false;
+  }
+}
+
+void Server::loop() {
+  if (!running_) return;
+  if (dnsRunning_) dns_.processNextRequest();
+  http_.handleClient();
+  ws_.loop();
+}
+void Server::sendGamePage() {
+  http_.sendHeader("Content-Encoding","gzip");
+  http_.sendHeader("Cache-Control","no-store");
+  http_.sendHeader("Cross-Origin-Resource-Policy","same-origin");
+  http_.sendHeader("X-Frame-Options","DENY");
+  http_.send_P(200,"text/html",CardPartyPageHtml,CardPartyPageHtmlCompressedSize);
+}
+void Server::configureRoutes() {
+  if(routesConfigured_) return;
+  http_.on(kPath,HTTP_GET,[this]{sendGamePage();});
+  http_.on("/",HTTP_GET,[this]{sendGamePage();});
+  http_.onNotFound([this]{
+    // Avoid silently serving the game at arbitrary paths on existing Wi-Fi.
+    http_.send(404,"text/plain","Not Found");
+  });
+  routesConfigured_=true;
+}
+void Server::sendError(uint8_t client) {
+  char response[]="{\"type\":\"error\",\"message\":\"REQUEST REJECTED\"}";
+  ws_.sendTXT(client,response,sizeof(response)-1);
+}
+
+void Server::sendState(uint8_t seat, bool welcome) {
+  if (!running_ || seat >= kPlayers || socket_[seat]==kNoConnection) return;
+  HandView privateView{};
+  uint32_t revision=0;
+  if (!sessions_.privateHand(socket_[seat],tickets_[seat].secret,privateView,revision)) return;
+  PublicView v=game_.publicView();
+  JsonWriter w(message_,sizeof(message_));
+  char token[33]={};
+  if(welcome) {
+    encodeSecret(tickets_[seat].secret,token);
+    w.raw("{\"type\":\"welcome\",\"token\":");w.quoted(token);
+    w.raw(",\"revision\":");w.num(revision);
+  } else {
+    w.raw("{\"type\":\"state\",\"revision\":");w.num(revision);
+  }
+  w.raw(",\"game\":{\"phase\":");w.quoted(phaseName(v.phase));
+  w.raw(",\"round\":");w.num(v.round);
+  w.raw(",\"pick\":");w.num(v.pick);
+  w.raw(",\"draw\":");w.num(v.draw);
+  w.raw(",\"czar\":");w.num(v.czar);
+  w.raw(",\"czarName\":");
+  if(v.czar<kPlayers) w.quoted(v.players[v.czar].name);
+  else w.quoted("");
+  w.raw(",\"promptText\":");
+  if(v.prompt<deck_.promptsCount) w.quoted(deck_.prompts[v.prompt].text);
+  else w.quoted("");
+  w.raw(",\"submitted\":");w.num(v.submitted);
+  w.raw(",\"expected\":");w.num(v.expected);
+  w.raw(",\"players\":[");
+  for(uint8_t i=0;i<kPlayers;++i) {
+    if(i)w.raw(",");
+    const PublicPlayer& p=v.players[i];
+    w.raw("{\"seated\":");w.boolean(p.seated);
+    w.raw(",\"connected\":");w.boolean(p.connected);
+    w.raw(",\"name\":");w.quoted(p.name);
+    w.raw(",\"points\":");w.num(p.points);
+    w.raw("}");
+  }
+  w.raw("],\"submissions\":[");
+  for(uint8_t i=0;i<v.plays;++i) {
+    if(i)w.raw(",");
+    w.raw("{\"cards\":[");
+    for(uint8_t j=0;j<v.pick;++j) {
+      if(j)w.raw(",");
+      const uint16_t id=v.pile[i].cards[j];
+      w.quoted(id<deck_.answersCount?deck_.answers[id].text:"");
+    }
+    w.raw("]}");
+  }
+  w.raw("],\"winnerName\":");
+  if (v.winner==kRando) w.quoted("RANDO CARDRISSIAN");
+  else if(v.winner<kPlayers)w.quoted(v.players[v.winner].name);
+  else w.quoted("");
+  w.raw(",\"winningText\":");
+  if(v.selected<v.plays) {
+    // No author identities or submitted cards leak before the reveal:
+    // the public view deliberately zeroes the pile in other phases.
+    char winnerText[256]={};
+    size_t used=0;
+    for(uint8_t i=0;i<v.pick;++i){
+      const uint16_t id=v.pile[v.selected].cards[i];
+      const char* line=id<deck_.answersCount?deck_.answers[id].text:"";
+      const size_t len=std::strlen(line);
+      if(used+len+4>=sizeof(winnerText))break;
+      if(used){winnerText[used++]=' ';winnerText[used++]='/';winnerText[used++]=' ';}
+      std::memcpy(winnerText+used,line,len);
+      used+=len;winnerText[used]=0;
+    }
+    w.quoted(winnerText);
+  } else w.quoted("");
+  w.raw("},\"private\":{\"isCzar\":");w.boolean(privateView.judge);
+  w.raw(",\"submitted\":");w.boolean(privateView.submitted);
+  w.raw(",\"hand\":[");
+  for(uint8_t i=0;i<privateView.size;++i) {
+    if(i)w.raw(",");
+    const uint16_t id=privateView.cards[i];
+    w.raw("{\"text\":");
+    w.quoted(id<deck_.answersCount?deck_.answers[id].text:"");
+    w.raw("}");
+  }
+  w.raw("]}}");
+  if(w.ok())ws_.sendTXT(static_cast<uint8_t>(socket_[seat]),message_,w.size());
+  else LOG_ERR("CARDPARTY","Outgoing view exceeded bounded buffer");
+}
+void Server::publishAll() {
+  for(uint8_t i=0;i<kPlayers;++i)
+    if(socket_[i]!=kNoConnection)sendState(i,false);
+}
+void Server::onDisconnect(uint8_t client) {
+  sessions_.disconnect(client);
+  for(uint8_t i=0;i<kPlayers;++i)
+    if(socket_[i]==client)socket_[i]=kNoConnection;
+  publishAll();
+}
+void Server::onMessage(uint8_t client,const uint8_t* bytes,size_t size) {
+  if (!running_) return;
+  Command command{};
+  if(!parse(bytes,size,command)){sendError(client);return;}
+  bool accepted=false;
+  if(command.kind==Kind::Join) {
+    uint8_t secret[kTicketBytes]={};
+    fillSecret(secret);
+    SessionTicket ticket{};
+    accepted=sessions_.join(client,command.name,secret,ticket);
+    if(accepted) {
+      tickets_[ticket.seat]=ticket;
+      socket_[ticket.seat]=client;
+      sendState(ticket.seat,true);
+    }
+  } else if(command.kind==Kind::Resume) {
+    uint8_t fresh[kTicketBytes]={};
+    fillSecret(fresh);
+    SessionTicket ticket{};
+    accepted=sessions_.resume(client,command.secret,fresh,ticket);
+    if(accepted) {
+      tickets_[ticket.seat]=ticket;
+      socket_[ticket.seat]=client;
+      sendState(ticket.seat,true);
+    }
+  } else if(command.kind==Kind::Submit) {
+    accepted=sessions_.submit(client,command.secret,command.revision,command.slots,command.count);
+  } else if(command.kind==Kind::Judge) {
+    accepted=sessions_.judge(client,command.secret,command.revision,command.selected);
+  }
+  if(!accepted) {sendError(client);return;}
+  publishAll();
+}
+bool Server::hostStart() {
+  if(!sessions_.hostStart())return false;
+  publishAll();return true;
+}
+bool Server::hostNext() {
+  if(!sessions_.hostNext())return false;
+  publishAll();return true;
+}
+bool Server::hostClose() {
+  if(!sessions_.hostClose())return false;
+  publishAll();return true;
+}
+bool Server::hostAbort() {
+  if(!sessions_.hostAbort())return false;
+  publishAll();return true;
+}
+}} // namespace cardparty::web
+#else
+namespace cardparty { namespace web {
+Server::~Server()=default;
+bool Server::begin(Mode m) {mode_=m;running_=false;return false;}
+void Server::loop(){}
+void Server::stop(){running_=false;}
+bool Server::hostStart(){return false;}
+bool Server::hostNext(){return false;}
+bool Server::hostClose(){return false;}
+bool Server::hostAbort(){return false;}
+}} // namespace cardparty::web
+#endif
