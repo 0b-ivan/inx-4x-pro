@@ -135,6 +135,17 @@ jobs:
       - name: Biscuit app UI smoke (headless X4 Pro)
         run: bash scripts_local/biscuit_sim_smoke.sh
 
+      - name: Cards Against Whatever X4 SDL six-state game smoke
+        run: bash scripts_local/cardparty_sim_smoke.sh
+
+      - name: Upload CardParty SDL screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardparty-simulator-phases
+          path: .pio/cardparty-simulator-smoke/
+          if-no-files-found: ignore
+
       - name: Verify real SDL screenshot visual goldens
         run: python3 host-tests/biscuit-sim/test_visual_goldens.py .pio/biscuit-ui-smoke
 
