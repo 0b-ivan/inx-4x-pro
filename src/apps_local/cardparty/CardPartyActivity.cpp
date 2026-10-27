@@ -1,6 +1,7 @@
 #include "CardPartyActivity.h"
 
 #include <Memory.h>
+#include <HalStorage.h>
 #include <Logging.h>
 #include <WiFi.h>
 #include <algorithm>
@@ -20,6 +21,23 @@
 
 namespace {
 namespace cp=cardparty;
+// Immutable, released SD pack. Missing/invalid/unapproved packs fall back to
+// the self-contained demo; never accept a .tmp file or draft pack as active.
+constexpr const char* kCardPartyActivePack="/games/cardparty/active.dat";
+class CardPartySdSource final : public cp::sdpack::ByteSource {
+ public:
+  explicit CardPartySdSource(HalFile& file)
+      : file_(file), length_(static_cast<uint32_t>(file.size())) {}
+  uint32_t size() const override { return length_; }
+  bool read(uint32_t offset,void* target,uint32_t count) override {
+    if(offset>length_ || count>length_-offset)return false;
+    if(!file_.seekSet(offset))return false;
+    return file_.read(target,count)==static_cast<int>(count);
+  }
+ private:
+  HalFile& file_;
+  uint32_t length_;
+};
 constexpr int kGutter=26;
 constexpr int kQr=160;
 const char* phaseLabel(cp::Phase phase) {
@@ -51,13 +69,37 @@ uint32_t visibleFingerprint(const cp::PublicView& v) {
 std::unique_ptr<Activity> CardPartyActivity::create(GfxRenderer& renderer, MappedInputManager& input) {
   return makeUniqueNoThrow<CardPartyActivity>(renderer,input);
 }
+void CardPartyActivity::loadConfiguredDeck() {
+  activeDeck_=cp::demoDeck();
+  HalFile file;
+  if(!Storage.openFileForRead("CARDPARTY",kCardPartyActivePack,file)) {
+    return; // No optional pack is normal.
+  }
+  if(file.size()>cp::sdpack::kMaxPackBytes) {
+    LOG_ERR("CARDPARTY","SD pack exceeds memory budget, using original demo");
+    file.close();
+    return;
+  }
+  CardPartySdSource source(file);
+  const bool accepted=sdPack_.load(source); // draft packs are rejected
+  file.close();
+  if(accepted) {
+    activeDeck_=sdPack_.deck();
+    LOG_INF("CARDPARTY","Loaded released SD deck v%u (%u prompts, %u answers)",
+            static_cast<unsigned>(sdPack_.version()),
+            static_cast<unsigned>(activeDeck_.promptsCount),
+            static_cast<unsigned>(activeDeck_.answersCount));
+  } else {
+    LOG_ERR("CARDPARTY","Rejected invalid/unapproved SD pack, using original demo");
+  }
+}
 void CardPartyActivity::resetGame() {
   abortArmed_=false;
   abortArmedAt_=0;
   backArmed_=false;
   backArmedAt_=0;
   const auto rules=cp::Rules{5,10,true};
-  if(!game_.configure(cp::demoDeck(),rules,toybox::seed())) {
+  if(!game_.configure(activeDeck_,rules,toybox::seed())) {
     stage_=Stage::Failed;
     std::snprintf(report_,sizeof(report_),"DEMO DECK INVALID");
   } else {
@@ -70,6 +112,7 @@ void CardPartyActivity::resetGame() {
 void CardPartyActivity::onEnter() {
   Activity::onEnter();
   toybox::ensureFonts(renderer);
+  loadConfiguredDeck();
   resetGame();
 #ifdef SIMULATOR
   // SDL fixture mode exercises the actual CardPartyActivity renderer.
@@ -343,7 +386,7 @@ void CardPartyActivity::drawGame() {
   renderer.drawText(SMALL_FONT_ID,kGutter,110,status,true);
   renderer.fillRect(kGutter,140,width-2*kGutter,1,true);
   renderer.drawText(SMALL_FONT_ID,kGutter,156,"/// PROMPT",true);
-  const cp::Deck& deck=cp::demoDeck();
+  const cp::Deck& deck=activeDeck_;
   if(v.prompt<deck.promptsCount)
     drawWrapped(UI_10_FONT_ID,deck.prompts[v.prompt].text,kGutter,190,width-2*kGutter,38,9);
   renderer.fillRect(kGutter,540,width-2*kGutter,1,true);
