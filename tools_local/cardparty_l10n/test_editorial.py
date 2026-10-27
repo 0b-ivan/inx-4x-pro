@@ -1,5 +1,6 @@
 """Editorial heuristic regression; manual semantic sign-off is still required."""
 import unittest
+from itertools import permutations
 from pathlib import Path
 
 from editorial_checks import audit, lint_card
@@ -44,6 +45,29 @@ class EditorialTests(unittest.TestCase):
                 self.assertNotIn(".", translated["text"][-4:])
             else:
                 self.assertNotIn("____", translated["text"])
+
+    def test_all_ordered_english_deck_combinations_render_without_punctuation_collisions(self):
+        # 3 Pick-1 questions * 14, 2 Pick-2 * 14P2,
+        # and 1 Pick-3 * 14P3 = 2,590 complete combinations.
+        answers = [self.edited[key]["text"] for key in self.source
+                   if self.source[key]["kind"] == "answer"]
+        total = 0
+        for key, original in self.source.items():
+            if original["kind"] != "prompt":
+                continue
+            question = self.edited[key]["text"]
+            for chosen in permutations(answers, original["pick"]):
+                rendered = question
+                for answer in chosen:
+                    rendered = rendered.replace("____", answer, 1)
+                self.assertNotIn("____", rendered)
+                self.assertNotIn(". und", rendered)
+                self.assertNotIn("..", rendered)
+                self.assertNotIn(". |", rendered)
+                self.assertNotIn("?.", rendered)
+                self.assertLessEqual(len(rendered.encode("utf-8")), 512)
+                total += 1
+        self.assertEqual(total, 2590)
 
     def test_lint_catches_regressions_without_automatic_approval(self):
         original = self.source["answer-009"]
