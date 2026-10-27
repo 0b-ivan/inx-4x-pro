@@ -147,6 +147,22 @@ int main() {
   assert(server.hostNext());
   assert(game.publicView().round==2);
 
+  // A page reload may open the new WebSocket before the old connection
+  // closes. The valid proof must atomically move seat C onto socket 5.
+  ws.event(WStype_CONNECTED,5);
+  const size_t handoverAt=ws.messages.size();
+  send(ws,5,"{\"type\":\"resume\",\"token\":\""+tokens[2]+"\"}");
+  const std::string moved=lastWelcome(ws,handoverAt,5);
+  assert(moved.size()==32 && moved!=tokens[2]);
+  assert(game.publicView().players[2].connected);
+  const size_t invalidAt=ws.messages.size();
+  send(ws,2,"{\"type\":\"submit\",\"token\":\""+moved+"\",\"revision\":0,\"slots\":[0]}");
+  assert(ws.messages.size()==invalidAt+1);
+  assert(ws.messages.back().find("\"type\":\"error\"")!=std::string::npos);
+  ws.event(WStype_DISCONNECTED,2); // delayed stale socket callback
+  assert(game.publicView().players[2].connected);
+  assert(anyStateFor(ws,5));
+
   // Disconnect preserves seat; resume rotates the ticket.
   ws.event(WStype_DISCONNECTED,1);
   assert(!game.publicView().players[1].connected);
