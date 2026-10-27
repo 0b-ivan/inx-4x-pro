@@ -1,0 +1,35 @@
+# Isolated importer QA: does not trigger PR #47 CrossPlay nor publish OTA.
+name: CardParty isolated SD pack QA
+
+on:
+  push:
+    branches:
+      - feature/cardparty-sd-pack-importer-20261027
+    paths:
+      - '.github/workflows/cardparty-sd-pack-qa.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cardparty-sd-pack-qa-isolated
+  cancel-in-progress: false
+
+jobs:
+  reader-and-compiler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Validate cards importer and all offline localization regressions
+        run: python3 -m unittest discover -s tools_local/cardparty_l10n -p 'test_*.py' -v
+      - name: Compile real CardPartyCore and SD reader with warnings as errors
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2             -Isrc/apps_local/cardparty             host-tests/cardparty/test_sd_pack.cpp -o /tmp/cardparty-sd-pack-test
+          /tmp/cardparty-sd-pack-test
