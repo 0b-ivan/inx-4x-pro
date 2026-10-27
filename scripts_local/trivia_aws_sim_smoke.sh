@@ -67,7 +67,8 @@ script+=";26200:TAP:80,750,110"   # mark A (right)
 script+=";28000:TAP:370,750,110"  # next -> B
 script+=";29800:TAP:390,750,110"  # grade correct
 script+=";32000:TAP:350,750,110"  # finished -> completion summary
-script+=";34600:QUIT"
+script+=";34600:TAP:80,750,110"  # explicitly leave completed summary
+script+=";36400:QUIT"             # checkpoint is now cleared; next pack test starts in menu
 
 shots="7500:.pio/aws-study-ui-smoke/main.bmp"
 shots+=";9600:.pio/aws-study-ui-smoke/packs.bmp"
