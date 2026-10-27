@@ -231,6 +231,40 @@ jobs:
           if-no-files-found: ignore
 
 
+  # One-time September prototype release cleanup: only the eight explicitly
+  # enumerated old alphas, and never stable, SD data or active study firmware.
+  # Runs independently so release hygiene does not wait for a full OTA compile.
+  release-legacy-cleanup:
+    name: One-time legacy alpha release cleanup
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 44 &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Test strict release retention allowlist
+        shell: bash
+        run: python3 -m unittest discover -s host-tests/release -p 'test_release_retention.py' -v
+
+      - name: Remove superseded September test alphas (keep stable and data)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts_local/release_retention.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --protect-tag v1.16.13-rc.20261027.ga3f90d4f \
+            --keep-study 3 --keep-connect-four 2 \
+            --min-age-hours 4 --prune-legacy-alpha --apply
+
   # Explicit user-requested PUBLIC feature-test Nightly. This job cannot
   # publish unless firmware, simulator and all host regressions pass for PR #44.
   # Published packs are ORIGINAL DEMO fixtures, never private Udemy questions.
