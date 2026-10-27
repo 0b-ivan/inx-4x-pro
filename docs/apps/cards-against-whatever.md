@@ -150,6 +150,24 @@ parser, anti-CSRF flow, browser client, QR/e-ink host activity, SD deck file
 reader, full simulator E2E and physical hardware smoke. These must pass before
 First Playable is declared done.
 
+## NODE-style browser client scaffold (third isolated change)
+
+- `web/CardPartyPage.html`: standalone high-contrast text-first browser
+  client, matching the [shared design system](../node-terminal-design-system.md).
+- Contains lobby, private hand, ordered Pick 1/2/3 selection with independent
+  scrolling, sticky SUBMIT, judge/confirm, reveal and scores.
+- No remote CDN/font, black/white only, touches 48px high, dynamic text assigned
+  through textContent rather than unsafe HTML injection.
+- Reconnect asks the X4 to resume using the session-scoped ticket; the expected
+  future server adapter must validate all messages and rotate the proof.
+- `host-tests/cardparty/test_browser_page.cjs`: Node-only mocked DOM/WebSocket
+  flow for join, Pick 2, submit, anonymous judge, reveal and reconnect.
+
+**Not deployed:** This page is not yet served by a real X4 web server, nor
+is its provisional JSON wire schema implemented by the C++ server. The tests
+exercise the **client in isolation**; they do not prove actual mobile-browser
+rendering, socket authentication or X4 hardware operation.
+
 ## Follow-on integration sequence
 
 1. Strict bounded protocol, multi-client authenticated session manager
