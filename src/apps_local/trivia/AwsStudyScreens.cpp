@@ -197,7 +197,7 @@ void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* st
   // gesture hint also tells first-time touchscreen users how to navigate.
   label(screen, {static_cast<int16_t>(body.x + kMargin),
                  static_cast<int16_t>(footer(screen) - 49), 224, 40},
-        model.optionCount && model.option < model.optionCount
+        model.isOption
             ? (model.german ? "LINKS/RECHTS | AWS" : "LEFT/RIGHT | AWS")
             : (model.german ? "HOCH/RUNTER | AWS" : "UP/DOWN | AWS"));
 }

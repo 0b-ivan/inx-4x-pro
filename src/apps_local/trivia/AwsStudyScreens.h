@@ -48,6 +48,7 @@ struct AwsPageModel {
   uint8_t domain = 0;
   uint8_t option = 0;
   uint8_t optionCount = 0;
+  bool isOption = false;
   uint8_t correct = 0;
   uint8_t selected = 0;
   int right = 0;

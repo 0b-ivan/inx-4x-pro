@@ -1453,6 +1453,7 @@ void TriviaActivity::render(RenderLock&&) {
       model.domain = awsQuestion_.domain();
       model.option = awsOption_;
       model.optionCount = awsQuestion_.optionCount();
+      model.isOption = view_ == View::AwsOption;
       model.correct = awsQuestion_.correctMask();
       model.selected = awsSelected_;
       model.asked = awsScore_.asked;
