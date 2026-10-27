@@ -42,7 +42,9 @@ class EditorialTests(unittest.TestCase):
                 self.assertEqual(translated["text"].count("____"), original["pick"])
                 if original["pick"] > 1:
                     self.assertEqual(translated["text"].count(" | "), original["pick"] - 1)
-                self.assertNotIn(".", translated["text"][-4:])
+                # Later explanatory clauses may legitimately end with a dot.
+                # Full answer-substitution punctuation is checked by the
+                # exhaustive combination test above.
             else:
                 self.assertNotIn("____", translated["text"])
 
