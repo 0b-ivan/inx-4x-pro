@@ -142,8 +142,14 @@ from pathlib import Path
 import hashlib, sys
 root, out = map(Path, sys.argv[1:])
 def digest(p): return hashlib.sha256(p.read_bytes()).hexdigest()
-assert digest(out / "resumed-explanation.bmp") == digest(out / "review2b.bmp"), (
-    "Deep sleep recreated Trivia but lost the exact graded explanation / text page")
+if digest(out / "resumed-explanation.bmp") != digest(out / "review2b.bmp"):
+    print("FAIL: screenshot differs after restart; inspect resume.log and checkpoint slots",
+          file=sys.stderr)
+    print((out / "resume.log").read_text(errors="replace")[-7000:], file=sys.stderr)
+    for slot in sorted(root.glob("DOP-C02.session?")):
+        raw = slot.read_bytes()
+        print(f"{slot.name}: {len(raw)} bytes, hex={raw.hex()}", file=sys.stderr)
+    raise AssertionError("Deep sleep did not restore identical graded explanation page")
 assert (root / "DOP-C02.state").read_bytes() == b"\x05", (
     "Reopening an already graded question incorrectly graded it a second time")
 slots = list(root.glob("DOP-C02.session?"))
