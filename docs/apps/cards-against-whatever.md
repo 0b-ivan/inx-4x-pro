@@ -29,10 +29,10 @@ preferences and optional local/cloud LLM judging belong to later milestones.
 
 Run: bash host-tests/cardparty/run.sh
 
-CAUTION: neither CardPartyCore nor the sample test fixture has an HTTP
-server, QR UI, e-ink Activity, on-device SD pack reader or menu entry yet.
-Those are integration tasks still to be implemented before First Playable is
-complete. The rules header must not be presented as a finished game.
+The initial rules-only implementation has since been connected to an X4
+server and a device Activity. Milestone 1 is still **unverified on real
+hardware** and must not be released to OTA. The SD .dat pack reader is a
+later milestone; the pilot uses original demo content.
 
 ## Visual design contract: N-O-D-E-inspired terminal / BBS (2026-10-27)
 
@@ -145,10 +145,11 @@ re-theme existing unrelated apps or change the EPUB reader.
 - `host-tests/cardparty/test_sessions.cpp` exercises wrong-token, replay,
   stale-close, reconnect and token rotation cases.
 
-**Not yet done:** HTTP/WebSocket adapter, actual socket ownership, strict wire
-parser, anti-CSRF flow, browser client, QR/e-ink host activity, SD deck file
-reader, full simulator E2E and physical hardware smoke. These must pass before
-First Playable is declared done.
+**Implemented since this section was written:** bounded HTTP/WebSocket
+adapter, connected-socket ownership, strict JSON command parser, NODE-style
+browser client, QR/e-ink X4 activity and shelf registration. **Not yet
+accepted:** real-device/mobile end-to-end validation, formal cross-origin
+WebSocket handshake policy, SD deck reader, release gates.
 
 ## NODE-style browser client scaffold (third isolated change)
 
@@ -163,19 +164,59 @@ First Playable is declared done.
 - `host-tests/cardparty/test_browser_page.cjs`: Node-only mocked DOM/WebSocket
   flow for join, Pick 2, submit, anonymous judge, reveal and reconnect.
 
-**Not deployed:** This page is not yet served by a real X4 web server, nor
-is its provisional JSON wire schema implemented by the C++ server. The tests
-exercise the **client in isolation**; they do not prove actual mobile-browser
-rendering, socket authentication or X4 hardware operation.
+**Updated:** The page is embedded by `scripts/build_html.py` and served by
+`CardPartyBrowserServer.cpp` on HTTP 80; cards, submissions and reconnect
+use the dedicated WebSocket on port 81. Server and client use the same strict
+bounded wire-command format. Host tests exercise the protocol and simulated
+Wi-Fi/WebSocket server, but these do **not** prove real smartphone or X4
+hardware correctness.
 
-## Follow-on integration sequence
+## Milestone 1 implementation and remaining acceptance gates
 
-1. Strict bounded protocol, multi-client authenticated session manager
-   (seat ownership, reconnect token, no premature authorship leak), timeout.
-2. X4 Activity, menu registration, host display, QR and hotspot lifecycle.
-3. Browser client, touch-friendly scrolling card selection, judge/reveal UI.
-4. Stable test-card deck and future indexed /games/cardparty/*.dat adapter.
-5. Playwright multi-browser scenarios, end-to-end simulator and hardware soak.
+### Implemented on the feature branch
+
+1. `CardPartyCore.h` + host tests: 3–8 players, Pick 1/2/3, Draw 2,
+   rotating Czar, Rando Cardrissian, scoring and private/public DTOs.
+2. `CardPartySessions.h`: per-connection 128-bit ticket, revision and resume
+   ticket rotation. Sender must be an active WebSocket owner.
+3. `web/CardPartyProtocol.h`: strict bounded JSON parser/escaped writer;
+   only join, resume, submit and judge are allowed from phones.
+4. `web/CardPartyBrowserServer.{h,cpp}`: HTTP 80 serves locally embedded
+   `/cardparty`; port 81 serves WebSockets, 8-seat authorization and
+   per-connection hands. X4 physically controls start/next/close/abort.
+5. `CardPartyActivity.{h,cpp}`: X4 800×480 e-ink host view and QR lobby,
+   WPA2 hotspot (unique generated password), existing-Wi-Fi choice,
+   progress, phase and winner; terminal-style UI, Games shelf registration.
+6. `CardPartyDemoDeck.h`: original German sample cards; no third-party
+   card-content licensing assumptions.
+7. `web/CardPartyPage.html`: NODE-style monochrome mobile UI with
+   scrolling prompt and hands, ordered selection with preserved scroll
+   position, sticky SUBMIT, anonymous judging and reconnect handling.
+8. CI host suites: game simulation, session authentication, JSON parser,
+   HTTP/WebSocket native fake-network tests (including eight players),
+   DOM mock and browser command-sequence verification.
+
+### Before marking First Playable complete
+
+- [ ] Entire latest branch CI green (firmware, simulator, host suites,
+      site documentation consistency; do not trust earlier superseded runs).
+- [ ] Real X4 local hotspot: WPA2 credentials, QR phone join, long-session
+      E-ink refresh, memory/free heap and watchdog observation.
+- [ ] Three or more real phones: separate hands, ordered Pick 3, random
+      Rando entry, hidden authors, real czar scoring and ten complete rounds.
+- [ ] Eight real/browser clients soak including disconnects, socket exhaustion,
+      reconnect-token rollover, shared-local-network risks and stall recovery.
+- [ ] Browser viewport/scroll/keyboard snapshots 320 px, 390 px and desktop;
+      long German text, RTL not required unless localization supports it.
+- [ ] Resolve any device-specific payload limits or refresh defects.
+- [ ] OTA disabled until acceptance and explicit release decision.
+
+### Follow-on deck milestone
+
+Replace static test data with versioned indexed SD `/games/cardparty/*.dat`
+packs, atomic download/install and localization-compatible metadata.
+AI preference learning, Rando ranking and remote LLM judging are distinct
+later phases, not part of this First Playable gate.
 
 ## Safety invariants
 
