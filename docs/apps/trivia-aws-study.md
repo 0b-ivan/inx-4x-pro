@@ -81,6 +81,29 @@ Du kannst weiterhin dein persönliches `DOP-C02.dat` mit 150 Fragen direkt
 auf die SD-Karte legen. **Privat erworbene Fragen werden nicht über GitHub
 hochgeladen oder veröffentlicht.**
 
+## Bedienung per Touch und Offline-Glossar
+
+- **Wischen nach oben** zeigt die nächste Textseite einer Frage, Antwort
+  oder Erklärung. **Wischen nach unten** kehrt zur vorherigen Textseite zurück.
+  Auf Antwortkarten führt der Rückweg gegebenenfalls zur vorherigen Antwort.
+  Die Bedienelemente am unteren Rand bleiben sichtbar.
+- Schriftgröße: Leseschrift 14 px, bei langen Szenarien mindestens 11 px;
+  längere Texte bleiben seitenweise abrufbar, statt weiter zu schrumpfen.
+- Bereits ausgewählte Antworten können auf **jeder Antwortseite** über
+  **JETZT PRUEFEN / GRADE NOW** bewertet werden. Ohne Markierung wird
+  nicht versehentlich abgegeben.
+- Auf der **ersten Erklärungsseite** gibt es einen direkten Einstieg zur
+  nächsten Frage, selbst wenn die Erklärung länger ist. Die Rundenübersicht
+  kann hoch-/runtergewischt werden und bietet ebenfalls **NAECHSTE / NEXT**.
+- **Lange auf den Text drücken** öffnet das Offline-Glossar mit den auf der
+  aktuellen Textseite gefundenen AWS-Diensten. Den gewünschten Begriff in
+  der Liste antippen, Erklärung lesen und zurück zur Frage gelangen.
+  Kein WLAN erforderlich. Die Glossartexte sind eigenständig formuliert und
+  gehören nicht zu den gekauften Prüfungsfragen.
+- Die Touch-Steuerung funktioniert als **seitenweises Wisch-Scrolling**,
+  nicht als animiertes Pixel-Scrolling. Das reduziert E-Ink-Aktualisierungen
+  und hält den Text stabil lesbar.
+
 ## Lernstand
 
 Es gibt **keine bereits vorhandenen Lernstände** für diese neuen Pakete.

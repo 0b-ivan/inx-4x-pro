@@ -60,7 +60,16 @@ struct AwsSummaryModel {
   uint32_t seen = 0;
   uint32_t total = 0;
   bool review = false;
+  uint8_t scroll = 0;  // one swipe up reveals more results, footer remains fixed
 };
+struct AwsGlossaryModel {
+  bool german = false;
+  uint8_t count = 0;
+  const char* terms[6] = {};
+  const char* description = nullptr;
+  const char* term = nullptr;
+};
+void buildAwsGlossary(toybox::Screen& screen, const AwsGlossaryModel& model);
 
 void buildAwsSummary(toybox::Screen& screen, const AwsSummaryModel& model);
 void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model);

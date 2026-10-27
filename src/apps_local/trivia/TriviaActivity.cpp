@@ -766,6 +766,7 @@ void TriviaActivity::awsDeal() {
   awsPageStart_ = 0;
   awsOption_ = 0;
   awsSelected_ = 0;
+  awsSummaryScroll_ = 0;
   awsAnswerCorrect_ = false;
   awsState_.setFlag(index, trivia::kSeen);
   go(View::AwsQuestion);
@@ -832,7 +833,8 @@ void TriviaActivity::awsNextPage() {
 }
 
 void TriviaActivity::awsPreviousPage() {
-  if (view_ != View::AwsOption) return;
+  if (view_ != View::AwsOption && view_ != View::AwsQuestion &&
+      view_ != View::AwsExplanation) return;
   if (awsPageStart_ > 0) {
     uint32_t previous = 0, cursor = 0;
     while (cursor < awsPageStart_) {
@@ -852,6 +854,16 @@ void TriviaActivity::awsPreviousPage() {
     awsPageStart_ = 0;
     go(View::AwsQuestion);
   }
+}
+
+void TriviaActivity::openAwsGlossary() {
+  if (view_ != View::AwsQuestion && view_ != View::AwsOption &&
+      view_ != View::AwsExplanation) return;
+  awsBuildPage();
+  awsGlossaryCount_ = trivia::awsGlossaryMatches(awsPageBuffer_, awsGlossaryMatches_);
+  if (!awsGlossaryCount_) return;
+  awsGlossaryReturn_ = view_;
+  go(View::AwsGlossary);
 }
 
 void TriviaActivity::routeAction(const int action, const int value) {
@@ -1001,6 +1013,21 @@ void TriviaActivity::routeAction(const int action, const int value) {
     case triviaui::ActionAwsPageNext:
       awsNextPage();
       break;
+    case triviaui::ActionAwsNextQuestion:
+      if ((view_ == View::AwsExplanation || view_ == View::AwsSummary) &&
+          awsHasQuestion_) awsDeal();
+      break;
+    case triviaui::ActionAwsGlossaryTerm:
+      if (view_ == View::AwsGlossary && value >= 0 &&
+          value < awsGlossaryCount_) {
+        awsGlossarySelected_ = static_cast<uint8_t>(value);
+        go(View::AwsGlossaryDetail);
+      }
+      break;
+    case triviaui::ActionAwsGlossaryBack:
+      if (view_ == View::AwsGlossaryDetail) go(View::AwsGlossary);
+      else if (view_ == View::AwsGlossary) go(awsGlossaryReturn_);
+      break;
     case triviaui::ActionAwsPageBack:
       awsPreviousPage();
       break;
@@ -1013,7 +1040,7 @@ void TriviaActivity::routeAction(const int action, const int value) {
       }
       break;
     case triviaui::ActionAwsSubmit:
-      if (view_ == View::AwsOption) awsSubmit();
+      if (view_ == View::AwsOption || view_ == View::AwsQuestion) awsSubmit();
       break;
     case triviaui::ActionQuit: {
       // Quizmaster keeps no score -- it is a person reading to a room, and
@@ -1097,6 +1124,37 @@ void TriviaActivity::loop() {
     return;
   }
 
+  // SDK recognizes swipes and long presses independently of ordinary taps.
+  // Work only in the text viewport, never on the fixed footer controls.
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe != MappedInputManager::SwipeDir::None) {
+    if (view_ == View::AwsSummary) {
+      if (swipe == MappedInputManager::SwipeDir::Up && !awsSummaryScroll_) {
+        awsSummaryScroll_ = 1;
+        requestUpdate();
+      } else if (swipe == MappedInputManager::SwipeDir::Down && awsSummaryScroll_) {
+        awsSummaryScroll_ = 0;
+        requestUpdate();
+      }
+      return;
+    }
+    if (view_ == View::AwsQuestion || view_ == View::AwsOption ||
+        view_ == View::AwsExplanation) {
+      if (swipe == MappedInputManager::SwipeDir::Up) awsNextPage();
+      else if (swipe == MappedInputManager::SwipeDir::Down) awsPreviousPage();
+      return;
+    }
+  }
+  if (view_ == View::AwsQuestion || view_ == View::AwsOption ||
+      view_ == View::AwsExplanation) {
+    int heldX = 0, heldY = 0;
+    if (mappedInput.wasScreenLongPress(heldX, heldY)) {
+      if (heldX >= 16 && heldX < 464 && heldY >= 150 && heldY < 650)
+        openAwsGlossary();
+      return;
+    }
+  }
+
   fui::InputSnapshot input;
   int tapX = 0;
   int tapY = 0;
@@ -1122,11 +1180,19 @@ void TriviaActivity::render(RenderLock&&) {
   // shape -- a headline with a sentence under it -- because at the 20px UI cut
   // a sentence runs off the panel and is truncated with an ellipsis Jersey
   // does not carry, so the line simply stops. See ToyboxTheme.h.
+  const bool studyText = view_ == View::AwsQuestion || view_ == View::AwsOption ||
+                         view_ == View::AwsExplanation;
   const bool prose = view_ == View::Quizmaster || view_ == View::Solo || view_ == View::Notice ||
-                     view_ == View::AwsQuestion || view_ == View::AwsOption ||
-                     view_ == View::AwsExplanation || view_ == View::AwsDomains;
-  auto target =
-      toybox::makeTarget(renderer, prose ? toybox::readingChromeFaces() : toybox::proseMenuFaces());
+                     studyText || view_ == View::AwsDomains ||
+                     view_ == View::AwsGlossaryDetail;
+  // Reading serif 14px for ordinary questions, 11px for long scenarios.
+  // Never shrink below 11px: additional content is paged/swiped instead.
+  const bool compact = studyText && std::strlen(awsPageSource()) > 520;
+  const toybox::Faces faces = compact
+      ? toybox::Faces{toybox::kButtonFontId, toybox::kReadingSmallFontId,
+                      toybox::kDisplayFontId}
+      : prose ? toybox::readingChromeFaces() : toybox::proseMenuFaces();
+  auto target = toybox::makeTarget(renderer, faces);
   const fui::InputSnapshot noInput{};
   toybox::Frame frame(target, target.deviceContext(), noInput, interactions_);
   toybox::Screen screen(frame);
@@ -1204,7 +1270,24 @@ void TriviaActivity::render(RenderLock&&) {
       model.total = awsPack_.count();
       model.missed = awsMissedCount();
       model.review = awsReviewMissed_;
+      model.scroll = awsSummaryScroll_;
       triviaui::buildAwsSummary(screen, model);
+      break;
+    }
+    case View::AwsGlossary:
+    case View::AwsGlossaryDetail: {
+      triviaui::AwsGlossaryModel model;
+      model.german = I18N.getLanguage() == Language::DE;
+      model.count = awsGlossaryCount_;
+      for (uint8_t i = 0; i < model.count; ++i)
+        model.terms[i] = trivia::kAwsGlossary[awsGlossaryMatches_[i]].term;
+      if (view_ == View::AwsGlossaryDetail &&
+          awsGlossarySelected_ < awsGlossaryCount_) {
+        const auto& entry = trivia::kAwsGlossary[awsGlossaryMatches_[awsGlossarySelected_]];
+        model.term = entry.term;
+        model.description = model.german ? entry.de : entry.en;
+      }
+      triviaui::buildAwsGlossary(screen, model);
       break;
     }
     case View::AwsDomains: {

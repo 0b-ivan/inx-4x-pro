@@ -54,6 +54,10 @@ enum : fui::ActionId {
   ActionStudyOnline = 24,
   ActionStudyRemoteSelect = 25,
   ActionStudyRemoteNextPage = 26,
+  ActionAwsNextQuestion = 27,
+  ActionAwsGlossaryTerm = 28,
+  ActionAwsGlossaryBack = 29,
+  ActionAwsGlossaryLookup = 30,
 };
 
 enum class MenuRow : int { Quizmaster = 0, Solo, Difficulty, Count };

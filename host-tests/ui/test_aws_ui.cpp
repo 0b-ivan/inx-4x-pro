@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <FreeInkUI.h>
+#include "../../src/apps_local/trivia/AwsGlossary.h"
 #include "../../src/apps_local/trivia/AwsStudyScreens.h"
 #include "../../src/apps_local/trivia/TriviaScreens.h"
 #include "../../src/apps_local/ui/ToyboxScreen.h"
@@ -111,6 +112,10 @@ void testAwsQuestion() {
     assert(out.draw.contains(more ? "MEHR TEXT" : "ANTWORTEN"));
     assert(out.tap(80, 750).action == triviaui::ActionAwsFinish);
     assert(out.tap(350, 750).action == triviaui::ActionAwsPageNext);
+    model.selected = 1;
+    Rendered selected;
+    render(selected, model, &triviaui::buildAwsQuestion);
+    assert(selected.tap(370, 660).action == triviaui::ActionAwsSubmit);
   }
 }
 
@@ -146,6 +151,8 @@ void testAwsOptionsAndGrading() {
     render(out, m, &triviaui::buildAwsOption);
     assert(out.draw.contains("NEXT"));
     assert(out.tap(395, 750).action == triviaui::ActionAwsPageNext);
+    // Submit stays available even on an early answer card.
+    assert(out.tap(370, 660).action == triviaui::ActionAwsSubmit);
   }
   // Verify that selecting / removing the active option is visually explained.
   m.option = 0;
@@ -173,6 +180,7 @@ void testAwsExplanation() {
                                     : (german ? "NAECHSTE" : "NEXT QUESTION")));
       assert(out.tap(90, 750).action == triviaui::ActionAwsFinish);
       assert(out.tap(350, 750).action == triviaui::ActionAwsPageNext);
+      if (more) assert(out.tap(370, 660).action == triviaui::ActionAwsNextQuestion);
     }
   }
 }
@@ -188,13 +196,48 @@ void testAwsSummary() {
     assert(out.draw.contains("70%"));
     assert(out.draw.contains(german ? "3 FEHLERFRAGEN OFFEN" : "3 MISSED QUESTIONS"));
     assert(out.tap(80, 750).action == triviaui::ActionAwsBackToMenu);
-    assert(out.tap(350, 750).action == triviaui::ActionAwsReview);
+    assert(out.tap(220, 750).action == triviaui::ActionAwsReview);
+    assert(out.tap(370, 750).action == triviaui::ActionAwsNextQuestion);
+    m.scroll = 1;
+    Rendered scrolled;
+    render(scrolled, m, &triviaui::buildAwsSummary);
+    assert(scrolled.draw.contains(german ? "10 ANTWORTEN IN DIESER RUNDE"
+                                         : "10 ANSWERS IN THIS SESSION"));
     m.missed = 0; m.review = true;
     Rendered done;
     render(done, m, &triviaui::buildAwsSummary);
     assert(done.draw.contains(german ? "FEHLERTRAINING FERTIG" : "REVIEW COMPLETED"));
-    assert(done.tap(350, 750).action == triviaui::ActionAwsBegin);
+    assert(done.tap(220, 750).action == triviaui::ActionAwsBegin);
+    assert(done.tap(370, 750).action == triviaui::ActionAwsNextQuestion);
   }
+}
+
+void testAwsGlossary() {
+  const char* text = "Amazon S3 and AWS Lambda integrate with Amazon DynamoDB.";
+  uint8_t matches[trivia::kAwsGlossaryMaxMatches] = {};
+  const uint8_t count = trivia::awsGlossaryMatches(text, matches);
+  assert(count == 3);
+  triviaui::AwsGlossaryModel model;
+  model.count = count;
+  for (uint8_t i = 0; i < count; ++i)
+    model.terms[i] = trivia::kAwsGlossary[matches[i]].term;
+  Rendered choices;
+  render(choices, model, &triviaui::buildAwsGlossary);
+  assert(choices.draw.contains("AWS GLOSSARY"));
+  assert(choices.tap(230, 190).action == triviaui::ActionAwsGlossaryTerm);
+  assert(choices.tap(80, 750).action == triviaui::ActionAwsGlossaryBack);
+  model.term = model.terms[0];
+  model.description = trivia::kAwsGlossary[matches[0]].en;
+  Rendered detail;
+  render(detail, model, &triviaui::buildAwsGlossary);
+  assert(detail.draw.contains(model.term));
+  assert(detail.draw.contains(model.description));
+  assert(detail.tap(360, 750).action == triviaui::ActionAwsGlossaryBack);
+  assert(trivia::awsContainsTerm("aws lambda, and AWS LAMBDA.", "AWS Lambda"));
+  assert(!trivia::awsContainsTerm("AWS LambdaFunction", "AWS Lambda"));
+  assert(!trivia::awsContainsTerm("unused term", "AWS Lambda"));
+  uint8_t empty[trivia::kAwsGlossaryMaxMatches] = {};
+  assert(trivia::awsGlossaryMatches("No cloud services mentioned.", empty) == 0);
 }
 
 void testStudyDeckList() {
@@ -232,6 +275,7 @@ void testStudyDeckList() {
 int main() {
   testStudyDeckList();
   testAwsSummary();
+  testAwsGlossary();
   testAwsMenu();
   testAwsDomains();
   testAwsQuestion();

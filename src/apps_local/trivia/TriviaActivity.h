@@ -13,6 +13,7 @@
 #include "TriviaCore.h"
 #include "AwsStudyPack.h"
 #include "AwsStudyScreens.h"
+#include "AwsGlossary.h"
 #include "StudyDeckCatalog.h"
 #include "TriviaPackLocale.h"
 #include "TriviaScreens.h"
@@ -32,7 +33,8 @@ class TriviaActivity final : public Activity {
  private:
   enum class View : uint8_t {
     Menu, Quizmaster, Solo, AwsMenu, AwsDomains, AwsQuestion, AwsOption,
-    AwsExplanation, AwsSummary, StudyDecks, RemoteStudyDecks, Notice
+    AwsExplanation, AwsSummary, AwsGlossary, AwsGlossaryDetail,
+    StudyDecks, RemoteStudyDecks, Notice
   };
   // Which mode the HIDDEN notice came from. deal() decides whether it needs a
   // multiple-choice question by reading view_, so the notice has to put the
@@ -48,6 +50,7 @@ class TriviaActivity final : public Activity {
   void awsSubmit();
   void awsNextPage();
   void awsPreviousPage();
+  void openAwsGlossary();
   uint32_t awsMissedCount() const;
   const char* awsPageSource() const;
   void awsBuildPage();
@@ -88,6 +91,11 @@ class TriviaActivity final : public Activity {
   trivia::Score awsScore_;
   uint32_t awsCurrent_ = 0;
   uint32_t awsPageStart_ = 0;
+  uint8_t awsSummaryScroll_ = 0;
+  View awsGlossaryReturn_ = View::AwsQuestion;
+  uint8_t awsGlossaryMatches_[trivia::kAwsGlossaryMaxMatches] = {};
+  uint8_t awsGlossaryCount_ = 0;
+  uint8_t awsGlossarySelected_ = 0;
   uint8_t awsOption_ = 0;
   uint8_t awsSelected_ = 0;
   uint8_t awsDomains_ = trivia::kAwsAllDomains;

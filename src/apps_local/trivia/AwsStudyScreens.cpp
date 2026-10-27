@@ -109,29 +109,41 @@ void buildAwsSummary(toybox::Screen& screen, const AwsSummaryModel& model) {
   std::snprintf(score, sizeof(score),
                 model.german ? "%d VON %d RICHTIG" : "%d OF %d CORRECT",
                 model.right, model.asked);
-  label(screen, {x, static_cast<int16_t>(body.y + 74), w, 60}, score);
+  // Results can be swiped without ever moving the navigation buttons.
+  const int16_t shift = model.scroll ? 174 : 0;
+  if (!model.scroll) label(screen, {x, static_cast<int16_t>(body.y + 74), w, 60}, score);
   char percent[24];
   const int accuracy = model.asked ? 100 * model.right / model.asked : 0;
   std::snprintf(percent, sizeof(percent), "%d%%", accuracy);
-  label(screen, {x, static_cast<int16_t>(body.y + 170), w, 64}, percent);
+  if (!model.scroll) label(screen, {x, static_cast<int16_t>(body.y + 170), w, 64}, percent);
   char progress[72];
   std::snprintf(progress, sizeof(progress),
                 model.german ? "%u / %u GESEHEN" : "%u / %u SEEN",
                 static_cast<unsigned>(model.seen), static_cast<unsigned>(model.total));
-  label(screen, {x, static_cast<int16_t>(body.y + 295), w, 48}, progress);
+  label(screen, {x, static_cast<int16_t>(body.y + 295 - shift), w, 48}, progress);
   char missed[72];
   std::snprintf(missed, sizeof(missed),
                 model.german ? "%u FEHLERFRAGEN OFFEN" : "%u MISSED QUESTIONS",
                 static_cast<unsigned>(model.missed));
-  label(screen, {x, static_cast<int16_t>(body.y + 365), w, 48}, missed);
+  label(screen, {x, static_cast<int16_t>(body.y + 365 - shift), w, 48}, missed);
+  if (model.scroll) {
+    label(screen, {x, static_cast<int16_t>(body.y + 328), w, 55},
+          model.german ? "RUNTERWISCHEN: ZURUECK" : "SWIPE DOWN TO GO BACK");
+    char hint[80];
+    std::snprintf(hint, sizeof(hint),
+                  model.german ? "%d ANTWORTEN IN DIESER RUNDE"
+                               : "%d ANSWERS IN THIS SESSION", model.asked);
+    label(screen, {x, static_cast<int16_t>(body.y + 405), w, 55}, hint);
+  }
   if (model.review && model.missed == 0) {
-    label(screen, {x, static_cast<int16_t>(body.y + 444), w, 44},
+    label(screen, {x, static_cast<int16_t>(body.y + (model.scroll ? 495 : 444)), w, 44},
           model.german ? "FEHLERTRAINING FERTIG" : "REVIEW COMPLETED");
   }
-  footerPair(screen, model.german ? "MENUE" : "MENU", ActionAwsBackToMenu,
-             model.missed != 0 ? (model.german ? "FEHLER UEBEN" : "REVIEW MISSED")
-                                : (model.german ? "NEU STARTEN" : "STUDY AGAIN"),
-             model.missed != 0 ? ActionAwsReview : ActionAwsBegin);
+  footerThree(screen, model.german ? "MENUE" : "MENU", ActionAwsBackToMenu,
+              model.missed != 0 ? (model.german ? "FEHLER" : "REVIEW")
+                                 : (model.german ? "NEU" : "RESTART"),
+              model.missed != 0 ? ActionAwsReview : ActionAwsBegin,
+              model.german ? "NAECHSTE" : "NEXT", ActionAwsNextQuestion);
 }
 
 void buildStudyDeckList(toybox::Screen& screen, const StudyDeckListModel& model) {
@@ -227,6 +239,12 @@ void buildAwsQuestion(toybox::Screen& screen, const AwsPageModel& model) {
   footerPair(screen, model.german ? "ENDE" : "EXIT", ActionAwsFinish,
              model.more ? (model.german ? "MEHR TEXT" : "MORE TEXT")
                         : (model.german ? "ANTWORTEN" : "ANSWERS"), ActionAwsPageNext);
+  if (model.selected) {
+    const auto body = screen.body();
+    button(screen, {static_cast<int16_t>(body.x + body.width - 206),
+                    static_cast<int16_t>(footer(screen) - 50), 190, 43},
+           model.german ? "JETZT PRUEFEN" : "GRADE NOW", ActionAwsSubmit);
+  }
 }
 
 void buildAwsOption(toybox::Screen& screen, const AwsPageModel& model) {
@@ -254,6 +272,12 @@ void buildAwsOption(toybox::Screen& screen, const AwsPageModel& model) {
                                           : (model.german ? "PRUEFEN" : "GRADE"),
               needsSelection ? ActionAwsToggleOption :
               lastPage ? ActionAwsSubmit : ActionAwsPageNext);
+  if (model.selected) {
+    const auto body = screen.body();
+    button(screen, {static_cast<int16_t>(body.x + body.width - 206),
+                    static_cast<int16_t>(footer(screen) - 50), 190, 43},
+           model.german ? "JETZT PRUEFEN" : "GRADE NOW", ActionAwsSubmit);
+  }
 }
 
 void buildAwsExplanation(toybox::Screen& screen, const AwsPageModel& model) {
@@ -275,6 +299,34 @@ void buildAwsExplanation(toybox::Screen& screen, const AwsPageModel& model) {
   footerPair(screen, model.german ? "ENDE" : "END", ActionAwsFinish,
              model.more ? (model.german ? "MEHR TEXT" : "MORE TEXT")
                         : (model.german ? "NAECHSTE" : "NEXT QUESTION"), ActionAwsPageNext);
+  if (model.more) {
+    const auto body = screen.body();
+    button(screen, {static_cast<int16_t>(body.x + body.width - 206),
+                    static_cast<int16_t>(footer(screen) - 50), 190, 43},
+           model.german ? "NAECHSTE FRAGE" : "NEXT QUESTION", ActionAwsNextQuestion);
+  }
+}
+
+void buildAwsGlossary(toybox::Screen& screen, const AwsGlossaryModel& model) {
+  chrome(screen, model.german ? "AWS GLOSSAR" : "AWS GLOSSARY");
+  const auto body = screen.body();
+  const int16_t x = static_cast<int16_t>(body.x + kMargin);
+  const int16_t w = static_cast<int16_t>(body.width - 2 * kMargin);
+  if (model.description) {
+    label(screen, {x, static_cast<int16_t>(body.y + 18), w, 52},
+          model.term ? model.term : "AWS");
+    prose(screen, {x, static_cast<int16_t>(body.y + 90), w, 415},
+          model.description);
+  } else {
+    label(screen, {x, static_cast<int16_t>(body.y + 14), w, 40},
+          model.german ? "ERKANNTE BEGRIFFE" : "RECOGNIZED TERMS");
+    for (int i = 0; i < model.count && i < 6; ++i) {
+      button(screen, {x, static_cast<int16_t>(body.y + 70 + i * 79), w, 65},
+             model.terms[i], ActionAwsGlossaryTerm, static_cast<int16_t>(i));
+    }
+  }
+  footerPair(screen, model.german ? "ZURUECK" : "BACK", ActionAwsGlossaryBack,
+             model.german ? "WEITER LERNEN" : "RESUME", ActionAwsGlossaryBack);
 }
 
 }  // namespace triviaui
