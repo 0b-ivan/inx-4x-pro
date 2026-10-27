@@ -6,6 +6,8 @@ translations are NOT human-approved. Quarantine display-impossible records.
 No deployment or firmware release is possible from this script.
 """
 import argparse,json,os,time,urllib.error
+import http.client
+import socket
 from pathlib import Path
 from build_de_pack import load_jsonl,source_hash,validate_record,TranslationError
 from translate_de_pack import translate_one
@@ -129,9 +131,13 @@ def translate(args):
                     if attempt==2: raise
                     time.sleep(9)
                 else: raise
-            except (urllib.error.URLError,TimeoutError):
-                if attempt==1: raise
-                time.sleep(9)
+            except (urllib.error.URLError,TimeoutError,ConnectionError,
+                    http.client.HTTPException,socket.timeout) as err:
+                # OpenRouter can reset a connection while streaming a JSON response.
+                # No checkpoint is committed until a complete response is validated.
+                if attempt==2:
+                    raise RuntimeError("OpenRouter transport failed after 3 attempts for shard {}: {}".format(args.shard,type(err).__name__)) from err
+                time.sleep(3*(attempt+1))
         if accepted:
             save_line(args.out,accepted)
             done[ident]=accepted
