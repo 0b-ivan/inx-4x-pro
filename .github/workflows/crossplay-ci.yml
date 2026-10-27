@@ -370,7 +370,7 @@ jobs:
             --repository "$GITHUB_REPOSITORY" \
             --protect-tag "$NIGHTLY_TAG" \
             --keep-study 3 --keep-connect-four 2 \
-            --min-age-hours 4 --apply
+            --min-age-hours 4 --prune-legacy-alpha --apply
 
   # Manual prerelease on main only, gated by the same three CI jobs.
   # Never publish prereleases from pull requests or old feature branches.

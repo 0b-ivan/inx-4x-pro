@@ -28,6 +28,12 @@ LANES = (
     ("X4 Pro Connect Four Nightly", "connect-four"),
 )
 REQUIRED_ASSETS = frozenset({"firmware.bin", "firmware.bin.sha256"})
+# One-time archive trim of superseded prototype builds from Aug/Sep. Each tag
+# is explicitly enumerated; never prune whole alpha families implicitly.
+ARCHIVED_ALPHA_TAGS = frozenset(
+    [f"v1.0.20-x4pro-alpha.{i}" for i in range(2, 8)]
+    + ["v1.15.1-alpha", "v1.15.1-alpha.1"]
+)
 
 
 def _published(release: dict[str, Any]) -> dt.datetime | None:
@@ -104,6 +110,38 @@ def cleanup_plan(
     return planned
 
 
+def legacy_alpha_plan(
+    releases: Sequence[dict[str, Any]], *, now: dt.datetime, min_age_days: int = 30
+) -> list[dict[str, Any]]:
+    """Explicitly identified obsolete prototype alphas; keep milestones."""
+    result: list[dict[str, Any]] = []
+    for r in releases:
+        tag = r.get("tag_name")
+        if tag not in ARCHIVED_ALPHA_TAGS or r.get("draft") is not False or \
+           r.get("prerelease") is not True:
+            continue
+        published = _published(r)
+        if published is None or (now - published) < dt.timedelta(days=min_age_days):
+            continue
+        if tag.startswith("v1.0.20-x4pro-alpha."):
+            # Historical prototypes were tagged at main rather than an SHA.
+            name = f"Inx X4 Pro release/{tag} (ALPHA)"
+            required = {"firmware.bin"}
+            if r.get("target_commitish") != "main":
+                continue
+        else:
+            name = tag
+            required = {"firmware.bin", f"crossplay-{tag}-x4pro-full.bin"}
+            if not re.fullmatch(r"[0-9a-f]{40}", str(r.get("target_commitish"))):
+                continue
+        assets = r.get("assets")
+        asset_names = {a.get("name") for a in assets if isinstance(a, dict)} \
+            if isinstance(assets, list) else set()
+        if r.get("name") == name and required.issubset(asset_names):
+            result.append(r)
+    return sorted(result, key=lambda r: r["tag_name"])
+
+
 def github_releases(repo: str) -> list[dict[str, Any]]:
     all_releases: list[dict[str, Any]] = []
     page = 1
@@ -132,6 +170,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--keep-study", type=int, default=3)
     parser.add_argument("--keep-connect-four", type=int, default=2)
     parser.add_argument("--min-age-hours", type=float, default=4.0)
+    parser.add_argument("--prune-legacy-alpha", action="store_true",
+                        help="also trim eight explicit obsolete Sep 2026 prototypes")
     parser.add_argument("--apply", action="store_true", help="actually delete planned releases and tags")
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", args.repository):
@@ -147,6 +187,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             keep_study=args.keep_study, keep_connect_four=args.keep_connect_four,
             min_age_hours=args.min_age_hours,
         )
+        if args.prune_legacy_alpha:
+            planned.extend(legacy_alpha_plan(releases, now=dt.datetime.now(UTC)))
         print(f"Inspected {len(releases)} releases; obsolete safe candidates: {len(planned)}")
         for release in planned:
             print("PRUNE" if args.apply else "DRY RUN", release["tag_name"], release["name"])

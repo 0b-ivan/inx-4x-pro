@@ -61,6 +61,32 @@ class ReleaseRetentionTests(unittest.TestCase):
                                    protect_tag=study[-1]["tag_name"])
         self.assertEqual({p["id"] for p in plan}, {1, 2})
 
+    def test_legacy_cleanup_only_explicit_alphas(self):
+        def legacy(tag, name, assets, target="main", age=55):
+            return {"tag_name": tag, "name": name, "draft": False,
+                    "prerelease": True, "target_commitish": target,
+                    "published_at": (NOW - dt.timedelta(days=age)).isoformat(),
+                    "assets": [{"name": n} for n in assets]}
+        old = [legacy(f"v1.0.20-x4pro-alpha.{i}",
+                      f"Inx X4 Pro release/v1.0.20-x4pro-alpha.{i} (ALPHA)",
+                      ["firmware.bin"]) for i in range(1, 9)]
+        v = "v1.15.1-alpha"
+        old.append(legacy(v, v, ["firmware.bin", f"crossplay-{v}-x4pro-full.bin"],
+                          target="a" * 40))
+        v = "v1.15.1-alpha.1"
+        old.append(legacy(v, v, ["firmware.bin", f"crossplay-{v}-x4pro-full.bin"],
+                          target="b" * 40))
+        bogus = [
+            legacy("v1.15.0", "v1.15.0", ["firmware.bin"]),
+            legacy("v1.0.20-x4pro-alpha.3", "untrusted name", ["firmware.bin"]),
+            legacy("v1.0.20-x4pro-alpha.5",
+                   "Inx X4 Pro release/v1.0.20-x4pro-alpha.5 (ALPHA)",
+                   ["firmware.bin"], age=2),
+        ]
+        planned = MODULE.legacy_alpha_plan(old + bogus, now=NOW)
+        self.assertEqual({x["tag_name"] for x in planned},
+                         MODULE.ARCHIVED_ALPHA_TAGS)
+
     def test_age_guard_and_absent_protected_tag_fail_closed(self):
         study = [release(i, hours_ago=6 - i) for i in range(1, 6)]
         selected = study[-1]["tag_name"]

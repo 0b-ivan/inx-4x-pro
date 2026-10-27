@@ -12,9 +12,17 @@ download URLs needed by the device.
 | Stable \`vX.Y.Z\` (plus full-flash, ELF and firmware) | All | **Never** |
 | \`trivia-study-packs\` public catalog and demo data | Always | **Never** |
 | \`trivia-de-pack\`, \`trivia-de-preview-*\` translations | Always | **Never** |
-| Historical alpha/milestone releases | All | **Never** |
+| Milestones `v0.1.0-alpha.0`, `v1.0.20-x4pro-alpha.1/.8` | Permanent | **Never** |
+| Eight explicitly named superseded Sep prototype alphas | Old intermediates only | **One-time cleanup**, >30 days old |
 | \`X4 Pro Nightly Study\` | Latest **3** | Yes, only after new Nightly publishes and CI succeeds |
 | \`X4 Pro Connect Four Nightly\` | Latest **2** | Yes, once older than protection window |
+
+The optional `--prune-legacy-alpha` mode additionally removes **only**
+`v1.0.20-x4pro-alpha.2` through `.7`, `v1.15.1-alpha` and
+`v1.15.1-alpha.1` once each is older than 30 days, has the exact expected
+name and firmware assets, and has not already been deleted. The initial
+bootstrap release, the first and last v1.0.20 alpha, v1.15.1-alpha.2,
+other alphas and **every stable version** are kept.
 
 Only immutable feature releases matching both their exact release title and
 \`vX.Y.Z-rc.YYYYMMDD.g<8 lowercase hex>\` tag, 40-digit source SHA prefix,
@@ -38,7 +46,8 @@ With \`gh auth login\` completed, execute:
 python3 scripts_local/release_retention.py \
   --repository 0b-ivan/inx-4x-pro \
   --protect-tag v1.16.13-rc.20261027.ga3f90d4f \
-  --keep-study 3 --keep-connect-four 2 --min-age-hours 4
+  --keep-study 3 --keep-connect-four 2 --min-age-hours 4 \
+  --prune-legacy-alpha
 \`\`\`
 
 Change \`--protect-tag\` to the **current public Study Nightly** when running
