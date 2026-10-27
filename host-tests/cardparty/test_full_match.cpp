@@ -68,7 +68,7 @@ void runMatch(uint8_t count,uint32_t seed) {
     assert(game.nextRound());
   }
   assert(game.phase()==Phase::Finished);
-  assert(game.round()==10);
+  assert(game.publicView().round==10);
   assert(!game.nextRound());
   std::printf("PASS demo 10 rounds, %d humans, seed=%u, pick2=%d, pick3=%d, draw2=%d, bot wins=%d\n",
       count, seed, pick2,pick3,draw2,botWon);
