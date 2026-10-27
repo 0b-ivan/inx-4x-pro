@@ -121,6 +121,35 @@ wordmark, artwork, exact screen layouts, or other copyrighted branding.
 - Precise anonymous response secrecy, reconnect and offline assets.
 - Simulator screenshots for 800x480 X4 and real hardware validation.
 
+## Shared design system
+
+This app is the first pilot of the proposed
+[CrossPlay Terminal design system](../node-terminal-design-system.md).
+Keep the user-visible NODE-inspired 1-bit, text-first design consistent across
+the browser client and the X4 host. Do not treat the pilot as permission to
+re-theme existing unrelated apps or change the EPUB reader.
+
+## Session-authentication foundation (second isolated change)
+
+- `CardPartySessions.h`: allocation-free 8-seat gateway, separately
+  authenticated connection IDs and 128-bit secret tickets.
+- Supports disconnect/seat retention and reconnect with **token rotation**,
+  rejects duplicate sockets and secrets, checks revision before each action.
+- Exposes only public game snapshots or **ticket-authorized** private hand DTOs.
+- Host-only start/next/close/abort methods are separate from browser command
+  authorization; none of these should be routed to an unauthenticated client.
+- Secrets must come from ESP hardware entropy (e.g. esp_fill_random); the
+  deterministic game shuffle RNG is NOT suitable for generating session tokens.
+- The gateway does not encrypt Wi-Fi/WebSocket traffic. Secure local hotspot
+  configuration remains a separate integration requirement.
+- `host-tests/cardparty/test_sessions.cpp` exercises wrong-token, replay,
+  stale-close, reconnect and token rotation cases.
+
+**Not yet done:** HTTP/WebSocket adapter, actual socket ownership, strict wire
+parser, anti-CSRF flow, browser client, QR/e-ink host activity, SD deck file
+reader, full simulator E2E and physical hardware smoke. These must pass before
+First Playable is declared done.
+
 ## Follow-on integration sequence
 
 1. Strict bounded protocol, multi-client authenticated session manager
