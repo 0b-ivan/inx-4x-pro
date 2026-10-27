@@ -7,13 +7,14 @@
 #include "CardPartyCore.h"
 #include "CardPartySessions.h"
 #include "CardPartyDemoDeck.h"
+#include "CardPartySdPack.h"
 #include "web/CardPartyBrowserServer.h"
 
 class CardPartyActivity final : public Activity {
  public:
   CardPartyActivity(GfxRenderer& renderer, MappedInputManager& input)
     : Activity("CardParty",renderer,input),
-      sessions_(game_), server_(game_,sessions_,cardparty::demoDeck()) {}
+      sessions_(game_), server_(game_,sessions_,activeDeck_) {}
   ~CardPartyActivity() override = default;
   static std::unique_ptr<Activity> create(GfxRenderer&,MappedInputManager&);
   void onEnter() override;
@@ -26,6 +27,7 @@ class CardPartyActivity final : public Activity {
  private:
   enum class Stage : uint8_t { Choice, Hosted, Failed };
   void resetGame();
+  void loadConfiguredDeck();
   void start(cardparty::web::Server::Mode mode);
   void chooseExistingWifi();
   void releaseNetwork();
@@ -42,6 +44,8 @@ class CardPartyActivity final : public Activity {
 
   cardparty::Game game_;
   cardparty::Sessions sessions_;
+  cardparty::sdpack::Pack sdPack_;
+  cardparty::Deck activeDeck_=cardparty::demoDeck();
   cardparty::web::Server server_;
   Stage stage_=Stage::Choice;
   // Station mode raised by the Wi-Fi picker for [02]; dev mode stays paused
