@@ -155,11 +155,15 @@ int main() {
   const std::string moved=lastWelcome(ws,handoverAt,5);
   assert(moved.size()==32 && moved!=tokens[2]);
   assert(game.publicView().players[2].connected);
+  assert(!ws.disconnected.empty() && ws.disconnected.back()==2);
+  assert(ws.clients==3); // prior 3 players + new socket - closed old socket
+  // A forced-close socket cannot receive responses or control the new seat,
+  // even if its former client ID sends a queued frame.
   const size_t invalidAt=ws.messages.size();
   send(ws,2,"{\"type\":\"submit\",\"token\":\""+moved+"\",\"revision\":0,\"slots\":[0]}");
-  assert(ws.messages.size()==invalidAt+1);
-  assert(ws.messages.back().find("\"type\":\"error\"")!=std::string::npos);
-  ws.event(WStype_DISCONNECTED,2); // delayed stale socket callback
+  assert(ws.messages.size()==invalidAt);
+  // A late duplicate callback cannot disconnect the replacement.
+  ws.callback(2,WStype_DISCONNECTED,nullptr,0);
   assert(game.publicView().players[2].connected);
   assert(anyStateFor(ws,5));
 
