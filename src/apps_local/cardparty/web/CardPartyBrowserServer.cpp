@@ -31,19 +31,24 @@ const char* phaseName(Phase phase) {
 Server::~Server() { stop(); }
 
 void Server::fillSecret(uint8_t secret[kTicketBytes]) {
-  // Hardware entropy, separate from the reproducible game shuffle seed.
-  esp_fill_random(secret, kTicketBytes);
+  // Hardware RNG, independent from the deterministic card-shuffle PRNG.
+  // Called after WiFi radio has been enabled so ESP32's entropy is available.
+  for (size_t i=0; i<kTicketBytes; i+=4) {
+    const uint32_t word=esp_random();
+    for (size_t j=0;j<4 && i+j<kTicketBytes;++j)
+      secret[i+j]=static_cast<uint8_t>(word >> (8*j));
+  }
 }
 
 bool Server::startHotspot() {
+  WiFi.mode(WIFI_AP);
+  delay(50);
   uint8_t entropy[kTicketBytes] = {};
   fillSecret(entropy);
   char hex[33] = {};
   encodeSecret(entropy, hex);
   std::memcpy(password_, hex, 16);
   password_[16] = 0;
-  WiFi.mode(WIFI_AP);
-  delay(50);
   if (!WiFi.softAP(kSsid, password_, 1, false, kMaxClients)) {
     WiFi.mode(WIFI_OFF);
     password_[0] = 0;
