@@ -104,7 +104,14 @@ def translate(args):
                 errors.append(str(err)[:200])
             except urllib.error.HTTPError as err:
                 if err.code in (401,402,403,404):
-                    raise RuntimeError("OpenRouter blocked HTTP "+str(err.code)+"; check model/provider availability and request parameters")
+                    # OpenRouter can return 404 for model/provider routing errors.
+                    # Record a bounded provider error without credentials or request headers.
+                    try:
+                        detail=json.loads(err.read(4096).decode("utf-8","replace"))
+                        message=str((detail.get("error") or {}).get("message",""))[:300]
+                    except (ValueError,AttributeError,TypeError):
+                        message="unavailable"
+                    raise RuntimeError("OpenRouter HTTP {} for model {}: {}".format(err.code,MODEL,message)) from err
                 if err.code==429 or err.code>=500:
                     if attempt==1: raise
                     time.sleep(9)
