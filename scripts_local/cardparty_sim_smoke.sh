@@ -35,7 +35,7 @@ for case in ('setup','lobby','collect','judge','reveal','finished'):
     data=(out/(case+'.bmp')).read_bytes()
     assert data[:2]==b'BM' and len(data)>1000, case
     w,h=struct.unpack_from('<ii',data,18)
-    assert (abs(w),abs(h)) == (480,800), (case,w,h)
+    assert (abs(w),abs(h)) == (800,480), (case,w,h)
     pixels=data[struct.unpack_from('<I',data,10)[0]:]
     assert len(set(pixels))>1, (case,'blank bitmap')
     hashes[case]=hashlib.sha256(pixels).hexdigest()
