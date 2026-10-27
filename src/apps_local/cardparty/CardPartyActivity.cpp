@@ -46,6 +46,8 @@ std::unique_ptr<Activity> CardPartyActivity::create(GfxRenderer& renderer, Mappe
   return makeUniqueNoThrow<CardPartyActivity>(renderer,input);
 }
 void CardPartyActivity::resetGame() {
+  abortArmed_=false;
+  abortArmedAt_=0;
   const auto rules=cp::Rules{5,10,true};
   if(!game_.configure(cp::demoDeck(),rules,toybox::seed())) {
     stage_=Stage::Failed;
@@ -105,11 +107,30 @@ void CardPartyActivity::handleTap(int x,int y) {
   }
   if(stage_!=Stage::Hosted||x<0||x>width||y<height-90)return;
   const cp::Phase phase=game_.phase();
+  if(phase==cp::Phase::Finished) {
+    server_.stop();
+    resetGame();
+    requestUpdate();
+    return;
+  }
   bool accepted=false;
-  if(phase==cp::Phase::Lobby) accepted=server_.hostStart();
-  else if(phase==cp::Phase::Playing) accepted=server_.hostClose();
-  else if(phase==cp::Phase::Judging) accepted=server_.hostAbort();
-  else if(phase==cp::Phase::Reveal) accepted=server_.hostNext();
+  if(phase==cp::Phase::Judging) {
+    const uint32_t now=millis();
+    if(!abortArmed_ || static_cast<uint32_t>(now-abortArmedAt_)>7000u) {
+      abortArmed_=true;
+      abortArmedAt_=now;
+      std::snprintf(report_,sizeof(report_),"TAP AGAIN TO ABORT ROUND");
+      requestUpdate();
+      return;
+    }
+    abortArmed_=false;
+    accepted=server_.hostAbort();
+  } else {
+    abortArmed_=false;
+    if(phase==cp::Phase::Lobby) accepted=server_.hostStart();
+    else if(phase==cp::Phase::Playing) accepted=server_.hostClose();
+    else if(phase==cp::Phase::Reveal) accepted=server_.hostNext();
+  }
   if(!accepted) {
     std::snprintf(report_,sizeof(report_),
                   phase==cp::Phase::Lobby ? "NEED 3 CONNECTED PLAYERS" :
@@ -248,7 +269,7 @@ void CardPartyActivity::drawGame() {
   if(v.phase==cp::Phase::Playing)action="[ CLOSE SUBMISSIONS ]";
   if(v.phase==cp::Phase::Judging)action="[ ABORT STALLED ROUND ]";
   if(v.phase==cp::Phase::Reveal)action="[ NEXT ROUND ]";
-  if(v.phase==cp::Phase::Finished)action="[ GAME OVER / BACK ]";
+  if(v.phase==cp::Phase::Finished)action="[ NEW SESSION ]";
   renderer.drawText(UI_10_FONT_ID,kGutter,bottom+8,action,true);
   if(report_[0])renderer.drawText(SMALL_FONT_ID,kGutter,bottom+42,report_,true);
 }
