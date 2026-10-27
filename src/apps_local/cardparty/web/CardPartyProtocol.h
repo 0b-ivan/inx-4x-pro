@@ -35,9 +35,15 @@ class Reader final {
   Reader(const uint8_t* data, size_t length)
     : data_(data), length_(length) {}
   bool token(const char* literal) {
+    const size_t before = position_;
     ws();
     while (*literal) {
-      if (position_ >= length_ || data_[position_++] != static_cast<uint8_t>(*literal++)) return false;
+      if (position_ >= length_ || data_[position_] != static_cast<uint8_t>(*literal)) {
+        position_ = before; // optional delimiters must not consume ']'
+        return false;
+      }
+      ++position_;
+      ++literal;
     }
     return true;
   }
@@ -67,7 +73,7 @@ class Reader final {
         data_[position_ + 1] >= '0' && data_[position_ + 1] <= '9') return false;
     while (position_ < length_ && data_[position_] >= '0' && data_[position_] <= '9') {
       const uint32_t digit = data_[position_++] - '0';
-      if (result > (max - digit) / 10u || digit > max) return false;
+      if (digit > max || result > (max - digit) / 10u) return false;
       result = result * 10u + digit;
     }
     out = result;
