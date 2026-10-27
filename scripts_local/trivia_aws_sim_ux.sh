@@ -125,6 +125,32 @@ assert state == bytes([0x01 | 0x04]), f"expected SEEN|MISSED after one wrong GRA
 print("PASS X4 Pro AWS study UX SDL: paging, hold glossary, resume, unmark, no swipe grading")
 PY
 
+# Simulate real deep-sleep wake: kill the process, create a new Trivia Activity,
+# keep the SD card, and verify that the SAME scored explanation page returns.
+# No tap should be needed: the shelf already reopens Trivia on power-button wake.
+if ! env CROSSPLAY_AUTOSTART=TRIVIA CROSSPOINT_SIM_SD="$tmp/sd" \
+  CROSSPOINT_SIM_INPUT_SCRIPT="14900:QUIT" \
+  CROSSPOINT_SIM_SCREENSHOTS="11600:$out/resumed-explanation.bmp" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 30s "$bin" >"$out/resume.log" 2>&1; then
+  echo "FAIL: AWS session deep sleep simulated restore"
+  tail -60 "$out/resume.log"
+  exit 1
+fi
+python3 - "$tmp/sd/trivia/aws" "$out" <<'PY'
+from pathlib import Path
+import hashlib, sys
+root, out = map(Path, sys.argv[1:])
+def digest(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+assert digest(out / "resumed-explanation.bmp") == digest(out / "review2b.bmp"), (
+    "Deep sleep recreated Trivia but lost the exact graded explanation / text page")
+assert (root / "DOP-C02.state").read_bytes() == b"\x05", (
+    "Reopening an already graded question incorrectly graded it a second time")
+slots = list(root.glob("DOP-C02.session?"))
+assert slots, "no session checkpoint was persisted before standby"
+print("PASS AWS study deep-sleep resume: scored explanation, reading page and progress")
+PY
+
 # Multiple response, on a fresh card: both keys must be marked, a mark can be
 # taken back and set again, the selection survives BACK, and GRADE NOW on the
 # question page grades the whole selection without visiting the last option.
@@ -197,6 +223,12 @@ root = Path(sys.argv[1])
 assert (root / "DOP-C02.state").read_bytes() == b"\x01"
 (root / "DOP-C02.prefs").write_bytes(b"\x03")
 (root / "SAA-C03.state").write_bytes(b"\x05")
+# This scenario specifically starts from the pack menu to test the reset UI.
+# The preceding multi-answer round is deliberately not resumed here; the
+# separate restart check above tests that resume behavior.
+for session in root.glob("DOP-C02.session?"):
+    session.unlink()
+
 PY
 t=8200; s="$t:TAP:240,520,110"; shots=""
 add "TAP:240,145,110"                 # packs -> DOP-C02
@@ -225,5 +257,7 @@ assert (root / "DOP-C02.state").read_bytes() == b"\x00", "selected deck progress
 assert (root / "DOP-C02.prefs").read_bytes() == b"\x03", "reset altered domain filters"
 assert (root / "SAA-C03.state").read_bytes() == b"\x05", "reset modified another deck"
 assert (root / "DOP-C02.dat").stat().st_size > 0, "reset deleted question pack"
+assert not list(root.glob("DOP-C02.session?")), "reset left resumable checkpoint behind"
+
 print("PASS X4 Pro AWS study UX SDL: confirmation, per-pack progress reset, preserved filters")
 PY
