@@ -164,3 +164,40 @@ bash scripts_local/trivia_aws_sim_ux.sh   # Blättern, Glossar, Wischen ohne Abg
 CI prüft die Paketauswahl, gültige/ungültige Dateinamen, isolierte Zustandsdateien,
 das Binärformat sowie Touch-Ablauf und Fehlertraining mit **synthetischen**
 Fragen. Der echte X4 Pro muss vor einem OTA-Release separat getestet werden.
+
+
+## Physische X4-Pro-Abnahme vor Merge (offen)
+
+**Status: nicht auf echter Hardware abgenommen.** Grüne Host-/SDL-/Firmware-CI
+belegt keine elektrisch korrekte Deep-Sleep-Wiederaufnahme und keine E-Ink-Qualität.
+PR #44 bleibt deshalb Draft; vor einem Merge müssen die folgenden Fälle mit
+konkreter Firmware-Version, Commit, SD-Karte und Testergebnis protokolliert werden.
+
+| Hardwarefall | Erwartetes Verhalten / Abnahmekriterium |
+| --- | --- |
+| OTA-Installation | Veröffentlichter Nightly-Tag zeigt exakt auf den geprüften PR-Commit; ESP32-S3/X4-Pro-Board-Marker, eingebettete Version, \`firmware.bin\` und SHA-256 stimmen überein |
+| Neustart vs. Deep Sleep | Normaler Kaltstart ohne Checkpoint öffnet Trivia regulär; Aufwecken nach Power-Taste und Idle-Standby öffnet die letzte aktive AWS-Frage wieder |
+| Bereits bewertete Frage | Nach Aufwecken dieselbe Erklärungsseite und Scrollposition, identischer Session-Score; kein zweites Bewerten |
+| Unbewertete Einfachauswahl | Frage/Antwortkarte/Markierung bleiben über Power-Taste und Idle erhalten, ohne den Score zu erhöhen |
+| Unbewertete Mehrfachauswahl | Mindestens zwei gesetzte Antwort-Bits bleiben auf derselben Antwortkarte; Abwahl nach dem Aufwachen funktioniert |
+| Textnavigation und Glossar | Frage, Erklärung und lange Antworten behalten ihre Seitenposition; Glossar-Schließen ändert weder Position noch Auswahl |
+| E-Ink und Touch | 11-/14-px-Text real lesbar, gepunktete Begriffe erkennbar, kein unzumutbares Ghosting nach Full-Refresh; Swipes bewerten nie |
+| SD-Karte / Strom | Verhalten bei entnommener oder nicht schreibbarer SD-Karte klar erkennbar; kein fälschlich bestätigter Persistenz-Erfolg; nach erneutem Einlegen keine Beschädigung bestehender Dateien |
+| Checkpointfehler | Ein defekter Slot führt zum gültigen zweiten Slot; zwei defekte Slots starten ohne alte Sitzungsantworten, vorhandener Lernfortschritt bleibt erhalten |
+| Fragenpaket-Austausch | Bei gleichem Dateinamen, aber geändertem Inhalt werden weder alte Antworten noch alte Lernstände auf die neuen Fragen übertragen |
+| Zwei Zertifikate | Auswahl, Domains, Lernfortschritte und aktive Sitzungen bleiben zwischen DOP-C02 und SAA-C03 getrennt |
+| Lernstand-Reset | Explizite Bestätigung erforderlich; nur ausgewähltes Paket verliert \`.state\` und beide \`.session*\`; \`.dat\`, \`.topics\`, \`.prefs\` und anderes Zertifikat bleiben erhalten |
+| Beenden | Verlassen über die Rundenübersicht entfernt nur den Sitzungscheckpoint; ein normales Deep-Sleep-Wakeup darf nicht als bewusstes Beenden gelten |
+
+Die **automatisierte** Simulatorprüfung in
+\`scripts_local/trivia_aws_sim_ux.sh\` verwendet ausschließlich selbst erstellte
+synthetische Packs. Sie deckt neben UI-Interaktion die Wiederaufnahme einer
+bewerteten Erklärung, unbewertete Mehrfachauswahl, defekte/abgeschnittene
+Checkpoint-Slots, Fragenbank-Austausch sowie Reset-Isolation ab. Der SDL-Prozess
+simuliert den Controller-Neustart, **nicht** die physische Versorgung, FAT-/SD-
+Stromausfälle, den Standby-Taster oder E-Ink-Wellenformen.
+
+**Abnahmeprotokoll:** Gerät und Hardware-Revision, OTA-Tag, Commit-SHA,
+SD-Medium/Filesystem, Standby-Auslöser (Taste oder Idle), Testfall,
+Ist-Ergebnis, Logs/Fotos und Datum erfassen. Keine privaten Frageninhalte,
+SD-Images oder gekauften Prüfungsfragen in Issues/CI hochladen.
