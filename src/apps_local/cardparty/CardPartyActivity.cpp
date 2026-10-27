@@ -6,6 +6,9 @@
 #include <cstdio>
 #include <cstring>
 #include <utility>
+#ifdef SIMULATOR
+#include <cstdlib>
+#endif
 #include "../../components/UITheme.h"
 #include "../../fontIds.h"
 #include "../../util/QrUtils.h"
@@ -65,6 +68,13 @@ void CardPartyActivity::onEnter() {
   renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
   ownsOrientation_=true;
   resetGame();
+#ifdef SIMULATOR
+  // SDL fixture mode exercises the actual CardPartyActivity renderer.
+  // Real production networking is never enabled in the simulator.
+  const char* scenario=std::getenv("CROSSPLAY_SIM_CARDPARTY_STATE");
+  if (scenario && *scenario && std::strcmp(scenario,"setup")!=0)
+    start(cp::web::Server::Mode::Hotspot);
+#endif
   requestUpdate();
 }
 void CardPartyActivity::onExit() {
