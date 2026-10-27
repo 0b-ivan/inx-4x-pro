@@ -87,8 +87,7 @@ bool Server::begin(Mode mode) {
   if (!devModePaused_) { devmode::pause(); devModePaused_ = true; }
   const bool networkOk = mode == Mode::Hotspot ? startHotspot() : startWifi();
   if (!networkOk) {
-    devmode::resume();
-    devModePaused_ = false;
+    releaseDevMode();
     return false;
   }
   configureRoutes();
@@ -105,6 +104,12 @@ bool Server::begin(Mode mode) {
   running_ = true;
   LOG_INF("CARDPARTY", "Game server ready at %s", url_.c_str());
   return true;
+}
+
+void Server::releaseDevMode() {
+  if (!devModePaused_) return;
+  devmode::resume();
+  devModePaused_ = false;
 }
 
 void Server::stop() {
@@ -129,10 +134,7 @@ void Server::stop() {
   }
   sessions_.reset();
   for (bool& connected : liveSocket_) connected = false;
-  if (devModePaused_) {
-    devmode::resume();
-    devModePaused_ = false;
-  }
+  releaseDevMode();
 }
 
 void Server::loop() {
