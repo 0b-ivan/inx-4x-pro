@@ -243,6 +243,17 @@ void testState() {
   CHECK(state.seen(3) && state.flagged(3));
   CHECK(state.flags(4) == 0);  // neighbours untouched
 
+  // Clearing review-only flags must not damage prior seen/flagged counts.
+  CHECK(state.setFlag(3, 0x04));
+  CHECK(state.clearFlag(3, 0x04));
+  CHECK(state.seen(3) && state.flagged(3));
+  CHECK(state.seenCount() == 1 && state.flaggedCount() == 1);
+  CHECK(!state.clearFlag(99, 0x04));
+  CHECK(!state.clearFlag(3, 0));
+  const int writesBeforeRepeatClear = src.writes;
+  CHECK(state.clearFlag(3, 0x04));
+  CHECK(src.writes == writesBeforeRepeatClear);
+
   const int before = src.writes;
   CHECK(state.setFlag(3, kSeen));  // already set
   CHECK(src.writes == before);     // and therefore writes nothing

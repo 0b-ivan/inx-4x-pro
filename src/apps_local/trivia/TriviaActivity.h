@@ -11,6 +11,11 @@
 #include "../../activities/Activity.h"
 #include "../ui/ToyboxScreen.h"
 #include "TriviaCore.h"
+#include "AwsStudyPack.h"
+#include "AwsStudyScreens.h"
+#include "AwsGlossary.h"
+#include "AwsSession.h"
+#include "StudyDeckCatalog.h"
 #include "TriviaPackLocale.h"
 #include "TriviaScreens.h"
 
@@ -27,15 +32,44 @@ class TriviaActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  enum class View : uint8_t { Menu, Quizmaster, Solo, Notice };
+  enum class View : uint8_t {
+    Menu, Quizmaster, Solo, AwsMenu, AwsDomains, AwsQuestion, AwsOption,
+    AwsExplanation, AwsSummary, AwsGlossary, AwsGlossaryDetail,
+    StudyDecks, RemoteStudyDecks, AwsResetConfirm, Notice
+  };
   // Which mode the HIDDEN notice came from. deal() decides whether it needs a
   // multiple-choice question by reading view_, so the notice has to put the
   // mode back before dealing or Quizmaster would start demanding distractors.
   View flagReturn_ = View::Menu;
 
   bool openPack();
+  bool openAwsPack();
+  void scanStudyDecks();
+  void loadStudyTopics();
+  bool studyPath(const char* ext, char* out, uint32_t capacity) const;
+  void awsDeal();
+  void awsSubmit();
+  // fromSwipe: a swipe only turns text pages and walks question -> options;
+  // it never grades the last option or leaves an explanation.
+  void awsNextPage(bool fromSwipe = false);
+  void awsPreviousPage(bool fromSwipe = false);
+  bool awsResetProgress();
+  bool saveAwsSession();
+  bool restoreAwsSession();
+  void clearAwsSession();
+  void awsResetPages();
+  void openAwsGlossary(int x, int y);
+  uint32_t awsMissedCount() const;
+  const char* awsPageSource() const;
+  // Lays out the visible page with the real fonts; called from render().
+  void awsBuildPage(freeink::ui::DrawTarget& target, const freeink::ui::Rect& viewport);
+  void saveAwsDomains() const;
   void onWifiChosen(bool connected);
   void runPackDownload();
+  void onStudyWifiChosen(bool connected);
+  void runStudyCatalogFetch();
+  void runStudyPackFetch();
+  void startStudyFetch();
   void showNotice(const char* headline, const char* body, const char* actionLabel = nullptr,
                   freeink::ui::ActionId action = 0);
   bool ensureState(uint32_t count, const char* statePath);
@@ -46,6 +80,56 @@ class TriviaActivity final : public Activity {
   View view_ = View::Menu;
   int selected_ = -1;
   int difficulty_ = 0;  // 0 = any
+
+  // An independent licensed/private study deck. Never mixes its state with
+  // the public trivia pack or the separate German translation state.
+  trivia::StudyDeckCatalog deckCatalog_;
+  trivia::StudyDeckCatalog remoteCatalog_;
+  enum class StudyFetch : uint8_t { None, Catalog, Pack };
+  StudyFetch studyFetch_ = StudyFetch::None;
+  uint8_t remoteSelected_ = 0;
+  uint8_t remotePage_ = 0;
+  bool studyDownloadQueued_ = false;
+  uint8_t selectedDeck_ = 0;
+  uint8_t deckPage_ = 0;
+  char studyTopics_[trivia::kAwsDomains][40] = {};
+  trivia::AwsPack awsPack_;
+  trivia::PackState awsState_;
+  trivia::AwsQuestion awsQuestion_;
+  trivia::AwsChooser awsChooser_;
+  trivia::Score awsScore_;
+  uint32_t awsCurrent_ = 0;
+  uint32_t awsSessionGeneration_ = 0;
+  bool awsSessionActive_ = false;
+  // Start offset of every page already shown for the current text, so BACK
+  // and a downward swipe return to exactly the page the reader saw.
+  static constexpr uint8_t kAwsMaxPages = 64;
+  uint16_t awsPageStarts_[kAwsMaxPages] = {};
+  uint8_t awsPageIndex_ = 0;
+  uint8_t awsPageCount_ = 0;
+  uint32_t awsPageLength_ = 0;
+  // True once render() has laid out the current page; page turns and the
+  // glossary hold act only on a layout the reader has actually seen.
+  bool awsLayoutReady_ = false;
+  freeink::ui::Rect awsTextRect_{};
+  uint8_t awsSummaryScroll_ = 0;
+  View awsGlossaryReturn_ = View::AwsQuestion;
+  uint8_t awsGlossaryMatches_[trivia::kAwsGlossaryMaxMatches] = {};
+  uint8_t awsGlossaryCount_ = 0;
+  uint8_t awsGlossarySelected_ = 0;
+  bool awsGlossaryOpen_ = false;
+  triviaui::AwsTermHit awsTermHits_[triviaui::kAwsInlineTermHits] = {};
+  uint8_t awsTermHitCount_ = 0;
+  uint8_t awsOption_ = 0;
+  uint8_t awsSelected_ = 0;
+  uint8_t awsDomains_ = trivia::kAwsAllDomains;
+  bool awsInstalled_ = false;
+  bool awsHasQuestion_ = false;
+  bool awsReviewMissed_ = false;
+  bool awsHaveLast_ = false;
+  bool awsAnswerCorrect_ = false;
+  bool awsMore_ = false;
+  char awsPageBuffer_[1400] = {};
 
   trivia::Pack pack_;
   trivia::PackState state_;

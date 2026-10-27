@@ -36,6 +36,32 @@ enum : fui::ActionId {
   ActionQuit = 6,
   ActionDifficulty = 7,
   ActionGetPack = 8,  // fetch the question pack over WiFi
+  ActionAwsBegin = 9,
+  ActionAwsDomains = 10,
+  ActionAwsReview = 11,
+  ActionAwsToggleDomain = 12,
+  ActionAwsAllDomains = 13,
+  ActionAwsHome = 14,
+  ActionAwsBackToMenu = 15,
+  ActionAwsPageNext = 16,
+  ActionAwsPageBack = 17,
+  ActionAwsToggleOption = 18,
+  ActionAwsSubmit = 19,
+  ActionAwsFinish = 20,
+  ActionStudyDecks = 21,
+  ActionStudySelect = 22,
+  ActionStudyNextPage = 23,
+  ActionStudyOnline = 24,
+  ActionStudyRemoteSelect = 25,
+  ActionStudyRemoteNextPage = 26,
+  ActionAwsNextQuestion = 27,
+  ActionAwsGlossaryTerm = 28,
+  ActionAwsGlossaryBack = 29,
+  ActionAwsGlossaryResume = 30,  // straight back to the study page, from list or detail
+  ActionAwsResetPrompt = 31,
+  ActionAwsResetConfirm = 32,
+  ActionAwsResetCancel = 33,
+  ActionAwsScrollTo = 34,
 };
 
 enum class MenuRow : int { Quizmaster = 0, Solo, Difficulty, Count };

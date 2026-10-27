@@ -64,4 +64,13 @@ mkdir -p "$BUILD_DIR"
   ../../src/apps_local/sudoku/SudokuScreens.cpp \
   ../../src/apps_local/xkcd/XkcdScreens.cpp \
   test_ui.cpp -o "$BUILD_DIR/test_ui"
+# AWS e-ink study screen: independently verify visible labels and touch
+# action/value mapping using FreeInkUI at the X4 Pro 480x800 resolution.
+# No purchased questions, network access or simulator assets needed.
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -Wno-comment \
+  -I"$SDK/include" -I"$ICONS/include" \
+  "$SDK/src/FreeInkUI.cpp" \
+  ../../src/apps_local/trivia/AwsStudyScreens.cpp \
+  test_aws_ui.cpp -o "$BUILD_DIR/test_aws_ui"
+"$BUILD_DIR/test_aws_ui"
 "$BUILD_DIR/test_ui"
