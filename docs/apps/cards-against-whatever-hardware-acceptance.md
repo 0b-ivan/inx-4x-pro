@@ -128,6 +128,14 @@ lobby. 3+ phones on the same network. Pass: join and one round; after
 leaving the app the X4's Wi-Fi is off again. Note: unencrypted `ws://` on a shared LAN
 is not accepted as secure; only use a trusted network.
 
+**T13 — SD pack and categories.** Copy a released format-2 pack to
+`/games/cardparty/active.dat`. Pass: setup shows the deck's title and
+license and `[03] CATEGORIES`; FSK 18 is off on first entry; switching a
+category changes the prompt/answer count; the choice survives leaving the app
+and a reboot; with too few categories on, setup refuses to start and says
+why; a round never shows a card from a switched-off category. Serial log
+shows `Loaded released SD deck v2 (…)`; note `heap` right after loading.
+
 **T12 — Soak.** Leave 8 phones connected in the lobby or a running round for
 60 min (screens may sleep). Pass: no reboot, `min` stable (no monotonic
 decline across the hour), phones resume on wake.

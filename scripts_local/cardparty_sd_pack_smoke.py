@@ -28,15 +28,23 @@ def main():
     cards[0]["text"]="ä"*189+" ENDE"
     long_word,_=validate(manifest,cards)
     draft,_=validate(manifest,cards,draft=True)
+    # Category screen: some answers Böse, some FSK 18 (off until switched on).
+    tagged_cards=[dict(card) for card in cards]
+    for i,card in enumerate(c for c in tagged_cards if c["kind"]=="answer"):
+        card["categories"]=["boese"] if i%3==1 else ["fsk-18"] if i%3==2 else []
+    tagged_cards[0]["text"]="SD Prüfung: Grüße aus Köln, Öl und süße Bürokratie?"
+    tagged,_=validate(manifest,tagged_cards)
     corrupt=bytearray(released);corrupt[-2]^=1
     cases={"missing":None,"released":released,"released-long-word":long_word,"draft":draft,
            "crc":bytes(corrupt),"truncated":released[:-1],"oversize":b"x"*(MAX_BYTES+1)}
     if args.all_states:
         cases.update({"released-"+phase:released for phase in ("setup","lobby","judge","reveal","finished")})
+        cases["released-categories"]=tagged
     hashes={}
     for case,data in cases.items():
         scenario=case.removeprefix("released-") if case in (
-            "released-setup","released-lobby","released-judge","released-reveal","released-finished") else "collect"
+            "released-setup","released-lobby","released-judge","released-reveal","released-finished",
+            "released-categories") else "collect"
         sd=out/(case+"-sd");target=sd/"games/cardparty/active.dat"
         target.parent.mkdir(parents=True,exist_ok=True)
         if data is None:
@@ -56,11 +64,11 @@ def main():
         text=(out/(case+".log")).read_text(errors="replace")
         assert result.returncode==0,(case,result.returncode,text[-3000:])
         assert "Autostart into CARDS WHATEVER" in text,(case,text[-3000:])
-        if scenario!="setup":
+        if scenario not in ("setup","categories"):
             assert "CARDPARTY_SIM_STATE="+scenario+" " in text,(case,text[-3000:])
         assert "No glyph for codepoint" not in text,(case,"unsupported glyph")
         if case.startswith("released"):
-            assert "Loaded released SD deck v2 (1 prompts, 100 answers)" in text,text[-3000:]
+            assert "Loaded released SD deck v2 (1 prompts, 100 answers, 3 categories)" in text,text[-3000:]
         else:
             assert "Loaded released SD deck" not in text,case
             if case!="missing":

@@ -28,6 +28,12 @@ namespace cp = cardparty;
 // Immutable, released SD pack. Missing/invalid/unapproved packs fall back to
 // the self-contained demo; never accept a .tmp file or draft pack as active.
 constexpr const char* kCardPartyActivePack = "/games/cardparty/active.dat";
+// The host's category switches, keyed to the active pack's CRC.
+constexpr const char* kCardPartySelection = "/games/cardparty/categories.bin";
+constexpr uint8_t kHand = 5;
+// Category list on the X4: one row per category, below the hint line.
+constexpr int kCategoryTop = 112;
+constexpr int kCategoryRow = 36;
 class CardPartySdSource final : public cp::sdpack::ByteSource {
  public:
   explicit CardPartySdSource(HalFile& file) : file_(file), length_(static_cast<uint32_t>(file.size())) {}
@@ -88,6 +94,8 @@ std::unique_ptr<Activity> CardPartyActivity::create(GfxRenderer& renderer, Mappe
 }
 void CardPartyActivity::loadConfiguredDeck() {
   activeDeck_ = cp::demoDeck();
+  packLoaded_ = false;
+  deckPlayable_ = true;
   HalFile file;
   if (!Storage.openFileForRead("CARDPARTY", kCardPartyActivePack, file)) {
     return;  // No optional pack is normal.
@@ -101,23 +109,75 @@ void CardPartyActivity::loadConfiguredDeck() {
   const bool accepted = sdPack_.load(source);  // draft packs are rejected
   file.close();
   if (accepted) {
+    packLoaded_ = true;
     activeDeck_ = sdPack_.deck();
-    LOG_INF("CARDPARTY", "Loaded released SD deck v%u (%u prompts, %u answers)",
+    LOG_INF("CARDPARTY", "Loaded released SD deck v%u (%u prompts, %u answers, %u categories)",
             static_cast<unsigned>(sdPack_.version()), static_cast<unsigned>(activeDeck_.promptsCount),
-            static_cast<unsigned>(activeDeck_.answersCount));
+            static_cast<unsigned>(activeDeck_.answersCount), static_cast<unsigned>(sdPack_.categoryCount()));
+    loadSelection();
+    applyCategories();
   } else {
     LOG_ERR("CARDPARTY", "Rejected invalid/unapproved SD pack, using original demo");
   }
+}
+void CardPartyActivity::loadSelection() {
+  enabled_ = cp::categories::defaults(sdPack_);
+  HalFile file;
+  if (Storage.openFileForRead("CARDPARTY", kCardPartySelection, file)) {
+    uint8_t saved[cp::categories::kSelectionBytes] = {};
+    uint16_t mask = 0;
+    if (file.read(saved, sizeof(saved)) == static_cast<int>(sizeof(saved)) &&
+        cp::categories::decode(saved, sdPack_.crc(), sdPack_.categoryCount(), mask))
+      enabled_ = mask;
+    file.close();
+  }
+  savedEnabled_ = enabled_;
+}
+void CardPartyActivity::saveSelection() {
+  if (enabled_ == savedEnabled_) return;
+  uint8_t out[cp::categories::kSelectionBytes] = {};
+  cp::categories::encode(sdPack_.crc(), enabled_, out);
+  HalFile file;
+  if (Storage.openFileForWrite("CARDPARTY", kCardPartySelection, file) &&
+      file.write(out, sizeof(out)) == sizeof(out)) {
+    savedEnabled_ = enabled_;
+  } else {
+    LOG_ERR("CARDPARTY", "Could not save category selection");
+  }
+}
+void CardPartyActivity::applyCategories() {
+  if (!packLoaded_) {
+    deckPlayable_ = true;
+    return;
+  }
+  if (sdPack_.categoryCount() == 0) {
+    activeDeck_ = sdPack_.deck();
+  } else if (filtered_.build(sdPack_, enabled_)) {
+    activeDeck_ = filtered_.deck();
+  } else {
+    LOG_ERR("CARDPARTY", "OOM: category filter, using original demo");
+    activeDeck_ = cp::demoDeck();
+  }
+  deckPlayable_ = cp::categories::playable(activeDeck_, kHand);
+}
+void CardPartyActivity::leaveCategories() {
+  saveSelection();
+  resetGame();
+  requestUpdate();
 }
 void CardPartyActivity::resetGame() {
   abortArmed_ = false;
   abortArmedAt_ = 0;
   backArmed_ = false;
   backArmedAt_ = 0;
-  const auto rules = cp::Rules{5, 10, true};
-  if (!game_.configure(activeDeck_, rules, toybox::seed())) {
+  const auto rules = cp::Rules{kHand, 10, true};
+  if (!deckPlayable_) {
+    // Switched off too much: stay in setup and say why instead of failing.
+    stage_ = Stage::Choice;
+    std::snprintf(report_, sizeof(report_), "TOO FEW CARDS: SWITCH ON MORE CATEGORIES");
+  } else if (!game_.configure(activeDeck_, rules, toybox::seed())) {
     stage_ = Stage::Failed;
-    std::snprintf(report_, sizeof(report_), "DEMO DECK INVALID");
+    std::snprintf(report_, sizeof(report_), "DECK INVALID");
   } else {
     stage_ = Stage::Choice;
     report_[0] = 0;
@@ -134,7 +194,10 @@ void CardPartyActivity::onEnter() {
   // SDL fixture mode exercises the actual CardPartyActivity renderer.
   // Real production networking is never enabled in the simulator.
   const char* scenario = std::getenv("CROSSPLAY_SIM_CARDPARTY_STATE");
-  if (scenario && *scenario && std::strcmp(scenario, "setup") != 0) start(cp::web::Server::Mode::Hotspot);
+  if (scenario && std::strcmp(scenario, "categories") == 0)
+    stage_ = Stage::Categories;
+  else if (scenario && *scenario && std::strcmp(scenario, "setup") != 0)
+    start(cp::web::Server::Mode::Hotspot);
 #endif
   requestUpdate();
 }
@@ -161,6 +224,10 @@ void CardPartyActivity::leave() {
   finish();
 }
 void CardPartyActivity::start(cp::web::Server::Mode mode) {
+  if (!deckPlayable_) {
+    requestUpdate();
+    return;
+  }
   if (!server_.begin(mode)) {
     stage_ = Stage::Failed;
     std::snprintf(report_, sizeof(report_),
@@ -172,6 +239,10 @@ void CardPartyActivity::start(cp::web::Server::Mode mode) {
   requestUpdate();
 }
 void CardPartyActivity::chooseExistingWifi() {
+  if (!deckPlayable_) {
+    requestUpdate();
+    return;
+  }
   // Already associated (dev mode keeps its last network): host right away.
   if (WiFi.status() == WL_CONNECTED) {
     start(cp::web::Server::Mode::ExistingWifi);
@@ -218,6 +289,22 @@ void CardPartyActivity::handleTap(int x, int y) {
       start(cp::web::Server::Mode::Hotspot);
     else if (y >= 240 && y < 325)
       chooseExistingWifi();
+    else if (y >= 335 && y < 420 && packLoaded_ && sdPack_.categoryCount()) {
+      stage_ = Stage::Categories;
+      report_[0] = 0;
+      requestUpdate();
+    }
+    return;
+  }
+  if (stage_ == Stage::Categories) {
+    const int row = (y - kCategoryTop) / kCategoryRow;
+    if (y >= kCategoryTop && row < sdPack_.categoryCount()) {
+      enabled_ ^= static_cast<uint16_t>(1u << row);
+      applyCategories();
+      requestUpdate();
+    } else if (y >= height - 90) {
+      leaveCategories();
+    }
     return;
   }
   if (stage_ == Stage::Failed) {
@@ -277,6 +364,10 @@ void CardPartyActivity::loop() {
       leave();
       return;
     }
+    if (stage_ == Stage::Categories) {
+      leaveCategories();
+      return;
+    }
     // One stray press must not end a party for everyone at the table.
     if (stage_ == Stage::Hosted && matchInProgress()) {
       const uint32_t now = millis();
@@ -325,7 +416,61 @@ void CardPartyActivity::drawChoice() {
   renderer.drawRect(kGutter, 240, width - 2 * kGutter, 85, 2, true);
   renderer.drawText(UI_10_FONT_ID, kGutter + 20, 261, "[02] EXISTING WI-FI", true);
   renderer.drawText(SMALL_FONT_ID, kGutter + 20, 293, "PICK A NETWORK / SAME AS PLAYERS", true);
+  const int textWidth = width - 2 * kGutter;
+  if (packLoaded_ && sdPack_.categoryCount()) {
+    renderer.drawRect(kGutter, 335, textWidth, 85, 2, true);
+    renderer.drawText(UI_10_FONT_ID, kGutter + 20, 356, "[03] CATEGORIES", true);
+    int on = 0;
+    for (uint8_t i = 0; i < sdPack_.categoryCount(); ++i)
+      if (enabled_ & (1u << i)) ++on;
+    char summary[64] = {};
+    std::snprintf(summary, sizeof(summary), "%d OF %u ON / %u PROMPTS / %u ANSWERS", on,
+                  static_cast<unsigned>(sdPack_.categoryCount()), static_cast<unsigned>(activeDeck_.promptsCount),
+                  static_cast<unsigned>(activeDeck_.answersCount));
+    renderer.drawText(SMALL_FONT_ID, kGutter + 20, 388, summary, true);
+  }
+  if (report_[0]) drawWrapped(SMALL_FONT_ID, report_, kGutter, 440, textWidth, 24, 2);
+  if (packLoaded_) {
+    // Attribution for the installed pack, as its license requires.
+    const int bottom = renderer.getScreenHeight();
+    char line[260] = {};
+    std::snprintf(line, sizeof(line), "DECK: %s", sdPack_.title());
+    drawWrapped(SMALL_FONT_ID, line, kGutter, bottom - 116, textWidth, 22, 1);
+    std::snprintf(line, sizeof(line), "%s / %s", sdPack_.rightsHolder(), sdPack_.license());
+    drawWrapped(SMALL_FONT_ID, line, kGutter, bottom - 92, textWidth, 22, 1);
+  }
   renderer.drawText(SMALL_FONT_ID, kGutter, renderer.getScreenHeight() - 35, "BACK  /  CANCEL", true);
+}
+void CardPartyActivity::drawCategories() {
+  drawBase("CATEGORIES");
+  const int width = renderer.getScreenWidth();
+  renderer.drawText(SMALL_FONT_ID, kGutter, 82, "TAP TO SWITCH  /  18+ STARTS OFF", true);
+  for (uint8_t i = 0; i < sdPack_.categoryCount(); ++i) {
+    const cp::sdpack::Category& c = sdPack_.category(i);
+    const int y = kCategoryTop + i * kCategoryRow;
+    const bool on = (enabled_ & (1u << i)) != 0;
+    char label[48] = {};
+    std::snprintf(label, sizeof(label), "%s %s", on ? "[x]" : "[  ]", c.name);
+    renderer.drawText(UI_10_FONT_ID, kGutter, y + 4, label, true);
+    char count[24] = {};
+    std::snprintf(count, sizeof(count), "%s%u", c.adult ? "18+  " : "",
+                  static_cast<unsigned>(cp::categories::cardsIn(sdPack_, i, false) +
+                                        cp::categories::cardsIn(sdPack_, i, true)));
+    renderer.drawText(SMALL_FONT_ID, width - kGutter - renderer.getTextWidth(SMALL_FONT_ID, count), y + 8, count, true);
+    renderer.fillRect(kGutter, y + kCategoryRow - 2, width - 2 * kGutter, 1, true);
+  }
+  const int bottom = renderer.getScreenHeight() - 72;
+  renderer.fillRect(kGutter, bottom - 4, width - 2 * kGutter, 2, true);
+  renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, "[ DONE ]", true);
+  char status[80] = {};
+  if (deckPlayable_)
+    std::snprintf(status, sizeof(status), "%u PROMPTS / %u ANSWERS IN PLAY",
+                  static_cast<unsigned>(activeDeck_.promptsCount), static_cast<unsigned>(activeDeck_.answersCount));
+  else
+    std::snprintf(status, sizeof(status), "TOO FEW CARDS: %u OF %u ANSWERS",
+                  static_cast<unsigned>(activeDeck_.answersCount),
+                  static_cast<unsigned>(cp::categories::requiredAnswers(activeDeck_, kHand)));
+  renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, status, true);
 }
 void CardPartyActivity::drawLobby() {
   drawBase("JOIN SESSION");
@@ -515,6 +660,9 @@ void CardPartyActivity::render(RenderLock&&) {
   switch (stage_) {
     case Stage::Choice:
       drawChoice();
+      break;
+    case Stage::Categories:
+      drawCategories();
       break;
     case Stage::Hosted:
       if (game_.phase() == cp::Phase::Lobby)

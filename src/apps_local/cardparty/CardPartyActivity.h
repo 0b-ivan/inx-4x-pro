@@ -7,6 +7,7 @@
 #include "CardPartyCore.h"
 #include "CardPartySessions.h"
 #include "CardPartyDemoDeck.h"
+#include "CardPartyCategories.h"
 #include "CardPartySdPack.h"
 #include "web/CardPartyBrowserServer.h"
 
@@ -25,9 +26,14 @@ class CardPartyActivity final : public Activity {
   bool skipLoopDelay() override { return server_.running(); }
 
  private:
-  enum class Stage : uint8_t { Choice, Hosted, Failed };
+  enum class Stage : uint8_t { Choice, Categories, Hosted, Failed };
   void resetGame();
   void loadConfiguredDeck();
+  void applyCategories();
+  void loadSelection();
+  void saveSelection();
+  void leaveCategories();
+  void drawCategories();
   void start(cardparty::web::Server::Mode mode);
   void chooseExistingWifi();
   void releaseNetwork();
@@ -46,6 +52,11 @@ class CardPartyActivity final : public Activity {
   cardparty::Sessions sessions_;
   cardparty::sdpack::Pack sdPack_;
   cardparty::Deck activeDeck_=cardparty::demoDeck();
+  // The pack's cards that pass the host's category switches.
+  cardparty::categories::FilteredDeck filtered_;
+  bool packLoaded_=false;
+  bool deckPlayable_=true;
+  uint16_t enabled_=0, savedEnabled_=0;
   cardparty::web::Server server_;
   Stage stage_=Stage::Choice;
   // Station mode raised by the Wi-Fi picker for [02]; dev mode stays paused

@@ -1,13 +1,15 @@
-# Cards Against Whatever – SD Pack Importer (isolated review branch)
+# Cards Against Whatever – SD Pack Importer
 
-Status: firmware, native host, browser and SDL SD integration checks passed
-locally on the importer branch. Physical X4 hardware is NOT tested; no OTA,
-PR #47 update or merge. See [the QA record](cardparty-sd-pack-qa-2026-10-27.md)
-for revisions, evidence and the remaining hardware gates.
+Status: merged into the Cards Against Whatever branch (PR 47). Format 2 adds
+categories, an adult flag and attribution. Native host, browser and SDL SD
+checks pass; physical X4 hardware is NOT tested. See
+[the QA record](cardparty-sd-pack-qa-2026-10-27.md) for the importer branch's
+own evidence (written for format 1).
 
 ## Implemented
 
-* Immutable versioned binary SD .dat format (v1).
+* Immutable versioned binary SD .dat format (2). Format 1 packs are rejected;
+  none were ever published.
 * Python compiler in tools_local/cardparty_l10n/build_sd_pack.py.
 * Read-only C++ loader in src/apps_local/cardparty/CardPartySdPack.h.
 * CAW Activity selects /games/cardparty/active.dat on entry and uses exactly
@@ -20,17 +22,36 @@ for revisions, evidence and the remaining hardware gates.
   UTF-8, non-terminated strings, oversize, extra bytes, bad counts or flags.
 * Strict draft / release separation. User's dark humor v2 is NOT approved.
 * No network endpoint to overwrite SD content and no download workflow.
+* Up to 16 categories per pack. The host switches them on the X4 under
+  `[03] CATEGORIES`; the choice is saved in `/games/cardparty/categories.bin`
+  and keyed to the pack's CRC, so a new pack starts from its own defaults.
+* A card plays only if none of its categories is off, so "Politik + FSK 18"
+  stays out while FSK 18 is off. Untagged cards always play. Adult categories
+  start off on every device, whatever the pack says.
+* If the switches leave fewer answers than a full table needs
+  (8 × 5 + 7 × largest draw + 3 for Rando), setup refuses to start and says so.
+* The setup screen shows the pack's title, rights holder and license.
 
 ## Binary layout
 
-Header 32 bytes: magic XCAWPK1 + NUL (8), version uint16 (1), flags uint16
-(1=released, 0=draft), promptCount uint16, answerCount uint16,
-blobSize uint32, CRC32 uint32, deckVersion uint32, reserved uint32=0.
+Little endian. Header 32 bytes: magic XCAWPK2 + NUL (8), format uint16 (2),
+flags uint16 (1=released, 0=draft), promptCount uint16, answerCount uint16,
+blobSize uint32, CRC32 uint32 over the body, deckVersion uint32,
+categoryCount uint8 (0-16), 3 zero bytes.
 
-Then prompts: UTF-8 length uint16, pick uint8, draw uint8, UTF-8 bytes,
-NUL terminator. Then answers: UTF-8 length uint16, UTF-8 bytes,
-NUL terminator. Total pack no larger than 192 KiB; max question 384 UTF-8
-bytes, max answer 160 UTF-8 bytes; 1-4096 questions, 32-4096 answers.
+Body, each string as UTF-8 length uint16 + bytes + NUL:
+
+1. Attribution: title, license, license URL, rights holder, source URL
+   (each at most 200 bytes; all required in a released pack).
+2. Categories: flags uint8 (1 = on by default, 2 = adult) + name
+   (1-24 bytes).
+3. Prompts: length uint16, pick uint8, draw uint8, category mask uint16,
+   text.
+4. Answers: length uint16, category mask uint16, text.
+
+A mask bit beyond categoryCount rejects the pack. Total pack no larger than
+192 KiB; max question 384 UTF-8 bytes, max answer 160 UTF-8 bytes;
+1-4096 questions, 32-4096 answers.
 
 ## Building a pack
 
@@ -46,11 +67,18 @@ be marked eligible for production. Manifest must include:
       "source_url": "https://example.org/my-deck",
       "rights_holder": "The Actual Rights Holder",
       "rights_status": "verified",
-      "editorial_status": "approved"
+      "editorial_status": "approved",
+      "title": "Grundspiel",
+      "categories": [
+        {"id": "boese", "name": "Böse"},
+        {"id": "fsk-18", "name": "FSK 18", "default_on": false, "adult": true}
+      ]
     }
 
 Card rows are JSONL, with unique id, kind prompt or answer, text and
-reviewed=true. Prompts also include pick and draw. Run:
+reviewed=true. Prompts also include pick and draw. A card may list category
+ids, e.g. `"categories": ["boese", "fsk-18"]`. `default_on` defaults to true;
+an adult category must set it to false or the compiler refuses. Run:
 
     python3 tools_local/cardparty_l10n/build_sd_pack.py \
       --manifest ./my-deck.json --cards ./cards.jsonl --out ./active.dat
