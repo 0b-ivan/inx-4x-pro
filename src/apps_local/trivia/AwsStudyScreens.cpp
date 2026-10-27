@@ -103,6 +103,36 @@ void frameText(toybox::Screen& screen, const AwsPageModel& model, const char* st
   const int16_t used = fui::measureWrappedText(screen.target(), model.text, s, text.width).height;
   if (used > 0 && used < text.height) text.height = used;
   screen.target().text(text, model.text, s);
+  // E-ink-friendly reader scrollbar: page position is stable and the rail is
+  // tappable, with six jump targets instead of continuous redraw while moving.
+  const fui::Rect rail{static_cast<int16_t>(text.x + text.width + 5),
+                       text.y, 11, awsTextViewport(body).height};
+  screen.target().stroke({static_cast<int16_t>(rail.x + 4), rail.y, 2, rail.height},
+                         fui::Paint::solid(fui::Color::Black), 1);
+  const uint8_t count = model.pageCount > 0 ? model.pageCount : 1;
+  const int16_t thumbH = static_cast<int16_t>(
+      rail.height / count > 28 ? rail.height / count : 28);
+  const int16_t travel = static_cast<int16_t>(rail.height > thumbH ? rail.height - thumbH : 0);
+  const int16_t offset = count > 1 ? static_cast<int16_t>(
+      (static_cast<int32_t>(travel) * model.pageIndex) / (count - 1)) : 0;
+  screen.target().fill({rail.x, static_cast<int16_t>(rail.y + offset), 10, thumbH},
+                       fui::Paint::solid(fui::Color::Black));
+  if (count > 1) {
+    for (int i = 0; i < 6; ++i) {
+      const int16_t top = static_cast<int16_t>(rail.y + (rail.height * i) / 6);
+      const int16_t bottom = static_cast<int16_t>(rail.y + (rail.height * (i + 1)) / 6);
+      const uint8_t page = static_cast<uint8_t>(
+          (static_cast<uint32_t>(count - 1) * (2 * i + 1)) / 12);
+      screen.frame().hit({static_cast<int16_t>(rail.x - 5), top, 20,
+                          static_cast<int16_t>(bottom - top)}, ActionAwsScrollTo, page);
+    }
+  }
+  char position[24];
+  std::snprintf(position, sizeof(position), "%u / %u",
+                static_cast<unsigned>(model.pageIndex + 1),
+                static_cast<unsigned>(count));
+  label(screen, {static_cast<int16_t>(body.x + body.width - 112),
+                 static_cast<int16_t>(footer(screen) - 49), 90, 40}, position);
   // The action above the footer must never overlap text. The permanent
   // gesture hint also tells first-time touchscreen users how to navigate.
   label(screen, {static_cast<int16_t>(body.x + kMargin),
@@ -124,7 +154,7 @@ fui::Rect awsTextViewport(const fui::Rect& body) {
   const int16_t top = static_cast<int16_t>(body.y + 20);
   const int16_t footerTop = static_cast<int16_t>(body.bottom() - 96);
   return {static_cast<int16_t>(body.x + kMargin), static_cast<int16_t>(top + 54),
-          static_cast<int16_t>(body.width - 2 * kMargin),
+          static_cast<int16_t>(body.width - 2 * kMargin - 24),
           static_cast<int16_t>(footerTop - top - 136)};
 }
 
@@ -304,8 +334,27 @@ void buildAwsMenu(toybox::Screen& screen, const AwsMenuModel& model) {
   button(screen, {x, static_cast<int16_t>(body.y + 394), w, 112},
          model.german ? "BEREICHE WAEHLEN" : "SELECT DOMAINS",
          ActionAwsDomains);
+  button(screen, {x, static_cast<int16_t>(body.y + 523), w, 61},
+         model.german ? "LERNSTAND LOESCHEN" : "RESET PROGRESS",
+         ActionAwsResetPrompt);
   footerPair(screen, model.german ? "PAKETE" : "PACKS", ActionStudyDecks,
              "START", ActionAwsBegin);
+}
+
+void buildAwsResetConfirm(toybox::Screen& screen, const char* deckName, const bool german) {
+  chrome(screen, german ? "LERNSTAND ZURUECKSETZEN" : "RESET STUDY PROGRESS");
+  const auto body = screen.body();
+  const int16_t x = static_cast<int16_t>(body.x + kMargin);
+  const int16_t w = static_cast<int16_t>(body.width - 2 * kMargin);
+  label(screen, {x, static_cast<int16_t>(body.y + 80), w, 62},
+        deckName ? deckName : "STUDY PACK");
+  prose(screen, {x, static_cast<int16_t>(body.y + 190), w, 190},
+        german ? "Alle gesehenen Fragen und Fehler-Markierungen in diesem Paket werden geloescht. Fragen und Bereichsfilter bleiben erhalten."
+               : "All seen and missed-question marks for THIS pack will be cleared. Questions and topic filters are kept.");
+  label(screen, {x, static_cast<int16_t>(body.y + 420), w, 52},
+        german ? "NICHT RUECKGAENGIG" : "CANNOT BE UNDONE");
+  footerPair(screen, german ? "ABBRECHEN" : "CANCEL", ActionAwsResetCancel,
+             german ? "ZURUECKSETZEN" : "RESET", ActionAwsResetConfirm);
 }
 
 void buildAwsDomains(toybox::Screen& screen, const AwsDomainsModel& model) {

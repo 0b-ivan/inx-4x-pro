@@ -58,6 +58,10 @@ enum : fui::ActionId {
   ActionAwsGlossaryTerm = 28,
   ActionAwsGlossaryBack = 29,
   ActionAwsGlossaryResume = 30,  // straight back to the study page, from list or detail
+  ActionAwsResetPrompt = 31,
+  ActionAwsResetConfirm = 32,
+  ActionAwsResetCancel = 33,
+  ActionAwsScrollTo = 34,
 };
 
 enum class MenuRow : int { Quizmaster = 0, Solo, Difficulty, Count };

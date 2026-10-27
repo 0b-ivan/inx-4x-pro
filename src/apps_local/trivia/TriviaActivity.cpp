@@ -287,6 +287,30 @@ bool TriviaActivity::openAwsPack() {
   return true;
 }
 
+bool TriviaActivity::awsResetProgress() {
+  if (!awsInstalled_ || !g_awsStateFile.isOpen() ||
+      static_cast<uint32_t>(g_awsStateFile.size()) != awsPack_.count() ||
+      !g_awsStateFile.seekSet(0)) return false;
+  // Only the SELECTED deck's .state is modified. Never touch the .dat,
+  // .topics, .prefs, the fingerprint or another certification's state.
+  const uint8_t zeros[256] = {};
+  for (uint32_t pos = 0; pos < awsPack_.count();) {
+    const uint32_t remaining = awsPack_.count() - pos;
+    const uint32_t chunk = remaining < sizeof(zeros) ? remaining : sizeof(zeros);
+    if (g_awsStateFile.write(zeros, chunk) != chunk) return false;
+    pos += chunk;
+  }
+  g_awsStateFile.flush();
+  if (!awsState_.open(g_awsStateSource, awsPack_.count())) return false;
+  awsChooser_.begin(awsPack_, awsState_, rng_);
+  awsScore_.reset();
+  awsHaveLast_ = false;
+  awsHasQuestion_ = false;
+  awsReviewMissed_ = false;
+  flashOnNextPaint_ = true;
+  return true;
+}
+
 void TriviaActivity::saveAwsDomains() const {
   HalFile prefs;
   char path[kStudyPathCapacity] = {};
@@ -783,6 +807,7 @@ const char* TriviaActivity::awsPageSource() const {
 
 void TriviaActivity::awsResetPages() {
   awsPageIndex_ = 0;
+  awsPageCount_ = 0;
   awsPageStarts_[0] = 0;
   awsPageLength_ = 0;
   awsMore_ = false;
@@ -793,6 +818,21 @@ void TriviaActivity::awsBuildPage(fui::DrawTarget& target, const fui::Rect& view
   const char* text = awsPageSource();
   const uint32_t total = static_cast<uint32_t>(std::strlen(text));
   awsTextRect_ = viewport;
+  if (awsPageCount_ == 0) {
+    // Build a complete scroll index for this text using the very same font,
+    // glyph metrics and viewport as the painter. The thumb is accurate and
+    // tapping the rail can seek immediately, without allocations.
+    uint32_t off = 0;
+    do {
+      const triviaui::AwsTextFit page = triviaui::awsFitText(
+          target, toybox::kBodyFont, text + off, viewport, sizeof(awsPageBuffer_) - 1);
+      ++awsPageCount_;
+      off += page.length;
+      if (!page.more || page.length == 0 || awsPageCount_ >= kAwsMaxPages) break;
+      awsPageStarts_[awsPageCount_] = static_cast<uint16_t>(off);
+    } while (true);
+  }
+  if (awsPageIndex_ >= awsPageCount_) awsPageIndex_ = awsPageCount_ - 1;
   uint32_t start = awsPageStarts_[awsPageIndex_];
   if (start > total) start = total;
   // A codepoint is never split by the fitter; this only guards a stale offset.
@@ -846,7 +886,7 @@ void TriviaActivity::awsNextPage(const bool fromSwipe) {
   }
 }
 
-void TriviaActivity::awsPreviousPage() {
+void TriviaActivity::awsPreviousPage(const bool fromSwipe) {
   if (view_ != View::AwsOption && view_ != View::AwsQuestion &&
       view_ != View::AwsExplanation) return;
   if (awsPageIndex_ > 0) {
@@ -857,7 +897,7 @@ void TriviaActivity::awsPreviousPage() {
   }
   // A downward swipe on page one of the question or explanation must not
   // accidentally change option index or restart the question.
-  if (view_ != View::AwsOption) return;
+  if (view_ != View::AwsOption || fromSwipe) return;
   if (awsOption_ > 0) {
     --awsOption_;
     awsResetPages();
@@ -997,6 +1037,28 @@ void TriviaActivity::routeAction(const int action, const int value) {
       break;
     case triviaui::ActionAwsDomains:
       go(View::AwsDomains);
+      break;
+    case triviaui::ActionAwsResetPrompt:
+      if (view_ == View::AwsMenu && awsInstalled_) go(View::AwsResetConfirm);
+      break;
+    case triviaui::ActionAwsResetCancel:
+      if (view_ == View::AwsResetConfirm) go(View::AwsMenu);
+      break;
+    case triviaui::ActionAwsResetConfirm:
+      if (view_ == View::AwsResetConfirm) {
+        if (awsResetProgress()) go(View::AwsMenu);
+        else showNotice("RESET FAILED", "Could not clear study progress on SD card.",
+                        "BACK", triviaui::ActionAwsBackToMenu);
+      }
+      break;
+    case triviaui::ActionAwsScrollTo:
+      if ((view_ == View::AwsQuestion || view_ == View::AwsOption ||
+           view_ == View::AwsExplanation) && awsLayoutReady_ &&
+          value >= 0 && value < awsPageCount_) {
+        awsPageIndex_ = static_cast<uint8_t>(value);
+        awsLayoutReady_ = false;
+        requestUpdate();
+      }
       break;
     case triviaui::ActionAwsAllDomains:
       awsDomains_ = trivia::kAwsAllDomains;
@@ -1165,8 +1227,27 @@ void TriviaActivity::loop() {
     }
     if (view_ == View::AwsQuestion || view_ == View::AwsOption ||
         view_ == View::AwsExplanation) {
-      if (swipe == MappedInputManager::SwipeDir::Up) awsNextPage(true);
-      else if (swipe == MappedInputManager::SwipeDir::Down && awsLayoutReady_) awsPreviousPage();
+      if (view_ == View::AwsOption && swipe == MappedInputManager::SwipeDir::Left) {
+        if (awsOption_ + 1 < awsQuestion_.optionCount()) {
+          ++awsOption_;
+          awsResetPages();
+          requestUpdate();
+        }
+      } else if (view_ == View::AwsOption && swipe == MappedInputManager::SwipeDir::Right) {
+        if (awsOption_ > 0) {
+          --awsOption_;
+          awsResetPages();
+          requestUpdate();
+        } else {
+          awsResetPages();
+          go(View::AwsQuestion);
+        }
+      } else if (swipe == MappedInputManager::SwipeDir::Up) {
+        // Answers use horizontal swipes; vertical movement scrolls their text.
+        if (view_ != View::AwsOption || awsMore_) awsNextPage(true);
+      } else if (swipe == MappedInputManager::SwipeDir::Down && awsLayoutReady_) {
+        awsPreviousPage(true);
+      }
       return;
     }
   }
@@ -1295,6 +1376,12 @@ void TriviaActivity::render(RenderLock&&) {
       triviaui::buildAwsMenu(screen, model);
       break;
     }
+    case View::AwsResetConfirm: {
+      const auto* deck = deckCatalog_.at(selectedDeck_);
+      triviaui::buildAwsResetConfirm(screen, deck ? deck->slug : "STUDY PACK",
+                                     I18N.getLanguage() == Language::DE);
+      break;
+    }
     case View::AwsSummary: {
       triviaui::AwsSummaryModel model;
       model.german = I18N.getLanguage() == Language::DE;
@@ -1346,6 +1433,8 @@ void TriviaActivity::render(RenderLock&&) {
       model.asked = awsScore_.asked;
       model.right = awsScore_.right;
       model.more = awsMore_;
+      model.pageIndex = awsPageIndex_;
+      model.pageCount = awsPageCount_;
       model.correctAnswer = awsAnswerCorrect_;
       model.hasQuestion = awsHasQuestion_;
       if (view_ == View::AwsQuestion) {

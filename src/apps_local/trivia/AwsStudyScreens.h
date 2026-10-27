@@ -50,6 +50,8 @@ struct AwsPageModel {
   bool hasQuestion = false;
   bool graded = false;
   bool correctAnswer = false;
+  uint8_t pageIndex = 0;
+  uint8_t pageCount = 1;
 };
 
 struct AwsSummaryModel {
@@ -70,6 +72,7 @@ struct AwsGlossaryModel {
   const char* term = nullptr;
 };
 void buildAwsGlossary(toybox::Screen& screen, const AwsGlossaryModel& model);
+void buildAwsResetConfirm(toybox::Screen& screen, const char* deckName, bool german);
 
 // The study text viewport inside screen.body(). The painter and the pager use
 // the same rect, so a page is cut exactly where the wrapped text would end.

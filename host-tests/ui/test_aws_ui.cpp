@@ -82,6 +82,22 @@ void testAwsMenu() {
   }
 }
 
+void testAwsReset() {
+  triviaui::AwsMenuModel menu{};
+  menu.german = true;
+  menu.count = 150;
+  Rendered home;
+  render(home, menu, &triviaui::buildAwsMenu);
+  assert(home.draw.contains("LERNSTAND LOESCHEN"));
+  assert(home.tap(240, 620).action == triviaui::ActionAwsResetPrompt);
+  Rendered confirm;
+  // Test confirmation actions separately: the screen must never reset on entry.
+  render(confirm, "DOP-C02", &triviaui::buildAwsResetConfirm);
+  assert(confirm.draw.contains("DOP-C02"));
+  assert(confirm.tap(85, 750).action == triviaui::ActionAwsResetCancel);
+  assert(confirm.tap(370, 750).action == triviaui::ActionAwsResetConfirm);
+}
+
 void testAwsDomains() {
   for (bool german : {false, true}) {
     triviaui::AwsDomainsModel model{};
@@ -414,6 +430,7 @@ int main() {
   testAwsSummary();
   testAwsGlossary();
   testAwsMenu();
+  testAwsReset();
   testAwsDomains();
   testAwsQuestion();
   testAwsOptionsAndGrading();

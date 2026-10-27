@@ -34,7 +34,7 @@ class TriviaActivity final : public Activity {
   enum class View : uint8_t {
     Menu, Quizmaster, Solo, AwsMenu, AwsDomains, AwsQuestion, AwsOption,
     AwsExplanation, AwsSummary, AwsGlossary, AwsGlossaryDetail,
-    StudyDecks, RemoteStudyDecks, Notice
+    StudyDecks, RemoteStudyDecks, AwsResetConfirm, Notice
   };
   // Which mode the HIDDEN notice came from. deal() decides whether it needs a
   // multiple-choice question by reading view_, so the notice has to put the
@@ -51,7 +51,8 @@ class TriviaActivity final : public Activity {
   // fromSwipe: a swipe only turns text pages and walks question -> options;
   // it never grades the last option or leaves an explanation.
   void awsNextPage(bool fromSwipe = false);
-  void awsPreviousPage();
+  void awsPreviousPage(bool fromSwipe = false);
+  bool awsResetProgress();
   void awsResetPages();
   void openAwsGlossary();
   uint32_t awsMissedCount() const;
@@ -99,6 +100,7 @@ class TriviaActivity final : public Activity {
   static constexpr uint8_t kAwsMaxPages = 64;
   uint16_t awsPageStarts_[kAwsMaxPages] = {};
   uint8_t awsPageIndex_ = 0;
+  uint8_t awsPageCount_ = 0;
   uint32_t awsPageLength_ = 0;
   // True once render() has laid out the current page; page turns and the
   // glossary hold act only on a layout the reader has actually seen.
