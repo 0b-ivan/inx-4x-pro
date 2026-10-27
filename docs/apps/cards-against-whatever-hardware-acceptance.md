@@ -25,7 +25,7 @@ that exact SHA).
 Serial, every 15 s while the server runs:
 
 ```
-CARDPARTY diag heap=… min=… maxblk=… psram=… ws=… ap=… seats=c/s rej=… takeover=… idle=… sendfail=… reset=…
+CARDPARTY diag heap=… min=… maxblk=… psram=… ws=… ap=… seats=c/s rej=… takeover=… idle=… sendfail=… defer=… drop=… reset=…
 ```
 
 | Field | Meaning |
@@ -40,6 +40,8 @@ CARDPARTY diag heap=… min=… maxblk=… psram=… ws=… ap=… seats=c/s rej
 | `takeover` | reload takeovers that closed an old socket |
 | `idle` | unauthenticated sockets closed after 20 s |
 | `sendfail` | state frames not delivered or over the 6 KB bound |
+| `defer` | state frames held back because the phone's TCP send buffer was full (sent later as one current frame) |
+| `drop` | sockets closed by the heartbeat: 2 unanswered pings, or send buffer full for 15 s |
 | `reset` | `esp_reset_reason`: 1 power-on, 3 software, 4 panic, 5 int-WDT, 6 task-WDT, 7 other WDT, 9 brownout |
 
 X4 footer (repainted only with normal game updates): `SYS H<heap>K M<min>K WS<n> AP<n>`.
@@ -57,6 +59,7 @@ the next start. Any reboot fails the run.
 | Heap leak | `heap` in the lobby after a rematch within 8 KB of the lobby value with the same 8 phones before game 1 |
 | `maxblk` | ≥ 16 KB at all times |
 | `sendfail` | 0 in T1–T6; only during T8 (dead phone) acceptable |
+| `drop` | 0 in T1–T5 and T9–T11; +1 per dead phone in T6 (> 30 s lock), T7, T8 |
 | `ws` | ≤ 10, returns to number of connected seats within 25 s of any reload/idle event |
 | Private data | no phone ever shows another phone's hand or the authors before Reveal |
 
@@ -102,10 +105,14 @@ Pass: Czar resumes and judges. Repeat with Czar gone > 60 s: X4
 `[ ABORT STALLED ROUND ]` needs two taps and moves on.
 
 **T8 — Half-dead phone.** Mid-round, one phone enters airplane mode *without*
-closing the page. Pass: no reboot; the other phones keep receiving updates
-(note the longest visible stall, expected ≤ 15 s until the heartbeat drops
-the dead socket); `seats` drops to 7/8. This is the main risk the host tests
-cannot model: `sendTXT` to a socket with a full TCP window blocks the loop.
+closing the page. Every write to a socket with a full send buffer blocks on
+the X4 (the ESP32 client retries `select()` for up to ~10 s), so the server
+checks writability first: it defers state frames, pings only writable
+sockets, and drops a stuck socket without a close frame.
+Pass: no reboot; the other phones keep receiving updates with **no visible
+stall** (submit on another phone shows on all others within ~1 s); `defer`
+rises; within ~20 s `drop` +1 and `seats` drops to 7/8; X4 buttons stay
+responsive throughout. Turn airplane mode off: the phone resumes its seat.
 
 **T9 — Stray BACK.** Press BACK once during a round. Pass: X4 shows
 `PRESS BACK AGAIN TO END SESSION`, game continues. Second press within 7 s
@@ -125,9 +132,17 @@ decline across the hour), phones resume on wake.
 
 ## Browser checks (any phone, during T4)
 
-320 px (small Android or devtools), 390 px, desktop: long German prompt,
-Pick 3 order markers visible, sticky `[ SUBMIT ]` reachable with keyboard
-closed and open, scroll position kept when selecting.
+Chromium layout at 320×568, 390×844 and 1280×800 is checked in CI by
+`host-tests/cardparty/test_browser_viewport.cjs` (no horizontal scroll, no
+clipped or overlapping cards, SUBMIT/CONFIRM on screen, Pick 3 order and
+hand scroll position kept; screenshots in the `cardparty-browser-viewports`
+artifact). What only real phones show:
+
+- iOS Safari: bottom toolbar and safe area over the sticky `[ SUBMIT ]`,
+  keyboard on the join screen, rubber-band scrolling inside the hand list.
+- Android Chrome: same, plus system font scaling at 130 %.
+- Long German prompt, Pick 3 order markers visible, scroll position kept
+  when selecting — by touch, not mouse.
 
 ## Result table
 

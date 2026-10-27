@@ -219,6 +219,43 @@ Found by code review of the reconnect path and reproduced in
 
 Diagnostics never include tickets, names or cards.
 
+### TCP back-pressure (half-dead phone)
+
+arduinoWebSockets writes block while a peer's TCP window is closed: the
+ESP32 network client retries `select()` for up to ~10 s per write, the
+library's own heartbeat pings through the same path, and `disconnect()`
+writes a close frame first. One phone in airplane mode with the page open
+froze the X4 loop for everyone, repeatedly, until the heartbeat gave up.
+
+`SocketServer` (a thin `WebSocketsServer` subclass) adds two calls that
+never block: `writable()` (zero-timeout `select()` on the client socket;
+lwIP reports writable while more than `TCP_SNDLOWAT` bytes are free:
+2,873 of the 5,744-byte send buffer on this build, above the largest
+measured state frame of ~2.2 KB) and
+`drop()` (library `clientDisconnect()` without a close frame). The server
+uses them everywhere it writes:
+
+- State frames to an unwritable socket are deferred; the seat keeps one
+  pending flag (welcome outranks state) and gets the current snapshot once
+  the buffer drains. Errors and `expired` to such a socket are skipped.
+- The library heartbeat is off. `heartbeat()` pings writable sockets every
+  5 s; any frame from the browser (pong, command) proves liveness. Two
+  unanswered pings, or 15 s without a writable buffer, drop the socket.
+- Takeover and idle-socket closes send a close frame only to a writable
+  socket and drop the rest.
+
+`test_backpressure.cpp` models a stalled slot (every write to it counts as a
+blocking write) and a silent one (no pongs). It checks: no blocking write
+in any path, the other seven phones get every update, the dead phone is
+dropped (never closed with a frame), a slow phone gets exactly one current
+frame after draining, a deferred welcome still delivers its ticket, and
+eight healthy phones survive two minutes of heartbeats. Against the
+previous server it fails 19 checks.
+
+Not covered: a writable socket whose free space is smaller than a large
+frame still blocks until the phone ACKs; the HTTP page download (port 80)
+is not gated.
+
 ### Stress test model
 
 `test_stress.cpp` drives the real `Server`, `Sessions` and `Game` with eight
@@ -236,8 +273,8 @@ measured state frame: ~2.2 KB of the 6 KB bound.
 Mutation check: removing the takeover `ws_.disconnect` or the idle-socket
 close each fails the suite (>130 failed checks).
 
-**Not proven by this test:** radio behaviour, TCP back-pressure of a half-dead
-phone (a blocking `sendTXT` stalls the loop), heap under real TLS-less
+**Not proven by this test:** radio behaviour, real lwIP send-buffer
+behaviour (modelled in `test_backpressure.cpp`), heap under real TLS-less
 traffic, e-ink refresh. See
 [cards-against-whatever-hardware-acceptance.md](cards-against-whatever-hardware-acceptance.md).
 
@@ -278,8 +315,13 @@ traffic, e-ink refresh. See
       reconnect-token rollover, shared-local-network risks and stall recovery.
       Procedure and pass criteria:
       [hardware acceptance plan](cards-against-whatever-hardware-acceptance.md).
-- [ ] Browser viewport/scroll/keyboard snapshots 320 px, 390 px and desktop;
-      long German text, RTL not required unless localization supports it.
+- [x] Browser viewport snapshots 320 px, 390 px and desktop with long
+      German text: `test_browser_viewport.cjs` in CI (Chromium). It found
+      answer cards squeezed below their text height and overlapping at
+      320 px, and an unwrapped judging prompt that scrolled the page
+      sideways; both fixed.
+- [ ] Same on real iOS Safari and Android Chrome (toolbars, safe area,
+      keyboard, font scaling); RTL not required unless localization supports it.
 - [ ] Resolve any device-specific payload limits or refresh defects.
 - [ ] OTA disabled until acceptance and explicit release decision.
 
