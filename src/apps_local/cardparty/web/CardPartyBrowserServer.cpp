@@ -373,7 +373,7 @@ bool Server::begin(Mode m) {
   }
   if (running_) {
     std::printf("CARDPARTY_SIM_STATE=%s PHASE=%u ROUND=%u\n",
-                scenario,static_cast<unsigned>(game_.phase()),game_.round());
+                scenario,static_cast<unsigned>(game_.phase()),game_.publicView().round);
   } else {
     std::printf("CARDPARTY_SIM_FIXTURE_FAILED=%s\n",scenario);
   }
