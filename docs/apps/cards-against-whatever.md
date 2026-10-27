@@ -34,90 +34,92 @@ server, QR UI, e-ink Activity, on-device SD pack reader or menu entry yet.
 Those are integration tasks still to be implemented before First Playable is
 complete. The rules header must not be presented as a finished game.
 
-## Visual design contract: monochrome wireframe (user requirement, 2026-10-27)
+## Visual design contract: N-O-D-E-inspired terminal / BBS (2026-10-27)
 
-Applies to BOTH the X4 e-ink Game Master UI and the phone/browser client.
-Treat this as an acceptance criterion, not an optional design inspiration.
+User reference: https://www.youtube.com/@NODEtv/videos ; https://n-o-d-e.net/
+The user explicitly requested N-O-D-E aesthetics. This **supersedes**
+the earlier generic black/white card wireframe direction.
 
-- **Strict black & white:** Use only #000000 and #ffffff as visual colors.
-  Do not inherit Battleship's cream/dark theme, gradients, tinted surfaces,
-  grays, colorful player markers or CSS color scheme preference.
-  Favor white canvas and black text; reverse black/white for the current
-  prompt card, a selected answer, and a primary action.
-- **Wireframe styling:** Flat 1–2px rectangular borders, sharp corners,
-  simple dividers, generous empty space, no shadows, glow, background textures,
-  illustrations, decorative icons, emoji decorations or transitions.
-  Selection must be recognizable without animation, hover, or color.
-- **Typography:** System sans/mono stack already available on the device;
-  no downloaded fonts. Short uppercase metadata headings. Reading text uses
-  normal sentence case; minimum 16px on phones, 18px on e-ink where the
-  available canvas allows it. Never shrink text until unreadable or truncate
-  a prompt/answer silently. Keep natural word wrapping.
-- **Cards:** Black prompts are black rectangles with white text, white
-  answers are bordered white rectangles with black text. A chosen answer
-  reverses to black/white and gains an explicit "SELECTED" label and visible
-  ordering for Pick 2/3 (1, 2, 3). Unselected answers are never hidden.
-- **Phone ergonomics:** Mobile-first at 320px+ viewport, touch targets at
-  least 44x44 CSS px, consistent spacing, scrollable prompt area AND
-  independently scrollable answer list. A visible scrollbar/position cue is
-  preferred; no horizontal scrolling. Sticky bottom action bar with current
-  selection count and SUBMIT, reachable regardless of list scroll position.
-  Disabled SUBMIT is explicit until exactly pick N distinct cards are selected.
-- **Card Czar:** Dedicated judgment state with shuffled anonymous responses.
-  Tap one numbered submission, review the whole assembled text, then confirm
-  the winner; do not reveal authors or hidden card ownership prematurely.
-- **Lobby:** Game code/QR, connected players, readiness and Start controls
-  must be legible from across a table. On the e-ink host, render only the
-  current prompt, round, submit count, Czar identity and eventual scores.
-- **E-ink refresh discipline:** Avoid animation and unnecessary redraws.
-  Update when joining/leaving, round changes, submit count changes,
-  judgment begins or a result is chosen; use the existing renderer's
-  partial/full refresh policies. QR requires sufficient quiet margin.
-- **Responsive/browser behavior:** High-contrast focus outline, keyboard
-  navigation, visible connection/reconnect state, safe-area padding, no
-  third-party CDN/JS/font dependencies; work with light/dark OS themes by
-  forcing the fixed monochrome palette.
-- **Localization:** German text and umlauts must fit without destructive
-  clipping. All controls and player-visible labels must be localizable.
-  Use clear words, not icon-only ambiguous actions.
+This is a visual interpretation, NOT an instruction to reuse the NODE logo,
+wordmark, artwork, exact screen layouts, or other copyrighted branding.
 
-### Reference wireframes (structure, not pixel-art assets)
+### Visual principles
 
-Phone player:
+- Mobile browser: full black (#000000) backdrop with white (#ffffff)
+  typography; high contrast, no other accent colors.
+- X4 Pro e-ink: only black/white pixels. Use white paper + black type where
+  it significantly improves long-term viewing and ghosting; shared design
+  language does not require identical inverted screen polarity.
+- Native X4 panel is 800x480 LANDSCAPE. Do not assume portrait support
+  without implementing display and touch rotation.
+- Monospace: system mono / Menlo / Consolas. No CDN fonts.
+- Text-first editorial/terminal layout: abbreviated all-caps metadata,
+  numbered options, thin horizontal rules, tight but intentional spacing.
+- No rounded cards, box shadows, gradients, faux CRT scanlines, glow,
+  colorful indicators, emoji decorations, busy illustrations, animations,
+  or giant decorative ASCII art.
+- Prompts are typographic focal points, with comfortable multiline
+  wrapping. Do not force card text to ALL CAPS or shrink it unreadably.
+- Answer choices are numbered vertical list rows: [01], [02], [03].
+  Selection is indicated by reverse video (WHITE bg/BLACK text) and
+  numbered selection order for Pick-2/Pick-3.
+- Clearly visible, accessible connection state: CONNECTED / WAITING,
+  ROUND 02/10, CZAR: MAX, 3 OF 5 SUBMITTED.
+- Rando Cardrissian appears via text and is indistinguishable from a
+  human submission prior to REVEAL.
 
-    +--------------------------------+
-    | CARDS AGAINST WHATEVER  R 2/10 |
-    | YOU: IVAN    CZAR: MAX         |
-    +--------------------------------+
-    | [ BLACK PROMPT / SCROLL ]      |
-    | Why is the server down? ____   |
-    +--------------------------------+
-    | YOUR HAND             1/2      |
-    | [1] Answer A                   |
-    | [ ] Answer B                   |
-    | [2] Answer C                   |
-    |  ...  (SCROLL)                 |
-    +--------------------------------+
-    | 2 OF 2 CHOSEN   [ SUBMIT ]     |
-    +--------------------------------+
+### Player browser layout and interaction
 
-X4 Game Master:
+- Touch-first, minimum 44px hit targets; card text >=16px.
+- A compact fixed masthead with C/A/W, round, username, current czar.
+- Long black prompts scroll within their own bounded area.
+- Answer choices scroll independently, with visible scroll progress.
+- A fixed/sticky bottom bar ALWAYS exposes count and [ SUBMIT ],
+  regardless of answer-list scroll position. Safe-area aware.
+- Answer submission requires exactly the specified number of DISTINCT
+  card slots; Pick-2/Pick-3 preserve order.
+- Separate clear phases: JOIN, LOBBY, SELECT, WAIT, JUDGE, REVEAL,
+  FINAL. Anonymous judge view must never show authors until reveal.
+- Judge chooses a numbered submission, sees its complete combined
+  phrase and explicitly confirms.
+- No unnecessary screen animation; respect reduced-motion preference.
+- Keyboard focus remains highly visible. Inputs have text labels.
 
-    +--------------------------------+
-    | CAW  / ROUND 02   CZAR: MAX    |
-    +--------------------------------+
-    | [      BLACK PROMPT          ] |
-    | [   LARGE WRAPPED TEXT       ] |
-    +--------------------------------+
-    | ANSWERS 3/5  [------    ]      |
-    | CONNECTION: LOCAL             |
-    +--------------------------------+
+### E-ink game-master UI
 
-Before implementing HTML or e-ink screens, make layout snapshots for
-320px/390px/desktop browser and 480x800 portrait e-ink, checking long DE
-prompts, Pick 3, virtual keyboard safe area, large text, focus and scroll.
-A visually appealing screenshot is not a substitute for touch/overflow tests.
+- 800x480 landscape, full-width large legible question.
+- Header: C/A/W / ROUND 02 / CZAR MAX.
+- Footer: 3/5 ANSWERS SUBMITTED, optionally a compact progress indicator.
+- QR lobby: large QR with quiet zone, readable local URL / code, roster.
+- Prefer updates on actual phase, count, roster and result changes, not
+  continuous animations or per-frame redraws.
+- Use familiar shelf/navigation behavior and existing Toybox font support.
 
+### Sketch (PHONE)
+
+    C/A/W                         02/10
+    PLAYER IVAN               CZAR MAX
+    ------------------------------------
+    PROMPT
+    Why did production go down?
+    ____
+    ------------------------------------
+    YOUR HAND                     1/2
+    [01] A technician with root access
+    [02] A coffee maker with IPv6
+    [03] A broken DNS server
+    [04] ...
+    ------------------------------------
+    1/2 SELECTED          [ SUBMIT ]
+
+### Acceptance criteria for browser UI
+
+- 320px, 390px and desktop viewports.
+- Very long German prompts, long answers, umlauts and Pick-3.
+- Visible list position and independently operable scroll areas.
+- No clipping behind sticky footer or system virtual keyboard.
+- Precise anonymous response secrecy, reconnect and offline assets.
+- Simulator screenshots for 800x480 X4 and real hardware validation.
 
 ## Follow-on integration sequence
 
