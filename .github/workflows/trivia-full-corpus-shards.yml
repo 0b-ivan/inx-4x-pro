@@ -8,6 +8,7 @@ on:
       - .github/trivia-full-corpus-trigger.txt
       - .github/workflows/trivia-full-corpus-shards.yml
       - tools_local/trivia/full_corpus_shards.py
+      - tools_local/trivia/test_full_corpus_shards.py
 
 permissions:
   contents: read
