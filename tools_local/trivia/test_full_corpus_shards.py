@@ -40,5 +40,30 @@ class ResumeTests(unittest.TestCase):
             self.assertEqual(result["translated"],len(rows))
             self.assertEqual(result["calls"],0)
 
+
+    def test_connection_reset_retries_without_quarantine(self):
+        source=[{"id":str(i)} for i in range(49958)]
+        rows=[{"id":str(i),"source_hash":"pinned","reviewed":False}
+              for i in range(0,49958,SHARDS)]
+        rows=rows[1:]
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory)
+            out=base/"questions.jsonl"
+            out.write_text("".join(json.dumps(row)+"\n" for row in rows),encoding="utf-8")
+            args=SimpleNamespace(source="unused",seed="unused",shard=0,
+                out=str(out),quarantine=str(base/"quarantine.jsonl"),
+                ledger=str(base/"usage.jsonl"),summary=str(base/"summary.json"))
+            with patch.object(shards,"originals",return_value=source), \
+                 patch.object(shards,"verify_seed",return_value={}), \\
+                 patch.object(shards,"validate_record"), \\
+                 patch.object(shards,"source_hash",return_value="pinned"), \\
+                 patch.object(shards,"translate_one",side_effect=[ConnectionResetError(104,"reset"),{"q":"Frage","a":"Antwort","alt":[],"w":[]}]) as paid, \\
+                 patch.object(shards.time,"sleep"), \\
+                 patch.dict("os.environ",{"OPENROUTER_API_KEY":"test"},clear=True):
+                shards.translate(args)
+                self.assertEqual(paid.call_count,2)
+            self.assertFalse(Path(args.quarantine).exists())
+            self.assertEqual(json.loads(Path(args.summary).read_text())["translated"],len(rows)+1)
+
 if __name__=="__main__":
     unittest.main()
