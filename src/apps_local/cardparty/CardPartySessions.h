@@ -50,8 +50,10 @@ class Sessions final {
     return true;
   }
 
-  // No loss of cards or points. An interrupted client must prove its ticket
-  // before reclaiming the same seat with a fresh connection and new secret.
+  // An interrupted or refreshed client must prove its existing ticket
+  // before reclaiming the same seat with a new connection and rotated secret.
+  // A browser reload can open the new socket before the old socket has closed.
+  // Authorized takeover invalidates the old connection immediately.
   bool disconnect(uint32_t connection) {
     for (uint8_t i = 0; i < kPlayers; ++i) {
       Seat& state = seats_[i];
@@ -73,9 +75,13 @@ class Sessions final {
 
     for (uint8_t i = 0; i < kPlayers; ++i) {
       Seat& state = seats_[i];
-      if (!state.registered || state.connected ||
-          !sameSecret(state.secret, oldSecret)) continue;
-      if (!game_.connected(i, true)) return false;
+      if (!state.registered || !sameSecret(state.secret, oldSecret))
+        continue;
+      // The connection itself does not establish identity: possession of the
+      // 128-bit ticket authorizes a handover, even while the previous socket
+      // is still considered live. Subsequent frames from that old socket
+      // fail both connection and token authentication.
+      if (!state.connected && !game_.connected(i, true)) return false;
       state.connected = true;
       state.connection = connection;
       std::memcpy(state.secret, freshSecret, kTicketBytes);
