@@ -41,3 +41,16 @@ jobs:
             --manifest tools_local/cardparty_l10n/examples/deck.json \
             --source tools_local/cardparty_l10n/examples/cards-en.jsonl \
             --drafts tools_local/cardparty_l10n/examples/cards-de-unreviewed.jsonl
+
+      - name: Validate edited German proposals against exact source hashes
+        run: |
+          python3 tools_local/cardparty_l10n/translate_cards.py validate \
+            --manifest tools_local/cardparty_l10n/examples/deck.json \
+            --source tools_local/cardparty_l10n/examples/cards-en.jsonl \
+            --drafts tools_local/cardparty_l10n/examples/cards-de-editorial-proposed.jsonl
+      - name: Detect grammar, punctuation and meaning regression heuristics
+        run: |
+          python3 tools_local/cardparty_l10n/editorial_checks.py \
+            --manifest tools_local/cardparty_l10n/examples/deck.json \
+            --source tools_local/cardparty_l10n/examples/cards-en.jsonl \
+            --drafts tools_local/cardparty_l10n/examples/cards-de-editorial-proposed.jsonl
