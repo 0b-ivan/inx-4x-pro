@@ -108,9 +108,9 @@ void testReconnectRotatesSecret() {
   CHECK(sessions.join(2, "B", second.b, b));
   CHECK(sessions.join(3, "C", third.b, c));
   CHECK(sessions.hostStart());
-  CHECK(!sessions.resume(9, old.b, fresh.b, renewed)); // old connection still bound
-  CHECK(sessions.disconnect(1));
-  CHECK(!sessions.disconnect(1));
+  // A browser reload can connect a replacement socket before the old
+  // WebSocket DISCONNECTED callback has arrived. Its 128-bit secret proves
+  // ownership; successful handover must revoke the old socket immediately.
   CHECK(!sessions.resume(2, old.b, fresh.b, renewed)); // already bound to B
   CHECK(!sessions.resume(9, attempt.b, fresh.b, renewed)); // wrong proof
   CHECK(!sessions.resume(9, old.b, second.b, renewed)); // duplicate new token
@@ -125,8 +125,9 @@ void testReconnectRotatesSecret() {
   CHECK(!sessions.privateHand(9, old.b, view, rev));
   CHECK(sessions.privateHand(9, fresh.b, view, rev));
   CHECK(view.judge); // restored original seat role
-  CHECK(!sessions.disconnect(1)); // stale disconnect doesn't kill new socket
+  CHECK(!sessions.disconnect(1)); // late old socket close must not kill new seat
   CHECK(sessions.privateHand(9, fresh.b, view, rev));
+  CHECK(!sessions.resume(10, old.b, attempt.b, renewed)); // replay after handover
   CHECK(!sessions.join(9, "Impersonator", attempt.b, renewed));
 
   // Even if a transport reuses socket IDs, token proof is mandatory.
