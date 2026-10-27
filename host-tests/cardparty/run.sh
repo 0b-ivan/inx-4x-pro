@@ -10,3 +10,6 @@ for name in cardparty sessions; do
     -o "/tmp/cardparty-host-tests/test_$name"
   "/tmp/cardparty-host-tests/test_$name"
 done
+
+# Node.js already runs in the existing Battleship browser host suite.
+node test_browser_page.cjs
