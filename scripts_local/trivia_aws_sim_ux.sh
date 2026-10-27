@@ -125,6 +125,25 @@ assert state == bytes([0x01 | 0x04]), f"expected SEEN|MISSED after one wrong GRA
 print("PASS X4 Pro AWS study UX SDL: paging, hold glossary, resume, unmark, no swipe grading")
 PY
 
+# Fail early with checkpoint diagnostics instead of attributing a save failure
+# to the later screenshot comparison.
+python3 - "$tmp/sd/trivia/aws" <<'PY'
+from pathlib import Path
+import struct,sys
+root=Path(sys.argv[1])
+slots=sorted(root.glob("DOP-C02.session?"))
+for slot in slots:
+    data=slot.read_bytes()
+    print(f"CHECKPOINT {slot.name} bytes={len(data)} hex={data.hex()}")
+    if len(data)==48:
+        print("  view,page,option,selected,generation,asked,right=",
+              data[9],data[12],data[10],data[11],
+              struct.unpack_from("<I",data,32)[0],
+              struct.unpack_from("<I",data,36)[0],
+              struct.unpack_from("<I",data,40)[0])
+assert slots, "No checkpoints written before simulated deep-sleep restart"
+PY
+
 # Simulate real deep-sleep wake: kill the process, create a new Trivia Activity,
 # keep the SD card, and verify that the SAME scored explanation page returns.
 # No tap should be needed: the shelf already reopens Trivia on power-button wake.
