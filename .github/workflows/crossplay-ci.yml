@@ -9,6 +9,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, reopened, synchronize, edited]
   workflow_dispatch:
     inputs:
       publish_nightly:
@@ -187,15 +188,22 @@ jobs:
           path: .pio/biscuit-native-previews/
           if-no-files-found: ignore
 
-  # Manual prerelease on main only, gated by the same three CI jobs.
-  # Never publish prereleases from pull requests or old feature branches.
+  # Test-only prerelease: main is manual; the single maintained CardParty PR
+  # can authorize precisely one immutable HEAD through its PR body.
+  # Never publish from forks, arbitrary feature branches or untested commits.
   nightly-release:
     name: X4 Pro Nightly OTA prerelease
     needs: [firmware, simulator, host-tests]
     if: >-
-      github.ref == 'refs/heads/main' &&
-      github.event_name == 'workflow_dispatch' &&
-      inputs.publish_nightly == true
+      (github.ref == 'refs/heads/main' &&
+       github.event_name == 'workflow_dispatch' &&
+       inputs.publish_nightly == true) ||
+      (github.event_name == 'pull_request' &&
+       github.repository == '0b-ivan/inx-4x-pro' &&
+       github.event.pull_request.number == 47 &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.head_ref == 'feature/cards-against-whatever' &&
+       contains(github.event.pull_request.body, format('NIGHTLY_REQUEST_SHA={0}', github.event.pull_request.head.sha)))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -204,7 +212,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
+          persist-credentials: false
 
       - uses: actions/setup-python@v6
         with:
@@ -214,7 +224,7 @@ jobs:
         with:
           version: "latest"
 
-      - name: Compute immutable prerelease version from tested main commit
+      - name: Compute immutable prerelease version from the exact tested commit
         shell: bash
         run: |
           set -euo pipefail
@@ -224,11 +234,13 @@ jobs:
             exit 1
           fi
           IFS=. read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
-          SHORT_SHA="${GITHUB_SHA:0:8}"
+          SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          SHORT_SHA="${SOURCE_SHA:0:8}"
+          echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
           TEST_VERSION="${MAJOR}.${MINOR}.$((PATCH+1))-rc.$(date -u +%Y%m%d).g${SHORT_SHA}"
           echo "CROSSPLAY_NIGHTLY_VERSION=$TEST_VERSION" >> "$GITHUB_ENV"
           echo "NIGHTLY_TAG=v$TEST_VERSION" >> "$GITHUB_ENV"
-          echo "Nightly: v$TEST_VERSION from $GITHUB_SHA"
+          echo "Nightly: v$TEST_VERSION from $SOURCE_SHA"
 
       - name: Install firmware build toolchain
         run: |
@@ -265,13 +277,13 @@ jobs:
           cp "$ELF" "dist/crossplay-${NIGHTLY_TAG}-x4pro.elf"
           (cd dist && sha256sum firmware.bin > firmware.bin.sha256)
           cat > dist/release-notes.md <<EOF
-          X4 Pro **Nightly OTA test build** from \`main\`.
+          X4 Pro **Nightly OTA test build** from \`${GITHUB_HEAD_REF:-main}\`.
 
-          Source commit: \`${GITHUB_SHA}\`
+          Source commit: \`${SOURCE_SHA}\`
 
           Passed gates: X4 Pro firmware build, native host tests, headless SDL Biscuit Activity smoke tests and visual regression.
 
-          This prerelease contains the tested X4 Pro main-branch firmware. The simulator's FIRE preview is UI-only; hardware builds contain the normal hardware Activity code. Use wireless features only on owned/authorized test equipment.
+          This prerelease contains the CI-tested X4 Pro firmware for the commit above. CardParty is an EXPERIMENTAL preview with no completed physical-hardware/3-phone acceptance yet. The simulator's FIRE preview is UI-only; hardware builds contain the normal hardware Activity code. Use wireless features only on owned/authorized test equipment.
 
           **Installation:** On the X4 Pro open OTA Updates, select **Nightly / Pre-release**, then select \`${NIGHTLY_TAG}\` and confirm. The device verifies chip, board and image size. Keep a recovery backup available.
 
@@ -291,7 +303,7 @@ jobs:
             dist/firmware.bin.sha256 \
             "dist/crossplay-${NIGHTLY_TAG}-x4pro.elf" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
+            --target "$SOURCE_SHA" \
             --title "X4 Pro Nightly ${NIGHTLY_TAG}" \
             --prerelease \
             --notes-file dist/release-notes.md
