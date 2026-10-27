@@ -203,8 +203,15 @@ class Game {
     return kNoCard;
   }
   uint8_t expected() const {
-    uint8_t n=0;for(uint8_t i=0;i<kPlayers;++i)
-      if(i!=czar_&&players_[i].seated&&players_[i].connected)++n;
+    // A disconnected player whose cards are already in the pile must
+    // *still* count toward the round's expected answer total. Otherwise
+    // dropping the Wi-Fi link after submitting could prematurely advance
+    // to Judging while another connected player has not yet answered.
+    // Players who left before submitting no longer block the round.
+    uint8_t n=0;
+    for(uint8_t i=0;i<kPlayers;++i)
+      if(i!=czar_ && players_[i].seated &&
+         (players_[i].connected || players_[i].submitted)) ++n;
     return n;
   }
   uint8_t humanPlays() const {uint8_t n=0;for(uint8_t i=0;i<plays_;++i)if(pile_[i].author!=kRando)++n;return n;}
