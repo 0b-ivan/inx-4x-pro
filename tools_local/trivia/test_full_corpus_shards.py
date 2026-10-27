@@ -25,7 +25,7 @@ class ResumeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             base=Path(directory)
             out=base/"questions.jsonl"
-            out.write_text("".join(json.dumps(row)+"\\n" for row in rows),encoding="utf-8")
+            out.write_text("".join(json.dumps(row)+"\n" for row in rows),encoding="utf-8")
             args=SimpleNamespace(source="unused",seed="unused",shard=0,
                 out=str(out),quarantine=str(base/"quarantine.jsonl"),
                 ledger=str(base/"usage.jsonl"),summary=str(base/"summary.json"))
