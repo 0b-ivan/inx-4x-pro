@@ -207,6 +207,10 @@ void TriviaActivity::loadStudyTopics() {
 }
 
 bool TriviaActivity::openAwsPack() {
+  // Save the old certificate before its file handles are replaced.
+  if (awsInstalled_ && awsSessionActive_) saveAwsSession();
+  awsSessionActive_ = false;
+  awsSessionGeneration_ = 0;
   g_awsPackFile.close();
   g_awsStateFile.close();
   awsInstalled_ = false;
@@ -307,6 +311,8 @@ bool TriviaActivity::awsResetProgress() {
   awsHaveLast_ = false;
   awsHasQuestion_ = false;
   awsReviewMissed_ = false;
+  awsSessionActive_ = false;
+  clearAwsSession();
   flashOnNextPaint_ = true;
   return true;
 }
@@ -453,9 +459,20 @@ void TriviaActivity::onEnter() {
 
   const bool haveTrivia = openPack();
   scanStudyDecks();
+  // X4 Pro deep sleep resets RAM; the shelf reopens Trivia on wake.
+  // Avoid opening any pack until an existing checkpoint is found.
+  if (deckCatalog_.count()) {
+    char slot0[kStudyPathCapacity] = {}, slot1[kStudyPathCapacity] = {};
+    if (studyPath(".session0", slot0, sizeof(slot0)) &&
+        studyPath(".session1", slot1, sizeof(slot1)) &&
+        (Storage.exists(slot0) || Storage.exists(slot1)) &&
+        openAwsPack() && restoreAwsSession()) {
+      LOG_INF("TRIVIA", "Resumed study question %u", static_cast<unsigned>(awsCurrent_));
+    }
+  }
   // Opening Trivia on an empty card must still expose the GitHub-pack
   // selector; creating state files is deferred until a deck is chosen.
-  view_ = View::Menu;
+  if (!awsSessionActive_) view_ = View::Menu;
   LOG_INF("TRIVIA", "Available packs: trivia=%u certificates=%u",
           static_cast<unsigned>(haveTrivia ? pack_.count() : 0),
           static_cast<unsigned>(deckCatalog_.count()));
@@ -465,6 +482,8 @@ void TriviaActivity::onEnter() {
 }
 
 void TriviaActivity::onExit() {
+  // ActivityManager calls onExit before SleepActivity powers down.
+  if (awsSessionActive_) saveAwsSession();
   g_packFile.close();
   g_stateFile.close();
   g_awsPackFile.close();
@@ -889,6 +908,7 @@ void TriviaActivity::awsDeal() {
     return;
   }
   awsCurrent_ = index;
+  awsSessionActive_ = true;
   awsHaveLast_ = true;
   awsHasQuestion_ = true;
   awsResetPages();
@@ -1137,6 +1157,10 @@ void TriviaActivity::routeAction(const int action, const int value) {
       }
       break;
     case triviaui::ActionAwsBackToMenu:
+      if (view_ == View::AwsSummary) {
+        awsSessionActive_ = false;  // deliberate completion
+        clearAwsSession();
+      }
       go(View::AwsMenu);
       break;
     case triviaui::ActionAwsFinish:
@@ -1374,6 +1398,7 @@ void TriviaActivity::loop() {
       } else if (swipe == MappedInputManager::SwipeDir::Down && awsLayoutReady_) {
         awsPreviousPage(true);
       }
+      if (awsSessionActive_) saveAwsSession();
       return;
     }
   }
@@ -1406,6 +1431,7 @@ void TriviaActivity::loop() {
 
   const fui::ActionEvent action = interactions_.route(input);
   routeAction(static_cast<int>(action.action), static_cast<int>(action.value));
+  if (awsSessionActive_) saveAwsSession();
 }
 
 void TriviaActivity::render(RenderLock&&) {
