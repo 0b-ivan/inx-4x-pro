@@ -13,7 +13,7 @@
 {"id":"answer-007","source_hash":"ff44bfdd282ae6e7a7233a9387e3fd9e60d53309ea631005a0c015e4a85e8e75","locale":"de","text":"Sechs identische Kabel und keine Beschriftung.","reviewed":false}
 {"id":"answer-008","source_hash":"3d37962aea90db63310dae4a61707a1dc727ad9d0bab02d5c084a112e5036b7a","locale":"de","text":"Ein Backup in einer vergessenen Schublade.","reviewed":false}
 {"id":"answer-009","source_hash":"d791a6e0ff58b63abb868878fa1c2ebfe3a2cd956f043fa12077618aff5cd377","locale":"de","text":"Ein Wecker, der nur an Feiertagen klingelt.","reviewed":false}
-{"id":"answer-010","source_hash":"8746814a612884113afc56117698f49274d576733551c4cd0a5d82d8456","locale":"de","text":"Eine Datenbankabfrage ohne WHERE-Klausel.","reviewed":false}
+{"id":"answer-010","source_hash":"8746814a612884113afc56117698f49274d576733551c4cd0a5d82dabe2d8456","locale":"de","text":"Eine Datenbankabfrage ohne WHERE-Klausel.","reviewed":false}
 {"id":"answer-011","source_hash":"9a2345985964c9680e1c1c23c975e2ea271ea49b8076798cdc2417d7a2e63afc","locale":"de","text":"Noch ein Dashboard, das niemand öffnet.","reviewed":false}
 {"id":"answer-012","source_hash":"8f3c6874a855642bb2537042a115ce1e9c69b9685ca06f97be2080a0894e30f0","locale":"de","text":"Eine besonders ambitionierte Tabellenkalkulation.","reviewed":false}
 {"id":"answer-013","source_hash":"411c7b1c99194bea898eab780509652fe217f923d9f8d771fc20f2abde8845c7","locale":"de","text":"Ein automatisierter Prozess, der drei Anrufe erfordert.","reviewed":false}
