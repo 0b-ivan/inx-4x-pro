@@ -3,15 +3,19 @@ on:
   push:
     branches:
       - experiment/trivia-de-100-20261026
+      - fix/trivia-shard-resume-20261027
     paths:
       - .github/trivia-full-corpus-trigger.txt
+      - .github/workflows/trivia-full-corpus-shards.yml
+      - tools_local/trivia/full_corpus_shards.py
+      - tools_local/trivia/test_full_corpus_shards.py
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: trivia-de-full-corpus-20261026
+  group: trivia-de-full-corpus-20261026-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -78,6 +82,7 @@ jobs:
           retention-days: 14
 
   translate-shard:
+    if: github.ref_name == 'experiment/trivia-de-100-20261026'
     needs: preflight
     name: Qwen shard ${{ matrix.shard }} of 50
     runs-on: ubuntu-latest
@@ -99,6 +104,22 @@ jobs:
         with:
           name: trivia-de-full-corpus-input
           path: ${{ runner.temp }}/trivia-full-input
+      - name: Restore previous-run question checkpoints before paid API calls
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHARD_ID: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivia-full-shard"
+          # Previous run is the original translation run, including its failed-job rerun.
+          # A missing artifact means this shard has no checkpoint to restore.
+          if gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/40336915883/artifacts?per_page=100" \
+            --jq '.artifacts[].name' | grep -Fxq "trivia-de-shard-$SHARD_ID"; then
+            gh run download 40336915883 --repo "$GITHUB_REPOSITORY" \
+              --name "trivia-de-shard-$SHARD_ID" \
+              --dir "$RUNNER_TEMP/trivia-full-shard"
+          fi
       - name: Translate one non-overlapping shard with USD 0.18 cost stop
         shell: bash
         env:

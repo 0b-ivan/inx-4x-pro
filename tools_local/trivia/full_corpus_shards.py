@@ -12,6 +12,7 @@ from translate_de_pack import translate_one
 SHARDS=50
 FIELDS=("q","a","alt","w")
 MODEL="qwen/qwen3-235b-a22b-2507"
+FALLBACK_MODEL="anthropic/claude-sonnet-4.6"
 def load(p): return list(load_jsonl(p)) if Path(p).exists() else []
 def save_line(path,row):
     with open(path,"a",encoding="utf-8") as f:
@@ -55,14 +56,26 @@ def translate(args):
     expected={src[i]["id"] for i in positions}
     cached=load(args.out)
     done={r["id"]:r for r in cached}
+    byid={r["id"]:r for r in src}
+    for row in cached:
+        if row["id"] not in byid:
+            raise ValueError("Unknown translated checkpoint ID")
+        validate_record(byid[row["id"]],row,allow_draft=True)
     quarantines=load(args.quarantine)
     failures={r["id"] for r in quarantines}
+    for row in quarantines:
+        if row["id"] not in byid:
+            raise ValueError("Unknown quarantine checkpoint ID")
+        if row.get("source_hash")!=source_hash(byid[row["id"]]):
+            raise ValueError("Quarantine checkpoint source hash mismatch")
     if len(done)!=len(cached) or len(failures)!=len(quarantines) or (set(done)&failures):
         raise ValueError("Duplicated or overlapping checkpoint rows")
     if not (set(done)|failures)<=expected:
         raise ValueError("Checkpoint contains source IDs outside this shard")
     key=os.getenv("OPENROUTER_API_KEY")
-    if not key: raise ValueError("OpenRouter key missing")
+    if (set(done)|failures)!=expected and not key:
+        raise ValueError("OpenRouter key missing")
+    preferred_model=MODEL
     for i in positions:
         original=src[i]
         ident=original["id"]
@@ -76,7 +89,8 @@ def translate(args):
             continue
         errors=[]
         accepted=None
-        for attempt in range(2):
+        active_model=preferred_model
+        for attempt in range(3):
             instruction=("" if attempt==0 else
                 "HARD DISPLAY RETRY: Previous German result exceeded Quizmaster "
                 "pixel width or 448-byte binary record. Use extremely concise "
@@ -84,7 +98,7 @@ def translate(args):
                 "Preserve the original correct answer and all alternative "
                 "and incorrect answer choices in original order. Never invent facts.")
             try:
-                translation=translate_one(original,MODEL,key,timeout=95,extra_instruction=instruction)
+                translation=translate_one(original,active_model,key,timeout=95,extra_instruction=instruction)
                 candidate={"id":ident,"source_hash":source_hash(original),
                            "reviewed":False,**{k:translation[k] for k in FIELDS}}
                 validate_record(original,candidate,allow_draft=True)
@@ -95,10 +109,24 @@ def translate(args):
                     raise
                 errors.append(str(err)[:200])
             except urllib.error.HTTPError as err:
-                if err.code in (401,402,403):
-                    raise RuntimeError("OpenRouter blocked HTTP "+str(err.code))
+                if err.code==404 and active_model==MODEL:
+                    # A Qwen provider may not support the required strict JSON schema.
+                    # Fall back to the provider/model used by the validated pilot.
+                    active_model=FALLBACK_MODEL
+                    preferred_model=FALLBACK_MODEL
+                    print("OPENROUTER_FALLBACK shard={} id={} reason=HTTP404".format(args.shard,ident),flush=True)
+                    continue
+                if err.code in (401,402,403,404):
+                    # OpenRouter can return 404 for model/provider routing errors.
+                    # Record a bounded provider error without credentials or request headers.
+                    try:
+                        detail=json.loads(err.read(4096).decode("utf-8","replace"))
+                        message=str((detail.get("error") or {}).get("message",""))[:300]
+                    except (ValueError,AttributeError,TypeError):
+                        message="unavailable"
+                    raise RuntimeError("OpenRouter HTTP {} for model {}: {}".format(err.code,active_model,message)) from err
                 if err.code==429 or err.code>=500:
-                    if attempt==1: raise
+                    if attempt==2: raise
                     time.sleep(9)
                 else: raise
             except (urllib.error.URLError,TimeoutError):
