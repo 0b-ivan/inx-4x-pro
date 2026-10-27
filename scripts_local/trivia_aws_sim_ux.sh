@@ -38,8 +38,8 @@ root = Path(os.environ["AWS_UX_PRIVATE_DIR"])
 sentence = ("Ein Team betreibt eine Anwendung mit Amazon EC2, speichert Berichte in "
             "Amazon S3 und vergibt Rechte ueber IAM-Rollen (Größe, café). ")
 row = {
-  "q": sentence * 7 + "Welche Loesung ist am einfachsten? FRAGE-ENDE.",
-  "options": ["Amazon S3 mit Versionierung. A-ENDE.", "Amazon EBS Snapshots. B-ENDE."],
+  "q": "S3. " + sentence * 7 + "Welche Loesung ist am einfachsten? FRAGE-ENDE.",
+  "options": ["Amazon S3 mit Versionierung. A-ENDE.", "SQS Queue statt Objektablage. B-ENDE."],
   "correct": [0], "type": "single",
   "explanation": ("Amazon S3 speichert Objekte dauerhaft; Amazon EBS ist Blockspeicher. " * 12)
                  + "ERKLAERUNG-ENDE.",
@@ -56,6 +56,8 @@ PY
 # threshold is 500 ms). SWIPE:x1,y1,x2,y2,ms.
 up="SWIPE:240,520,240,240,250"
 down="SWIPE:240,240,240,520,250"
+left="SWIPE:360,370,120,370,250"
+right="SWIPE:120,370,360,370,250"
 t=8200; step=1800
 s="$t:TAP:240,520,110"; shots=""
 add() { t=$((t + step)); s+=";$t:$1"; }
@@ -64,15 +66,17 @@ add "TAP:240,145,110"                 # packs -> DOP-C02
 add "TAP:240,240,110"; shot q1         # study -> question page 1
 add "$up";             shot q2         # swipe up -> page 2
 add "$down";           shot q1b        # swipe down -> page 1 again
-add "TAP:240,300,900"; shot gloss      # hold in text -> glossary
+add "TAP:24,165,900"; shot gloss       # hold directly on dotted "S3" in first line
 add "TAP:370,750,110"; shot q1c        # RESUME -> same page 1
 add "TAP:370,750,900"; shot q2b        # slow press MORE TEXT -> page 2
 add "$up";             shot optA       # swipe up past question -> option A
 add "TAP:80,750,110";  shot optAmark   # MARK A
 add "TAP:80,750,110";  shot optAclear  # tap again -> UNMARK (single choice)
-add "TAP:370,750,110"; shot optB       # NEXT -> option B
+add "$left";            shot optB       # swipe left -> option B
+add "$right";           shot optAagain  # swipe right -> option A
+add "$left";            shot optBagain  # swipe left -> B again
 add "TAP:80,750,110";  shot optBmark   # MARK B (wrong on purpose)
-add "TAP:240,300,900"; shot glossB     # hold -> glossary of option B
+add "TAP:24,165,900"; shot glossB      # hold directly on dotted SQS in answer B
 add "TAP:370,750,110"; shot optBback   # RESUME keeps the selection
 add "$up";             shot optBswipe  # swipe past last option -> NO grading
 add "TAP:390,750,110"; shot review1    # GRADE -> explanation page 1 (wrong)
@@ -98,7 +102,7 @@ def h(name):
     assert tuple(map(abs, struct.unpack_from("<ii", raw, 18))) == (480, 800), name
     return hashlib.sha256(raw).hexdigest()
 H = {n: h(n) for n in ["q1", "q2", "q1b", "gloss", "q1c", "q2b", "optA", "optAmark",
-                       "optAclear", "optB", "optBmark", "glossB", "optBback",
+                       "optAclear", "optB", "optAagain", "optBagain", "optBmark", "glossB", "optBback",
                        "optBswipe", "review1", "review2", "review2b"]}
 assert H["q1"] != H["q2"], "swipe up did not turn the question page"
 assert H["q1b"] == H["q1"], "swipe down did not return to the identical first page"
@@ -108,6 +112,8 @@ assert H["q2b"] == H["q2"], "a slow press on MORE TEXT was swallowed"
 assert H["optA"] not in (H["q1"], H["q2"]), "swipe past the question did not open option A"
 assert H["optAmark"] != H["optA"], "MARK did not select option A"
 assert H["optAclear"] == H["optA"], "single choice: tapping the marked option did not clear it"
+assert H["optAagain"] == H["optA"], "swipe right did not restore option A"
+assert H["optBagain"] == H["optB"], "swipe left did not restore option B"
 assert H["optBmark"] != H["optB"], "MARK did not select option B"
 assert H["optBback"] == H["optBmark"], "glossary round trip lost the answer selection"
 assert H["optBswipe"] == H["optBmark"], "a swipe past the last option changed the screen"
@@ -179,4 +185,45 @@ assert H["mreview"] not in (H["mqback"], H["mq"]), "GRADE NOW did not grade"
 state = (root / "DOP-C02.state").read_bytes()
 assert state == b"\x01", f"A+B is the key: expected SEEN without MISSED, got {state.hex()}"
 print("PASS X4 Pro AWS study UX SDL: multi-response mark/unmark/back and GRADE NOW from question")
+PY
+
+# Regression: reset is per-deck, requires a second confirmation, and must not
+# erase the study deck, topic filters or the state of another certification.
+# The multi-answer scenario above left DOP-C02.state == SEEN.
+python3 - "$tmp/sd/trivia/aws" <<'PY'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+assert (root / "DOP-C02.state").read_bytes() == b"\x01"
+(root / "DOP-C02.prefs").write_bytes(b"\x03")
+(root / "SAA-C03.state").write_bytes(b"\x05")
+PY
+t=8200; s="$t:TAP:240,520,110"; shots=""
+add "TAP:240,145,110"                 # packs -> DOP-C02
+add "TAP:240,620,110"; shot resetAsk  # selected deck -> reset confirmation
+add "TAP:80,750,110";  shot resetNo   # cancel -> menu, nothing erased
+add "TAP:240,620,110"                 # enter confirmation again
+add "TAP:370,750,110"; shot resetYes  # explicit reset -> study menu
+t=$((t + step)); s+=";$t:QUIT"
+if ! env CROSSPLAY_AUTOSTART=TRIVIA CROSSPOINT_SIM_SD="$tmp/sd" \
+  CROSSPOINT_SIM_INPUT_SCRIPT="$s" CROSSPOINT_SIM_SCREENSHOTS="$shots" \
+  LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' \
+  timeout 60s "$bin" >"$out/reset.log" 2>&1; then
+  echo "FAIL: AWS reset progress UI simulator run"
+  tail -60 "$out/reset.log"
+  exit 1
+fi
+python3 - "$tmp/sd/trivia/aws" "$out" <<'PY'
+from pathlib import Path
+import hashlib, sys
+root, out = map(Path, sys.argv[1:])
+def digest(name):
+    return hashlib.sha256((out / f"{name}.bmp").read_bytes()).digest()
+assert digest("resetAsk") != digest("resetNo"), "confirmation and study menu identical"
+assert digest("resetAsk") != digest("resetYes"), "confirm screen remains after reset"
+assert (root / "DOP-C02.state").read_bytes() == b"\x00", "selected deck progress was not reset"
+assert (root / "DOP-C02.prefs").read_bytes() == b"\x03", "reset altered domain filters"
+assert (root / "SAA-C03.state").read_bytes() == b"\x05", "reset modified another deck"
+assert (root / "DOP-C02.dat").stat().st_size > 0, "reset deleted question pack"
+print("PASS X4 Pro AWS study UX SDL: confirmation, per-pack progress reset, preserved filters")
 PY
