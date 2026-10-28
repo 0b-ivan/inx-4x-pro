@@ -60,6 +60,7 @@ int main() {
   assert(game.configure(fixture.deck,Rules{5,2,true},11));
   Sessions sessions(game);
   Server server(game,sessions,fixture.deck);
+  server.setLanguage("de");
   devmode::pause();
   assert(server.begin(Server::Mode::Hotspot));
   assert(server.running()&&server.hotspot());
@@ -87,10 +88,13 @@ int main() {
   std::string tokens[3];
   for(int i=0;i<3;++i) {
     ws.event(WStype_CONNECTED,static_cast<uint8_t>(i));
+    assert(ws.messages.back()==R"({"type":"hello","lang":"de"})");
+    assert(ws.recipients.back()==i);
     const size_t mark=ws.messages.size();
     send(ws,i,std::string("{\"type\":\"join\",\"name\":\"") + char('A'+i) + "\"}");
     tokens[i]=lastWelcome(ws,mark,i);
     assert(tokens[i].size()==32);
+    assert(ws.messages[mark].find("\"lang\":\"de\"")!=std::string::npos);
     assert(anyStateFor(ws,i) && hasPrivateFor(ws,i));
     // Invalid proof / roles may not obtain someone else's cards.
     assert(ws.messages.back().find("\"type\":\"state\"")!=std::string::npos);
@@ -120,7 +124,9 @@ int main() {
   send(ws,1,"{\"type\":\"submit\",\"token\":\""+wrong+"\",\"revision\":0,\"slots\":[0]}");
   assert(ws.messages.size()==beforeRejected+1);
   assert(ws.messages.back().find("\"type\":\"error\"")!=std::string::npos);
-  assert(game.publicView().submitted==0);
+  assert(ws.messages.back().find("\"code\":\"rejected\"")!=std::string::npos);
+   assert(ws.messages.back().find("\"message\"")==std::string::npos);
+   assert(game.publicView().submitted==0);
 
   send(ws,1,"{\"type\":\"submit\",\"token\":\""+tokens[1]+"\",\"revision\":0,\"slots\":[0]}");
   assert(game.publicView().submitted==1);
