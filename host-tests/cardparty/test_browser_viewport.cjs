@@ -102,35 +102,39 @@ async function inViewport(page, id, label) {
   assert.ok(r.top >= 0 && r.bottom <= r.h && r.left >= 0 && r.right <= r.w,
             `${label}: #${id} not fully visible without scrolling (${JSON.stringify(r)})`);
 }
-async function shot(page, vp, phase) {
-  await page.screenshot({ path: path.join(outDir, `${vp.name}-${phase}.png`), fullPage: false });
+async function shot(page, vp, phase, locale) {
+  await page.screenshot({ path: path.join(outDir, `${vp.name}-${locale}-${phase}.png`), fullPage: false });
 }
 
 (async () => {
   const browser = await chromium.launch(process.env.CARDPARTY_BROWSER_CHANNEL ?
     { channel: process.env.CARDPARTY_BROWSER_CHANNEL } : {});
   try {
+    for (const locale of ["de-DE", "en-US"]) {
     for (const vp of viewports) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height },
-                                           deviceScaleFactor: 2, hasTouch: vp.name !== "desktop" });
+                                           deviceScaleFactor: 2, hasTouch: vp.name !== "desktop", locale });
       await page.addInitScript(fakeSocket);
       // Served under the X4 hotspot URL, so location.hostname is realistic.
       await page.route("http://192.168.4.1/**", route =>
         route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: html }));
       await page.goto("http://192.168.4.1/cardparty", { waitUntil: "load" });
       await page.waitForFunction(() => window.__sockets && window.__sockets.length === 1);
-      const tag = `${vp.name}px`;
+      const lang=locale.startsWith("de")?"de":"en";
+      await page.evaluate(lang => window.__deliver({ type:"hello",lang }),lang);
+      assert.equal(await page.evaluate(() => document.documentElement.lang), lang);
+      const tag = `${vp.name}px / ${lang}`;
 
       // Join.
       await noHorizontalScroll(page, `${tag} join`);
-      await shot(page, vp, "1-join");
+      await shot(page, vp, "1-join", lang);
 
       // Lobby with eight long names.
       await page.evaluate(([t, g]) => window.__deliver({ type: "welcome", token: t, revision: 1, game: g,
         private: { isCzar: false, submitted: false, hand: [] } }), [token, game("Lobby", { round: 0 })]);
       assert.equal(await page.isVisible("#lobby"), true);
       await noHorizontalScroll(page, `${tag} lobby`);
-      await shot(page, vp, "2-lobby");
+      await shot(page, vp, "2-lobby", lang);
 
       // Pick 3 with a long prompt and long answers.
       await page.evaluate(([g, h]) => window.__deliver({ type: "state", revision: 2, game: g,
@@ -155,7 +159,7 @@ async function shot(page, vp, phase) {
       assert.equal(await page.isEnabled("#submit"), true);
       await inViewport(page, "submit", `${tag} play after selection`);
       await cardsIntact(page, "choices", `${tag} play`);
-      await shot(page, vp, "3-play-pick3");
+      await shot(page, vp, "3-play-pick3", lang);
       const promptScrolls = await page.$eval(".prompt", el => el.scrollHeight > el.clientHeight);
       if (vp.name === "320") assert.ok(promptScrolls, "320px: long prompt should scroll inside its region");
       await page.click("#submit");
@@ -176,15 +180,16 @@ async function shot(page, vp, phase) {
       // At least two whole answers fit next to the prompt, even at 320x568.
       const shown = await page.$eval("#candidateList", el => el.clientHeight);
       assert.ok(shown >= 150, `${tag} judging: answer list only ${shown}px tall`);
-      await shot(page, vp, "4-judging");
+      await shot(page, vp, "4-judging", lang);
 
       // Reveal with the winning triple.
       await page.evaluate(g => window.__deliver({ type: "state", revision: 4, game: g,
         private: { isCzar: false, submitted: false, hand: [] } }),
-        game("Reveal", { winnerName: names[0], winningText: answers.slice(0, 3).join(" / ") }));
+        game("Reveal", { winnerName: names[0], winningText: answers.slice(0, 3).join(" / "), winningCards: answers.slice(0, 3) }));
       assert.equal(await page.isVisible("#result"), true);
+      assert.equal(await page.$eval("#winnerText strong",els=>els.length),3);
       await noHorizontalScroll(page, `${tag} reveal`);
-      await shot(page, vp, "5-reveal");
+      await shot(page, vp, "5-reveal", lang);
 
       // Paused by a player with the longest name; the timer stays in the header.
       await page.evaluate(g => window.__deliver({ type: "state", revision: 4, game: g,
@@ -193,14 +198,14 @@ async function shot(page, vp, phase) {
       assert.equal(await page.isVisible("#hold"), true);
       await noHorizontalScroll(page, `${tag} paused`);
       await inViewport(page, "timer", `${tag} paused`);
-      await shot(page, vp, "6-paused");
+      await shot(page, vp, "6-paused", lang);
 
       // Waiting for a missing player.
       await page.evaluate(g => window.__deliver({ type: "state", revision: 4, game: g,
         private: { isCzar: false, submitted: false, hand: [] } }), game("Judging", { blockedOn: names[2] }));
       assert.equal(await page.isVisible("#hold"), true);
       await noHorizontalScroll(page, `${tag} blocked`);
-      await shot(page, vp, "7-blocked");
+      await shot(page, vp, "7-blocked", lang);
 
       // Ceremony: two leaders tied, eight long names.
       const finalPlayers = players.map((p, i) => ({ ...p, points: i === 0 || i === 3 ? 7 : i % 5 }));
@@ -211,15 +216,16 @@ async function shot(page, vp, phase) {
       assert.equal(await page.$$eval("#podium .crown", els => els.length), 2);
       await noHorizontalScroll(page, `${tag} final`);
       await inViewport(page, "againButton", `${tag} final`);
-      await shot(page, vp, "8-final");
+      await shot(page, vp, "8-final", lang);
 
       // Removed by the host.
       await page.evaluate(() => window.__deliver({ type: "kicked" }));
       assert.equal(await page.isVisible("#removed"), true);
       await noHorizontalScroll(page, `${tag} removed`);
-      await shot(page, vp, "9-removed");
+      await shot(page, vp, "9-removed", lang);
       await page.close();
       console.log(`PASS cardparty viewport ${vp.width}x${vp.height}: join, lobby, Pick 3, judging, reveal, pause, block, final, removed`);
+    }
     }
   } finally {
     await browser.close();
