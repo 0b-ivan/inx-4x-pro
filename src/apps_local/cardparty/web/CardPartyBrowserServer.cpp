@@ -344,19 +344,6 @@ void Server::sendError(uint8_t client, const char* code) {
   if (w.ok() && ws_.writable(client)) ws_.sendTXT(client, response, w.size());
 }
 
-const char* Server::seatLabel(uint8_t seat, char* target, size_t capacity) const {
-  if (!target || !capacity) return "";
-  const PublicView v = game_.publicView();
-  if (seat >= kPlayers || !v.players[seat].seated) {
-    target[0] = 0;
-    return target;
-  }
-  if (playerIds_[seat])
-    std::snprintf(target,capacity,"%s·%s",v.players[seat].name,word(playerWords_[seat]));
-  else
-    std::snprintf(target,capacity,"%s",v.players[seat].name);
-  return target;
-}
 void Server::assignId(uint8_t seat, uint64_t requested) {
   if (seat >= kPlayers) return;
   bool collision = false;
