@@ -144,9 +144,9 @@ h2{font-size:18px;font-weight:500}
     </section>
     <section id="fame" hidden>
       <p class="eyebrow" data-t="fameTitle">RUHMESHALLE</p>
-      <h1 data-t="famePlayers">SPIELERSTATISTIK</h1>
+      <h1 id="famePlayersHeading" data-t="famePlayers">SPIELERSTATISTIK</h1>
       <ul id="famePlayers" class="list" aria-label="Wall of Fame"></ul>
-      <p class="eyebrow" data-t="fameQuotes">LETZTE SIEGERSAETZE</p>
+      <p class="eyebrow" id="fameQuotesHeading" data-t="fameQuotes">LETZTE SIEGERSAETZE</p>
       <ul id="fameQuotes" class="list" aria-label="Siegersaetze"></ul>
       <div class="footer">
         <button id="famePrev" type="button" class="mini" data-t="famePrevious">[ ZURUECK ]</button>
@@ -566,6 +566,11 @@ h2{font-size:18px;font-weight:500}
     const data=state.fameData||{},players=Array.isArray(data.players)?data.players:[],
       quotes=Array.isArray(data.quotes)?data.quotes:[];
     const a=$("famePlayers"),b=$("fameQuotes");a.replaceChildren();b.replaceChildren();
+    const statistics=data.section!=="quotes";
+    $("famePlayersHeading").hidden=!statistics;
+    a.hidden=!statistics;
+    $("fameQuotesHeading").hidden=statistics;
+    b.hidden=statistics;
     for(const p of players){
       const li=document.createElement("li"),label=document.createElement("strong");
       label.textContent=String(p.name||"")+"·"+String(p.word||"");
@@ -577,9 +582,10 @@ h2{font-size:18px;font-weight:500}
       const li=document.createElement("li");
       li.textContent=String(q.name||"")+" — "+String(q.sentence||"");b.append(li);
     }
-    if(!players.length){const li=document.createElement("li");li.textContent=t("fameEmpty");a.append(li);}
+    if(!players.length&&statistics){const li=document.createElement("li");li.textContent=t("fameEmpty");a.append(li);}
+    if(!quotes.length&&!statistics){const li=document.createElement("li");li.textContent=t("fameEmpty");b.append(li);}
     $("famePrev").disabled=state.famePage===0;
-    $("fameNext").disabled=state.famePage+1>=Math.max(2,Math.ceil((Number(data.total)||0)/10));
+    $("fameNext").disabled=state.famePage+1>=(Number(data.pages)||1);
   }
   function render() {
     const game=state.snapshot||{},personal=state.personal||{};
