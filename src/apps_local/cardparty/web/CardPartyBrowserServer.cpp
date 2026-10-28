@@ -373,7 +373,8 @@ void Server::assignId(uint8_t seat, uint64_t requested) {
     } while (collision);
   }
   playerIds_[seat] = id;
-  uint8_t wordId = history::Book::wordFor(id);
+  const auto* saved = history_ ? history_->player(id) : nullptr;
+  uint8_t wordId = saved ? saved->word : history::Book::wordFor(id);
   bool inUse;
   do {
     inUse = false;
@@ -657,7 +658,8 @@ void Server::onMessage(uint8_t client, const uint8_t* bytes, size_t size) {
       tickets_[ticket.seat] = ticket;
       socket_[ticket.seat] = client;
       assignId(ticket.seat, command.playerId);
-      if (history_) history_->upsert(playerIds_[ticket.seat], command.name, ++identitySequence_);
+      if (history_) history_->upsert(playerIds_[ticket.seat], command.name, ++identitySequence_,
+                                    playerWords_[ticket.seat]);
       sendState(ticket.seat, true);
     } else {
       ++rejected_;
