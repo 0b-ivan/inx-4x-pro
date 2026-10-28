@@ -216,6 +216,7 @@ bool CardPartyActivity::loadPack(const char* path) {
   }
   packLoaded_ = true;
   activeDeck_ = sdPack_.deck();
+  server_.setPackCrc(sdPack_.crc());
   std::snprintf(deckPath_, sizeof(deckPath_), "%s", path);
   LOG_INF("CARDPARTY", "Loaded released SD deck v%u (%u prompts, %u answers, %u categories)",
           static_cast<unsigned>(sdPack_.version()), static_cast<unsigned>(activeDeck_.promptsCount),
@@ -273,6 +274,7 @@ void CardPartyActivity::chooseDeck(int row) {
         packLoaded_ = false;
         deckPath_[0] = 0;
         activeDeck_ = cp::demoDeck();
+        server_.setPackCrc(0xca000001u);
         enabled_ = 0;
         switched = true;
       } else {
@@ -306,6 +308,7 @@ void CardPartyActivity::chooseDeck(int row) {
       packLoaded_ = false;
       deckPath_[0] = 0;
       activeDeck_ = cp::demoDeck();
+      server_.setPackCrc(0xca000001u);
       deckPlayable_ = true;
     } else if (!loadPack(decks_[row - 1].path)) {
       std::snprintf(report_, sizeof(report_), "NOT LOADED: %.40s", decks_[row - 1].file);
@@ -546,6 +549,7 @@ void CardPartyActivity::onEnter() {
   server_.setHistory(&history_);
   server_.hostSettings(settings_);
   loadConfiguredDeck();
+  server_.setPackCrc(packLoaded_ ? sdPack_.crc() : 0xca000001u);
   resetGame();
 #ifdef SIMULATOR
   // SDL fixture mode exercises the actual CardPartyActivity renderer.
