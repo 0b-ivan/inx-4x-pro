@@ -17,6 +17,8 @@ int main() {
   assert(book.upsert(carol,"Carol",12));
   assert(book.player(alice)->id != book.player(bob)->id);
   assert(book.player(alice)->word == Book::wordFor(alice));
+  assert(book.upsert(alice,"Alice",15,7));
+  assert(book.player(alice)->word == 7);
   assert(!book.upsert(0,"Invalid",13));
   assert(!book.upsert(alice,"",13));
   assert(book.played(alice));
@@ -47,6 +49,7 @@ int main() {
   assert(restored.players()==3 && restored.quotes()==1 && restored.pairs()==1);
   assert(restored.blocked(pack,4,17));
   assert(restored.player(alice)->wins == 1);
+  assert(restored.player(alice)->word == 7);
   assert(restored.strike(alice,pack,4,17) == Book::Vote::Blocked);
   auto bad = saved;
   bad[12] ^= 0x80;
