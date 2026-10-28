@@ -79,12 +79,22 @@ first.message({type:"hello",lang:"en"});
 assert.equal(nodes.connection.textContent,"LOCAL / CONNECTED");
 first.message({type:"error",code:"session_full"});
 assert.equal(nodes.joinHint.textContent,"ERROR: SESSION FULL");
+for(const [code,label] of [["rejected","REQUEST REJECTED"],["already_joined","ALREADY JOINED"],
+                           ["game_running","GAME ALREADY RUNNING"]]){
+  first.message({type:"error",code});
+  assert.equal(nodes.joinHint.textContent,"ERROR: "+label);
+}
 first.message({type:"error",code:"unrecognized_error"});
 assert.equal(nodes.joinHint.textContent,"ERROR: unrecognized_error");
 first.message({type:"hello",lang:"de"});
 assert.equal(nodes.connection.textContent,"LOKAL / VERBUNDEN");
 first.message({type:"error",code:"session_full"});
 assert.equal(nodes.joinHint.textContent,"FEHLER: SITZUNG VOLL");
+for(const [code,label] of [["rejected","ANFRAGE ABGELEHNT"],["already_joined","BEREITS BEIGETRETEN"],
+                           ["game_running","SPIEL LÄUFT BEREITS"]]){
+  first.message({type:"error",code});
+  assert.equal(nodes.joinHint.textContent,"FEHLER: "+label);
+}
 
 nodes.nick.value="Ivan";
 nodes.joinForm.dispatch("submit",{preventDefault(){}});
