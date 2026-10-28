@@ -52,7 +52,14 @@ class Server final {
     language_[0] = de ? 'd' : 'e';
     language_[1] = de ? 'e' : 'n';
   }
-  void setHistory(history::Book* book) { history_ = book; }
+  void setHistory(history::Book* book) {
+    history_ = book;
+    game_.setBlocker([](void* self, uint16_t prompt, uint16_t answer) {
+      const Server* server = static_cast<const Server*>(self);
+      return server->history_ && server->history_->blocked(server->packCrc_, prompt, answer);
+    }, this);
+  }
+  void setPackCrc(uint32_t crc) { packCrc_ = crc; }
   bool begin(Mode mode);
   void loop();
   void stop();
@@ -175,6 +182,7 @@ class Server final {
   }
   void assignId(uint8_t seat, uint64_t id);
   uint32_t identitySequence_ = 0;
+  uint32_t packCrc_ = 0xca000001u;
   uint16_t recordedRound_ = 0;
   bool recordedFinal_ = false;
 };
