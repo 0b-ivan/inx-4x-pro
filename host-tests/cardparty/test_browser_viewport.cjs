@@ -140,11 +140,18 @@ async function shot(page, vp, phase, locale) {
         games:100,wins:20,rounds:70
       }));
       await page.evaluate(data=>window.__deliver(data),{
-        type:"fame",page:0,total:8,players:famePlayers,
-        quotes:answers.map((sentence,i)=>({name:names[i],sentence}))
+        type:"fame",page:0,pages:4,section:"players",total:8,players:famePlayers,quotes:[]
       });
       await noHorizontalScroll(page,`${tag} fame`);
       await shot(page,vp,"2-fame",lang);
+      await page.click("#fameNext");
+      await page.evaluate(data=>window.__deliver(data),{
+        type:"fame",page:1,pages:4,section:"quotes",total:8,players:[],
+        quotes:answers.slice(0,2).map((sentence,i)=>({name:names[i],sentence}))
+      });
+      assert.equal(await page.locator("#fameQuotes li").count(),2);
+      await noHorizontalScroll(page,`${tag} fame sentences`);
+      await shot(page,vp,"2-fame-quotes",lang);
       await page.click("#fameClose");
       assert.equal(await page.isVisible("#lobby"),true);
       await noHorizontalScroll(page, `${tag} lobby`);
