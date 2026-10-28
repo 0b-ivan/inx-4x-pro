@@ -553,6 +553,7 @@ void CardPartyActivity::start(cp::web::Server::Mode mode) {
     requestUpdate();
     return;
   }
+  server_.setLanguage(I18N.getLanguage() == Language::DE ? "de" : "en");
   if (!server_.begin(mode)) {
     stage_ = Stage::Failed;
     std::snprintf(report_, sizeof(report_),
