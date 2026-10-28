@@ -67,52 +67,52 @@ h2{font-size:18px;font-weight:500}
       <button id="pauseButton" class="mini" type="button" hidden>[ PAUSE ]</button></span>
   </header>
   <hr class="rule">
-  <div class="meta"><span id="round">ROUND —</span><span id="timer" aria-live="off"></span></div>
+  <div class="meta"><span id="round">RUNDE —</span><span id="timer" aria-live="off"></span></div>
   <main>
     <section id="join">
-      <p class="eyebrow">/// JOIN GAME</p>
+      <p class="eyebrow">/// SPIEL BEITRETEN</p>
       <h1>CARDS AGAINST WHATEVER</h1>
       <p class="secondary">Der X4 Pro ist der Spielleiter. Dein Telefon ist deine Kartenhand.</p>
       <form id="joinForm" class="stack">
-        <label class="field" for="nick"><span>PLAYER NAME</span>
+        <label class="field" for="nick"><span>SPIELERNAME</span>
           <input id="nick" type="text" required minlength="1" maxlength="23" autocomplete="nickname" spellcheck="false" placeholder="DEIN NAME">
         </label>
-        <button type="submit" id="joinButton">[ JOIN SESSION ]</button>
+        <button type="submit" id="joinButton">[ BEITRETEN ]</button>
       </form>
       <p class="secondary" id="joinHint" role="status" aria-live="polite">CONNECT TO X4 TO JOIN</p>
     </section>
     <section id="lobby" hidden>
       <p class="eyebrow">/// LOBBY</p>
-      <h1>WAITING FOR PLAYERS</h1>
+      <h1>WARTE AUF SPIELER</h1>
       <p class="secondary">Die Partie wird auf dem X4 gestartet.</p>
       <ul id="roster" class="list" aria-label="Players"></ul>
     </section>
     <section id="play" hidden>
       <p class="eyebrow" id="playMeta">/// SELECT RESPONSE</p>
       <div class="prompt" tabindex="0" role="region" aria-label="Aktuelle Frage, scrollbar">
-        <p class="eyebrow">CURRENT PROMPT</p>
-        <h1 id="promptText"></h1>
+        <p class="eyebrow">AKTUELLER SATZ</p>
+        <h1 id="promptText"></h1><p id="answerPreview" class="secondary" aria-live="polite"></p>
       </div>
-      <div class="row"><span class="eyebrow">YOUR HAND</span><span class="secondary" id="count">0/1 SELECTED</span></div>
+      <div class="row"><span class="eyebrow">DEINE KARTEN</span><span class="secondary" id="count">0/1 GEWÄHLT</span></div>
       <div id="choices" class="choice-list" tabindex="0" role="region" aria-label="Antwortkarten, scrollbar"></div>
       <div class="footer">
-        <span class="secondary" id="footCount">0/1 SELECTED</span>
-        <button id="submit" type="button" disabled>[ SUBMIT ]</button>
+        <span class="secondary" id="footCount">0/1 GEWÄHLT</span>
+        <button id="submit" type="button" disabled>[ ABSENDEN ]</button>
       </div>
     </section>
     <section id="waiting" hidden>
       <p class="eyebrow">/// RESPONSE SENT</p>
-      <h1>WAITING FOR THE OTHERS</h1>
+      <h1>WARTE AUF DIE ANDEREN</h1>
       <p id="waitingCount" role="status" aria-live="polite">WAITING...</p>
     </section>
     <section id="judging" hidden>
       <p class="eyebrow">/// JUDGING</p>
-      <h1 id="judgeHeader">CHOOSE THE WINNER</h1>
+      <h1 id="judgeHeader">GEWINNER WÄHLEN</h1>
       <p id="judgePrompt" class="secondary" tabindex="0" role="region" aria-label="Aktuelle Frage, scrollbar"></p>
       <div id="candidateList" class="choice-list" tabindex="0" role="region" aria-label="Anonyme Antworten, scrollbar"></div>
       <div class="footer">
         <span class="secondary" id="judgeSelection">NONE SELECTED</span>
-        <button id="confirmJudge" type="button" disabled>[ CONFIRM ]</button>
+        <button id="confirmJudge" type="button" disabled>[ BESTÄTIGEN ]</button>
       </div>
     </section>
     <section id="result" hidden>
@@ -128,7 +128,7 @@ h2{font-size:18px;font-weight:500}
       <ul id="standings" class="list" aria-label="Final standings"></ul>
       <div class="footer">
         <span class="secondary" id="votes" role="status" aria-live="polite">0 WANT ANOTHER GAME</span>
-        <button id="againButton" type="button">[ AGAIN! ]</button>
+        <button id="againButton" type="button">[ NOCHMAL! ]</button>
       </div>
     </section>
     <section id="hold" hidden>
@@ -139,13 +139,13 @@ h2{font-size:18px;font-weight:500}
     </section>
     <section id="removed" hidden>
       <p class="eyebrow">/// REMOVED</p>
-      <h1>THE HOST REMOVED YOU FROM THE PARTY</h1>
-      <p class="secondary">You can join again when the next game opens.</p>
+      <h1>DER X4 HAT DICH AUS DER PARTY ENTFERNT</h1>
+      <p class="secondary">Du kannst in der nächsten Lobby wieder beitreten.</p>
       <button id="rejoinButton" type="button">[ BACK TO JOIN ]</button>
     </section>
   </main>
   <hr class="rule">
-  <div class="meta"><span>LOCAL MULTIPLAYER</span><span>NO CLOUD REQUIRED</span></div>
+  <div class="meta"><span>LOKALER MEHRSPIELERMODUS</span><span>OHNE CLOUD</span></div>
 </div>
 <script>
 "use strict";
@@ -209,6 +209,36 @@ h2{font-size:18px;font-weight:500}
     btn.append(mark,body);btn.addEventListener("click",onClick);
     return btn;
   }
+  // Compose plain text and emphasized answer parts without HTML injection.
+  function sentenceParts(prompt, answers) {
+    const source=String(prompt||"");
+    const parts=[], pieces=source.split(/(_{3,}|\\[blank\\]|\\{blank\\})/gi);
+    let used=0;
+    const blankCount=pieces.filter((_,i)=>i%2===1).length;
+    if(!blankCount) {
+      parts.push({text:source,answer:false});
+      for(const answer of answers)parts.push({text:" "+String(answer||""),answer:true});
+      return parts;
+    }
+    pieces.forEach((part,i)=>{
+      if(i%2===0)parts.push({text:part,answer:false});
+      else if(used<answers.length)parts.push({text:String(answers[used++]||""),answer:true});
+      else parts.push({text:part,answer:false});
+    });
+    while(used<answers.length)parts.push({text:" "+String(answers[used++]||""),answer:true});
+    return parts;
+  }
+  function fillSentence(element,prompt,answers) {
+    element.replaceChildren();
+    for(const part of sentenceParts(prompt,answers)) {
+      if(part.answer) {
+        const strong=document.createElement("strong");
+        strong.style.textDecoration="underline";
+        strong.textContent=part.text;
+        element.append(strong);
+      } else element.append(document.createTextNode(part.text));
+    }
+  }
   function choices() {
     const personal=state.personal||{}, game=state.snapshot||{};
     const cards=Array.isArray(personal.hand)?personal.hand:[];
@@ -220,6 +250,7 @@ h2{font-size:18px;font-weight:500}
       ? Array.prototype.indexOf.call(list.children,focused) : -1;
     list.replaceChildren();
     text("promptText",game.promptText||"");
+    fillSentence($("answerPreview"),game.promptText||"",state.selection.map(i=>cards[i]&&cards[i].text||""));
     text("playMeta","/// SELECT RESPONSE / JUROR "+(game.czarName||"?"));
     for(let i=0;i<cards.length;i++){
       const selected=state.selection.indexOf(i);
@@ -258,7 +289,7 @@ h2{font-size:18px;font-weight:500}
     text("judgePrompt",game.promptText||"");
     for(let i=0;i<candidates.length;i++){
       const answer=candidates[i];
-      const label=Array.isArray(answer.cards)?answer.cards.join(" / "):answer.text||"";
+      const label=Array.isArray(answer.cards)?sentenceParts(game.promptText||"",answer.cards).map(p=>p.text).join(""):answer.text||"";
       const btn=rowButton(i+1,label,state.judging===i,()=>{
         if(!canJudge)return;
         state.judging=i;candidateRows();
@@ -268,7 +299,7 @@ h2{font-size:18px;font-weight:500}
     list.scrollTop=scrollOffset;
     text("judgeSelection",state.judging==null?"NONE SELECTED":"["+String(state.judging+1).padStart(2,"0")+"] SELECTED");
     $("confirmJudge").disabled=!canJudge||state.judging==null;
-    text("judgeHeader",canJudge?"CHOOSE THE WINNER":"THE JUROR IS JUDGING");
+    text("judgeHeader",canJudge?"GEWINNER WÄHLEN":"THE JUROR IS JUDGING");
   }
   function render() {
     const game=state.snapshot||{},personal=state.personal||{};
