@@ -25,7 +25,7 @@ class MoralischBankrottDraftTest(unittest.TestCase):
 
     def test_draft_pack_compiles_with_real_format_2_compiler(self):
         blob, receipt = validate(self.manifest, self.cards, draft=True)
-        self.assertEqual(blob[:8], b"XCAWPK2\\0")
+        self.assertEqual(blob[:8], b"XCAWPK2\0")
         self.assertTrue(receipt["draft_only"])
         self.assertEqual(receipt["prompts"], 24)
         self.assertEqual(receipt["answers"], 80)
@@ -56,7 +56,7 @@ class MoralischBankrottDraftTest(unittest.TestCase):
         for prompt in self.prompts:
             self.assertLessEqual(len(prompt["text"].encode("utf-8")), 384)
             self.assertEqual(prompt["text"].count("____"), prompt["pick"])
-            self.assertNotRegex(prompt["text"], r"(?i)\\b(?:wegen|durch|ohne|anstelle von)\\s+____")
+            self.assertNotRegex(prompt["text"], r"(?i)\b(?:wegen|durch|ohne|anstelle von)\s+____")
 
     def test_every_pick_one_and_pick_two_combination_is_structurally_valid(self):
         pick1 = [c for c in self.prompts if c["pick"] == 1]
