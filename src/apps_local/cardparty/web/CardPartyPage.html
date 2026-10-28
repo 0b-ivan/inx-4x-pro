@@ -64,88 +64,88 @@ h2{font-size:18px;font-weight:500}
   <header class="mast" aria-label="Cards Against Whatever">
     <span class="brand">C / A / W</span>
     <span class="tools"><span id="connection" role="status" aria-live="polite">OFFLINE</span>
-      <button id="pauseButton" class="mini" type="button" hidden>[ PAUSE ]</button></span>
+      <button id="pauseButton" class="mini" type="button" hidden data-t="pauseButton">[ PAUSE ]</button></span>
   </header>
   <hr class="rule">
   <div class="meta"><span id="round">RUNDE —</span><span id="timer" aria-live="off"></span></div>
   <main>
     <section id="join">
-      <p class="eyebrow">/// SPIEL BEITRETEN</p>
+      <p class="eyebrow" data-t="joinEyebrow">/// SPIEL BEITRETEN</p>
       <h1>CARDS AGAINST WHATEVER</h1>
-      <p class="secondary">Der X4 Pro ist der Spielleiter. Dein Telefon ist deine Kartenhand.</p>
+      <p class="secondary" data-t="joinDescription">Der X4 Pro ist der Spielleiter. Dein Telefon ist deine Kartenhand.</p>
       <form id="joinForm" class="stack">
-        <label class="field" for="nick"><span>SPIELERNAME</span>
-          <input id="nick" type="text" required minlength="1" maxlength="23" autocomplete="nickname" spellcheck="false" placeholder="DEIN NAME">
+        <label class="field" for="nick"><span data-t="playerName">SPIELERNAME</span>
+          <input id="nick" type="text" required minlength="1" maxlength="23" autocomplete="nickname" spellcheck="false" placeholder="DEIN NAME" data-t-placeholder="namePlaceholder">
         </label>
-        <button type="submit" id="joinButton">[ BEITRETEN ]</button>
+        <button type="submit" id="joinButton" data-t="joinButton">[ BEITRETEN ]</button>
       </form>
       <p class="secondary" id="joinHint" role="status" aria-live="polite">MIT DEM X4 VERBINDEN</p>
     </section>
     <section id="lobby" hidden>
-      <p class="eyebrow">/// LOBBY</p>
-      <h1>WARTE AUF SPIELER</h1>
-      <p class="secondary">Die Partie wird auf dem X4 gestartet.</p>
-      <ul id="roster" class="list" aria-label="Spieler"></ul>
+      <p class="eyebrow" data-t="lobbyEyebrow">/// LOBBY</p>
+      <h1 data-t="waitingPlayers">WARTE AUF SPIELER</h1>
+      <p class="secondary" data-t="hostStarts">Die Partie wird auf dem X4 gestartet.</p>
+      <ul id="roster" class="list" aria-label="Spieler" data-t-aria="playersAria"></ul>
     </section>
     <section id="play" hidden>
       <p class="eyebrow" id="playMeta">/// ANTWORT WÄHLEN</p>
-      <div class="prompt" tabindex="0" role="region" aria-label="Aktuelle Frage, scrollbar">
-        <p class="eyebrow">AKTUELLER SATZ</p>
+      <div class="prompt" tabindex="0" role="region" aria-label="Aktuelle Frage, scrollbar" data-t-aria="promptScroll">
+        <p class="eyebrow" data-t="currentPrompt">AKTUELLER SATZ</p>
         <h1 id="promptText"></h1><p id="answerPreview" class="secondary" aria-live="polite"></p>
       </div>
-      <div class="row"><span class="eyebrow">DEINE KARTEN</span><span class="secondary" id="count">0/1 GEWÄHLT</span></div>
-      <div id="choices" class="choice-list" tabindex="0" role="region" aria-label="Antwortkarten, scrollbar"></div>
+      <div class="row"><span class="eyebrow" data-t="yourHand">DEINE KARTEN</span><span class="secondary" id="count">0/1 GEWÄHLT</span></div>
+      <div id="choices" class="choice-list" tabindex="0" role="region" aria-label="Antwortkarten, scrollbar" data-t-aria="cardsScroll"></div>
       <div class="footer">
         <span class="secondary" id="footCount">0/1 GEWÄHLT</span>
-        <button id="submit" type="button" disabled>[ ABSENDEN ]</button>
+        <button id="submit" type="button" disabled data-t="submitButton">[ ABSENDEN ]</button>
       </div>
     </section>
     <section id="waiting" hidden>
-      <p class="eyebrow">/// ANTWORT GESENDET</p>
-      <h1>WARTE AUF DIE ANDEREN</h1>
+      <p class="eyebrow" data-t="responseSent">/// ANTWORT GESENDET</p>
+      <h1 data-t="waitingOthers">WARTE AUF DIE ANDEREN</h1>
       <p id="waitingCount" role="status" aria-live="polite">WARTE ...</p>
     </section>
     <section id="judging" hidden>
-      <p class="eyebrow">/// JUROR</p>
+      <p class="eyebrow" data-t="judgingEyebrow">/// JUROR</p>
       <h1 id="judgeHeader">GEWINNER WÄHLEN</h1>
-      <p id="judgePrompt" class="secondary" tabindex="0" role="region" aria-label="Aktuelle Frage, scrollbar"></p>
-      <div id="candidateList" class="choice-list" tabindex="0" role="region" aria-label="Anonyme Antworten, scrollbar"></div>
+      <p id="judgePrompt" class="secondary" tabindex="0" role="region" aria-label="Aktuelle Frage, scrollbar" data-t-aria="promptScroll"></p>
+      <div id="candidateList" class="choice-list" tabindex="0" role="region" aria-label="Anonyme Antworten, scrollbar" data-t-aria="anonymousScroll"></div>
       <div class="footer">
         <span class="secondary" id="judgeSelection">NICHTS GEWÄHLT</span>
-        <button id="confirmJudge" type="button" disabled>[ BESTÄTIGEN ]</button>
+        <button id="confirmJudge" type="button" disabled data-t="confirmButton">[ BESTÄTIGEN ]</button>
       </div>
     </section>
     <section id="result" hidden>
-      <p class="eyebrow">/// AUFLÖSUNG</p>
+      <p class="eyebrow" data-t="revealEyebrow">/// AUFLÖSUNG</p>
       <h1 id="winner"></h1>
       <div id="winnerText" class="notice"></div>
       <p class="secondary" id="nextHint" role="status" aria-live="polite">DER X4 STARTET DIE NÄCHSTE RUNDE</p>
-      <ul id="scores" class="list" aria-label="Punkte"></ul>
+      <ul id="scores" class="list" aria-label="Punkte" data-t-aria="scoresAria"></ul>
     </section>
     <section id="final" hidden>
       <p class="eyebrow" id="finalEyebrow">/// SPIELENDE</p>
-      <div id="podium" class="podium" aria-label="Sieger"></div>
-      <ul id="standings" class="list" aria-label="Endstand"></ul>
+      <div id="podium" class="podium" aria-label="Sieger" data-t-aria="winnerAria"></div>
+      <ul id="standings" class="list" aria-label="Endstand" data-t-aria="standingsAria"></ul>
       <div class="footer">
         <span class="secondary" id="votes" role="status" aria-live="polite">0 WOLLEN NOCHMAL</span>
-        <button id="againButton" type="button">[ NOCHMAL! ]</button>
+        <button id="againButton" type="button" data-t="againButton">[ NOCHMAL! ]</button>
       </div>
     </section>
     <section id="hold" hidden>
       <p class="eyebrow" id="holdEyebrow">/// PAUSE</p>
       <h1 id="holdTitle">PAUSED</h1>
       <p class="secondary" id="holdText" role="status" aria-live="polite"></p>
-      <button id="resumeButton" type="button" hidden>[ FORTSETZEN ]</button>
+      <button id="resumeButton" type="button" hidden data-t="resumeButton">[ FORTSETZEN ]</button>
     </section>
     <section id="removed" hidden>
-      <p class="eyebrow">/// ENTFERNT</p>
-      <h1>DER X4 HAT DICH AUS DER PARTY ENTFERNT</h1>
-      <p class="secondary">Du kannst in der nächsten Lobby wieder beitreten.</p>
-      <button id="rejoinButton" type="button">[ ZURÜCK ZUM BEITRITT ]</button>
+      <p class="eyebrow" data-t="removedEyebrow">/// ENTFERNT</p>
+      <h1 data-t="removedHeading">DER X4 HAT DICH AUS DER PARTY ENTFERNT</h1>
+      <p class="secondary" data-t="removedDescription">Du kannst in der nächsten Lobby wieder beitreten.</p>
+      <button id="rejoinButton" type="button" data-t="rejoinButton">[ ZURÜCK ZUM BEITRITT ]</button>
     </section>
   </main>
   <hr class="rule">
-  <div class="meta"><span>LOKALER MEHRSPIELERMODUS</span><span>OHNE CLOUD</span></div>
+  <div class="meta"><span data-t="localMultiplayer">LOKALER MEHRSPIELERMODUS</span><span data-t="noCloud">OHNE CLOUD</span></div>
 </div>
 <script>
 "use strict";
@@ -154,9 +154,214 @@ h2{font-size:18px;font-weight:500}
 // Neither a browser name nor seat ID authorizes a game action.
 (() => {
   const $ = id => document.getElementById(id);
+  const T = {
+    "de": {
+      "offline": "OFFLINE",
+      "pauseButton": "[ PAUSE ]",
+      "roundDefault": "RUNDE —",
+      "joinEyebrow": "/// SPIEL BEITRETEN",
+      "joinDescription": "Der X4 Pro ist der Spielleiter. Dein Telefon ist deine Kartenhand.",
+      "playerName": "SPIELERNAME",
+      "joinButton": "[ BEITRETEN ]",
+      "connectToX4": "MIT DEM X4 VERBINDEN",
+      "lobbyEyebrow": "/// LOBBY",
+      "waitingPlayers": "WARTE AUF SPIELER",
+      "hostStarts": "Die Partie wird auf dem X4 gestartet.",
+      "selectResponse": "/// ANTWORT WÄHLEN",
+      "currentPrompt": "AKTUELLER SATZ",
+      "yourHand": "DEINE KARTEN",
+      "initialSelection": "0/1 GEWÄHLT",
+      "submitButton": "[ ABSENDEN ]",
+      "responseSent": "/// ANTWORT GESENDET",
+      "waitingOthers": "WARTE AUF DIE ANDEREN",
+      "waiting": "WARTE ...",
+      "judgingEyebrow": "/// JUROR",
+      "chooseWinner": "GEWINNER WÄHLEN",
+      "noneSelected": "NICHTS GEWÄHLT",
+      "confirmButton": "[ BESTÄTIGEN ]",
+      "revealEyebrow": "/// AUFLÖSUNG",
+      "hostNextRound": t("hostNextRound"),
+      "gameOverEyebrow": "/// SPIELENDE",
+      "initialVotes": "0 WOLLEN NOCHMAL",
+      "againButton": "[ NOCHMAL! ]",
+      "pauseEyebrow": "/// PAUSE",
+      "holdInitial": "PAUSED",
+      "resumeButton": "[ FORTSETZEN ]",
+      "removedEyebrow": "/// ENTFERNT",
+      "removedHeading": "DER X4 HAT DICH AUS DER PARTY ENTFERNT",
+      "removedDescription": "Du kannst in der nächsten Lobby wieder beitreten.",
+      "rejoinButton": "[ ZURÜCK ZUM BEITRITT ]",
+      "localMultiplayer": "LOKALER MEHRSPIELERMODUS",
+      "noCloud": "OHNE CLOUD",
+      "namePlaceholder": "DEIN NAME",
+      "promptScroll": "Aktuelle Frage, scrollbar",
+      "cardsScroll": "Antwortkarten, scrollbar",
+      "anonymousScroll": "Anonyme Antworten, scrollbar",
+      "playersAria": "Spieler",
+      "scoresAria": "Punkte",
+      "winnerAria": "Sieger",
+      "standingsAria": "Endstand",
+      "answersTime": "ZEIT {0}",
+      "jurorTime": "JUROR {0}",
+      "nextTime": "WEITER {0}",
+      "nextRoundIn": "NÄCHSTE RUNDE IN {0}",
+      "selectResponseFor": "/// ANTWORT WÄHLEN / JUROR {0}",
+      "selectionPosition": "Position {0} von {1}: {2}",
+      "selected": "{0}/{1} GEWÄHLT",
+      "judgePicked": "[{0}] GEWÄHLT",
+      "jurorJudging": "DER JUROR ENTSCHEIDET",
+      "round": "RUNDE {0}{1}",
+      "waitEyebrow": "/// WARTEZEIT",
+      "pauseBy": "PAUSIERT VON {0}",
+      "waitFor": "WARTE AUF {0}",
+      "blockedDescription": "{0} IST OFFLINE. DER X4 ENTSCHEIDET: WARTEN, WEITERMACHEN ODER ENTFERNEN.",
+      "pausedByMe": "NUR DU ODER DER X4 KÖNNEN FORTSETZEN.",
+      "pausedByOther": "NUR {0} ODER DER X4 KÖNNEN FORTSETZEN.",
+      "hostName": "DEM X4",
+      "connectedStatus": "  / VERBUNDEN",
+      "offlineStatus": "  / OFFLINE",
+      "received": "{0}/{1} ERHALTEN",
+      "endedByHost": "/// VOM X4 BEENDET",
+      "points": "{0} PT",
+      "rankedScore": "{0}  /  {1} PT",
+      "votes": "{0} WOLLEN NOCHMAL{1}",
+      "votedSuffix": " / DU AUCH",
+      "roundComplete": "RUNDE BEENDET",
+      "awaitNextRound": "Warte auf die nächste Runde",
+      "connecting": "VERBINDE",
+      "connected": "LOKAL / VERBUNDEN",
+      "joinSent": "BEITRITT GESENDET",
+      "error": "FEHLER: {0}",
+      "rejected": "ANFRAGE ABGELEHNT",
+      "session_full": "SITZUNG VOLL",
+      "already_joined": "BEREITS BEIGETRETEN",
+      "game_running": "SPIEL LÄUFT BEREITS",
+      "disconnected": "OFFLINE",
+      "idle": "BEREIT / BEITRETEN",
+      "noConnection": "KEINE VERBINDUNG ZUM X4",
+      "connectionError": "VERBINDUNGSFEHLER",
+      "badName": "NAME UNGÜLTIG ODER ZU LANG (MAX. 23 BYTE)",
+      "connectingToX4": "VERBINDE MIT X4"
+    },
+    "en": {
+      "offline": "OFFLINE",
+      "pauseButton": "[ PAUSE ]",
+      "roundDefault": "ROUND —",
+      "joinEyebrow": "/// JOIN GAME",
+      "joinDescription": "The X4 Pro runs the game. Your phone holds your cards.",
+      "playerName": "PLAYER NAME",
+      "joinButton": "[ JOIN ]",
+      "connectToX4": "CONNECT TO THE X4",
+      "lobbyEyebrow": "/// LOBBY",
+      "waitingPlayers": "WAITING FOR PLAYERS",
+      "hostStarts": "The match starts on the X4.",
+      "selectResponse": "/// SELECT RESPONSE",
+      "currentPrompt": "CURRENT PROMPT",
+      "yourHand": "YOUR HAND",
+      "initialSelection": "0/1 SELECTED",
+      "submitButton": "[ SUBMIT ]",
+      "responseSent": "/// RESPONSE SENT",
+      "waitingOthers": "WAITING FOR THE OTHERS",
+      "waiting": "WAITING...",
+      "judgingEyebrow": "/// JUDGE",
+      "chooseWinner": "CHOOSE THE WINNER",
+      "noneSelected": "NONE SELECTED",
+      "confirmButton": "[ CONFIRM ]",
+      "revealEyebrow": "/// REVEAL",
+      "hostNextRound": "THE X4 STARTS THE NEXT ROUND",
+      "gameOverEyebrow": "/// GAME OVER",
+      "initialVotes": "0 WANT TO PLAY AGAIN",
+      "againButton": "[ AGAIN! ]",
+      "pauseEyebrow": "/// PAUSED",
+      "holdInitial": "PAUSED",
+      "resumeButton": "[ RESUME ]",
+      "removedEyebrow": "/// REMOVED",
+      "removedHeading": "THE X4 REMOVED YOU FROM THE PARTY",
+      "removedDescription": "You can join again in the next lobby.",
+      "rejoinButton": "[ BACK TO JOIN ]",
+      "localMultiplayer": "LOCAL MULTIPLAYER",
+      "noCloud": "NO CLOUD",
+      "namePlaceholder": "YOUR NAME",
+      "promptScroll": "Current prompt, scrollable",
+      "cardsScroll": "Answer cards, scrollable",
+      "anonymousScroll": "Anonymous answers, scrollable",
+      "playersAria": "Players",
+      "scoresAria": "Scores",
+      "winnerAria": "Winner",
+      "standingsAria": "Final standings",
+      "answersTime": "TIME {0}",
+      "jurorTime": "JUDGE {0}",
+      "nextTime": "NEXT {0}",
+      "nextRoundIn": "NEXT ROUND IN {0}",
+      "selectResponseFor": "/// SELECT RESPONSE / JUDGE {0}",
+      "selectionPosition": "Position {0} of {1}: {2}",
+      "selected": "{0}/{1} SELECTED",
+      "judgePicked": "[{0}] SELECTED",
+      "jurorJudging": "THE JUDGE IS DECIDING",
+      "round": "ROUND {0}{1}",
+      "waitEyebrow": "/// WAITING",
+      "pauseBy": "PAUSED BY {0}",
+      "waitFor": "WAITING FOR {0}",
+      "blockedDescription": "{0} IS OFFLINE. THE X4 DECIDES: WAIT, CONTINUE OR REMOVE.",
+      "pausedByMe": "ONLY YOU OR THE X4 CAN RESUME.",
+      "pausedByOther": "ONLY {0} OR THE X4 CAN RESUME.",
+      "hostName": "THE X4",
+      "connectedStatus": "  / CONNECTED",
+      "offlineStatus": "  / OFFLINE",
+      "received": "{0}/{1} RECEIVED",
+      "endedByHost": "/// ENDED BY THE X4",
+      "points": "{0} PTS",
+      "rankedScore": "{0}  /  {1} PTS",
+      "votes": "{0} WANT TO PLAY AGAIN{1}",
+      "votedSuffix": " / YOU TOO",
+      "roundComplete": "ROUND COMPLETE",
+      "awaitNextRound": "Waiting for the next round",
+      "connecting": "CONNECTING",
+      "connected": "LOCAL / CONNECTED",
+      "joinSent": "JOIN REQUEST SENT",
+      "error": "ERROR: {0}",
+      "rejected": "REQUEST REJECTED",
+      "session_full": "SESSION FULL",
+      "already_joined": "ALREADY JOINED",
+      "game_running": "GAME ALREADY RUNNING",
+      "disconnected": "DISCONNECTED",
+      "idle": "IDLE / JOIN TO CONNECT",
+      "noConnection": "NO CONNECTION TO X4",
+      "connectionError": "CONNECTION ERROR",
+      "badName": "INVALID NAME OR TOO LONG (MAX 23 BYTES)",
+      "connectingToX4": "CONNECTING TO X4"
+    }
+  };
+  let lang=(typeof navigator!=="undefined" && /^de/i.test(navigator.language||""))?"de":"en";
+  function t(key,...args) {
+    const template=(T[lang]&&T[lang][key])||T.en[key]||key;
+    return template.replace(/\{(\d+)\}/g,(_,index)=>String(args[Number(index)]??""));
+  }
+  function applyLanguage() {
+    if(document.documentElement) document.documentElement.lang=lang;
+    if(typeof document.querySelectorAll==="function") {
+      for(const el of document.querySelectorAll("[data-t]"))
+        el.textContent=t(el.getAttribute("data-t"));
+      for(const el of document.querySelectorAll("[data-t-placeholder]"))
+        el.placeholder=t(el.getAttribute("data-t-placeholder"));
+      for(const el of document.querySelectorAll("[data-t-aria]"))
+        el.setAttribute("aria-label",t(el.getAttribute("data-t-aria")));
+    }
+    if(state.statusKey) text("connection",t(state.statusKey));
+    if(state.hintKey) text("joinHint",t(state.hintKey,...state.hintArgs));
+  }
+  function setLanguage(code) {
+    if(code!=="de"&&code!=="en")return;
+    if(lang!==code){lang=code;applyLanguage();render();}
+  }
+  function hint(key,...args) {
+    state.hintKey=key;state.hintArgs=args;text("joinHint",t(key,...args));
+  }
+
   const screens = ["join", "lobby", "play", "waiting", "judging", "result", "final", "hold", "removed"];
   const state = {socket:null, ticket:null, revision:0, selection:[], judging:null,
-                 snapshot:null, personal:null, pendingJoin:null, removed:false};
+                 snapshot:null, personal:null, pendingJoin:null, removed:false,
+                 statusKey:null,hintKey:null,hintArgs:[]};
   // The X4 sends the time left with each state; the phone counts down alone.
   const clock = {kind:"", left:0, at:0, frozen:false};
   // The X4 stores names as at most 23 UTF-8 bytes (umlauts count twice).
@@ -168,7 +373,7 @@ h2{font-size:18px;font-weight:500}
   const saved = sessionStorage.getItem("caw.session.token");
   if (saved && /^[0-9a-f]{32}$/.test(saved)) state.ticket = saved;
   function show(name) { for(const s of screens) $(s).hidden = s !== name; }
-  function status(text) { $("connection").textContent = text; }
+  function status(key) { state.statusKey=key;$("connection").textContent=t(key); }
   function text(id, value) { $(id).textContent = value == null ? "" : String(value); }
   function command(type, args = {}) {
     if (!state.socket || state.socket.readyState !== WebSocket.OPEN || !state.ticket) return false;
@@ -186,13 +391,13 @@ h2{font-size:18px;font-weight:500}
   function mmss(ms) { const s = Math.ceil(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
   function tickClock() {
     const left = mmss(clockLeft());
-    const label = clock.kind === "answers" ? "ZEIT " + left
-      : clock.kind === "juror" ? "JUROR " + left
-      : clock.kind === "next" ? "WEITER " + left : "";
+    const label = clock.kind === "answers" ? t("answersTime",left)
+      : clock.kind === "juror" ? t("jurorTime",left)
+      : clock.kind === "next" ? t("nextTime",left) : "";
     text("timer", label);
     const game = state.snapshot || {};
     if (game.phase === "Reveal")
-      text("nextHint", clock.kind === "next" ? "NÄCHSTE RUNDE IN " + left : "DER X4 STARTET DIE NÄCHSTE RUNDE");
+      text("nextHint", clock.kind === "next" ? t("nextRoundIn",left) : t("hostNextRound"));
   }
   function winnersOf(players) {
     let best = -1;
@@ -251,7 +456,7 @@ h2{font-size:18px;font-weight:500}
     list.replaceChildren();
     text("promptText",game.promptText||"");
     fillSentence($("answerPreview"),game.promptText||"",state.selection.map(i=>cards[i]&&cards[i].text||""));
-    text("playMeta","/// ANTWORT WÄHLEN / JUROR "+(game.czarName||"?"));
+    text("playMeta",t("selectResponseFor",game.czarName||"?"));
     for(let i=0;i<cards.length;i++){
       const selected=state.selection.indexOf(i);
       const label=cards[i].text||"";
@@ -267,7 +472,7 @@ h2{font-size:18px;font-weight:500}
         order.className="position";
         order.textContent=" <"+(selected+1)+"/"+pick+"> ";
         item.append(order);
-        item.setAttribute("aria-label","Position "+(selected+1)+" von "+pick+": "+label);
+        item.setAttribute("aria-label",t("selectionPosition",selected+1,pick,label));
       }
       list.append(item);
     }
@@ -275,7 +480,7 @@ h2{font-size:18px;font-weight:500}
     if(focusedIndex>=0 && list.children[focusedIndex] &&
        typeof list.children[focusedIndex].focus==="function")
       list.children[focusedIndex].focus({preventScroll:true});
-    const counter=state.selection.length+"/"+pick+" GEWÄHLT";
+    const counter=t("selected",state.selection.length,pick);
     text("count",counter);text("footCount",counter);
     $("submit").disabled=state.selection.length!==pick;
   }
@@ -297,13 +502,13 @@ h2{font-size:18px;font-weight:500}
       btn.disabled=!canJudge;list.append(btn);
     }
     list.scrollTop=scrollOffset;
-    text("judgeSelection",state.judging==null?"NICHTS GEWÄHLT":"["+String(state.judging+1).padStart(2,"0")+"] GEWÄHLT");
+    text("judgeSelection",state.judging==null?t("noneSelected"):t("judgePicked",String(state.judging+1).padStart(2,"0")));
     $("confirmJudge").disabled=!canJudge||state.judging==null;
-    text("judgeHeader",canJudge?"GEWINNER WÄHLEN":"DER JUROR ENTSCHEIDET");
+    text("judgeHeader",canJudge?t("chooseWinner"):t("jurorJudging"));
   }
   function render() {
     const game=state.snapshot||{},personal=state.personal||{};
-    text("round","RUNDE "+(game.round||"—")+(game.rounds?"/"+game.rounds:""));
+    text("round",t("round",game.round||"—",game.rounds?"/"+game.rounds:""));
     const running=game.phase==="Playing"||game.phase==="Judging"||game.phase==="Reveal";
     const paused=!!(game.pausedBy||game.pausedByHost);
     $("pauseButton").hidden=!state.ticket||!running||paused;
@@ -312,12 +517,12 @@ h2{font-size:18px;font-weight:500}
     if(!state.ticket){show("join");return;}
     if(running&&(paused||game.blockedOn)){
       show("hold");
-      const who=game.pausedByHost?"DEM X4":(game.pausedBy||"");
-      text("holdEyebrow",paused?"/// PAUSE":"/// WARTEZEIT");
-      text("holdTitle",paused?"PAUSIERT VON "+who:"WARTE AUF "+game.blockedOn);
+      const who=game.pausedByHost?t("hostName"):(game.pausedBy||"");
+      text("holdEyebrow",paused?t("pauseEyebrow"):t("waitEyebrow"));
+      text("holdTitle",paused?t("pauseBy",who):t("waitFor",game.blockedOn));
       text("holdText",game.blockedOn
-        ?game.blockedOn+" IST OFFLINE. DER X4 ENTSCHEIDET: WARTEN, WEITERMACHEN ODER ENTFERNEN."
-        :personal.pausedByMe?"NUR DU ODER DER X4 KÖNNEN FORTSETZEN.":"NUR "+who+" ODER DER X4 KÖNNEN FORTSETZEN.");
+        ?t("blockedDescription",game.blockedOn)
+        :personal.pausedByMe?t("pausedByMe"):t("pausedByOther",who));
       $("resumeButton").hidden=!personal.pausedByMe;
       return;
     }
@@ -326,20 +531,20 @@ h2{font-size:18px;font-weight:500}
       for(const player of (game.players||[])){
         if(!player.seated)continue;
         const li=document.createElement("li");
-        li.textContent=player.name+(player.connected?"  / VERBUNDEN":"  / OFFLINE");
+        li.textContent=player.name+t(player.connected?"connectedStatus":"offlineStatus");
         list.append(li);
       }
     } else if(game.phase==="Playing"||game.phase==="playing"){
       state.judging=null;
       if(personal.isCzar||personal.submitted){
         show("waiting");
-        text("waitingCount",(game.submitted||0)+"/"+(game.expected||0)+" ERHALTEN");
+        text("waitingCount",t("received",game.submitted||0,game.expected||0));
       } else {show("play");choices();}
     } else if(game.phase==="Judging"||game.phase==="judging"){
       show("judging");candidateRows();
     } else if(game.phase==="Finished"){
       show("final");
-      text("finalEyebrow",game.endedByHost?"/// VOM X4 BEENDET":"/// SPIELENDE");
+      text("finalEyebrow",game.endedByHost?t("endedByHost"):t("gameOverEyebrow"));
       const players=Array.isArray(game.players)?game.players:[];
       const podium=$("podium");podium.replaceChildren();
       for(const champ of winnersOf(players)){
@@ -348,27 +553,27 @@ h2{font-size:18px;font-weight:500}
         crown.setAttribute("aria-hidden","true");
         const name=document.createElement("h1");name.textContent=champ.name;
         const points=document.createElement("p");points.className="secondary";
-        points.textContent=(champ.points||0)+" PT";
+        points.textContent=t("points",champ.points||0);
         box.append(crown,name,points);podium.append(box);
       }
       const list=$("standings");list.replaceChildren();
       const ranked=players.filter(p=>p.seated).sort((a,b)=>(b.points||0)-(a.points||0));
       for(const player of ranked){
         const li=document.createElement("li");
-        li.textContent=player.name+"  /  "+(player.points||0)+" PT";
+        li.textContent=t("rankedScore",player.name,player.points||0);
         list.append(li);
       }
-      text("votes",(game.votes||0)+" WOLLEN NOCHMAL"+(personal.voted?" / DU AUCH":""));
+      text("votes",t("votes",game.votes||0,personal.voted?t("votedSuffix"):""));
       $("againButton").disabled=!!personal.voted;
     } else if(game.phase==="Reveal"||game.phase==="reveal"){
       show("result");
-      text("winner",game.winnerName||"RUNDE BEENDET");
-      text("winnerText",game.winningText||"Warte auf die nächste Runde");
+      text("winner",game.winnerName||t("roundComplete"));
+      text("winnerText",game.winningText||t("awaitNextRound"));
       const list=$("scores");list.replaceChildren();
       for(const player of (game.players||[])){
         if(!player.seated)continue;
         const li=document.createElement("li");
-        li.textContent=player.name+"  /  "+(player.points||0)+" PT";
+        li.textContent=t("rankedScore",player.name,player.points||0);
         list.append(li);
       }
     } else show("join");
@@ -382,20 +587,22 @@ h2{font-size:18px;font-weight:500}
     const url="ws://"+hostname+":81/cardparty";
     const socket=new WebSocket(url);
     state.socket=socket;
-    status("VERBINDE");
+    status("connecting");
     socket.addEventListener("open",()=>{
-      status("LOKAL / VERBUNDEN");
+      status("connected");
       if(state.ticket) socket.send(JSON.stringify({type:"resume",token:state.ticket}));
       else if(state.pendingJoin){
         socket.send(JSON.stringify({type:"join",name:state.pendingJoin}));
         state.pendingJoin=null;
-        text("joinHint","BEITRITT GESENDET");
+        hint("joinSent");
       }
     });
     socket.addEventListener("message",event=>{
       let msg;
       try {msg=JSON.parse(event.data);} catch {return;}
       if(!msg||typeof msg!=="object")return;
+      if(msg.type==="hello") {setLanguage(msg.lang);return;}
+      if(msg.game&&msg.game.lang)setLanguage(msg.game.lang);
       if(msg.type==="kicked"){
         state.ticket=null;sessionStorage.removeItem("caw.session.token");
         state.personal=null;state.snapshot=null;state.removed=true;render();
@@ -417,7 +624,7 @@ h2{font-size:18px;font-weight:500}
         if(msg.game && msg.game.phase!=="Playing" && msg.game.phase!=="playing")state.selection=[];
         render();
       } else if(msg.type==="error"){
-        text("joinHint","FEHLER: "+escapeText(msg.message||"ANFRAGE ABGELEHNT"));
+        hint("error",t(msg.code||"rejected")===msg.code&&msg.message?msg.message:t(msg.code||"rejected"));
       } else if(msg.type==="expired"){
         state.ticket=null;sessionStorage.removeItem("caw.session.token");
         state.personal=null;state.snapshot=null;render();
@@ -428,30 +635,31 @@ h2{font-size:18px;font-weight:500}
       // Only a seated browser reconnects on its own. The X4 closes sockets
       // that never join, so an idle join screen does not hold one of its
       // few connection slots; JOIN reconnects on demand.
-      if(state.ticket){status("OFFLINE");setTimeout(connect,1500);}
+      if(state.ticket){status("disconnected");setTimeout(connect,1500);}
       else {
-        state.socket=null;status("BEREIT / BEITRETEN");
-        if(state.pendingJoin){state.pendingJoin=null;text("joinHint","FEHLER: KEINE VERBINDUNG ZUM X4");}
+        state.socket=null;status("idle");
+        if(state.pendingJoin){state.pendingJoin=null;hint("error",t("noConnection"));}
       }
     });
-    socket.addEventListener("error",()=>{status("VERBINDUNGSFEHLER");});
+    socket.addEventListener("error",()=>{status("connectionError");});
   }
+  applyLanguage();
   $("joinForm").addEventListener("submit",ev=>{
     ev.preventDefault();
     const name=$("nick").value.trim();
     if(!name)return;
     if(utf8Length(name)>kNameBytes||/[<>]/.test(name)){
-      text("joinHint","FEHLER: NAME UNGÜLTIG ODER ZU LANG (MAX. 23 BYTE)");return;
+      hint("error",t("badName"));return;
     }
     if(!state.socket||state.socket.readyState!==WebSocket.OPEN){
       // Socket was released while idle: reconnect, then join on open.
       state.pendingJoin=name;
-      text("joinHint","VERBINDE MIT X4");
+      hint("connectingToX4");
       if(!state.socket)connect();
       return;
     }
     state.socket.send(JSON.stringify({type:"join",name}));
-    text("joinHint","BEITRITT GESENDET");
+    hint("joinSent");
   });
   $("submit").addEventListener("click",()=>{
     const expected=(state.snapshot||{}).pick||1;
