@@ -128,6 +128,33 @@ At commit 92501b2 the import yields 107 prompts (37 without a blank) and
 610 answers, no issues, no duplicates, 23.7 KB as a pack. Every character
 in it is covered by the X4 UI font.
 
+## Importing BixelPitch and merging sources
+
+`import_bixelpitch.py` converts
+[BixelPitch/cah-cards](https://github.com/BixelPitch/cah-cards)
+`dist/de/grundspiel.json` (80 prompts, 502 answers). Pick is the number of
+blanks (a question without a blank asks for one card), pick 3 draws 2. The
+source has no content categories, so every card is "Basis". The repository
+states CC BY-NC-SA 2.0; the manifest records it but stays unverified.
+
+`merge_cards.py` joins importer outputs into one deck. Earlier inputs win a
+duplicate's text and pick; the card gains every source's categories and
+lists its sources. A category is adult if any source says so. The license is
+kept only if all sources agree, otherwise it is left for a human.
+
+    python3 tools_local/cardparty_l10n/merge_cards.py \
+      --deck-id community-de --title "Community DE (Prior99 + BixelPitch)" \
+      --input prior99.json prior99.jsonl --input bixelpitch.json bixelpitch.jsonl \
+      --cards merged.jsonl --manifest merged.json --report merged-report.json
+
+At Prior99 92501b2 and BixelPitch 26b21b5: 138 cards are shared (mostly
+differing only by a final period), giving 176 prompts and 985 answers,
+40.8 KB as a pack, no pick conflicts. `card_text.py` holds the shared rules:
+blanks normalised to `____`, whitespace, NFC and characters the X4 UI font
+cannot draw (™ becomes "(TM)").
+
+The six Cards vs Humanity CSV packs are not imported yet.
+
 ## Test coverage
 
 Run Python offline unit suite and host C++ SD loader tests. An isolated

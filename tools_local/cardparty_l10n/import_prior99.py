@@ -16,7 +16,8 @@ import json
 from pathlib import Path
 import re
 import sys
-import unicodedata
+
+from card_text import BLANK, DRAW_FOR_PICK, normalized, tidy
 
 SOURCE_URL="https://github.com/Prior99/cah-fullformat-german"
 # Source file stem -> (category id, display name, adult). Order is the bit order.
@@ -33,9 +34,6 @@ CATEGORIES=[
     ("religion","religion","Religion",False),
     ("werbung","werbung","Werbung",False),
 ]
-BLANK="____"
-# CAH convention: a pick-3 prompt lets everyone draw 2 extra cards first.
-DRAW_FOR_PICK={1:0,2:0,3:2}
 
 class ImportError_(ValueError):
     pass
@@ -75,15 +73,7 @@ def clean(raw):
     # "Volleyball- Montage" -> "Volleyball-Montage".
     text=re.sub(r"(\w)- (?=[a-zäöüß])",r"\1",text)
     text=re.sub(r"(\w)- (?=\w)",r"\1-",text)
-    text=re.sub(r"\s+"," ",text).strip()
-    # A blank glued to punctuation: "____ ." -> "____."
-    text=re.sub(rf"{BLANK} (?=[.,!?:;“])",BLANK,text)
-    return unicodedata.normalize("NFC",text)
-
-def normalized(text):
-    """Key for duplicate detection: case, punctuation and blanks ignored."""
-    text=unicodedata.normalize("NFKC",text).casefold().replace(BLANK," ")
-    return " ".join(re.sub(r"[^\w]+"," ",text).split())
+    return tidy(text)
 
 def card_id(kind,category,text):
     digest=hashlib.sha256(f"{kind}\0{category}\0{text}".encode()).hexdigest()[:10]
