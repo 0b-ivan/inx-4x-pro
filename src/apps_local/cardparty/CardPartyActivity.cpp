@@ -1,6 +1,7 @@
 #include "CardPartyActivity.h"
 
 #include <HalStorage.h>
+#include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
