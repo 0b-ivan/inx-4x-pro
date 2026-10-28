@@ -60,6 +60,8 @@ int main() {
   assert(game.configure(fixture.deck,Rules{5,2,true},11));
   Sessions sessions(game);
   Server server(game,sessions,fixture.deck);
+  history::Book fame;
+  server.setHistory(&fame);
   server.setLanguage("de");
   devmode::pause();
   assert(server.begin(Server::Mode::Hotspot));
@@ -100,6 +102,10 @@ int main() {
     assert(ws.messages.back().find("\"type\":\"state\"")!=std::string::npos);
   }
   assert(game.publicView().phase==Phase::Lobby);
+  assert(fame.players()==3);
+  send(ws,0,"{\"type\":\"fame\",\"token\":\""+tokens[0]+"\",\"page\":0}");
+  assert(ws.messages.back().find("\"type\":\"fame\"")!=std::string::npos);
+  assert(ws.messages.back().find("\"players\":[")!=std::string::npos);
   // An old tab tries to resume a ticket belonging to a previous match.
   // The browser must receive "expired" and return to JOIN, not retry forever.
   ws.event(WStype_CONNECTED,9);
@@ -118,6 +124,10 @@ int main() {
 
   assert(server.hostStart());
   const auto initial=game.publicView();
+  assert(fame.players()==3);
+  for(uint8_t i=0;i<3;++i)assert(fame.at(i).games==1);
+  send(ws,1,"{\"type\":\"strike\",\"token\":\""+tokens[1]+"\",\"slot\":0}");
+  assert(fame.pairs()==1);
   assert(initial.czar==0 && initial.pick==1);
   const std::string wrong="ffffffffffffffffffffffffffffffff";
   const size_t beforeRejected=ws.messages.size();
