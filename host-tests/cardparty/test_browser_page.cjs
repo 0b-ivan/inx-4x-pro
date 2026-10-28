@@ -88,6 +88,7 @@ first.message({type:"error",code:"unrecognized_error"});
 assert.equal(nodes.joinHint.textContent,"ERROR: unrecognized_error");
 first.message({type:"hello",lang:"de"});
 assert.equal(nodes.connection.textContent,"LOKAL / VERBUNDEN");
+assert.equal(nodes.joinHint.textContent,"FEHLER: unrecognized_error");
 first.message({type:"error",code:"session_full"});
 assert.equal(nodes.joinHint.textContent,"FEHLER: SITZUNG VOLL");
 for(const [code,label] of [["rejected","ANFRAGE ABGELEHNT"],["already_joined","BEREITS BEIGETRETEN"],
