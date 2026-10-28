@@ -3,6 +3,7 @@
 
     python3 publish_packs.py --config public_packs.json \\
         --source prior99=./cah-fullformat-german --source bixelpitch=./cah-cards \\
+        --source nach-mitternacht=../../packs.local/nach-mitternacht.json \\
         --out ./dist
 
 Offline: the sources are local clones the caller checked out at the pinned
@@ -22,10 +23,13 @@ import sys
 
 import build_sd_pack as pack
 import import_bixelpitch
+import import_local
 import import_prior99
 import merge_cards
 
-IMPORTERS={"prior99":import_prior99,"bixelpitch":import_bixelpitch}
+# "local" is an own deck outside git (import_local.py); its --source key is
+# the entry's "name", so several own decks can feed different packs.
+IMPORTERS={"prior99":import_prior99,"bixelpitch":import_bixelpitch,"local":import_local}
 # Mirrors CardPartyCatalog.h: what the X4 accepts from the list.
 MAX_PACKS=8
 NAME_CHARS=set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
@@ -55,14 +59,17 @@ def build(entry,sources):
         importer=IMPORTERS.get(source["importer"])
         if importer is None:
             raise PublishError(f"unknown importer {source['importer']!r}")
-        path=sources.get(source["importer"])
+        key=source.get("name",source["importer"])
+        path=sources.get(key)
         if path is None:
-            raise PublishError(f"no --source for {source['importer']}")
+            raise PublishError(f"no --source for {key}")
         check_commit(path,source["commit"])
         cards,issues,_=importer.convert(path)
         if issues:
-            raise PublishError(f"{source['importer']}: {len(issues)} cards failed to convert")
-        inputs.append((importer.manifest(source["commit"]),cards))
+            raise PublishError(f"{key}: {len(issues)} cards failed to convert")
+        manifest=(importer.manifest_for(path,source["commit"]) if hasattr(importer,"manifest_for")
+                  else importer.manifest(source["commit"]))
+        inputs.append((manifest,cards))
     cards,manifest,_=merge_cards.merge(inputs,entry["deck_id"],entry["title"])
     manifest.update(version=entry["version"],rights_holder=entry["rights_holder"],
                     license=entry["license"],license_url=entry["license_url"],
@@ -84,7 +91,8 @@ def readme(built):
                 f"  Rights holders: {entry['rights_holder']}",
                 f"  License: {entry['license']} {entry['license_url']}",
                 "  Sources:"]
-        lines+=[f"    {s['url']} at {s['commit']}" for s in entry["sources"]]
+        lines+=[f"    {s['url']} at {s['commit']}" if s["importer"]!="local" else
+                f"    {s['url']} (own deck {s.get('name','local')}, {s['commit']})" for s in entry["sources"]]
         lines+=["  Changes: converted to the CAW pack format, sources merged, duplicates removed,",
                 "  print hyphenation and quotes normalized. Card wording is otherwise unchanged."]
         lines+=[f"  Decision: {entry['decision']}",""]
@@ -116,7 +124,7 @@ def main():
     sources=dict(item.split("=",1) for item in args.source)
     try:
         built=publish(json.loads(args.config.read_text(encoding="utf-8")),sources,args.out)
-    except (PublishError,pack.PackError,merge_cards.MergeError,OSError,KeyError) as exc:
+    except (PublishError,pack.PackError,merge_cards.MergeError,import_local.ImportError_,OSError,KeyError,ValueError) as exc:
         ap.error(str(exc))
     for entry,receipt in built:
         print(f"{entry['file']}: {receipt['prompts']} prompts, {receipt['answers']} answers, "

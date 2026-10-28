@@ -192,6 +192,28 @@ A changed importer or source fails the SHA-256 check instead of publishing
 different cards. Card text still never enters this repository; only the
 release carries it.
 
+## Own decks (local source)
+
+`import_local.py` lets `publish_packs.py` build packs from decks written for
+this project, kept outside git like the community clones: a manifest
+`deck.json` plus `deck.jsonl` next to it (build_sd_pack.py row format), by
+convention in the git-ignored `packs.local/`. A config source
+`{"importer": "local", "name": "<key>", "url": ..., "commit": "<label>"}`
+is fed with `--source <key>=packs.local/<deck>.json`; the label only names the
+deck version in README.txt. Card text, blanks, pick/draw and categories are
+validated like the importers do; `reviewed` flags are ignored because the
+config's decision releases the whole pack, and the pinned SHA-256 catches
+any changed card.
+
+Released this way (2026-10-28): `nach-mitternacht.dat` (own cards, CC0, FSK 18
+off by default) and `Alles.dat` (Deutsch + Nach Mitternacht, CC BY-NC-SA 2.0,
+13 categories).
+
+    python3 tools_local/cardparty_l10n/publish_packs.py \
+      --config tools_local/cardparty_l10n/public_packs.json \
+      --source prior99=./cah-fullformat-german --source bixelpitch=./cah-cards \
+      --source nach-mitternacht=packs.local/nach-mitternacht.json --out ./dist
+
 ## Test coverage
 
 Run Python offline unit suite and host C++ SD loader tests. An isolated
