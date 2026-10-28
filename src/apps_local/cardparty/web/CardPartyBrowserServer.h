@@ -118,6 +118,7 @@ class Server final {
   void onMessage(uint8_t client, const uint8_t* payload, size_t size);
   void onDisconnect(uint8_t client);
   void sendState(uint8_t seat, bool welcome);
+  void sendFame(uint8_t client, uint8_t page);
   void captureHistory();
   void publishAll();
   void sendError(uint8_t client, const char* code = "rejected");
