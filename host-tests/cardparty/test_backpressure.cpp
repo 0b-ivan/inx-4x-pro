@@ -171,6 +171,25 @@ void slowPhoneCatchesUp() {
   std::printf("PASS slow phone: one coalesced state frame after draining, seat kept\n");
 }
 
+// A phone that stops draining for less than kStallDropMs keeps its seat,
+// whatever the clock reads when the stall is first seen.
+void briefStallKeepsSeat() {
+  for (uint32_t offset : {0u, 1u}) {
+    Table t(4);
+    clockMs += offset;  // the first heartbeat lands on an even, then an odd millis()
+    CHECK(t.server.hostStart());
+    Phone& slow = *t.nonCzar(0);
+    t.ws->stalled.insert(static_cast<uint8_t>(slow.slot));
+    t.run(Server::kStallDropMs - Server::kPingMs);
+    CHECK(!t.wasDropped(slow.slot));
+    CHECK(t.connected(slow));
+    t.ws->stalled.erase(static_cast<uint8_t>(slow.slot));
+    t.run(Server::kPingMs * 4);
+    CHECK(!t.wasDropped(slow.slot));
+  }
+  std::printf("PASS brief stall under %u ms keeps the seat\n", static_cast<unsigned>(Server::kStallDropMs));
+}
+
 // Buffer empty but the phone is gone: missed pings drop it.
 void silentPhone() {
   Table t(3);
@@ -267,6 +286,7 @@ void stalledIdleSocket() {
 int main() {
   halfDeadPhone();
   slowPhoneCatchesUp();
+  briefStallKeepsSeat();
   silentPhone();
   healthyTableStays();
   takeoverFromStalledSocket();

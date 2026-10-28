@@ -235,7 +235,7 @@ void Server::heartbeat(uint32_t now) {
   for (uint8_t client = 0; client < kTrackedSlots; ++client) {
     if (!liveSocket_[client]) continue;
     if (!ws_.writable(client)) {
-      if (!stalledSince_[client]) stalledSince_[client] = now | 1;  // 0 = not stalled
+      if (!stalledSince_[client]) stalledSince_[client] = now ? now : 1;  // 0 = not stalled
       if (static_cast<uint32_t>(now - stalledSince_[client]) < kStallDropMs) continue;
     } else {
       stalledSince_[client] = 0;
