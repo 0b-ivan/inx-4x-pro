@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <string>
 #ifndef SIMULATOR
 #include <DNSServer.h>
@@ -111,7 +112,19 @@ class Server final {
   const char* password() const { return password_; }
   const char* ip() const { return ip_.c_str(); }
   const char* url() const { return url_.c_str(); }
-  const char* seatLabel(uint8_t seat, char* target, size_t capacity) const;
+  const char* seatLabel(uint8_t seat, char* target, size_t capacity) const {
+    if (!target || !capacity) return "";
+    const PublicView v = game_.publicView();
+    if (seat >= kPlayers || !v.players[seat].seated) {
+      target[0] = 0;
+      return target;
+    }
+    if (playerIds_[seat])
+      std::snprintf(target,capacity,"%s·%s",v.players[seat].name,word(playerWords_[seat]));
+    else
+      std::snprintf(target,capacity,"%s",v.players[seat].name);
+    return target;
+  }
   static const char* wordLabel(uint8_t index) { return word(index); }
 
  private:
