@@ -624,7 +624,7 @@ h2{font-size:18px;font-weight:500}
         if(msg.game && msg.game.phase!=="Playing" && msg.game.phase!=="playing")state.selection=[];
         render();
       } else if(msg.type==="error"){
-        hint("error",t(msg.code||"rejected")===msg.code&&msg.message?msg.message:t(msg.code||"rejected"));
+        hint("error",typeof msg.code==="string"?t(msg.code):(typeof msg.message==="string"?msg.message:t("rejected")));
       } else if(msg.type==="expired"){
         state.ticket=null;sessionStorage.removeItem("caw.session.token");
         state.personal=null;state.snapshot=null;render();
