@@ -338,6 +338,33 @@ void Server::sendError(uint8_t client, const char* code) {
   if (w.ok() && ws_.writable(client)) ws_.sendTXT(client, response, w.size());
 }
 
+void Server::assignId(uint8_t seat, uint64_t requested) {
+  if (seat >= kPlayers) return;
+  bool collision = false;
+  for (uint8_t i = 0; i < kPlayers; ++i)
+    if (i != seat && requested && playerIds_[i] == requested) collision = true;
+  uint64_t id = requested;
+  if (!id || collision) {
+    // Public identity, never an authorization secret.
+    do {
+      id = (static_cast<uint64_t>(esp_random()) << 32) | esp_random();
+      collision = !id;
+      for (uint8_t i = 0; i < kPlayers; ++i)
+        if (i != seat && playerIds_[i] == id) collision = true;
+    } while (collision);
+  }
+  playerIds_[seat] = id;
+  uint8_t wordId = history::Book::wordFor(id);
+  bool inUse;
+  do {
+    inUse = false;
+    for (uint8_t i = 0; i < kPlayers; ++i)
+      if (i != seat && playerIds_[i] && playerWords_[i] == wordId) inUse = true;
+    if (inUse) wordId = static_cast<uint8_t>((wordId + 1) & 63u);
+  } while (inUse);
+  playerWords_[seat] = wordId;
+}
+
 void Server::sendState(uint8_t seat, bool welcome) {
   if (!running_ || seat >= kPlayers || socket_[seat] == kNoConnection) return;
   if (pending_[seat] == 2) welcome = true;  // a held-back ticket is never replaced by plain state
@@ -359,6 +386,12 @@ void Server::sendState(uint8_t seat, bool welcome) {
     w.quoted(token);
     w.raw(",\"revision\":");
     w.num(revision);
+    char pid[17] = {};
+    encodePlayerId(playerIds_[seat], pid);
+    w.raw(",\"pid\":");
+    w.quoted(pid);
+    w.raw(",\"word\":");
+    w.quoted(word(playerWords_[seat]));
   } else {
     w.raw("{\"type\":\"state\",\"revision\":");
     w.num(revision);
@@ -523,6 +556,8 @@ void Server::onMessage(uint8_t client, const uint8_t* bytes, size_t size) {
     if (accepted) {
       tickets_[ticket.seat] = ticket;
       socket_[ticket.seat] = client;
+      assignId(ticket.seat, command.playerId);
+      if (history_) history_->upsert(playerIds_[ticket.seat], command.name, ++identitySequence_);
       sendState(ticket.seat, true);
     } else {
       ++rejected_;
