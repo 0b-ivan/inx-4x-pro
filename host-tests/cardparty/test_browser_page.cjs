@@ -65,7 +65,7 @@ vm.runInNewContext(match[1], {
   document: {getElementById:id => {
       assert.ok(nodes[id], "unknown id: "+id); return nodes[id];
     }, createElement: () => element(), createTextNode: text => ({textContent: text})},
-  sessionStorage, location:{hostname:"crossplay.local"},
+  sessionStorage, location:{hostname:"crossplay.local"}, navigator:{language:"de-DE"},
   WebSocket:Socket, setTimeout: fn => {timers.push(fn);return timers.length;},
   setInterval: () => 0
 });
@@ -75,6 +75,17 @@ assert.equal(nodes.connection.textContent,"VERBINDE");
 assert.equal(nodes.join.hidden,false);
 first.open();
 assert.equal(nodes.connection.textContent,"LOKAL / VERBUNDEN");
+first.message({type:"hello",lang:"en"});
+assert.equal(nodes.connection.textContent,"LOCAL / CONNECTED");
+first.message({type:"error",code:"session_full"});
+assert.equal(nodes.joinHint.textContent,"ERROR: SESSION FULL");
+first.message({type:"error",code:"unrecognized_error"});
+assert.equal(nodes.joinHint.textContent,"ERROR: unrecognized_error");
+first.message({type:"hello",lang:"de"});
+assert.equal(nodes.connection.textContent,"LOKAL / VERBUNDEN");
+first.message({type:"error",code:"session_full"});
+assert.equal(nodes.joinHint.textContent,"FEHLER: SITZUNG VOLL");
+
 nodes.nick.value="Ivan";
 nodes.joinForm.dispatch("submit",{preventDefault(){}});
 assert.deepEqual(first.sent.at(-1),{type:"join",name:"Ivan"});
