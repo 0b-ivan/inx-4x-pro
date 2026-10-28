@@ -27,7 +27,7 @@ const ids = [
   "result","winner","winnerText","scores","nextHint",
   "final","finalEyebrow","podium","standings","votes","againButton",
   "hold","holdEyebrow","holdTitle","holdText","resumeButton","removed","rejoinButton",
-  "fame","fameButton","famePlayers","fameQuotes","famePrev","fameNext","fameClose","strikeButton"
+  "fame","fameButton","famePlayers","fameQuotes","famePlayersHeading","fameQuotesHeading","famePrev","fameNext","fameClose","strikeButton"
 ];
 const nodes = Object.fromEntries(ids.map(x => [x, element()]));
 const store = new Map();
@@ -119,10 +119,18 @@ assert.equal(nodes.lobby.hidden,false);
 assert.equal(localItems.get("caw.player.id"),"11112222deadbeef");
 nodes.fameButton.dispatch("click");
 assert.deepEqual(first.sent.at(-1),{type:"fame",token:token1,page:0});
-first.message({type:"fame",page:0,total:1,players:[
+first.message({type:"fame",page:0,pages:2,section:"players",total:1,players:[
   {name:"Ivan",word:"Toast",games:2,wins:1,rounds:4}],quotes:[]});
 assert.equal(nodes.fame.hidden,false);
 assert.equal(nodes.famePlayers.children.length,1);
+assert.equal(nodes.fameQuotes.hidden,true);
+nodes.fameNext.dispatch("click");
+assert.deepEqual(first.sent.at(-1),{type:"fame",token:token1,page:1});
+first.message({type:"fame",page:1,pages:2,section:"quotes",total:1,
+  players:[],quotes:[{name:"Ivan",sentence:"Hallo ____."}]});
+assert.equal(nodes.famePlayers.hidden,true);
+assert.equal(nodes.fameQuotes.children.length,1);
+assert.equal(nodes.fameNext.disabled,true);
 nodes.fameClose.dispatch("click");
 assert.equal(nodes.lobby.hidden,false);
 assert.equal(nodes.roster.children.length,2);
