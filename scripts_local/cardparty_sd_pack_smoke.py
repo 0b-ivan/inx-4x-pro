@@ -36,16 +36,21 @@ def main():
     tagged,_=validate(manifest,tagged_cards)
     corrupt=bytearray(released);corrupt[-2]^=1
     cases={"missing":None,"released":released,"released-long-word":long_word,"draft":draft,
-           "crc":bytes(corrupt),"truncated":released[:-1],"oversize":b"x"*(MAX_BYTES+1)}
+           "crc":bytes(corrupt),"truncated":released[:-1],"oversize":b"x"*(MAX_BYTES+1),
+           # Same pack from the packs folder, no active.dat: picked up on its own.
+           "released-packdir":released}
     if args.all_states:
         cases.update({"released-"+phase:released for phase in ("setup","lobby","judge","reveal","finished")})
         cases["released-categories"]=tagged
+        cases["released-decks"]=released
     hashes={}
     for case,data in cases.items():
         scenario=case.removeprefix("released-") if case in (
             "released-setup","released-lobby","released-judge","released-reveal","released-finished",
-            "released-categories") else "collect"
-        sd=out/(case+"-sd");target=sd/"games/cardparty/active.dat"
+            "released-categories","released-decks") else "collect"
+        sd=out/(case+"-sd")
+        target=sd/("games/cardparty/packs/qa.dat" if case in ("released-packdir","released-decks")
+                   else "games/cardparty/active.dat")
         target.parent.mkdir(parents=True,exist_ok=True)
         if data is None:
             target.unlink(missing_ok=True)
@@ -64,7 +69,7 @@ def main():
         text=(out/(case+".log")).read_text(errors="replace")
         assert result.returncode==0,(case,result.returncode,text[-3000:])
         assert "Autostart into CARDS WHATEVER" in text,(case,text[-3000:])
-        if scenario not in ("setup","categories"):
+        if scenario not in ("setup","categories","decks"):
             assert "CARDPARTY_SIM_STATE="+scenario+" " in text,(case,text[-3000:])
         assert "No glyph for codepoint" not in text,(case,"unsupported glyph")
         if case.startswith("released"):
@@ -81,6 +86,7 @@ def main():
         hashes[case]=hashlib.sha256(pixels).hexdigest()
         print("PASS SD Activity",case,hashes[case][:14],flush=True)
     assert hashes["released"]!=hashes["missing"],"SD and demo render identically"
+    assert hashes["released-packdir"]==hashes["released"],"packs folder plays differently from active.dat"
     assert all(hashes[key]==hashes["missing"] for key in cases if not key.startswith("released")),"fallback differs from demo"
     assert len({hashes[key] for key in ("missing","released","released-long-word")})==3
     if args.all_states:

@@ -12,8 +12,12 @@ own evidence (written for format 1).
   none were ever published.
 * Python compiler in tools_local/cardparty_l10n/build_sd_pack.py.
 * Read-only C++ loader in src/apps_local/cardparty/CardPartySdPack.h.
-* CAW Activity selects /games/cardparty/active.dat on entry and uses exactly
-  one selected Deck for engine, browser and e-ink renderer.
+* Packs live on the card as /games/cardparty/active.dat and any number of
+  `*.dat` files in /games/cardparty/packs/ (the list shows the first nine by
+  name, plus active.dat). The host picks one under `[03] DECK` on the X4;
+  the choice is saved in /games/cardparty/deck.sel. Without a choice, CAW
+  loads active.dat, else the first released pack in the folder, else the
+  demo. Exactly one Deck feeds engine, browser and e-ink renderer.
 * Missing/bad/unapproved file retains original built-in demoDeck.
 * Prompts without any blank are valid; ones containing blanks must contain
   exactly PICK 1, 2 or 3 placeholders. Browsers already display question
@@ -23,8 +27,10 @@ own evidence (written for format 1).
 * Strict draft / release separation. User's dark humor v2 is NOT approved.
 * No network endpoint to overwrite SD content and no download workflow.
 * Up to 16 categories per pack. The host switches them on the X4 under
-  `[03] CATEGORIES`; the choice is saved in `/games/cardparty/categories.bin`
-  and keyed to the pack's CRC, so a new pack starts from its own defaults.
+  `[04] CATEGORIES` (shown when a pack has two or more); the choice is saved
+  in `/games/cardparty/categories.bin`, one record per pack keyed to its CRC
+  (the last eight packs), so a new or changed pack starts from its own
+  defaults and switching packs keeps each one's switches.
 * A card plays only if none of its categories is off, so "Politik + FSK 18"
   stays out while FSK 18 is off. Untagged cards always play. Adult categories
   start off on every device, whatever the pack says.
@@ -84,8 +90,9 @@ an adult category must set it to false or the compiler refuses. Run:
       --manifest ./my-deck.json --cards ./cards.jsonl --out ./active.dat
 
 Receipt active.receipt.json holds SHA256, version and licensing metadata.
-Copy approved active.dat to /games/cardparty/active.dat on the SD card
-while CAW is not running. A --draft compile marks the file as unapproved,
+Copy the approved .dat to /games/cardparty/packs/ (any name ending in .dat)
+or to /games/cardparty/active.dat on the SD card while CAW is not running,
+then pick it under `[03] DECK`. A --draft compile marks the file as unapproved,
 which the production C++ reader refuses.
 
 CRITICAL: Boolean approval fields are only an operator workflow guard.

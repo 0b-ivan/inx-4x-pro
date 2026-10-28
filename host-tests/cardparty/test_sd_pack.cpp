@@ -47,7 +47,10 @@ static Buffer fixture(bool released = true, Layout* layout = nullptr, uint8_t ca
   std::vector<uint8_t> body;
   for (const char* meta : {"QA Deck", "CC0-1.0", "https://example.org/l", "Fixture", "https://example.org"})
     str(body, meta);
-  const struct { uint8_t flags; const char* name; } cats[] = {
+  const struct {
+    uint8_t flags;
+    const char* name;
+  } cats[] = {
       {kCategoryDefaultOn, "Basis"}, {kCategoryDefaultOn, "Böse"}, {kCategoryDefaultOn | kCategoryAdult, "FSK 18"}};
   for (uint8_t i = 0; i < categories; ++i) {
     body.push_back(cats[i].flags);
@@ -169,6 +172,70 @@ static void categoriesAndFilter() {
   std::puts("cardparty sd pack: categories, adult off by default, filter, min answers, saved selection OK");
 }
 
+static void deckListAndSelections() {
+  // The deck list reads header and title only, whatever the body holds.
+  Info info;
+  Buffer input = fixture();
+  assert(peek(input, info) && info.released && info.prompts == 2 && info.answers == 100 && info.categories == 3);
+  assert(std::strcmp(info.title, "QA Deck") == 0);
+  Buffer draft = fixture(false);
+  assert(peek(draft, info) && !info.released);
+  Buffer bad = input;
+  bad.bytes.back() ^= 0x20;  // body CRC wrong: listed, load() still refuses it
+  Pack pack;
+  assert(peek(bad, info) && !pack.load(bad));
+  bad = input;
+  bad.bytes[0] = '?';
+  assert(!peek(bad, info));
+  bad = input;
+  bad.bytes.resize(33);
+  assert(!peek(bad, info));
+  bad = input;
+  bad.bytes[34] = 0xc0;
+  assert(!peek(bad, info));
+  // A long UTF-8 title is cut on a character boundary.
+  std::string title;
+  for (int i = 0; i < 30; ++i) title += "ü";
+  Buffer longTitle;
+  longTitle.bytes = input.bytes;
+  longTitle.bytes.erase(longTitle.bytes.begin() + 32, longTitle.bytes.begin() + 32 + 2 + 7 + 1);
+  std::vector<uint8_t> head;
+  str(head, title);
+  longTitle.bytes.insert(longTitle.bytes.begin() + 32, head.begin(), head.end());
+  assert(peek(longTitle, info) && std::strlen(info.title) == 46 &&
+         validText(reinterpret_cast<const uint8_t*>(info.title), 46));
+
+  // clear() frees the cards and the pack can load again.
+  assert(pack.load(input) && pack.ready());
+  pack.clear();
+  assert(!pack.ready() && pack.categoryCount() == 0 && std::strcmp(pack.title(), "") == 0);
+  assert(pack.load(input) && pack.ready());
+
+  // One selection record per pack: storing replaces its own, keeps others.
+  uint8_t file[categories::kSelectionBytes * categories::kSelectionSlots] = {};
+  size_t len = categories::store(file, 0, 0x11, 0b01);
+  len = categories::store(file, len, 0x22, 0b10);
+  len = categories::store(file, len, 0x11, 0b11);
+  assert(len == 2 * categories::kSelectionBytes);
+  uint16_t mask = 0;
+  assert(categories::find(file, len, 0x11, 3, mask) && mask == 0b11);
+  assert(categories::find(file, len, 0x22, 3, mask) && mask == 0b10);
+  assert(!categories::find(file, len, 0x33, 3, mask));
+  // A single-record file from before still reads.
+  assert(categories::find(file, categories::kSelectionBytes, 0x22, 3, mask) && mask == 0b10);
+  // Full file: the oldest record goes.
+  for (uint32_t crc = 0x100; crc < 0x100 + categories::kSelectionSlots; ++crc)
+    len = categories::store(file, len, crc, 1);
+  assert(len == sizeof(file));
+  assert(!categories::find(file, len, 0x22, 3, mask) && !categories::find(file, len, 0x11, 3, mask));
+  assert(categories::find(file, len, 0x100, 3, mask) && categories::find(file, len, 0x107, 3, mask));
+  // Junk records are dropped on the next store.
+  file[0] = 'X';
+  len = categories::store(file, len, 0x200, 2);
+  assert(!categories::find(file, len, 0x100, 3, mask) && categories::find(file, len, 0x200, 3, mask) && mask == 2);
+  std::puts("cardparty sd pack: deck list peek, clear, per-pack selections OK");
+}
+
 int main() {
   Layout at;
   const auto good = fixture(true, &at);
@@ -247,5 +314,6 @@ int main() {
   }
   std::puts("cardparty sd pack: game, no blank, pick2, CRC, UTF8, draft gate, malformed headers OK");
   categoriesAndFilter();
+  deckListAndSelections();
   return 0;
 }

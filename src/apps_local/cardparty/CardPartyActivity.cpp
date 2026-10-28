@@ -25,15 +25,33 @@
 
 namespace {
 namespace cp = cardparty;
-// Immutable, released SD pack. Missing/invalid/unapproved packs fall back to
-// the self-contained demo; never accept a .tmp file or draft pack as active.
+// Released SD packs: active.dat plus any *.dat in the packs folder, chosen on
+// the X4. Missing/invalid/unapproved packs fall back to the self-contained
+// demo; never accept a .tmp file or draft pack as active.
+constexpr const char* kCardPartyDir = "/games/cardparty";
 constexpr const char* kCardPartyActivePack = "/games/cardparty/active.dat";
-// The host's category switches, keyed to the active pack's CRC.
+constexpr const char* kCardPartyPackDir = "/games/cardparty/packs";
+// The chosen pack's path, or "demo" for the built-in deck.
+constexpr const char* kCardPartyDeckChoice = "/games/cardparty/deck.sel";
+constexpr const char* kDemoChoice = "demo";
+// The host's category switches, one record per pack, keyed to its CRC.
 constexpr const char* kCardPartySelection = "/games/cardparty/categories.bin";
 constexpr uint8_t kHand = 5;
 // Category list on the X4: one row per category, below the hint line.
 constexpr int kCategoryTop = 112;
 constexpr int kCategoryRow = 36;
+// Deck list: the built-in demo, then one row per pack file.
+constexpr int kDeckTop = 112;
+constexpr int kDeckRow = 56;
+// Setup boxes, top and bottom: [01] hotspot, [02] Wi-Fi, [03] deck, [04] categories.
+constexpr int kBoxTop[] = {145, 240, 335, 430};
+constexpr int kBoxHeight = 85;
+bool hasDatSuffix(const char* name) {
+  const size_t n = std::strlen(name);
+  if (n < 5) return false;
+  const char* ext = name + n - 4;
+  return ext[0] == '.' && (ext[1] | 0x20) == 'd' && (ext[2] | 0x20) == 'a' && (ext[3] | 0x20) == 't';
+}
 class CardPartySdSource final : public cp::sdpack::ByteSource {
  public:
   explicit CardPartySdSource(HalFile& file) : file_(file), length_(static_cast<uint32_t>(file.size())) {}
@@ -96,38 +114,119 @@ void CardPartyActivity::loadConfiguredDeck() {
   activeDeck_ = cp::demoDeck();
   packLoaded_ = false;
   deckPlayable_ = true;
-  HalFile file;
-  if (!Storage.openFileForRead("CARDPARTY", kCardPartyActivePack, file)) {
-    return;  // No optional pack is normal.
+  deckPath_[0] = 0;
+  char chosen[sizeof(deckPath_)] = {};
+  if (Storage.exists(kCardPartyDeckChoice)) Storage.readFileToBuffer(kCardPartyDeckChoice, chosen, sizeof(chosen));
+  if (std::strcmp(chosen, kDemoChoice) == 0) return;
+  if (chosen[0] && loadPack(chosen)) return;
+  // Nothing chosen yet, or the chosen file is gone: active.dat, then the
+  // first released pack in the folder.
+  bool tried = chosen[0] != 0;
+  if (Storage.exists(kCardPartyActivePack)) {
+    if (loadPack(kCardPartyActivePack)) return;
+    tried = true;
   }
+  scanDecks();
+  for (uint8_t i = 0; i < deckCount_; ++i) {
+    if (!decks_[i].readable || !decks_[i].info.released || std::strcmp(decks_[i].path, kCardPartyActivePack) == 0)
+      continue;
+    if (loadPack(decks_[i].path)) return;
+    tried = true;
+  }
+  if (tried) LOG_ERR("CARDPARTY", "No usable SD pack, using original demo");
+}
+bool CardPartyActivity::loadPack(const char* path) {
+  HalFile file;
+  if (!Storage.exists(path) || !Storage.openFileForRead("CARDPARTY", path, file)) return false;
   if (file.size() > cp::sdpack::kMaxPackBytes) {
-    LOG_ERR("CARDPARTY", "SD pack exceeds memory budget, using original demo");
-    file.close();
-    return;
+    LOG_ERR("CARDPARTY", "SD pack %s exceeds memory budget", path);
+    return false;
   }
   CardPartySdSource source(file);
-  const bool accepted = sdPack_.load(source);  // draft packs are rejected
+  // Draft packs are rejected; a rejected file leaves the loaded pack intact.
+  const bool accepted = sdPack_.load(source);
   file.close();
-  if (accepted) {
-    packLoaded_ = true;
-    activeDeck_ = sdPack_.deck();
-    LOG_INF("CARDPARTY", "Loaded released SD deck v%u (%u prompts, %u answers, %u categories)",
-            static_cast<unsigned>(sdPack_.version()), static_cast<unsigned>(activeDeck_.promptsCount),
-            static_cast<unsigned>(activeDeck_.answersCount), static_cast<unsigned>(sdPack_.categoryCount()));
-    loadSelection();
-    applyCategories();
-  } else {
-    LOG_ERR("CARDPARTY", "Rejected invalid/unapproved SD pack, using original demo");
+  if (!accepted) {
+    LOG_ERR("CARDPARTY", "Rejected invalid/unapproved SD pack %s", path);
+    return false;
   }
+  packLoaded_ = true;
+  activeDeck_ = sdPack_.deck();
+  std::snprintf(deckPath_, sizeof(deckPath_), "%s", path);
+  LOG_INF("CARDPARTY", "Loaded released SD deck v%u (%u prompts, %u answers, %u categories)",
+          static_cast<unsigned>(sdPack_.version()), static_cast<unsigned>(activeDeck_.promptsCount),
+          static_cast<unsigned>(activeDeck_.answersCount), static_cast<unsigned>(sdPack_.categoryCount()));
+  loadSelection();
+  applyCategories();
+  return true;
+}
+void CardPartyActivity::scanDecks() {
+  deckCount_ = 0;
+  auto add = [this](const char* path, const char* name, HalFile& file) {
+    DeckEntry& entry = decks_[deckCount_++];
+    std::snprintf(entry.path, sizeof(entry.path), "%s", path);
+    std::snprintf(entry.file, sizeof(entry.file), "%s", name);
+    CardPartySdSource source(file);
+    entry.readable = cp::sdpack::peek(source, entry.info);
+  };
+  if (Storage.exists(kCardPartyActivePack)) {
+    HalFile file;
+    if (Storage.openFileForRead("CARDPARTY", kCardPartyActivePack, file)) add(kCardPartyActivePack, "active.dat", file);
+  }
+  auto dir = Storage.open(kCardPartyPackDir);
+  if (dir && dir.isDirectory()) {
+    char name[64] = {};
+    char path[sizeof(DeckEntry::path)] = {};
+    for (auto entry = dir.openNextFile(); entry && deckCount_ < kMaxDecks; entry = dir.openNextFile()) {
+      if (entry.isDirectory()) continue;
+      // Skips macOS "._" shadow files and names the list cannot hold.
+      if (!entry.getName(name, sizeof(name)) || name[0] == '.' || !hasDatSuffix(name) ||
+          std::strlen(name) >= sizeof(DeckEntry::file))
+        continue;
+      const int n = std::snprintf(path, sizeof(path), "%s/%s", kCardPartyPackDir, name);
+      if (n < 0 || n >= static_cast<int>(sizeof(path))) continue;
+      add(path, name, entry);
+    }
+  }
+  std::sort(decks_, decks_ + deckCount_,
+            [](const DeckEntry& a, const DeckEntry& b) { return std::strcmp(a.file, b.file) < 0; });
+}
+void CardPartyActivity::chooseDeck(int row) {
+  {
+    // The Game holds pointers into the pack until resetGame() reconfigures it.
+    RenderLock lock(*this);
+    if (row == 0) {
+      sdPack_.clear();
+      packLoaded_ = false;
+      deckPath_[0] = 0;
+      activeDeck_ = cp::demoDeck();
+      deckPlayable_ = true;
+    } else if (!loadPack(decks_[row - 1].path)) {
+      std::snprintf(report_, sizeof(report_), "NOT LOADED: %.40s", decks_[row - 1].file);
+      requestUpdate();
+      return;
+    }
+    resetGame();
+  }
+  saveDeckChoice();
+  requestUpdate();
+}
+void CardPartyActivity::saveDeckChoice() {
+  const char* value = deckPath_[0] ? deckPath_ : kDemoChoice;
+  const size_t n = std::strlen(value);
+  HalFile file;
+  if (!Storage.ensureDirectoryExists(kCardPartyDir) ||
+      !Storage.openFileForWrite("CARDPARTY", kCardPartyDeckChoice, file) || file.write(value, n) != n)
+    LOG_ERR("CARDPARTY", "Could not save deck choice");
 }
 void CardPartyActivity::loadSelection() {
   enabled_ = cp::categories::defaults(sdPack_);
+  uint8_t saved[cp::categories::kSelectionBytes * cp::categories::kSelectionSlots] = {};
   HalFile file;
-  if (Storage.openFileForRead("CARDPARTY", kCardPartySelection, file)) {
-    uint8_t saved[cp::categories::kSelectionBytes] = {};
+  if (Storage.exists(kCardPartySelection) && Storage.openFileForRead("CARDPARTY", kCardPartySelection, file)) {
+    const int n = file.read(saved, sizeof(saved));
     uint16_t mask = 0;
-    if (file.read(saved, sizeof(saved)) == static_cast<int>(sizeof(saved)) &&
-        cp::categories::decode(saved, sdPack_.crc(), sdPack_.categoryCount(), mask))
+    if (n > 0 && cp::categories::find(saved, static_cast<size_t>(n), sdPack_.crc(), sdPack_.categoryCount(), mask))
       enabled_ = mask;
     file.close();
   }
@@ -135,11 +234,16 @@ void CardPartyActivity::loadSelection() {
 }
 void CardPartyActivity::saveSelection() {
   if (enabled_ == savedEnabled_) return;
-  uint8_t out[cp::categories::kSelectionBytes] = {};
-  cp::categories::encode(sdPack_.crc(), enabled_, out);
+  uint8_t records[cp::categories::kSelectionBytes * cp::categories::kSelectionSlots] = {};
+  size_t len = 0;
   HalFile file;
-  if (Storage.openFileForWrite("CARDPARTY", kCardPartySelection, file) &&
-      file.write(out, sizeof(out)) == sizeof(out)) {
+  if (Storage.exists(kCardPartySelection) && Storage.openFileForRead("CARDPARTY", kCardPartySelection, file)) {
+    const int n = file.read(records, sizeof(records));
+    if (n > 0) len = static_cast<size_t>(n);
+    file.close();
+  }
+  len = cp::categories::store(records, len, sdPack_.crc(), enabled_);
+  if (Storage.openFileForWrite("CARDPARTY", kCardPartySelection, file) && file.write(records, len) == len) {
     savedEnabled_ = enabled_;
   } else {
     LOG_ERR("CARDPARTY", "Could not save category selection");
@@ -194,9 +298,12 @@ void CardPartyActivity::onEnter() {
   // SDL fixture mode exercises the actual CardPartyActivity renderer.
   // Real production networking is never enabled in the simulator.
   const char* scenario = std::getenv("CROSSPLAY_SIM_CARDPARTY_STATE");
-  if (scenario && std::strcmp(scenario, "categories") == 0)
+  if (scenario && std::strcmp(scenario, "categories") == 0) {
     stage_ = Stage::Categories;
-  else if (scenario && *scenario && std::strcmp(scenario, "setup") != 0)
+  } else if (scenario && std::strcmp(scenario, "decks") == 0) {
+    scanDecks();
+    stage_ = Stage::Decks;
+  } else if (scenario && *scenario && std::strcmp(scenario, "setup") != 0)
     start(cp::web::Server::Mode::Hotspot);
 #endif
   requestUpdate();
@@ -285,12 +392,29 @@ void CardPartyActivity::handleTap(int x, int y) {
   const int height = renderer.getScreenHeight();
   const int width = renderer.getScreenWidth();
   if (stage_ == Stage::Choice) {
-    if (y >= 145 && y < 232)
+    const auto inBox = [y](int i) { return y >= kBoxTop[i] && y < kBoxTop[i] + kBoxHeight; };
+    if (inBox(0)) {
       start(cp::web::Server::Mode::Hotspot);
-    else if (y >= 240 && y < 325)
+    } else if (inBox(1)) {
       chooseExistingWifi();
-    else if (y >= 335 && y < 420 && packLoaded_ && sdPack_.categoryCount()) {
+    } else if (inBox(2)) {
+      scanDecks();
+      stage_ = Stage::Decks;
+      report_[0] = 0;
+      requestUpdate();
+    } else if (inBox(3) && packLoaded_ && sdPack_.categoryCount() > 1) {
       stage_ = Stage::Categories;
+      report_[0] = 0;
+      requestUpdate();
+    }
+    return;
+  }
+  if (stage_ == Stage::Decks) {
+    const int row = (y - kDeckTop) / kDeckRow;
+    if (y >= kDeckTop && row <= deckCount_) {
+      chooseDeck(row);
+    } else if (y >= height - 90) {
+      stage_ = Stage::Choice;
       report_[0] = 0;
       requestUpdate();
     }
@@ -368,6 +492,12 @@ void CardPartyActivity::loop() {
       leaveCategories();
       return;
     }
+    if (stage_ == Stage::Decks) {
+      stage_ = Stage::Choice;
+      report_[0] = 0;
+      requestUpdate();
+      return;
+    }
     // One stray press must not end a party for everyone at the table.
     if (stage_ == Stage::Hosted && matchInProgress()) {
       const uint32_t now = millis();
@@ -410,16 +540,17 @@ void CardPartyActivity::drawChoice() {
   renderer.drawText(UI_10_FONT_ID, kGutter, 92, "CARDS AGAINST WHATEVER", true);
   renderer.drawText(SMALL_FONT_ID, kGutter, 118, "X4 = GAME MASTER  /  PHONES = CARDS", true);
   const int width = renderer.getScreenWidth();
-  renderer.drawRect(kGutter, 145, width - 2 * kGutter, 86, 2, true);
-  renderer.drawText(UI_10_FONT_ID, kGutter + 20, 166, "[01] CREATE HOTSPOT", true);
-  renderer.drawText(SMALL_FONT_ID, kGutter + 20, 198, "LOCAL / PASSWORD PROTECTED", true);
-  renderer.drawRect(kGutter, 240, width - 2 * kGutter, 85, 2, true);
-  renderer.drawText(UI_10_FONT_ID, kGutter + 20, 261, "[02] EXISTING WI-FI", true);
-  renderer.drawText(SMALL_FONT_ID, kGutter + 20, 293, "PICK A NETWORK / SAME AS PLAYERS", true);
   const int textWidth = width - 2 * kGutter;
-  if (packLoaded_ && sdPack_.categoryCount()) {
-    renderer.drawRect(kGutter, 335, textWidth, 85, 2, true);
-    renderer.drawText(UI_10_FONT_ID, kGutter + 20, 356, "[03] CATEGORIES", true);
+  const auto box = [&](int i, const char* title, const char* detail) {
+    renderer.drawRect(kGutter, kBoxTop[i], textWidth, kBoxHeight, 2, true);
+    renderer.drawText(UI_10_FONT_ID, kGutter + 20, kBoxTop[i] + 21, title, true);
+    drawWrapped(SMALL_FONT_ID, detail, kGutter + 20, kBoxTop[i] + 53, textWidth - 40, 22, 1);
+  };
+  box(0, "[01] CREATE HOTSPOT", "LOCAL / PASSWORD PROTECTED");
+  box(1, "[02] EXISTING WI-FI", "PICK A NETWORK / SAME AS PLAYERS");
+  box(2, "[03] DECK", packLoaded_ ? sdPack_.title() : "BUILT-IN DEMO / TAP TO CHOOSE A PACK");
+  // A single category has nothing to switch: off would only empty the deck.
+  if (packLoaded_ && sdPack_.categoryCount() > 1) {
     int on = 0;
     for (uint8_t i = 0; i < sdPack_.categoryCount(); ++i)
       if (enabled_ & (1u << i)) ++on;
@@ -427,19 +558,51 @@ void CardPartyActivity::drawChoice() {
     std::snprintf(summary, sizeof(summary), "%d OF %u ON / %u PROMPTS / %u ANSWERS", on,
                   static_cast<unsigned>(sdPack_.categoryCount()), static_cast<unsigned>(activeDeck_.promptsCount),
                   static_cast<unsigned>(activeDeck_.answersCount));
-    renderer.drawText(SMALL_FONT_ID, kGutter + 20, 388, summary, true);
+    box(3, "[04] CATEGORIES", summary);
   }
-  if (report_[0]) drawWrapped(SMALL_FONT_ID, report_, kGutter, 440, textWidth, 24, 2);
+  if (report_[0]) drawWrapped(SMALL_FONT_ID, report_, kGutter, 535, textWidth, 24, 2);
   if (packLoaded_) {
-    // Attribution for the installed pack, as its license requires.
-    const int bottom = renderer.getScreenHeight();
-    char line[260] = {};
-    std::snprintf(line, sizeof(line), "DECK: %s", sdPack_.title());
-    drawWrapped(SMALL_FONT_ID, line, kGutter, bottom - 116, textWidth, 22, 1);
+    // Attribution for the loaded pack, as its license requires.
+    char line[420] = {};
     std::snprintf(line, sizeof(line), "%s / %s", sdPack_.rightsHolder(), sdPack_.license());
-    drawWrapped(SMALL_FONT_ID, line, kGutter, bottom - 92, textWidth, 22, 1);
+    drawWrapped(SMALL_FONT_ID, line, kGutter, renderer.getScreenHeight() - 138, textWidth, 22, 3);
   }
   renderer.drawText(SMALL_FONT_ID, kGutter, renderer.getScreenHeight() - 35, "BACK  /  CANCEL", true);
+}
+void CardPartyActivity::drawDecks() {
+  drawBase("DECK");
+  const int width = renderer.getScreenWidth();
+  const int textWidth = width - 2 * kGutter;
+  renderer.drawText(SMALL_FONT_ID, kGutter, 82, "TAP TO LOAD  /  SD: GAMES/CARDPARTY/PACKS", true);
+  for (int row = 0; row <= deckCount_; ++row) {
+    const int y = kDeckTop + row * kDeckRow;
+    const DeckEntry* entry = row ? &decks_[row - 1] : nullptr;
+    const bool current = entry ? packLoaded_ && std::strcmp(entry->path, deckPath_) == 0 : !packLoaded_;
+    const char* title = !entry                                    ? "Built-in demo"
+                        : entry->readable && entry->info.title[0] ? entry->info.title
+                                                                  : entry->file;
+    char line[96] = {};
+    std::snprintf(line, sizeof(line), "%s %s", current ? "[x]" : "[  ]", title);
+    drawWrapped(UI_10_FONT_ID, line, kGutter, y + 4, textWidth, 26, 1);
+    if (!entry)
+      std::snprintf(line, sizeof(line), "ENGLISH / ALWAYS AVAILABLE");
+    else if (!entry->readable)
+      std::snprintf(line, sizeof(line), "%s / NOT A CAW PACK", entry->file);
+    else if (!entry->info.released)
+      std::snprintf(line, sizeof(line), "%s / DRAFT, NOT PLAYABLE", entry->file);
+    else
+      std::snprintf(line, sizeof(line), "%s / %u PROMPTS / %u ANSWERS", entry->file,
+                    static_cast<unsigned>(entry->info.prompts), static_cast<unsigned>(entry->info.answers));
+    drawWrapped(SMALL_FONT_ID, line, kGutter + 34, y + 30, textWidth - 34, 22, 1);
+    renderer.fillRect(kGutter, y + kDeckRow - 2, textWidth, 1, true);
+  }
+  if (deckCount_ == 0)
+    drawWrapped(SMALL_FONT_ID, "NO PACKS ON THE CARD. COPY .DAT FILES TO /games/cardparty/packs/", kGutter,
+                kDeckTop + kDeckRow + 16, textWidth, 24, 2);
+  const int bottom = renderer.getScreenHeight() - 72;
+  renderer.fillRect(kGutter, bottom - 4, textWidth, 2, true);
+  renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, "[ DONE ]", true);
+  if (report_[0]) renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, report_, true);
 }
 void CardPartyActivity::drawCategories() {
   drawBase("CATEGORIES");
@@ -453,9 +616,9 @@ void CardPartyActivity::drawCategories() {
     std::snprintf(label, sizeof(label), "%s %s", on ? "[x]" : "[  ]", c.name);
     renderer.drawText(UI_10_FONT_ID, kGutter, y + 4, label, true);
     char count[24] = {};
-    std::snprintf(count, sizeof(count), "%s%u", c.adult ? "18+  " : "",
-                  static_cast<unsigned>(cp::categories::cardsIn(sdPack_, i, false) +
-                                        cp::categories::cardsIn(sdPack_, i, true)));
+    std::snprintf(
+        count, sizeof(count), "%s%u", c.adult ? "18+  " : "",
+        static_cast<unsigned>(cp::categories::cardsIn(sdPack_, i, false) + cp::categories::cardsIn(sdPack_, i, true)));
     renderer.drawText(SMALL_FONT_ID, width - kGutter - renderer.getTextWidth(SMALL_FONT_ID, count), y + 8, count, true);
     renderer.fillRect(kGutter, y + kCategoryRow - 2, width - 2 * kGutter, 1, true);
   }
@@ -522,8 +685,8 @@ void CardPartyActivity::drawLobby() {
 // Greedy word wrap by measured width; returns the y below the last row.
 // Returns the y below the last row. With draw=false it only counts rows, so a
 // caller can pick the largest font that fits.
-int CardPartyActivity::drawWrapped(int fontId, const char* text, int x, int y, int maxWidth, int lineStep,
-                                   int maxRows, bool draw) {
+int CardPartyActivity::drawWrapped(int fontId, const char* text, int x, int y, int maxWidth, int lineStep, int maxRows,
+                                   bool draw) {
   struct Context {
     GfxRenderer& renderer;
     int font;
@@ -660,6 +823,9 @@ void CardPartyActivity::render(RenderLock&&) {
   switch (stage_) {
     case Stage::Choice:
       drawChoice();
+      break;
+    case Stage::Decks:
+      drawDecks();
       break;
     case Stage::Categories:
       drawCategories();

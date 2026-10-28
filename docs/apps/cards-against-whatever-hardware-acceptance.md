@@ -129,12 +129,21 @@ leaving the app the X4's Wi-Fi is off again. Note: unencrypted `ws://` on a shar
 is not accepted as secure; only use a trusted network.
 
 **T13 — SD pack and categories.** Copy a released format-2 pack to
-`/games/cardparty/active.dat`. Pass: setup shows the deck's title and
-license and `[03] CATEGORIES`; FSK 18 is off on first entry; switching a
+`/games/cardparty/active.dat`. Pass: setup shows the deck's title under
+`[03] DECK`, its license at the bottom, and `[04] CATEGORIES`; FSK 18 is off on first entry; switching a
 category changes the prompt/answer count; the choice survives leaving the app
 and a reboot; with too few categories on, setup refuses to start and says
 why; a round never shows a card from a switched-off category. Serial log
-shows `Loaded released SD deck v2 (…)`; note `heap` right after loading.
+shows `Loaded released SD deck v<deck version> (…)`; note `heap` right after loading.
+
+**T14 — Deck picker.** Copy two or more released packs into
+`/games/cardparty/packs/`, plus one file that is not a pack (e.g. a renamed
+text file). Pass: `[03] DECK` lists the built-in demo and every `.dat` by
+title with its counts, the non-pack as `NOT A CAW PACK`; tapping a pack
+returns to setup with that deck and its categories; tapping the non-pack
+shows `NOT LOADED` and keeps the current deck; the choice survives leaving
+the app and a reboot; categories switched in one pack are still as set after
+switching to another pack and back. Note `heap` after each switch.
 
 **T12 — Soak.** Leave 8 phones connected in the lobby or a running round for
 60 min (screens may sleep). Pass: no reboot, `min` stable (no monotonic
@@ -170,6 +179,8 @@ artifact). What only real phones show:
 | T10 | | | | | | | |
 | T11 | | | | | | | |
 | T12 | | | | | | | |
+| T13 | | | | | | | |
+| T14 | | | | | | | |
 
 Attach the serial logs to the PR. A failed case blocks the merge until it is
 fixed and re-run on the new SHA.
