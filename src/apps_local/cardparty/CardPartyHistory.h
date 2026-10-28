@@ -144,6 +144,11 @@ class Book final {
     ++revision_;
     return Vote::Recorded;
   }
+  uint8_t strikeCount(uint32_t pack, uint16_t prompt, uint16_t answer) const {
+    for (const Pair& p : pairs_)
+      if (p.pack == pack && p.prompt == prompt && p.answer == answer) return p.count;
+    return 0;
+  }
   bool blocked(uint32_t pack, uint16_t prompt, uint16_t answer) const {
     for (const Pair& p : pairs_)
       if (p.pack == pack && p.prompt == prompt && p.answer == answer) return p.count == 3;
