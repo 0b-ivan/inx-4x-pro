@@ -499,6 +499,7 @@ h2{font-size:18px;font-weight:500}
         if(!canJudge)return;
         state.judging=i;candidateRows();
       });
+      if(Array.isArray(answer.cards)) fillSentence(btn.children[1],game.promptText||"",answer.cards);
       btn.disabled=!canJudge;list.append(btn);
     }
     list.scrollTop=scrollOffset;
@@ -568,7 +569,9 @@ h2{font-size:18px;font-weight:500}
     } else if(game.phase==="Reveal"||game.phase==="reveal"){
       show("result");
       text("winner",game.winnerName||t("roundComplete"));
-      text("winnerText",game.winningText||t("awaitNextRound"));
+      if(Array.isArray(game.winningCards)&&game.winningCards.length)
+        fillSentence($("winnerText"),game.promptText||"",game.winningCards);
+      else text("winnerText",game.winningText||t("awaitNextRound"));
       const list=$("scores");list.replaceChildren();
       for(const player of (game.players||[])){
         if(!player.seated)continue;
