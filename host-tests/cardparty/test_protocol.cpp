@@ -51,8 +51,8 @@ static void accepted() {
   CHECK(decode(std::string("{\"type\":\"pause\",\"token\":\"") + secret + "\"}", c) && c.kind == Kind::Pause);
   CHECK(decode(std::string("{\"type\":\"unpause\",\"token\":\"") + secret + "\"}", c) && c.kind == Kind::Unpause);
   CHECK(decode(std::string("{\"type\":\"again\",\"token\":\"") + secret + "\"}", c) && c.kind == Kind::Again);
-  CHECK(decode(std::string("{\"type\":\"strike\",\"token\":\"") + secret + "\",\"slot\":9}", c));
-  CHECK(c.kind == Kind::Strike && c.slot == 9);
+  CHECK(decode(std::string("{\"type\":\"swap\",\"token\":\"") + secret + "\",\"revision\":4,\"slot\":9}", c));
+  CHECK(c.kind == Kind::Swap && c.slot == 9 && c.revision == 4);
   CHECK(decode(std::string("{\"type\":\"fame\",\"token\":\"") + secret + "\",\"page\":6}", c));
   CHECK(c.kind == Kind::Fame && c.page == 6);
 }
@@ -96,9 +96,11 @@ static void rejected() {
   }
   CHECK(!decode("{\"type\":\"Pause\",\"token\":\"" + t + "\"}", c));
   CHECK(!decode("{\"type\":\"kick\",\"token\":\"" + t + "\"}", c));
-  CHECK(!decode("{\"type\":\"strike\",\"token\":\"" + t + "\",\"slot\":12}", c));
-  CHECK(!decode("{\"type\":\"strike\",\"token\":\"" + t + "\",\"slot\":-1}", c));
-  CHECK(!decode("{\"type\":\"strike\",\"token\":\"" + t + "\",\"slot\":0,\"revision\":0}", c));
+  CHECK(!decode("{\"type\":\"swap\",\"token\":\"" + t + "\",\"revision\":0,\"slot\":12}", c));
+  CHECK(!decode("{\"type\":\"swap\",\"token\":\"" + t + "\",\"revision\":0,\"slot\":-1}", c));
+  CHECK(!decode("{\"type\":\"swap\",\"token\":\"" + t + "\",\"slot\":0}", c));  // revision is required
+  CHECK(!decode("{\"type\":\"swap\",\"token\":\"" + t + "\",\"slot\":0,\"revision\":0}", c));
+  CHECK(!decode("{\"type\":\"strike\",\"token\":\"" + t + "\",\"slot\":0}", c));  // removed command
   CHECK(!decode("{\"type\":\"fame\",\"token\":\"" + t + "\",\"page\":256}", c));  // host-only, never on the wire
   CHECK(!decode("{\"type\":\"submit\",\"token\":\"" + t + "\",\"revision\":-1,\"slots\":[0]}", c));
   CHECK(!decode("{\"type\":\"submit\",\"token\":\"" + t + "\",\"revision\":1.2,\"slots\":[0]}", c));

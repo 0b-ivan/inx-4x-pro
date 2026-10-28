@@ -212,10 +212,9 @@ async function shot(page, vp, phase, locale) {
       const fifth = await page.$eval("#choices", el => el.children[4].textContent);
       assert.ok(fifth.includes("<1/3>"), `${tag}: first pick not marked as position 1`);
       assert.equal(await page.isEnabled("#submit"), true);
-      await page.click("#strikeButton");
-      const strike=await page.evaluate(()=>JSON.parse(window.__sockets.at(-1).sent.at(-1)));
-      assert.equal(strike.type,"strike");
-      assert.equal(strike.slot,0);
+      // Discard is for exactly one selected card; with three picked it waits.
+      assert.equal(await page.isVisible("#swapButton"), true);
+      assert.equal(await page.isEnabled("#swapButton"), false);
       await inViewport(page, "submit", `${tag} play after selection`);
       await cardsIntact(page, "choices", `${tag} play`);
       await shot(page, vp, "3-play-pick3", lang);

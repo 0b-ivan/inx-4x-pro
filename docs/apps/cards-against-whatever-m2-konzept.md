@@ -195,17 +195,15 @@ Geschrieben wird nur zwischen Runden und am Spielende, nie im WebSocket-Takt.
   einen Knopf. Das Handy holt sie mit einer eigenen Nachricht, in Seiten zu
   10 Einträgen, damit kein Frame das heutige Budget sprengt.
 
-### 7.3 Strikes („passt nicht“)
+### 7.3 Abwerfen (ersetzt „passt nicht“, 2026-10-28)
 
-- Spieler markieren eine **Karte in der eigenen Hand** für den aktuellen Satz.
-  Das Handy zeigt „markiert (1/3)“.
-- Gezählt wird pro Paar (Pack-CRC, Satz, Antwort), je Spieler-ID nur einmal,
-  über Spiele hinweg. Bei **3 verschiedenen Spielern** ist das Paar gesperrt.
-- Gesperrt heißt: Wird dieser Satz gezogen, wird jede gesperrte Karte auf
-  einer Hand still gegen eine neue getauscht; Rando zieht sie dafür nicht.
-- `/games/cardparty/strikes.bin`: pro Paar 14 Byte (CRC, Satz, Antwort, bis
-  zu 3 ID-Kürzel); höchstens 2048 Paare (28 KB, PSRAM). Ist die Datei voll,
-  fallen Paare mit nur einem Strike zuerst raus.
+- „Passt nicht“-Strikes sind entfernt: kein `strike`-Befehl, keine Sperren
+  mehr beim Ziehen. Alte Paare in der Historie bleiben im Dateiformat, wirken
+  aber nicht mehr.
+- Stattdessen darf jeder Spieler **einmal pro Runde eine Handkarte abwerfen**
+  und zieht sofort eine neue (`swap` mit Ticket, Revision und Handplatz), nur
+  in der Antwortphase und nur vor dem Abgeben. Die abgeworfene Karte kommt
+  erst nach dem nächsten Mischen wieder.
 
 ## 8. Protokoll
 
@@ -215,7 +213,7 @@ Neu vom Handy (alle mit Ticket):
 |---|---|
 | `join` + `pid` | Beitritt mit gespeicherter Spieler-ID |
 | `pause` / `unpause` | Pause setzen bzw. aufheben (nur der eigene) |
-| `strike` + Handplatz | Strike für Karte × aktuellen Satz |
+| `swap` + Revision + Handplatz | Karte abwerfen und neu ziehen, 1× pro Runde |
 | `again` | Stimme für „Nochmal“ |
 | `fame` + Seite | Wall of Fame anfordern |
 

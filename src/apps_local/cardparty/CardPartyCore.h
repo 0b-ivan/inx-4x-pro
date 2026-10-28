@@ -52,7 +52,7 @@ struct PublicView {
 struct HandView {
   uint8_t size = 0;
   uint16_t cards[kHandMax] = {};
-  bool submitted = false, judge = false;
+  bool submitted = false, judge = false, swapped = false;
 };
 
 class Game {
@@ -173,6 +173,18 @@ class Game {
       play.cards[i] = p.hand[slots[i]];
     }
     maybeJudge();
+    return true;
+  }
+  // Once per round: throw one hand card away and draw a fresh one. The
+  // discarded card stays out of the draw pile until it is reshuffled.
+  bool swap(uint8_t seat, uint8_t slot) {
+    if (phase_ != Phase::Playing || !valid(seat) || !players_[seat].connected) return false;
+    Player& p = players_[seat];
+    if (p.submitted || p.swapped || slot >= p.size) return false;
+    const uint16_t fresh = draw();  // the old card is still in the hand, so never redrawn
+    if (fresh == kNoCard) return false;
+    p.hand[slot] = fresh;
+    p.swapped = true;
     return true;
   }
   // Host-only action for timeout/disconnect. Never expose unguarded to clients.
@@ -426,6 +438,7 @@ class Game {
     const Player& p = players_[seat];
     out.size = p.size;
     out.submitted = p.submitted;
+    out.swapped = p.swapped;
     out.judge = (seat == czar_);
     for (uint8_t i = 0; i < p.size; ++i) out.cards[i] = p.hand[i];
     return true;
@@ -434,7 +447,7 @@ class Game {
 
  private:
   struct Player {
-    bool seated = false, connected = false, submitted = false, held = false;
+    bool seated = false, connected = false, submitted = false, held = false, swapped = false;
     char name[24] = {};
     uint16_t hand[kHandMax] = {};
     uint8_t size = 0;
@@ -595,6 +608,7 @@ class Game {
         Player& p = players_[i];
         p.submitted = false;
         p.held = false;
+        p.swapped = false;
         for (auto& slot : p.selected) slot = kNone;
         if (i == czar_) continue;
         for (uint8_t j = 0; j < draw_; ++j) {

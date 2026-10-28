@@ -27,7 +27,7 @@ const ids = [
   "result","winner","winnerText","scores","nextHint",
   "final","finalEyebrow","podium","standings","votes","againButton",
   "hold","holdEyebrow","holdTitle","holdText","resumeButton","removed","rejoinButton",
-  "fame","fameButton","famePlayers","fameQuotes","famePlayersHeading","fameQuotesHeading","famePrev","fameNext","fameClose","strikeButton"
+  "fame","fameButton","famePlayers","fameQuotes","famePlayersHeading","fameQuotesHeading","famePrev","fameNext","fameClose","swapButton"
 ];
 const nodes = Object.fromEntries(ids.map(x => [x, element()]));
 const store = new Map();
@@ -160,16 +160,26 @@ assert.equal(nodes.choices.scrollTop,96);
 assert.equal(nodes.choices.children[3].children.at(-1).textContent," <2/2> ");
 assert.equal(nodes.submit.disabled,false);
 assert.equal(nodes.footCount.textContent,"2/2 GEWÄHLT");
-assert.equal(nodes.strikeButton.disabled,false);
-nodes.strikeButton.dispatch("click");
-assert.deepEqual(first.sent.at(-1),{type:"strike",token:token1,slot:3});
+// Discard needs exactly one selected card: deselect, discard, reselect.
+assert.equal(nodes.swapButton.disabled,true);
+nodes.choices.children[3].dispatch("click");
+assert.equal(nodes.swapButton.disabled,false);
+assert.equal(nodes.swapButton.textContent,"[ ABWERFEN ]");
+nodes.swapButton.dispatch("click");
+assert.deepEqual(first.sent.at(-1),{type:"swap",token:token1,revision:0,slot:1});
+assert.equal(nodes.count.textContent,"0/2 GEWÄHLT");
+first.message({type:"state",revision:1,game:playing,private:{isCzar:false,submitted:false,swapped:true,hand:cards}});
+assert.equal(nodes.swapButton.textContent,"[ GETAUSCHT ]");
+nodes.choices.children[1].dispatch("click");
+assert.equal(nodes.swapButton.disabled,true);  // once per round
+nodes.choices.children[3].dispatch("click");
 
 // The picked answers sit in the prompt's blanks, in play order, emphasized.
 const preview=nodes.answerPreview.children;
 assert.ok(preview.filter(part=>part.style&&part.style.textDecoration==="underline").length===2);
 nodes.submit.dispatch("click");
 assert.deepEqual(first.sent.at(-1),{
-  type:"submit",token:token1,revision:0,slots:[1,3]});
+  type:"submit",token:token1,revision:1,slots:[1,3]});
 assert.equal(nodes.submit.disabled,true);
 first.message({type:"state",revision:1,game:{...playing,submitted:1},
   private:{isCzar:false,submitted:true,hand:cards}});

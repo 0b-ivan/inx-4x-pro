@@ -598,14 +598,14 @@ void Server::sendState(uint8_t seat, bool welcome) {
   w.boolean(table_.voted(seat));
   w.raw(",\"submitted\":");
   w.boolean(privateView.submitted);
+  w.raw(",\"swapped\":");
+  w.boolean(privateView.swapped);
   w.raw(",\"hand\":[");
   for (uint8_t i = 0; i < privateView.size; ++i) {
     if (i) w.raw(",");
     const uint16_t id = privateView.cards[i];
     w.raw("{\"text\":");
     w.quoted(id < deck_.answersCount ? deck_.answers[id].text : "");
-    w.raw(",\"strikes\":");
-    w.num(history_ && v.prompt < deck_.promptsCount ? history_->strikeCount(packCrc_, v.prompt, id) : 0);
     w.raw("}");
   }
   w.raw("]}}");
@@ -717,18 +717,8 @@ void Server::onMessage(uint8_t client, const uint8_t* bytes, size_t size) {
     }
     sendFame(client, command.page);
     return;
-  } else if (command.kind == Kind::Strike) {
-    const uint8_t seat = sessions_.authenticatedSeat(client, command.secret);
-    HandView hand{};
-    uint32_t revision = 0;
-    const PublicView v = game_.publicView();
-    if (seat != kNone && history_ && !table_.frozen() && v.phase == Phase::Playing && seat != v.czar &&
-        playerIds_[seat] && sessions_.privateHand(client, command.secret, hand, revision) && !hand.submitted &&
-        command.slot < hand.size && v.prompt < deck_.promptsCount) {
-      const uint16_t card = hand.cards[command.slot];
-      const auto vote = history_->strike(playerIds_[seat], packCrc_, v.prompt, card);
-      accepted = vote != history::Book::Vote::Full && vote != history::Book::Vote::Invalid;
-    }
+  } else if (command.kind == Kind::Swap) {
+    accepted = !table_.frozen() && sessions_.swap(client, command.secret, command.revision, command.slot);
   } else if (command.kind == Kind::Submit) {
     // Paused or waiting for a missing player: nobody moves.
     accepted =

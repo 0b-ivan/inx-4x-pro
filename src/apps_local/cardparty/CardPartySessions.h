@@ -113,6 +113,16 @@ class Sessions final {
     return true;
   }
 
+  // Discard one hand card and draw a new one. The revision pins the slot to
+  // the hand the browser saw.
+  bool swap(uint32_t connection, const uint8_t secret[kTicketBytes], uint32_t expectedRevision, uint8_t slot) {
+    const uint8_t seat = authenticate(connection, secret);
+    if (seat == kNone || seats_[seat].revision != expectedRevision || seats_[seat].revision == UINT32_MAX) return false;
+    if (!game_.swap(seat, slot)) return false;
+    ++seats_[seat].revision;
+    return true;
+  }
+
   bool judge(uint32_t connection, const uint8_t secret[kTicketBytes], uint32_t expectedRevision, uint8_t chosen) {
     const uint8_t seat = authenticate(connection, secret);
     if (seat == kNone || seats_[seat].revision != expectedRevision || seats_[seat].revision == UINT32_MAX) return false;

@@ -154,12 +154,56 @@ void answersCycleThroughDeck() {
   CHECK(everSeen.size() == 120);
   std::printf("answers: whole deck of 120 seen after %d rounds, no early repeats\n", draws);
 }
+// Discard: once per round, only before answering, only while playing; the
+// thrown card does not come back before the pile is used up.
+void swapOncePerRound() {
+  Fixture f(4, 200);
+  Game g;
+  CHECK(g.configure(f.deck, Rules{5, 10, false}, 4242));
+  seat(g, 3);
+  CHECK(!g.swap(0, 0));  // lobby
+  CHECK(g.start());
+  const auto v = g.publicView();
+  const uint8_t p = static_cast<uint8_t>((v.czar + 1) % 3);
+  HandView before{}, after{};
+  g.privateHand(p, before);
+  CHECK(!g.swap(p, 5));  // no such slot
+  CHECK(g.swap(p, 2));
+  g.privateHand(p, after);
+  CHECK(after.swapped && after.cards[2] != before.cards[2]);
+  CHECK(!g.swap(p, 0));  // once per round
+  const uint8_t q = static_cast<uint8_t>((v.czar + 2) % 3);
+  const uint8_t slot[1] = {0};
+  CHECK(g.submit(q, slot, 1));
+  CHECK(!g.swap(q, 1));  // already answered
+  CHECK(g.submit(p, slot, 1));
+  CHECK(g.judge(v.czar, 0) && g.nextRound());
+  HandView next{};
+  g.privateHand(p, next);
+  CHECK(!next.swapped);
+  // The discarded card stays out for the rest of the pile.
+  bool back = false;
+  for (int r = 0; r < 8; ++r) {
+    for (uint8_t s = 0; s < 3; ++s) {
+      HandView h{};
+      g.privateHand(s, h);
+      for (uint8_t i = 0; i < h.size; ++i) back = back || h.cards[i] == before.cards[2];
+    }
+    const auto w = g.publicView();
+    for (uint8_t s = 0; s < 3; ++s)
+      if (s != w.czar) g.submit(s, slot, w.pick);
+    if (!g.judge(w.czar, 0) || !g.nextRound()) break;
+  }
+  CHECK(!back);
+  std::puts("swap: once per round, not after answering, discarded card stays out");
+}
 }  // namespace
 
 int main() {
   uniformDeal();
   promptsDoNotRepeat();
   answersCycleThroughDeck();
+  swapOncePerRound();
   std::printf("cardparty shuffle: %d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

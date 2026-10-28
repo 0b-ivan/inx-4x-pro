@@ -356,3 +356,14 @@ later phases, not part of this First Playable gate.
   docs/battleship-browser.md
 - Current repo SD pack model
   docs/apps/trivia-pack-format.md
+
+## Mischen, Abwerfen, Bedienung (2026-10-28)
+
+- Antworten und Fragen kommen aus einem virtuellen gemischten Stapel (1 Bit
+  pro Karte): jede noch nicht gezogene Karte ist gleich wahrscheinlich,
+  gespielte und abgeworfene Karten kommen erst nach Durchlauf des Stapels
+  wieder, Fragen wiederholen sich in einer Sitzung erst, wenn alle dran waren
+  (`test_shuffle.cpp`; die alte Engine zog Nachbarkarten 42 % öfter zusammen).
+- Einmal pro Runde eine Karte abwerfen und neu ziehen; „passt nicht“ entfällt.
+- Der Spielbildschirm passt genau ins Display; die letzten Handkarten sind
+  per Touch erreichbar (`test_browser_viewport.cjs` wischt bis zum Ende).

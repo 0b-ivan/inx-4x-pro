@@ -131,8 +131,23 @@ int main() {
   const auto initial = game.publicView();
   assert(fame.players() == 3);
   for (uint8_t i = 0; i < 3; ++i) assert(fame.at(i).games == 1);
-  send(ws, 1, "{\"type\":\"strike\",\"token\":\"" + tokens[1] + "\",\"slot\":0}");
-  assert(fame.pairs() == 1);
+  // Discard and redraw: once per round, revision-checked, never the same card.
+  {
+    HandView before{}, after{};
+    assert(game.privateHand(2, before));
+    send(ws, 2, "{\"type\":\"swap\",\"token\":\"" + tokens[2] + "\",\"revision\":0,\"slot\":0}");
+    assert(game.privateHand(2, after) && after.swapped && after.size == before.size);
+    assert(after.cards[0] != before.cards[0]);
+    for (uint8_t i = 1; i < after.size; ++i) assert(after.cards[i] == before.cards[i]);
+    assert(ws.messages.back().find("\"swapped\":true") != std::string::npos);
+    const size_t again = ws.messages.size();
+    send(ws, 2, "{\"type\":\"swap\",\"token\":\"" + tokens[2] + "\",\"revision\":1,\"slot\":1}");
+    assert(ws.messages[again].find("\"type\":\"error\"") != std::string::npos);
+    HandView still{};
+    assert(game.privateHand(2, still) && still.cards[1] == before.cards[1]);
+    send(ws, 1, "{\"type\":\"strike\",\"token\":\"" + tokens[1] + "\",\"slot\":0}");
+    assert(fame.pairs() == 0);  // "doesn't fit" voting is gone
+  }
   // T8 regression: the ESP32 writable() low-water threshold is about 2873B.
   // Even twenty maximum-length, heavily JSON-escaped winning sentences must
   // be paginated without asking a socket to send a blocking oversized frame.
@@ -172,7 +187,7 @@ int main() {
   assert(ws.messages.back().find("\"type\":\"state\",\"revision\":1") != std::string::npos);
   assert(game.publicView().submitted == 1);
 
-  send(ws, 2, "{\"type\":\"submit\",\"token\":\"" + tokens[2] + "\",\"revision\":0,\"slots\":[0]}");
+  send(ws, 2, "{\"type\":\"submit\",\"token\":\"" + tokens[2] + "\",\"revision\":1,\"slots\":[0]}");
   const auto judging = game.publicView();
   assert(judging.phase == Phase::Judging && judging.plays == 3);  // 2 players + Rando
   for (uint8_t i = 0; i < judging.plays; ++i) assert(judging.pile[i].author == kNone);

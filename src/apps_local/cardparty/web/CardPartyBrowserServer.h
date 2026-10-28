@@ -59,10 +59,6 @@ class Server final {
     if (book)
       for (size_t i = 0; i < book->players(); ++i)
         if (book->at(i).seen > identitySequence_) identitySequence_ = book->at(i).seen;
-    game_.setBlocker([](void* self, uint16_t prompt, uint16_t answer) {
-      const Server* server = static_cast<const Server*>(self);
-      return server->history_ && server->history_->blocked(server->packCrc_, prompt, answer);
-    }, this);
   }
   void setPackCrc(uint32_t crc) { packCrc_ = crc; }
   bool begin(Mode mode);
