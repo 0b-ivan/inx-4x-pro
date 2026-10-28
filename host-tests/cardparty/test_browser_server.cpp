@@ -128,6 +128,25 @@ int main() {
   for(uint8_t i=0;i<3;++i)assert(fame.at(i).games==1);
   send(ws,1,"{\"type\":\"strike\",\"token\":\""+tokens[1]+"\",\"slot\":0}");
   assert(fame.pairs()==1);
+  // T8 regression: the ESP32 writable() low-water threshold is about 2873B.
+  // Even twenty maximum-length, heavily JSON-escaped winning sentences must
+  // be paginated without asking a socket to send a blocking oversized frame.
+  const std::string longSentence(200,'\\');
+  for(uint64_t id=100;id<120;++id) {
+    assert(fame.upsert(id,"StressTraveler",static_cast<uint32_t>(id)));
+    assert(fame.roundWon(id,longSentence.c_str(),static_cast<uint32_t>(id)));
+  }
+  // 23 players -> 3 player pages; 20 sentences -> 10 quote pages.
+  for(int page=0;page<13;++page) {
+    const size_t before=ws.messages.size();
+    send(ws,0,"{\"type\":\"fame\",\"token\":\""+tokens[0]+
+              "\",\"page\":"+std::to_string(page)+"}");
+    assert(ws.messages.size()==before+1);
+    assert(ws.messages.back().find("\"type\":\"fame\"")!=std::string::npos);
+    assert(ws.messages.back().size()<=2800);
+    if(page>=3)
+      assert(ws.messages.back().find("\"section\":\"quotes\"")!=std::string::npos);
+  }
   assert(initial.czar==0 && initial.pick==1);
   const std::string wrong="ffffffffffffffffffffffffffffffff";
   const size_t beforeRejected=ws.messages.size();
