@@ -69,6 +69,7 @@ class CardPartyActivity final : public Activity {
   void drawPlayers();
   void drawFame();
   void drawFinal();
+  void drawRichSentence(const char* prompt, const char* const* answers, uint8_t pick, int x, int y, int width);
   void hostAction(bool menu);
   void loadSelection();
   void saveSelection();
