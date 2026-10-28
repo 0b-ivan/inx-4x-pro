@@ -102,6 +102,39 @@ async function inViewport(page, id, label) {
   assert.ok(r.top >= 0 && r.bottom <= r.h && r.left >= 0 && r.right <= r.w,
             `${label}: #${id} not fully visible without scrolling (${JSON.stringify(r)})`);
 }
+// Touch-drag a card list to its end like a thumb would and require the last
+// card to sit fully above the footer, inside the viewport. A page that also
+// scrolls (sticky footer over the list) hid the last cards on phones.
+async function lastCardReachable(page, listId, label) {
+  const cdp = await page.context().newCDPSession(page);
+  const area = () => page.evaluate(id => {
+    const l = document.getElementById(id), r = l.getBoundingClientRect();
+    const f = l.closest("section").querySelector(".footer").getBoundingClientRect();
+    const top = Math.max(r.top, 0), bottom = Math.min(r.bottom, f.top, innerHeight);
+    return { x: r.left + r.width / 2, y: (top + bottom) / 2, span: bottom - top,
+             left: l.scrollHeight - l.clientHeight - l.scrollTop };
+  }, listId);
+  let a = await area();
+  assert.ok(a.span >= 100, `${label}: only ${Math.round(a.span)}px of #${listId} can be touched`);
+  for (let i = 0; i < 200 && a.left > 1; ++i) {
+    const x = Math.round(a.x), y = Math.round(a.y + a.span * 0.35);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+    for (let k = 1; k <= 10; ++k)
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: Math.round(y - k * a.span * 0.07) }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    a = await area();
+  }
+  const r = await page.evaluate(id => {
+    const l = document.getElementById(id), last = l.lastElementChild.getBoundingClientRect();
+    const f = l.closest("section").querySelector(".footer").getBoundingClientRect();
+    return { left: l.scrollHeight - l.clientHeight - l.scrollTop, last: last.bottom, footerTop: f.top,
+             footerBottom: f.bottom, h: innerHeight, page: scrollY };
+  }, listId);
+  assert.ok(r.left <= 1 && r.last <= r.footerTop + 1 && r.footerBottom <= r.h + 1,
+            `${label}: last card of #${listId} unreachable by touch (${JSON.stringify(r)})`);
+  await page.$eval(`#${listId}`, el => { el.scrollTop = 0; });
+  await cdp.detach();
+}
 async function shot(page, vp, phase, locale) {
   await page.screenshot({ path: path.join(outDir, `${vp.name}-${locale}-${phase}.png`), fullPage: false });
 }
@@ -163,6 +196,7 @@ async function shot(page, vp, phase, locale) {
       assert.equal(await page.isVisible("#play"), true);
       await noHorizontalScroll(page, `${tag} play`);
       await inViewport(page, "submit", `${tag} play`);
+      if (vp.name !== "desktop") await lastCardReachable(page, "choices", `${tag} play`);
       const tap = await page.$$eval("#choices .choice", els => Math.min(...els.map(e => e.getBoundingClientRect().height)));
       assert.ok(tap >= 44, `${tag}: answer button only ${tap}px tall`);
       // Scroll the hand, select in reverse order: the scroll position stays and
@@ -198,6 +232,7 @@ async function shot(page, vp, phase, locale) {
         private: { isCzar: true, submitted: false, hand: [] } }), game("Judging", { submissions }));
       assert.equal(await page.isVisible("#judging"), true);
       await noHorizontalScroll(page, `${tag} judging`);
+      if (vp.name !== "desktop") await lastCardReachable(page, "candidateList", `${tag} judging`);
       await page.$eval("#candidateList", el => { el.scrollTop = el.scrollHeight; el.lastElementChild.click(); });
       assert.equal(await page.isEnabled("#confirmJudge"), true);
       await inViewport(page, "confirmJudge", `${tag} judging`);

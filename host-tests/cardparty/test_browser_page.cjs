@@ -63,7 +63,7 @@ class Socket {
 assert.match(html,/background:#000/);
 assert.match(html,/aria-pressed/);
 assert.match(html,/min-height:48px/);
-assert.match(html,/position:sticky/);
+assert.match(html,/height:100dvh/);  // play screen fits the viewport; no page scroll hides cards
 assert.doesNotMatch(html,/cdn\.|fonts\.googleapis/);
 const match = html.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(match, "embedded script");
