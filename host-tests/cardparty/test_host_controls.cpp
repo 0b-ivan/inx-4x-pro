@@ -99,7 +99,7 @@ void pauseOverTheWire() {
   const int a = p.answerer(0), b = p.answerer(1);
   p.ticketed(a, "pause");
   CHECK(p.server.table().pausedBy() == a);
-  CHECK(p.lastHas(a, "\"pausedBy\":\"P" + std::to_string(a) + "\""));
+  CHECK(p.lastHas(a, "\"pausedBy\":\"P" + std::to_string(a) + "·"));
   CHECK(p.lastHas(a, "\"pausedByMe\":true"));
   CHECK(p.lastHas(b, "\"pausedByMe\":false"));
   // Not theirs to lift; moves are refused while paused.
@@ -144,7 +144,7 @@ void kickOverTheWire() {
   CHECK(p.lastHas(9, "\"type\":\"expired\""));
   // Joining needs the next lobby.
   p.send(9, "{\"type\":\"join\",\"name\":\"Back\"}");
-  CHECK(p.lastHas(9, "GAME ALREADY RUNNING"));
+  CHECK(p.lastHas(9, "\"code\":\"game_running\""));
   CHECK(!p.server.hostKick(static_cast<uint8_t>(gone)));
   std::puts("PASS kick: phone told, socket closed, ticket revoked, rejoin from the next lobby");
 }
@@ -188,7 +188,7 @@ void clockOnTheWire() {
   p.server.loop();
   clockMs += kBlockAfterMs;
   p.server.loop();
-  CHECK(p.lastHas(p.answerer(0), "\"blockedOn\":\"P" + std::to_string(away) + "\""));
+  CHECK(p.lastHas(p.answerer(0), "\"blockedOn\":\"P" + std::to_string(away) + "·"));
   CHECK(p.server.hostContinue());
   CHECK(p.lastHas(p.answerer(0), "\"blockedOn\":\"\""));
   std::puts("PASS clock fields: answers clock, extension, +time, block by name");
