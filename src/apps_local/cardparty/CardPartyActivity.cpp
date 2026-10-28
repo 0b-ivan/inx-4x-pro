@@ -963,8 +963,8 @@ void CardPartyActivity::hostAction(bool menu) {
   }
   if (!accepted) {
     std::snprintf(report_, sizeof(report_),
-                  phase == cp::Phase::Lobby     ? "NEED 3 CONNECTED PLAYERS"
-                  : phase == cp::Phase::Playing ? "NO ANSWERS RECEIVED YET"
+                  phase == cp::Phase::Lobby     ? tr(STR_CAW_MSG_NEED_PLAYERS)
+                  : phase == cp::Phase::Playing ? tr(STR_CAW_MSG_NO_ANSWERS)
                                                 : tr(STR_CAW_MSG_ACTION_UNAVAILABLE));
   } else {
     report_[0] = 0;
