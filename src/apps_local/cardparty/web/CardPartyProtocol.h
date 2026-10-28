@@ -26,6 +26,7 @@ enum class Kind : uint8_t { Join, Resume, Submit, Judge, Pause, Unpause, Again }
 struct Command {
   Kind kind = Kind::Join;
   char name[24] = {};
+  uint64_t playerId = 0;  // optional stable, non-secret browser identity
   uint8_t secret[kTicketBytes] = {};
   uint32_t revision = 0;
   uint8_t slots[kPickMax] = {};
@@ -126,6 +127,27 @@ inline bool decodeSecret(const char* token, uint8_t out[kTicketBytes]) {
   }
   return any != 0;
 }
+inline bool decodePlayerId(const char* hex, uint64_t& id) {
+  if (!hex || std::strlen(hex) != 16) return false;
+  uint64_t value = 0;
+  for (size_t i = 0; i < 16; ++i) {
+    const int n = nibble(hex[i]);
+    if (n < 0) return false;
+    value = (value << 4) | static_cast<uint64_t>(n);
+  }
+  if (!value) return false;
+  id = value;
+  return true;
+}
+inline void encodePlayerId(uint64_t id, char out[17]) {
+  static constexpr char hex[] = "0123456789abcdef";
+  for (int i = 15; i >= 0; --i) {
+    out[i] = hex[id & 15u];
+    id >>= 4;
+  }
+  out[16] = 0;
+}
+
 inline bool parse(const uint8_t* data, size_t length, Command& out) {
   if (!data || length == 0 || length > kMaxCommand) return false;
   Reader r(data, length);
@@ -138,6 +160,12 @@ inline bool parse(const uint8_t* data, size_t length, Command& out) {
     // No unsafe controls or multiline input, and prevent HTML/markup confusion.
     for (const unsigned char* p = reinterpret_cast<const unsigned char*>(command.name); *p; ++p)
       if (*p < 0x20 || *p == 0x7f || *p == '<' || *p == '>') return false;
+    // Canonical optional identity, distinct from the 128-bit seat ticket.
+    // The first join omits it; the X4 issues one in the welcome frame.
+    if (r.token(",\"pid\":")) {
+      char pid[17] = {};
+      if (!r.str(pid, sizeof(pid), false) || !decodePlayerId(pid, command.playerId)) return false;
+    }
   } else {
     // Every other command proves its seat with the ticket alone.
     static constexpr struct {
