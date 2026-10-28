@@ -5,7 +5,7 @@ set -eu
 cd "$(dirname "$0")"
 build=$(mktemp -d "${TMPDIR:-/tmp}/cardparty-host-tests.XXXXXX")
 trap 'rm -rf "$build"' EXIT HUP INT TERM
-for name in cardparty sessions protocol full_match disconnect_progress sd_pack catalog text_wrap table history sentence snapshot; do
+for name in cardparty shuffle sessions protocol full_match disconnect_progress sd_pack catalog text_wrap table history sentence snapshot; do
   c++ -std=c++17 -funsigned-char -Wall -Wextra -Werror -pedantic -O2 \
     -I../../src/apps_local/cardparty "test_$name.cpp" \
     -o "$build/test_$name"

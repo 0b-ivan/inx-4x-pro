@@ -89,6 +89,7 @@ class Game {
     aborted_ = false;
     for (auto& player : players_) player = Player{};
     for (auto& play : pile_) play = Play{};
+    clearDrawn();
     return true;
   }
   static bool validName(const char* name) {
@@ -349,6 +350,7 @@ class Game {
   // round starts. Points stay.
   bool reloadDeck() {
     if (!deck_ || !validDeck(*deck_, rules_)) return false;
+    clearDrawn();
     if (phase_ == Phase::Lobby) return true;
     if (phase_ != Phase::Reveal) return false;
     plays_ = 0;
@@ -472,25 +474,58 @@ class Game {
     rng_ ^= rng_ << 5;
     return rng_;
   }
+  // Shuffled draw pile without storing one: every playable answer not yet
+  // drawn is equally likely. Drawn cards (in hands, played, discarded) stay
+  // out until the pile is used up; then it is reshuffled from everything
+  // not currently in a hand or Rando's play.
+  static bool drawnBit(const uint32_t* set, uint16_t i) { return (set[i >> 5] >> (i & 31)) & 1u; }
+  static void markDrawn(uint32_t* set, uint16_t i) { set[i >> 5] |= 1u << (i & 31); }
+  void clearDrawn() {
+    std::memset(drawnAnswers_, 0, sizeof(drawnAnswers_));
+    std::memset(drawnPrompts_, 0, sizeof(drawnPrompts_));
+  }
+  bool answerFree(uint16_t c) const {
+    return !drawnBit(drawnAnswers_, c) && answerOn(c) &&
+           !(blocker_ && prompt_ != kNoCard && blocker_(blockerContext_, prompt_, c));
+  }
+  void reshuffleAnswers() {
+    std::memset(drawnAnswers_, 0, sizeof(drawnAnswers_));
+    for (const auto& p : players_)
+      if (p.seated)
+        for (uint8_t j = 0; j < p.size; ++j)
+          if (p.hand[j] < deck_->answersCount) markDrawn(drawnAnswers_, p.hand[j]);
+    for (uint8_t i = 0; i < plays_; ++i)
+      if (pile_[i].author == kRando)
+        for (uint8_t j = 0; j < kPickMax; ++j)
+          if (pile_[i].cards[j] < deck_->answersCount) markDrawn(drawnAnswers_, pile_[i].cards[j]);
+  }
+  // Uniform pick among `free` cards: a few random probes (cheap while most
+  // cards are free), else count and select the k-th one.
+  template <class Free>
+  uint16_t pickFree(uint16_t n, Free free) {
+    for (uint8_t t = 0; t < 32; ++t) {
+      const uint16_t c = static_cast<uint16_t>(random() % n);
+      if (free(c)) return c;
+    }
+    uint16_t count = 0;
+    for (uint16_t c = 0; c < n; ++c)
+      if (free(c)) ++count;
+    if (!count) return kNoCard;
+    uint16_t k = static_cast<uint16_t>(random() % count);
+    for (uint16_t c = 0; c < n; ++c)
+      if (free(c) && k-- == 0) return c;
+    return kNoCard;
+  }
   uint16_t draw() {
     const uint16_t n = deck_->answersCount;
-    const uint16_t offset = static_cast<uint16_t>(random() % n);
-    for (uint16_t step = 0; step < n; ++step) {
-      const uint16_t candidate = static_cast<uint16_t>((offset + step) % n);
-      if (!answerOn(candidate) ||
-          (blocker_ && prompt_ != kNoCard && blocker_(blockerContext_, prompt_, candidate))) continue;
-      bool used = false;
-      for (const auto& p : players_)
-        if (p.seated)
-          for (uint8_t j = 0; j < p.size; ++j)
-            if (p.hand[j] == candidate) used = true;
-      for (uint8_t i = 0; i < plays_; ++i)
-        if (pile_[i].author == kRando)
-          for (uint8_t j = 0; j < kPickMax; ++j)
-            if (pile_[i].cards[j] == candidate) used = true;
-      if (!used) return candidate;
+    auto free = [this](uint16_t c) { return answerFree(c); };
+    uint16_t c = pickFree(n, free);
+    if (c == kNoCard) {
+      reshuffleAnswers();
+      c = pickFree(n, free);
     }
-    return kNoCard;
+    if (c != kNoCard) markDrawn(drawnAnswers_, c);
+    return c;
   }
   uint8_t expected() const {
     // A disconnected player whose cards are already in the pile must
@@ -529,17 +564,18 @@ class Game {
     selected_ = kNone;
     winner_ = kNone;
     aborted_ = false;
-    // Next playable prompt from a random start, never the same one twice in
-    // a row while there is a choice.
+    // No prompt comes twice until every playable prompt has been shown in
+    // this session; then the pile starts over, never with the last prompt.
     const uint16_t count = deck_->promptsCount;
-    const uint16_t first = static_cast<uint16_t>(random() % count);
-    const bool choice = promptsOn() > 1;
-    uint16_t chosen = kNoCard;
-    for (uint16_t step = 0; step < count && chosen == kNoCard; ++step) {
-      const uint16_t c = static_cast<uint16_t>((first + step) % count);
-      if (promptOn(c) && !(choice && c == prompt_)) chosen = c;
+    auto fresh = [this](uint16_t c) { return promptOn(c) && !drawnBit(drawnPrompts_, c); };
+    uint16_t chosen = pickFree(count, fresh);
+    if (chosen == kNoCard) {
+      std::memset(drawnPrompts_, 0, sizeof(drawnPrompts_));
+      if (prompt_ < count && promptsOn() > 1) markDrawn(drawnPrompts_, prompt_);
+      chosen = pickFree(count, fresh);
     }
     if (chosen == kNoCard) return false;
+    markDrawn(drawnPrompts_, chosen);
     prompt_ = chosen;
     pick_ = deck_->prompts[prompt_].pick;
     draw_ = deck_->prompts[prompt_].draw;
@@ -590,6 +626,10 @@ class Game {
   Player players_[kPlayers] = {};
   Play pile_[kPileMax] = {};
   uint16_t enabled_ = 0xffff;
+  // Drawn-this-cycle bits, one per card (deck limit 4096): 1 KiB in total.
+  static constexpr uint16_t kCardWords = 4096 / 32;
+  uint32_t drawnAnswers_[kCardWords] = {};
+  uint32_t drawnPrompts_[kCardWords] = {};
   Blocker blocker_ = nullptr;
   void* blockerContext_ = nullptr;
 };
