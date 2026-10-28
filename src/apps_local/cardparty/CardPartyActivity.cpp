@@ -1423,10 +1423,12 @@ void CardPartyActivity::drawRichSentence(const char* prompt, const char* const* 
   while (*p && row < kRows) {
     size_t blankBytes = 0;
     if (cp::sentence::blank(p, blankBytes)) {
-      if (answers && used < pick && answers[used])
-        drawRun(answers[used++], std::strlen(answers[used - 1]), true);
-      else
+      if (answers && used < pick && answers[used]) {
+        const char* card = answers[used++];
+        drawRun(card, std::strlen(card), true);
+      } else {
         drawRun(p, blankBytes, false);
+      }
       p += blankBytes;
     } else {
       const char* first = p;
