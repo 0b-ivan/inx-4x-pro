@@ -79,16 +79,16 @@ h2{font-size:18px;font-weight:500}
         </label>
         <button type="submit" id="joinButton">[ BEITRETEN ]</button>
       </form>
-      <p class="secondary" id="joinHint" role="status" aria-live="polite">CONNECT TO X4 TO JOIN</p>
+      <p class="secondary" id="joinHint" role="status" aria-live="polite">MIT DEM X4 VERBINDEN</p>
     </section>
     <section id="lobby" hidden>
       <p class="eyebrow">/// LOBBY</p>
       <h1>WARTE AUF SPIELER</h1>
       <p class="secondary">Die Partie wird auf dem X4 gestartet.</p>
-      <ul id="roster" class="list" aria-label="Players"></ul>
+      <ul id="roster" class="list" aria-label="Spieler"></ul>
     </section>
     <section id="play" hidden>
-      <p class="eyebrow" id="playMeta">/// SELECT RESPONSE</p>
+      <p class="eyebrow" id="playMeta">/// ANTWORT WÄHLEN</p>
       <div class="prompt" tabindex="0" role="region" aria-label="Aktuelle Frage, scrollbar">
         <p class="eyebrow">AKTUELLER SATZ</p>
         <h1 id="promptText"></h1><p id="answerPreview" class="secondary" aria-live="polite"></p>
@@ -101,47 +101,47 @@ h2{font-size:18px;font-weight:500}
       </div>
     </section>
     <section id="waiting" hidden>
-      <p class="eyebrow">/// RESPONSE SENT</p>
+      <p class="eyebrow">/// ANTWORT GESENDET</p>
       <h1>WARTE AUF DIE ANDEREN</h1>
-      <p id="waitingCount" role="status" aria-live="polite">WAITING...</p>
+      <p id="waitingCount" role="status" aria-live="polite">WARTE ...</p>
     </section>
     <section id="judging" hidden>
-      <p class="eyebrow">/// JUDGING</p>
+      <p class="eyebrow">/// JUROR</p>
       <h1 id="judgeHeader">GEWINNER WÄHLEN</h1>
       <p id="judgePrompt" class="secondary" tabindex="0" role="region" aria-label="Aktuelle Frage, scrollbar"></p>
       <div id="candidateList" class="choice-list" tabindex="0" role="region" aria-label="Anonyme Antworten, scrollbar"></div>
       <div class="footer">
-        <span class="secondary" id="judgeSelection">NONE SELECTED</span>
+        <span class="secondary" id="judgeSelection">NICHTS GEWÄHLT</span>
         <button id="confirmJudge" type="button" disabled>[ BESTÄTIGEN ]</button>
       </div>
     </section>
     <section id="result" hidden>
-      <p class="eyebrow">/// REVEAL</p>
+      <p class="eyebrow">/// AUFLÖSUNG</p>
       <h1 id="winner"></h1>
       <div id="winnerText" class="notice"></div>
-      <p class="secondary" id="nextHint" role="status" aria-live="polite">THE HOST STARTS THE NEXT ROUND</p>
-      <ul id="scores" class="list" aria-label="Scores"></ul>
+      <p class="secondary" id="nextHint" role="status" aria-live="polite">DER X4 STARTET DIE NÄCHSTE RUNDE</p>
+      <ul id="scores" class="list" aria-label="Punkte"></ul>
     </section>
     <section id="final" hidden>
-      <p class="eyebrow" id="finalEyebrow">/// GAME OVER</p>
-      <div id="podium" class="podium" aria-label="Winner"></div>
-      <ul id="standings" class="list" aria-label="Final standings"></ul>
+      <p class="eyebrow" id="finalEyebrow">/// SPIELENDE</p>
+      <div id="podium" class="podium" aria-label="Sieger"></div>
+      <ul id="standings" class="list" aria-label="Endstand"></ul>
       <div class="footer">
-        <span class="secondary" id="votes" role="status" aria-live="polite">0 WANT ANOTHER GAME</span>
+        <span class="secondary" id="votes" role="status" aria-live="polite">0 WOLLEN NOCHMAL</span>
         <button id="againButton" type="button">[ NOCHMAL! ]</button>
       </div>
     </section>
     <section id="hold" hidden>
-      <p class="eyebrow" id="holdEyebrow">/// PAUSED</p>
+      <p class="eyebrow" id="holdEyebrow">/// PAUSE</p>
       <h1 id="holdTitle">PAUSED</h1>
       <p class="secondary" id="holdText" role="status" aria-live="polite"></p>
-      <button id="resumeButton" type="button" hidden>[ RESUME ]</button>
+      <button id="resumeButton" type="button" hidden>[ FORTSETZEN ]</button>
     </section>
     <section id="removed" hidden>
-      <p class="eyebrow">/// REMOVED</p>
+      <p class="eyebrow">/// ENTFERNT</p>
       <h1>DER X4 HAT DICH AUS DER PARTY ENTFERNT</h1>
       <p class="secondary">Du kannst in der nächsten Lobby wieder beitreten.</p>
-      <button id="rejoinButton" type="button">[ BACK TO JOIN ]</button>
+      <button id="rejoinButton" type="button">[ ZURÜCK ZUM BEITRITT ]</button>
     </section>
   </main>
   <hr class="rule">
@@ -186,13 +186,13 @@ h2{font-size:18px;font-weight:500}
   function mmss(ms) { const s = Math.ceil(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
   function tickClock() {
     const left = mmss(clockLeft());
-    const label = clock.kind === "answers" ? "TIME " + left
+    const label = clock.kind === "answers" ? "ZEIT " + left
       : clock.kind === "juror" ? "JUROR " + left
-      : clock.kind === "next" ? "NEXT " + left : "";
+      : clock.kind === "next" ? "WEITER " + left : "";
     text("timer", label);
     const game = state.snapshot || {};
     if (game.phase === "Reveal")
-      text("nextHint", clock.kind === "next" ? "NEXT ROUND IN " + left : "THE HOST STARTS THE NEXT ROUND");
+      text("nextHint", clock.kind === "next" ? "NÄCHSTE RUNDE IN " + left : "DER X4 STARTET DIE NÄCHSTE RUNDE");
   }
   function winnersOf(players) {
     let best = -1;
@@ -251,7 +251,7 @@ h2{font-size:18px;font-weight:500}
     list.replaceChildren();
     text("promptText",game.promptText||"");
     fillSentence($("answerPreview"),game.promptText||"",state.selection.map(i=>cards[i]&&cards[i].text||""));
-    text("playMeta","/// SELECT RESPONSE / JUROR "+(game.czarName||"?"));
+    text("playMeta","/// ANTWORT WÄHLEN / JUROR "+(game.czarName||"?"));
     for(let i=0;i<cards.length;i++){
       const selected=state.selection.indexOf(i);
       const label=cards[i].text||"";
@@ -275,7 +275,7 @@ h2{font-size:18px;font-weight:500}
     if(focusedIndex>=0 && list.children[focusedIndex] &&
        typeof list.children[focusedIndex].focus==="function")
       list.children[focusedIndex].focus({preventScroll:true});
-    const counter=state.selection.length+"/"+pick+" SELECTED";
+    const counter=state.selection.length+"/"+pick+" GEWÄHLT";
     text("count",counter);text("footCount",counter);
     $("submit").disabled=state.selection.length!==pick;
   }
@@ -297,13 +297,13 @@ h2{font-size:18px;font-weight:500}
       btn.disabled=!canJudge;list.append(btn);
     }
     list.scrollTop=scrollOffset;
-    text("judgeSelection",state.judging==null?"NONE SELECTED":"["+String(state.judging+1).padStart(2,"0")+"] SELECTED");
+    text("judgeSelection",state.judging==null?"NICHTS GEWÄHLT":"["+String(state.judging+1).padStart(2,"0")+"] SELECTED");
     $("confirmJudge").disabled=!canJudge||state.judging==null;
-    text("judgeHeader",canJudge?"GEWINNER WÄHLEN":"THE JUROR IS JUDGING");
+    text("judgeHeader",canJudge?"GEWINNER WÄHLEN":"DER JUROR ENTSCHEIDET");
   }
   function render() {
     const game=state.snapshot||{},personal=state.personal||{};
-    text("round","ROUND "+(game.round||"—")+(game.rounds?"/"+game.rounds:""));
+    text("round","RUNDE "+(game.round||"—")+(game.rounds?"/"+game.rounds:""));
     const running=game.phase==="Playing"||game.phase==="Judging"||game.phase==="Reveal";
     const paused=!!(game.pausedBy||game.pausedByHost);
     $("pauseButton").hidden=!state.ticket||!running||paused;
@@ -313,11 +313,11 @@ h2{font-size:18px;font-weight:500}
     if(running&&(paused||game.blockedOn)){
       show("hold");
       const who=game.pausedByHost?"THE HOST":(game.pausedBy||"");
-      text("holdEyebrow",paused?"/// PAUSED":"/// WAITING");
-      text("holdTitle",paused?"PAUSED BY "+who:"WAITING FOR "+game.blockedOn);
+      text("holdEyebrow",paused?"/// PAUSE":"/// WARTEZEIT");
+      text("holdTitle",paused?"PAUSIERT VON "+who:"WARTE AUF "+game.blockedOn);
       text("holdText",game.blockedOn
-        ?game.blockedOn+" HAS NO CONNECTION. THE HOST DECIDES: WAIT, GO ON WITHOUT THEM OR REMOVE THEM."
-        :personal.pausedByMe?"ONLY YOU OR THE HOST CAN CONTINUE.":"ONLY "+who+" OR THE HOST CAN CONTINUE.");
+        ?game.blockedOn+" IST OFFLINE. DER X4 ENTSCHEIDET: WARTEN, WEITERMACHEN ODER ENTFERNEN."
+        :personal.pausedByMe?"NUR DU ODER DER X4 KÖNNEN FORTSETZEN.":"NUR "+who+" ODER DER X4 KÖNNEN FORTSETZEN.");
       $("resumeButton").hidden=!personal.pausedByMe;
       return;
     }
@@ -326,20 +326,20 @@ h2{font-size:18px;font-weight:500}
       for(const player of (game.players||[])){
         if(!player.seated)continue;
         const li=document.createElement("li");
-        li.textContent=player.name+(player.connected?"  / CONNECTED":"  / DISCONNECTED");
+        li.textContent=player.name+(player.connected?"  / VERBUNDEN":"  / OFFLINE");
         list.append(li);
       }
     } else if(game.phase==="Playing"||game.phase==="playing"){
       state.judging=null;
       if(personal.isCzar||personal.submitted){
         show("waiting");
-        text("waitingCount",(game.submitted||0)+"/"+(game.expected||0)+" RECEIVED");
+        text("waitingCount",(game.submitted||0)+"/"+(game.expected||0)+" ERHALTEN");
       } else {show("play");choices();}
     } else if(game.phase==="Judging"||game.phase==="judging"){
       show("judging");candidateRows();
     } else if(game.phase==="Finished"){
       show("final");
-      text("finalEyebrow",game.endedByHost?"/// GAME ENDED BY THE HOST":"/// GAME OVER");
+      text("finalEyebrow",game.endedByHost?"/// VOM X4 BEENDET":"/// SPIELENDE");
       const players=Array.isArray(game.players)?game.players:[];
       const podium=$("podium");podium.replaceChildren();
       for(const champ of winnersOf(players)){
@@ -358,12 +358,12 @@ h2{font-size:18px;font-weight:500}
         li.textContent=player.name+"  /  "+(player.points||0)+" PT";
         list.append(li);
       }
-      text("votes",(game.votes||0)+" WANT ANOTHER GAME"+(personal.voted?" / YOU TOO":""));
+      text("votes",(game.votes||0)+" WOLLEN NOCHMAL"+(personal.voted?" / DU AUCH":""));
       $("againButton").disabled=!!personal.voted;
     } else if(game.phase==="Reveal"||game.phase==="reveal"){
       show("result");
-      text("winner",game.winnerName||"ROUND COMPLETE");
-      text("winnerText",game.winningText||"Awaiting next round");
+      text("winner",game.winnerName||"RUNDE BEENDET");
+      text("winnerText",game.winningText||"Warte auf die nächste Runde");
       const list=$("scores");list.replaceChildren();
       for(const player of (game.players||[])){
         if(!player.seated)continue;
@@ -382,14 +382,14 @@ h2{font-size:18px;font-weight:500}
     const url="ws://"+hostname+":81/cardparty";
     const socket=new WebSocket(url);
     state.socket=socket;
-    status("CONNECTING");
+    status("VERBINDE");
     socket.addEventListener("open",()=>{
-      status("LOCAL / CONNECTED");
+      status("LOKAL / VERBUNDEN");
       if(state.ticket) socket.send(JSON.stringify({type:"resume",token:state.ticket}));
       else if(state.pendingJoin){
         socket.send(JSON.stringify({type:"join",name:state.pendingJoin}));
         state.pendingJoin=null;
-        text("joinHint","JOIN REQUEST SENT");
+        text("joinHint","BEITRITT GESENDET");
       }
     });
     socket.addEventListener("message",event=>{
@@ -417,7 +417,7 @@ h2{font-size:18px;font-weight:500}
         if(msg.game && msg.game.phase!=="Playing" && msg.game.phase!=="playing")state.selection=[];
         render();
       } else if(msg.type==="error"){
-        text("joinHint","ERROR: "+escapeText(msg.message||"REQUEST REJECTED"));
+        text("joinHint","FEHLER: "+escapeText(msg.message||"ANFRAGE ABGELEHNT"));
       } else if(msg.type==="expired"){
         state.ticket=null;sessionStorage.removeItem("caw.session.token");
         state.personal=null;state.snapshot=null;render();
@@ -428,30 +428,30 @@ h2{font-size:18px;font-weight:500}
       // Only a seated browser reconnects on its own. The X4 closes sockets
       // that never join, so an idle join screen does not hold one of its
       // few connection slots; JOIN reconnects on demand.
-      if(state.ticket){status("DISCONNECTED");setTimeout(connect,1500);}
+      if(state.ticket){status("OFFLINE");setTimeout(connect,1500);}
       else {
-        state.socket=null;status("IDLE / JOIN TO CONNECT");
-        if(state.pendingJoin){state.pendingJoin=null;text("joinHint","ERROR: NO CONNECTION TO X4");}
+        state.socket=null;status("BEREIT / BEITRETEN");
+        if(state.pendingJoin){state.pendingJoin=null;text("joinHint","FEHLER: KEINE VERBINDUNG ZUM X4");}
       }
     });
-    socket.addEventListener("error",()=>{status("CONNECTION ERROR");});
+    socket.addEventListener("error",()=>{status("VERBINDUNGSFEHLER");});
   }
   $("joinForm").addEventListener("submit",ev=>{
     ev.preventDefault();
     const name=$("nick").value.trim();
     if(!name)return;
     if(utf8Length(name)>kNameBytes||/[<>]/.test(name)){
-      text("joinHint","ERROR: NAME TOO LONG (MAX 23 BYTES, UMLAUTE = 2) OR INVALID");return;
+      text("joinHint","FEHLER: NAME UNGÜLTIG ODER ZU LANG (MAX. 23 BYTE)");return;
     }
     if(!state.socket||state.socket.readyState!==WebSocket.OPEN){
       // Socket was released while idle: reconnect, then join on open.
       state.pendingJoin=name;
-      text("joinHint","CONNECTING TO X4");
+      text("joinHint","VERBINDE MIT X4");
       if(!state.socket)connect();
       return;
     }
     state.socket.send(JSON.stringify({type:"join",name}));
-    text("joinHint","JOIN REQUEST SENT");
+    text("joinHint","BEITRITT GESENDET");
   });
   $("submit").addEventListener("click",()=>{
     const expected=(state.snapshot||{}).pick||1;
