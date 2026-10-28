@@ -384,6 +384,50 @@ void Server::assignId(uint8_t seat, uint64_t requested) {
   playerWords_[seat] = wordId;
 }
 
+void Server::sendFame(uint8_t client, uint8_t page) {
+  if (!ws_.writable(client)) return;
+  JsonWriter w(message_,sizeof(message_));
+  w.raw("{\"type\":\"fame\",\"page\":");
+  w.num(page);
+  w.raw(",\"total\":");
+  w.num(history_ ? static_cast<uint32_t>(history_->players()) : 0);
+  w.raw(",\"players\":[");
+  if (history_) {
+    const size_t start = static_cast<size_t>(page) * 10;
+    const size_t end = std::min(start + 10,history_->players());
+    for (size_t i = start; i < end; ++i) {
+      const auto& p = history_->at(i);
+      if (i != start) w.raw(",");
+      char id[17] = {};
+      encodePlayerId(p.id,id);
+      w.raw("{\"id\":");w.quoted(id);
+      w.raw(",\"name\":");w.quoted(p.name);
+      w.raw(",\"word\":");w.quoted(word(p.word));
+      w.raw(",\"games\":");w.num(p.games);
+      w.raw(",\"wins\":");w.num(p.wins);
+      w.raw(",\"rounds\":");w.num(p.rounds);
+      w.raw("}");
+    }
+  }
+  w.raw("],\"quotes\":[");
+  if (history_ && page < 2) {
+    const size_t first = static_cast<size_t>(page) * 10;
+    const size_t last = std::min(first+10,history_->quotes());
+    for(size_t i=first;i<last;++i) {
+      const auto& q = history_->quote(i);
+      if(i!=first)w.raw(",");
+      const auto* p = history_->player(q.player);
+      w.raw("{\"name\":");
+      w.quoted(p ? p->name : "");
+      w.raw(",\"sentence\":");
+      w.quoted(q.sentence);
+      w.raw("}");
+    }
+  }
+  w.raw("]}");
+  if (w.ok() && ws_.writable(client)) ws_.sendTXT(client,message_,w.size());
+}
+
 void Server::sendState(uint8_t seat, bool welcome) {
   if (!running_ || seat >= kPlayers || socket_[seat] == kNoConnection) return;
   if (pending_[seat] == 2) welcome = true;  // a held-back ticket is never replaced by plain state
@@ -536,6 +580,9 @@ void Server::sendState(uint8_t seat, bool welcome) {
     const uint16_t id = privateView.cards[i];
     w.raw("{\"text\":");
     w.quoted(id < deck_.answersCount ? deck_.answers[id].text : "");
+    w.raw(",\"strikes\":");
+    w.num(history_ && v.prompt < deck_.promptsCount ?
+          history_->strikeCount(packCrc_, v.prompt, id) : 0);
     w.raw("}");
   }
   w.raw("]}}");
@@ -640,6 +687,27 @@ void Server::onMessage(uint8_t client, const uint8_t* bytes, size_t size) {
         ++takeovers_;
         closeSocket(static_cast<uint8_t>(previousSocket));
       }
+    }
+  } else if (command.kind == Kind::Fame) {
+    const uint8_t seat = sessions_.authenticatedSeat(client, command.secret);
+    if (seat == kNone) {
+      sendError(client);
+      return;
+    }
+    sendFame(client,command.page);
+    return;
+  } else if (command.kind == Kind::Strike) {
+    const uint8_t seat = sessions_.authenticatedSeat(client, command.secret);
+    HandView hand{};
+    uint32_t revision = 0;
+    const PublicView v = game_.publicView();
+    if (seat != kNone && history_ && !table_.frozen() &&
+        v.phase == Phase::Playing && seat != v.czar && playerIds_[seat] &&
+        sessions_.privateHand(client,command.secret,hand,revision) &&
+        !hand.submitted && command.slot < hand.size && v.prompt < deck_.promptsCount) {
+      const uint16_t card = hand.cards[command.slot];
+      const auto vote = history_->strike(playerIds_[seat],packCrc_,v.prompt,card);
+      accepted = vote != history::Book::Vote::Full && vote != history::Book::Vote::Invalid;
     }
   } else if (command.kind == Kind::Submit) {
     // Paused or waiting for a missing player: nobody moves.
