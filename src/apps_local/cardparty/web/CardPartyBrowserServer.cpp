@@ -920,8 +920,8 @@ bool Server::begin(Mode m) {
     running_ = game_.start() && judgeSimulatedRound(game_);
   } else if (std::strcmp(scenario, "finished") == 0) {
     running_ = game_.start();
-    // Same ten-round game state transitions as the real production engine.
-    for (int round = 0; running_ && round < 10; ++round) {
+    // A whole match (the fair round count) through the production engine.
+    for (int round = 0; running_ && round < game_.rules().rounds; ++round) {
       running_ = judgeSimulatedRound(game_) && game_.nextRound();
     }
     running_ = running_ && game_.phase() == Phase::Finished;
