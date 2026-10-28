@@ -26,7 +26,8 @@ const ids = [
   "judgePrompt","candidateList","judgeSelection","confirmJudge",
   "result","winner","winnerText","scores","nextHint",
   "final","finalEyebrow","podium","standings","votes","againButton",
-  "hold","holdEyebrow","holdTitle","holdText","resumeButton","removed","rejoinButton"
+  "hold","holdEyebrow","holdTitle","holdText","resumeButton","removed","rejoinButton",
+  "fame","fameButton","famePlayers","fameQuotes","famePrev","fameNext","fameClose","strikeButton"
 ];
 const nodes = Object.fromEntries(ids.map(x => [x, element()]));
 const store = new Map();
@@ -34,6 +35,12 @@ const sessionStorage = {
   getItem: x => store.get(x) || null,
   setItem: (x,v) => store.set(x,v),
   removeItem: x => store.delete(x)
+};
+const localItems=new Map();
+const localStorage={
+  getItem:key=>localItems.get(key)||null,
+  setItem:(key,value)=>localItems.set(key,value),
+  removeItem:key=>localItems.delete(key)
 };
 const timers = [];
 const sockets = [];
@@ -65,7 +72,7 @@ vm.runInNewContext(match[1], {
   document: {getElementById:id => {
       assert.ok(nodes[id], "unknown id: "+id); return nodes[id];
     }, createElement: () => element(), createTextNode: text => ({textContent: text})},
-  sessionStorage, location:{hostname:"crossplay.local"}, navigator:{language:"de-DE"},
+  sessionStorage, localStorage, location:{hostname:"crossplay.local"}, navigator:{language:"de-DE"},
   WebSocket:Socket, setTimeout: fn => {timers.push(fn);return timers.length;},
   setInterval: () => 0
 });
@@ -102,12 +109,21 @@ nodes.joinForm.dispatch("submit",{preventDefault(){}});
 assert.deepEqual(first.sent.at(-1),{type:"join",name:"Ivan"});
 const token1="0123456789abcdef0123456789abcdef";
 const token2="fedcba9876543210fedcba9876543210";
-first.message({type:"welcome",token:token1,revision:0,game:{
+first.message({type:"welcome",pid:"11112222deadbeef",word:"Toast",token:token1,revision:0,game:{
   phase:"Lobby",round:0,players:[
     {name:"Ivan",seated:true,connected:true,points:0},
     {name:"Max",seated:true,connected:true,points:0}]
   },private:{}});
 assert.equal(store.get("caw.session.token"),token1);
+assert.equal(nodes.lobby.hidden,false);
+assert.equal(localItems.get("caw.player.id"),"11112222deadbeef");
+nodes.fameButton.dispatch("click");
+assert.deepEqual(first.sent.at(-1),{type:"fame",token:token1,page:0});
+first.message({type:"fame",page:0,total:1,players:[
+  {name:"Ivan",word:"Toast",games:2,wins:1,rounds:4}],quotes:[]});
+assert.equal(nodes.fame.hidden,false);
+assert.equal(nodes.famePlayers.children.length,1);
+nodes.fameClose.dispatch("click");
 assert.equal(nodes.lobby.hidden,false);
 assert.equal(nodes.roster.children.length,2);
 assert.match(nodes.roster.children[0].textContent,/Ivan/);
@@ -136,6 +152,10 @@ assert.equal(nodes.choices.scrollTop,96);
 assert.equal(nodes.choices.children[3].children.at(-1).textContent," <2/2> ");
 assert.equal(nodes.submit.disabled,false);
 assert.equal(nodes.footCount.textContent,"2/2 GEWÄHLT");
+assert.equal(nodes.strikeButton.disabled,false);
+nodes.strikeButton.dispatch("click");
+assert.deepEqual(first.sent.at(-1),{type:"strike",token:token1,slot:3});
+
 // The picked answers sit in the prompt's blanks, in play order, emphasized.
 const preview=nodes.answerPreview.children;
 assert.ok(preview.filter(part=>part.style&&part.style.textDecoration==="underline").length===2);
