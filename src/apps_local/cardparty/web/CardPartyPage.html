@@ -212,7 +212,7 @@ h2{font-size:18px;font-weight:500}
   // Compose plain text and emphasized answer parts without HTML injection.
   function sentenceParts(prompt, answers) {
     const source=String(prompt||"");
-    const parts=[], pieces=source.split(/(_{3,}|\\[blank\\]|\\{blank\\})/gi);
+    const parts=[], pieces=source.split(/(_{3,}|\[blank\]|\{blank\})/gi);
     let used=0;
     const blankCount=pieces.filter((_,i)=>i%2===1).length;
     if(!blankCount) {
@@ -297,7 +297,7 @@ h2{font-size:18px;font-weight:500}
       btn.disabled=!canJudge;list.append(btn);
     }
     list.scrollTop=scrollOffset;
-    text("judgeSelection",state.judging==null?"NICHTS GEWÄHLT":"["+String(state.judging+1).padStart(2,"0")+"] SELECTED");
+    text("judgeSelection",state.judging==null?"NICHTS GEWÄHLT":"["+String(state.judging+1).padStart(2,"0")+"] GEWÄHLT");
     $("confirmJudge").disabled=!canJudge||state.judging==null;
     text("judgeHeader",canJudge?"GEWINNER WÄHLEN":"DER JUROR ENTSCHEIDET");
   }
@@ -312,7 +312,7 @@ h2{font-size:18px;font-weight:500}
     if(!state.ticket){show("join");return;}
     if(running&&(paused||game.blockedOn)){
       show("hold");
-      const who=game.pausedByHost?"THE HOST":(game.pausedBy||"");
+      const who=game.pausedByHost?"DEM X4":(game.pausedBy||"");
       text("holdEyebrow",paused?"/// PAUSE":"/// WARTEZEIT");
       text("holdTitle",paused?"PAUSIERT VON "+who:"WARTE AUF "+game.blockedOn);
       text("holdText",game.blockedOn
