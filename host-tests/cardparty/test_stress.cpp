@@ -250,7 +250,7 @@ void eightPlayerStorm(uint32_t seed) {
   CHECK(h.ws->accept() == -1);  // all ten library slots are in use
   const size_t mark = h.ws->messages.size();
   h.text(ninth, R"({"type":"join","name":"Ninth"})");
-  CHECK(h.lastTo(ninth, mark).find("SESSION FULL") != std::string::npos);
+  CHECK(h.lastTo(ninth, mark).find("\"code\":\"session_full\"") != std::string::npos);
   clockMs += Server::kAuthGraceMs - 1;
   h.server.loop();
   CHECK(h.ws->open.size() == 10);
@@ -325,7 +325,7 @@ void eightPlayerStorm(uint32_t seed) {
   CHECK(late >= 0);
   const size_t lateAt = h.ws->messages.size();
   h.text(late, R"({"type":"join","name":"Late"})");
-  CHECK(h.lastTo(late, lateAt).find("GAME ALREADY RUNNING") != std::string::npos);
+  CHECK(h.lastTo(late, lateAt).find("\"code\":\"game_running\"") != std::string::npos);
   h.ws->event(WStype_DISCONNECTED, static_cast<uint8_t>(late));
 
   // Rematch keeps network, seats and tickets; scores reset; reloads still work.
@@ -370,7 +370,7 @@ void ghostSeatReclaim() {
   // With every seat live, a further join is refused and nobody is displaced.
   const size_t fullAt = h.ws->messages.size();
   h.text(slot, R"({"type":"join","name":"Ninth"})");
-  CHECK(h.lastTo(slot, fullAt).find("SESSION FULL") != std::string::npos);
+  CHECK(h.lastTo(slot, fullAt).find("\"code\":\"session_full\"") != std::string::npos);
   for (int i = 0; i < 8; ++i) CHECK(h.game.publicView().players[i].connected);
   // A 24-byte UTF-8 name exceeds the 23-byte seat name and is refused
   // without evicting anyone.
