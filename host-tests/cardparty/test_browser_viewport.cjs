@@ -133,6 +133,20 @@ async function shot(page, vp, phase, locale) {
       await page.evaluate(([t, g]) => window.__deliver({ type: "welcome", token: t, revision: 1, game: g,
         private: { isCzar: false, submitted: false, hand: [] } }), [token, game("Lobby", { round: 0 })]);
       assert.equal(await page.isVisible("#lobby"), true);
+      await page.click("#fameButton");
+      assert.equal(await page.isVisible("#fame"),true);
+      const famePlayers=players.slice(0,8).map((p,i)=>({
+        id:String(i+1).padStart(16,"0"),name:p.name,word:"Kompass",
+        games:100,wins:20,rounds:70
+      }));
+      await page.evaluate(data=>window.__deliver(data),{
+        type:"fame",page:0,total:8,players:famePlayers,
+        quotes:answers.map((sentence,i)=>({name:names[i],sentence}))
+      });
+      await noHorizontalScroll(page,`${tag} fame`);
+      await shot(page,vp,"2-fame",lang);
+      await page.click("#fameClose");
+      assert.equal(await page.isVisible("#lobby"),true);
       await noHorizontalScroll(page, `${tag} lobby`);
       await shot(page, vp, "2-lobby", lang);
 
@@ -157,6 +171,10 @@ async function shot(page, vp, phase, locale) {
       const fifth = await page.$eval("#choices", el => el.children[4].textContent);
       assert.ok(fifth.includes("<1/3>"), `${tag}: first pick not marked as position 1`);
       assert.equal(await page.isEnabled("#submit"), true);
+      await page.click("#strikeButton");
+      const strike=await page.evaluate(()=>JSON.parse(window.__sockets.at(-1).sent.at(-1)));
+      assert.equal(strike.type,"strike");
+      assert.equal(strike.slot,0);
       await inViewport(page, "submit", `${tag} play after selection`);
       await cardsIntact(page, "choices", `${tag} play`);
       await shot(page, vp, "3-play-pick3", lang);
