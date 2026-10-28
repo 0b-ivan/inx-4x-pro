@@ -111,6 +111,7 @@ class Server final {
   void onMessage(uint8_t client, const uint8_t* payload, size_t size);
   void onDisconnect(uint8_t client);
   void sendState(uint8_t seat, bool welcome);
+  void captureHistory();
   void publishAll();
   void sendError(uint8_t client, const char* code = "rejected");
   void closeSocket(uint8_t client);
@@ -174,6 +175,8 @@ class Server final {
   }
   void assignId(uint8_t seat, uint64_t id);
   uint32_t identitySequence_ = 0;
+  uint16_t recordedRound_ = 0;
+  bool recordedFinal_ = false;
 };
 
 }  // namespace web
