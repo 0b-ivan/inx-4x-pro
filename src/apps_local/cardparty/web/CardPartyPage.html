@@ -18,7 +18,7 @@ button[aria-pressed="true"]{background:#fff;color:#000}
 button[aria-pressed="true"]:focus-visible{outline:2px solid #000;outline-offset:-5px}
 input{background:#000;border:1px solid #fff;color:#fff;padding:12px;width:100%;font-size:16px;min-height:48px}
 .shell{width:min(100%,720px);margin:0 auto;min-height:100dvh;padding:20px 16px max(16px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:16px}
-.mast{display:flex;justify-content:space-between;gap:12px;align-items:baseline;font-size:12px;letter-spacing:.03em}
+.mast{display:flex;justify-content:space-between;gap:12px;align-items:baseline;font-size:12px;letter-spacing:.03em;flex-wrap:wrap}
 .brand{font-weight:700;white-space:nowrap}
 .rule{border:0;border-top:1px solid #fff;width:100%;margin:0}
 .meta{display:flex;justify-content:space-between;gap:10px;font-size:13px;flex-wrap:wrap}
@@ -31,7 +31,7 @@ h1{font-size:clamp(22px,6vw,30px);font-weight:500;line-height:1.25;overflow-wrap
 h2{font-size:18px;font-weight:500}
 .notice{border:1px solid #fff;padding:12px;white-space:pre-wrap}
 .stack{display:flex;flex-direction:column;gap:8px}
-.row{display:flex;justify-content:space-between;gap:10px;align-items:center;min-height:44px}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center;min-height:44px;flex-wrap:wrap}
 .prompt{border-block:1px solid #fff;padding:14px 0;flex:0 1 auto;max-height:min(30dvh,240px);overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#fff #000;scrollbar-width:thin}
 .prompt h1{padding-block:12px}
 .choice-list{display:flex;flex-direction:column;gap:0;overflow-y:auto;flex:1;min-height:120px;max-height:48dvh;overscroll-behavior:contain;scrollbar-color:#fff #000;scrollbar-width:thin;border-top:1px solid #fff}
@@ -49,7 +49,7 @@ h2{font-size:18px;font-weight:500}
 .grow{flex:1}
 [role="status"]{min-height:1.4em}
 .mini{min-height:44px;padding:6px 10px;font-size:13px}
-.mast .tools{display:flex;gap:10px;align-items:center}
+.mast .tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 #timer{font-weight:700;font-variant-numeric:tabular-nums}
 .podium{display:flex;flex-wrap:wrap;gap:18px;justify-content:center;padding:8px 0}
 .champ{display:flex;flex-direction:column;align-items:center;gap:6px;max-width:100%}
@@ -394,10 +394,10 @@ h2{font-size:18px;font-weight:500}
     text("joinHint",t(key,...(key==="error"?args.map(arg=>t(arg)):args)));
   }
 
-  const screens = ["join", "lobby", "play", "waiting", "judging", "result", "final", "hold", "removed"];
+  const screens = ["join", "lobby", "play", "waiting", "judging", "result", "final", "hold", "removed", "fame"];
   const state = {socket:null, ticket:null, revision:0, selection:[], judging:null,
                  snapshot:null, personal:null, pendingJoin:null, removed:false, pid:null,
-                 statusKey:null,hintKey:null,hintArgs:[]};
+                 statusKey:null,hintKey:null,hintArgs:[],fameOpen:false,famePage:0,fameData:null};
   // The X4 sends the time left with each state; the phone counts down alone.
   const clock = {kind:"", left:0, at:0, frozen:false};
   // The X4 stores names as at most 23 UTF-8 bytes (umlauts count twice).
@@ -524,6 +524,12 @@ h2{font-size:18px;font-weight:500}
     const counter=t("selected",state.selection.length,pick);
     text("count",counter);text("footCount",counter);
     $("submit").disabled=state.selection.length!==pick;
+    $("strikeButton").disabled=state.selection.length===0||!(state.ticket&&game.phase==="Playing")||
+      !!personal.submitted||!!personal.isCzar;
+    if(state.selection.length){
+      const card=cards[state.selection[state.selection.length-1]];
+      $("strikeButton").textContent=t("strikeButton")+" "+t("strikeCount",Number(card&&card.strikes)||0);
+    } else $("strikeButton").textContent=t("strikeButton");
   }
   function candidateRows() {
     const game=state.snapshot||{};
@@ -548,15 +554,40 @@ h2{font-size:18px;font-weight:500}
     $("confirmJudge").disabled=!canJudge||state.judging==null;
     text("judgeHeader",canJudge?t("chooseWinner"):t("jurorJudging"));
   }
+  function requestFame() {
+    if(!state.socket||state.socket.readyState!==WebSocket.OPEN||!state.ticket)return;
+    state.socket.send(JSON.stringify({type:"fame",token:state.ticket,page:state.famePage}));
+  }
+  function renderFame() {
+    const data=state.fameData||{},players=Array.isArray(data.players)?data.players:[],
+      quotes=Array.isArray(data.quotes)?data.quotes:[];
+    const a=$("famePlayers"),b=$("fameQuotes");a.replaceChildren();b.replaceChildren();
+    for(const p of players){
+      const li=document.createElement("li"),label=document.createElement("strong");
+      label.textContent=String(p.name||"")+"·"+String(p.word||"");
+      const stats=document.createElement("p");stats.className="secondary";
+      stats.textContent=t("fameStats",p.games||0,p.wins||0,p.rounds||0);
+      li.append(label,stats);a.append(li);
+    }
+    for(const q of quotes){
+      const li=document.createElement("li");
+      li.textContent=String(q.name||"")+" — "+String(q.sentence||"");b.append(li);
+    }
+    if(!players.length){const li=document.createElement("li");li.textContent=t("fameEmpty");a.append(li);}
+    $("famePrev").disabled=state.famePage===0;
+    $("fameNext").disabled=state.famePage+1>=Math.max(2,Math.ceil((Number(data.total)||0)/10));
+  }
   function render() {
     const game=state.snapshot||{},personal=state.personal||{};
     text("round",t("round",game.round||"—",game.rounds?"/"+game.rounds:""));
     const running=game.phase==="Playing"||game.phase==="Judging"||game.phase==="Reveal";
     const paused=!!(game.pausedBy||game.pausedByHost);
     $("pauseButton").hidden=!state.ticket||!running||paused;
+    $("fameButton").hidden=!state.ticket;
     tickClock();
     if(state.removed){show("removed");return;}
     if(!state.ticket){show("join");return;}
+    if(state.fameOpen){show("fame");renderFame();return;}
     if(running&&(paused||game.blockedOn)){
       show("hold");
       const who=game.pausedByHost?t("hostName"):(game.pausedBy||"");
@@ -645,11 +676,15 @@ h2{font-size:18px;font-weight:500}
       let msg;
       try {msg=JSON.parse(event.data);} catch {return;}
       if(!msg||typeof msg!=="object")return;
+      if(msg.type==="fame") {
+        if(Number(msg.page)===state.famePage){state.fameData=msg;if(state.fameOpen)renderFame();}
+        return;
+      }
       if(msg.type==="hello") {setLanguage(msg.lang);return;}
       if(msg.game&&msg.game.lang)setLanguage(msg.game.lang);
       if(msg.type==="kicked"){
         state.ticket=null;sessionStorage.removeItem("caw.session.token");
-        state.personal=null;state.snapshot=null;state.removed=true;render();
+        state.personal=null;state.snapshot=null;state.removed=true;state.fameOpen=false;render();
       } else if(msg.type==="welcome"){
         if(!/^[0-9a-f]{32}$/.test(msg.token||""))return;
         state.ticket=msg.token;
@@ -675,7 +710,7 @@ h2{font-size:18px;font-weight:500}
         hint("error",typeof msg.code==="string"?msg.code:(typeof msg.message==="string"?msg.message:"rejected"));
       } else if(msg.type==="expired"){
         state.ticket=null;sessionStorage.removeItem("caw.session.token");
-        state.personal=null;state.snapshot=null;render();
+        state.personal=null;state.snapshot=null;state.fameOpen=false;render();
       }
     });
     socket.addEventListener("close",()=>{
@@ -718,6 +753,17 @@ h2{font-size:18px;font-weight:500}
     if(state.judging==null)return;
     if(command("judge",{selected:state.judging}))$("confirmJudge").disabled=true;
   });
+  $("strikeButton").addEventListener("click",()=>{
+    if(!state.selection.length)return;
+    const slot=state.selection[state.selection.length-1];
+    if(command("strike",{slot}))$("strikeButton").disabled=true;
+  });
+  $("fameButton").addEventListener("click",()=>{
+    state.fameOpen=true;state.famePage=0;state.fameData=null;requestFame();render();
+  });
+  $("fameClose").addEventListener("click",()=>{state.fameOpen=false;render();});
+  $("famePrev").addEventListener("click",()=>{if(state.famePage>0){--state.famePage;state.fameData=null;requestFame();renderFame();}});
+  $("fameNext").addEventListener("click",()=>{++state.famePage;state.fameData=null;requestFame();renderFame();});
   $("pauseButton").addEventListener("click",()=>{ticketed("pause");});
   $("resumeButton").addEventListener("click",()=>{ticketed("unpause");});
   $("againButton").addEventListener("click",()=>{if(ticketed("again"))$("againButton").disabled=true;});
