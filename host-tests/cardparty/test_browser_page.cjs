@@ -158,10 +158,13 @@ assert.deepEqual(first.sent.at(-1),{
   type:"judge",token:token1,revision:1,selected:0});
 first.message({type:"state",revision:2,game:{...playing,phase:"Reveal",
   winnerName:"Ivan",winningText:"Kaffeemaschine mit IPv6",
+  winningCards:["Kaffeemaschine mit IPv6","Vier vergessene Backups"],
   players:[{name:"Ivan",seated:true,points:1},{name:"Max",seated:true,points:0}]},
   private:{isCzar:true}});
 assert.equal(nodes.result.hidden,false);
 assert.equal(nodes.winner.textContent,"Ivan");
+assert.equal(nodes.winnerText.children.filter(x=>x.style&&x.style.textDecoration==="underline").length,2);
+assert.equal(nodes.candidateList.children[0].children[1].children.filter(x=>x.style&&x.style.textDecoration==="underline").length,2);
 assert.equal(nodes.scores.children.length,2);
 first.close();
 assert.equal(nodes.connection.textContent,"OFFLINE");
