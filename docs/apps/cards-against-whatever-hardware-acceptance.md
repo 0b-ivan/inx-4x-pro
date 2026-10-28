@@ -145,6 +145,13 @@ shows `NOT LOADED` and keeps the current deck; the choice survives leaving
 the app and a reboot; categories switched in one pack are still as set after
 switching to another pack and back. Note `heap` after each switch.
 
+**T15 — Download from GitHub.** Card without `/games/cardparty/packs/`.
+`[03] DECK` → `[+] Download from GitHub`, pick a network. Pass: the list
+shows `Deutsch - alle Karten`; tapping it returns to setup with that deck
+and `INSTALLED: …`; the file is on the card, no `.part`/`.bak` left; Wi-Fi is
+off after leaving the app. Repeat with Wi-Fi out of range: a clear message,
+no crash, the current deck unchanged. Note `heap` before and after.
+
 **T12 — Soak.** Leave 8 phones connected in the lobby or a running round for
 60 min (screens may sleep). Pass: no reboot, `min` stable (no monotonic
 decline across the hour), phones resume on wake.
@@ -181,6 +188,7 @@ artifact). What only real phones show:
 | T12 | | | | | | | |
 | T13 | | | | | | | |
 | T14 | | | | | | | |
+| T15 | | | | | | | |
 
 Attach the serial logs to the PR. A failed case blocks the merge until it is
 fixed and re-run on the new SHA.

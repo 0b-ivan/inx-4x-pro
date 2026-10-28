@@ -1,0 +1,28 @@
+{
+  "release_tag": "cardparty-packs",
+  "packs": [
+    {
+      "file": "Deutsch.dat",
+      "deck_id": "deutsch-alle-karten",
+      "title": "Deutsch - alle Karten",
+      "version": 1,
+      "rights_holder": "Prior99 und Mitwirkende, BixelPitch; nach Cards Against Humanity",
+      "license": "CC-BY-NC-SA-2.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/2.0/",
+      "decision": "Released for public, non-commercial download by the repository owner on 2026-10-28 under CC BY-NC-SA 2.0, the license of the Cards Against Humanity originals both sources derive from. Every card was approved as converted; no editorial changes.",
+      "sources": [
+        {
+          "importer": "prior99",
+          "url": "https://github.com/Prior99/cah-fullformat-german",
+          "commit": "92501b245f7002ac3d3875099d859a5579aa2161"
+        },
+        {
+          "importer": "bixelpitch",
+          "url": "https://github.com/BixelPitch/cah-cards",
+          "commit": "26b21b5b12b8d3270cf4952869e1bc3df1e6c955"
+        }
+      ],
+      "sha256": "eeccf364faa88cb22d8d5eab2cbd4f9c97dded1b5a5723a7abd691dbd3aa74a9"
+    }
+  ]
+}

@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
+#include <string>
 #include <utility>
 
 #include "CardPartyTextWrap.h"
@@ -19,6 +20,7 @@
 #include "../../activities/network/WifiSelectionActivity.h"
 #include "../../components/UITheme.h"
 #include "../../fontIds.h"
+#include "../../network/HttpDownloader.h"
 #include "../../util/QrUtils.h"
 #include "../ui/ToyboxFonts.h"
 #include "../ui/ToyboxSeed.h"
@@ -34,6 +36,16 @@ constexpr const char* kCardPartyPackDir = "/games/cardparty/packs";
 // The chosen pack's path, or "demo" for the built-in deck.
 constexpr const char* kCardPartyDeckChoice = "/games/cardparty/deck.sel";
 constexpr const char* kDemoChoice = "demo";
+// Public packs: a fixed release of this repository. The list names files
+// only; every URL is this base plus catalog.txt or a validated file name.
+constexpr const char* kCardPartyPacksBase = "https://github.com/0b-ivan/inx-4x-pro/releases/download/cardparty-packs/";
+std::string packsUrl(const char* file) {
+#ifdef SIMULATOR
+  // SDL QA points the same flow at a local server.
+  if (const char* base = std::getenv("CROSSPLAY_SIM_CARDPARTY_PACKS_URL")) return std::string(base) + file;
+#endif
+  return std::string(kCardPartyPacksBase) + file;
+}
 // The host's category switches, one record per pack, keyed to its CRC.
 constexpr const char* kCardPartySelection = "/games/cardparty/categories.bin";
 constexpr uint8_t kHand = 5;
@@ -303,6 +315,20 @@ void CardPartyActivity::onEnter() {
   } else if (scenario && std::strcmp(scenario, "decks") == 0) {
     scanDecks();
     stage_ = Stage::Decks;
+  } else if (scenario && std::strcmp(scenario, "remote") == 0) {
+    // The GitHub list as the device shows it: fetched from a local server
+    // when one is set, else a fixed sample. The SDL build skips the Wi-Fi picker.
+    scanDecks();
+    if (std::getenv("CROSSPLAY_SIM_CARDPARTY_PACKS_URL")) {
+      WiFi.mode(WIFI_STA);
+      WiFi.begin("SimLAN");
+      ownsSta_ = true;
+      openRemote();
+    } else {
+      static constexpr char kSample[] = "Deutsch.dat|Deutsch - alle Karten|40770\nqa.dat|QA Deck|9000\n";
+      catalog_.parse(kSample, sizeof(kSample) - 1);
+      stage_ = Stage::Remote;
+    }
   } else if (scenario && *scenario && std::strcmp(scenario, "setup") != 0)
     start(cp::web::Server::Mode::Hotspot);
 #endif
@@ -350,9 +376,13 @@ void CardPartyActivity::chooseExistingWifi() {
     requestUpdate();
     return;
   }
-  // Already associated (dev mode keeps its last network): host right away.
+  connectWifi(Stage::Choice, &CardPartyActivity::hostExistingWifi);
+}
+void CardPartyActivity::hostExistingWifi() { start(cp::web::Server::Mode::ExistingWifi); }
+void CardPartyActivity::connectWifi(Stage back, void (CardPartyActivity::*onReady)()) {
+  // Already associated (dev mode keeps its last network): go right away.
   if (WiFi.status() == WL_CONNECTED) {
-    start(cp::web::Server::Mode::ExistingWifi);
+    (this->*onReady)();
     return;
   }
   if (!devModePaused_) {
@@ -370,23 +400,131 @@ void CardPartyActivity::chooseExistingWifi() {
     requestUpdate();
     return;
   }
-  startActivityForResult(std::move(picker), [this](const ActivityResult& result) {
+  startActivityForResult(std::move(picker), [this, back, onReady](const ActivityResult& result) {
     if (result.isCancelled) {
       releaseNetwork();
-      stage_ = Stage::Choice;
+      stage_ = back;
       requestUpdate();
       return;
     }
     const auto& wifi = std::get<WifiResult>(result.data);
     if (!wifi.connected) {
       releaseNetwork();
-      stage_ = Stage::Failed;
+      // Hosting fails to the error screen; a download goes back to its list.
+      stage_ = back == Stage::Choice ? Stage::Failed : back;
       std::snprintf(report_, sizeof(report_), "WI-FI NOT CONNECTED");
       requestUpdate();
       return;
     }
-    start(cp::web::Server::Mode::ExistingWifi);
+    (this->*onReady)();
   });
+}
+void CardPartyActivity::openRemote() {
+  catalog_.clear();
+  report_[0] = 0;
+  connectWifi(Stage::Decks, &CardPartyActivity::queueCatalog);
+}
+void CardPartyActivity::queueCatalog() {
+  stage_ = Stage::Remote;
+  job_ = RemoteJob::Catalog;
+  busy_ = "LOADING THE PACK LIST FROM GITHUB";
+  requestUpdate();
+}
+void CardPartyActivity::runRemoteJob() {
+  const RemoteJob job = job_;
+  job_ = RemoteJob::None;
+  requestUpdateAndWait();  // the screen says what is happening first
+  if (job == RemoteJob::Catalog)
+    fetchCatalog();
+  else
+    installPack(jobIndex_);
+  busy_ = nullptr;
+  requestUpdate();
+}
+void CardPartyActivity::fetchCatalog() {
+  char text[cp::catalog::kMaxBytes] = {};
+  size_t used = 0;
+  bool overflow = false;
+  const bool fetched = HttpDownloader::fetchUrl(packsUrl("catalog.txt"), [&](const uint8_t* data, size_t len) {
+    if (len > sizeof(text) - used) {
+      overflow = true;
+      return false;
+    }
+    std::memcpy(text + used, data, len);
+    used += len;
+    return true;
+  });
+  if (!fetched && !overflow) {
+    const int status = HttpDownloader::lastStatus();
+    if (status == 0)
+      std::snprintf(report_, sizeof(report_), "GITHUB NOT REACHABLE. CHECK THE WI-FI AND TRY AGAIN.");
+    else
+      std::snprintf(report_, sizeof(report_), "NO PACK LIST ON GITHUB (HTTP %d)", status);
+  } else if (overflow || !catalog_.parse(text, used)) {
+    LOG_ERR("CARDPARTY", "Rejected pack list from GitHub (%u bytes)", static_cast<unsigned>(used));
+    std::snprintf(report_, sizeof(report_), "PACK LIST FROM GITHUB IS INVALID");
+  } else {
+    report_[0] = 0;
+  }
+}
+void CardPartyActivity::installPack(uint8_t index) {
+  if (index >= catalog_.count()) return;
+  const cp::catalog::Entry& entry = catalog_.at(index);
+  char path[sizeof(DeckEntry::path)] = {}, part[sizeof(path) + 8] = {}, backup[sizeof(path) + 8] = {};
+  std::snprintf(path, sizeof(path), "%s/%s", kCardPartyPackDir, entry.file);
+  std::snprintf(part, sizeof(part), "%s.part", path);
+  std::snprintf(backup, sizeof(backup), "%s.bak", path);
+  if (!Storage.ensureDirectoryExists(kCardPartyPackDir)) {
+    std::snprintf(report_, sizeof(report_), "CANNOT CREATE THE PACKS FOLDER");
+    return;
+  }
+  downloadCancel_ = false;
+  const auto limit = [this](size_t done, size_t total) {
+    if (done > cp::sdpack::kMaxPackBytes || total > cp::sdpack::kMaxPackBytes) downloadCancel_ = true;
+  };
+  const std::string url = packsUrl(entry.file);
+  if (HttpDownloader::downloadToFile(url, part, limit, &downloadCancel_) != HttpDownloader::OK) {
+    Storage.remove(part);
+    std::snprintf(report_, sizeof(report_), "DOWNLOAD FAILED: %.40s", entry.title);
+    return;
+  }
+  // Keep an installed copy until the new file has loaded.
+  Storage.remove(backup);
+  const bool hadOld = Storage.exists(path);
+  if ((hadOld && !Storage.rename(path, backup)) || !Storage.rename(part, path)) {
+    if (hadOld && !Storage.exists(path)) Storage.rename(backup, path);
+    Storage.remove(part);
+    std::snprintf(report_, sizeof(report_), "SD CARD ERROR, NOTHING CHANGED");
+    return;
+  }
+  bool loaded = false;
+  {
+    RenderLock lock(*this);
+    loaded = loadPack(path);
+    if (loaded) resetGame();
+  }
+  if (!loaded) {
+    Storage.remove(path);
+    if (hadOld) Storage.rename(backup, path);
+    scanDecks();
+    std::snprintf(report_, sizeof(report_), "NOT A VALID PACK: %.40s", entry.title);
+    return;
+  }
+  Storage.remove(backup);
+  saveDeckChoice();
+  releaseNetwork();
+  catalog_.clear();
+  scanDecks();
+  std::snprintf(report_, sizeof(report_), "INSTALLED: %.60s", entry.title);
+}
+void CardPartyActivity::leaveRemote() {
+  releaseNetwork();
+  catalog_.clear();
+  busy_ = nullptr;
+  scanDecks();
+  stage_ = Stage::Decks;
+  report_[0] = 0;
+  requestUpdate();
 }
 void CardPartyActivity::handleTap(int x, int y) {
   const int height = renderer.getScreenHeight();
@@ -413,10 +551,26 @@ void CardPartyActivity::handleTap(int x, int y) {
     const int row = (y - kDeckTop) / kDeckRow;
     if (y >= kDeckTop && row <= deckCount_) {
       chooseDeck(row);
+    } else if (y >= kDeckTop && row == deckCount_ + 1) {
+      openRemote();
     } else if (y >= height - 90) {
       stage_ = Stage::Choice;
       report_[0] = 0;
       requestUpdate();
+    }
+    return;
+  }
+  if (stage_ == Stage::Remote) {
+    const int row = (y - kDeckTop) / kDeckRow;
+    if (busy_) return;
+    if (y >= kDeckTop && row < catalog_.count()) {
+      jobIndex_ = static_cast<uint8_t>(row);
+      job_ = RemoteJob::Pack;
+      busy_ = "DOWNLOADING THE PACK FROM GITHUB";
+      report_[0] = 0;
+      requestUpdate();
+    } else if (y >= height - 90) {
+      leaveRemote();
     }
     return;
   }
@@ -498,6 +652,10 @@ void CardPartyActivity::loop() {
       requestUpdate();
       return;
     }
+    if (stage_ == Stage::Remote) {
+      leaveRemote();
+      return;
+    }
     // One stray press must not end a party for everyone at the table.
     if (stage_ == Stage::Hosted && matchInProgress()) {
       const uint32_t now = millis();
@@ -524,6 +682,10 @@ void CardPartyActivity::loop() {
       fingerprint_ = next;
       requestUpdate();
     }
+  }
+  if (job_ != RemoteJob::None) {
+    runRemoteJob();
+    return;
   }
   int x = 0, y = 0;
   if (mappedInput.wasScreenTapped(x, y)) handleTap(x, y);
@@ -597,13 +759,47 @@ void CardPartyActivity::drawDecks() {
     drawWrapped(SMALL_FONT_ID, line, kGutter + 34, y + 30, textWidth - 34, 22, 1);
     renderer.fillRect(kGutter, y + kDeckRow - 2, textWidth, 1, true);
   }
+  const int download = kDeckTop + (deckCount_ + 1) * kDeckRow;
+  renderer.drawText(UI_10_FONT_ID, kGutter, download + 4, "[+] Download from GitHub", true);
+  renderer.drawText(SMALL_FONT_ID, kGutter + 34, download + 30, "NEEDS WI-FI / PUBLIC CAW PACKS", true);
+  renderer.fillRect(kGutter, download + kDeckRow - 2, textWidth, 1, true);
   if (deckCount_ == 0)
-    drawWrapped(SMALL_FONT_ID, "NO PACKS ON THE CARD. COPY .DAT FILES TO /games/cardparty/packs/", kGutter,
-                kDeckTop + kDeckRow + 16, textWidth, 24, 2);
+    drawWrapped(SMALL_FONT_ID, "NO PACKS ON THE CARD YET. DOWNLOAD ONE, OR COPY .DAT FILES TO /games/cardparty/packs/",
+                kGutter, download + kDeckRow + 16, textWidth, 24, 3);
   const int bottom = renderer.getScreenHeight() - 72;
   renderer.fillRect(kGutter, bottom - 4, textWidth, 2, true);
   renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, "[ DONE ]", true);
   if (report_[0]) renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, report_, true);
+}
+void CardPartyActivity::drawRemote() {
+  drawBase("GITHUB");
+  const int width = renderer.getScreenWidth();
+  const int textWidth = width - 2 * kGutter;
+  if (busy_) {
+    renderer.drawText(UI_10_FONT_ID, kGutter, 112, "PLEASE WAIT", true);
+    drawWrapped(SMALL_FONT_ID, busy_, kGutter, 150, textWidth, 24, 3);
+    return;
+  }
+  if (catalog_.count()) renderer.drawText(SMALL_FONT_ID, kGutter, 82, "TAP TO DOWNLOAD AND PLAY", true);
+  for (uint8_t row = 0; row < catalog_.count(); ++row) {
+    const cp::catalog::Entry& entry = catalog_.at(row);
+    const int y = kDeckTop + row * kDeckRow;
+    drawWrapped(UI_10_FONT_ID, entry.title, kGutter, y + 4, textWidth, 26, 1);
+    bool onCard = false;
+    for (uint8_t i = 0; i < deckCount_; ++i)
+      if (std::strcmp(decks_[i].file, entry.file) == 0) onCard = true;
+    char line[96] = {};
+    std::snprintf(line, sizeof(line), "%u KB / %s / %s", static_cast<unsigned>((entry.bytes + 1023) / 1024),
+                  onCard ? "ON CARD, TAP TO UPDATE" : "NEW", entry.file);
+    drawWrapped(SMALL_FONT_ID, line, kGutter + 34, y + 30, textWidth - 34, 22, 1);
+    renderer.fillRect(kGutter, y + kDeckRow - 2, textWidth, 1, true);
+  }
+  if (!catalog_.count())
+    drawWrapped(SMALL_FONT_ID, report_[0] ? report_ : "NO PACKS LISTED", kGutter, kDeckTop + 16, textWidth, 24, 3);
+  const int bottom = renderer.getScreenHeight() - 72;
+  renderer.fillRect(kGutter, bottom - 4, textWidth, 2, true);
+  renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, "[ DONE ]", true);
+  if (report_[0] && catalog_.count()) renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, report_, true);
 }
 void CardPartyActivity::drawCategories() {
   drawBase("CATEGORIES");
@@ -827,6 +1023,9 @@ void CardPartyActivity::render(RenderLock&&) {
       break;
     case Stage::Decks:
       drawDecks();
+      break;
+    case Stage::Remote:
+      drawRemote();
       break;
     case Stage::Categories:
       drawCategories();

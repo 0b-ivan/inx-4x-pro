@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "../../activities/Activity.h"
+#include "CardPartyCatalog.h"
 #include "CardPartyCategories.h"
 #include "CardPartyCore.h"
 #include "CardPartyDemoDeck.h"
@@ -26,7 +27,9 @@ class CardPartyActivity final : public Activity {
   bool skipLoopDelay() override { return server_.running(); }
 
  private:
-  enum class Stage : uint8_t { Choice, Decks, Categories, Hosted, Failed };
+  enum class Stage : uint8_t { Choice, Decks, Remote, Categories, Hosted, Failed };
+  // Blocking network work, run from loop() after the screen says so.
+  enum class RemoteJob : uint8_t { None, Catalog, Pack };
   // One pack file on the card, as the deck list shows it.
   struct DeckEntry {
     char path[80];
@@ -34,7 +37,7 @@ class CardPartyActivity final : public Activity {
     cardparty::sdpack::Info info;
     bool readable;
   };
-  static constexpr uint8_t kMaxDecks = 9;
+  static constexpr uint8_t kMaxDecks = 8;
   void resetGame();
   void loadConfiguredDeck();
   bool loadPack(const char* path);
@@ -42,6 +45,12 @@ class CardPartyActivity final : public Activity {
   void chooseDeck(int row);
   void saveDeckChoice();
   void drawDecks();
+  void openRemote();
+  void runRemoteJob();
+  void fetchCatalog();
+  void installPack(uint8_t index);
+  void leaveRemote();
+  void drawRemote();
   void applyCategories();
   void loadSelection();
   void saveSelection();
@@ -49,6 +58,11 @@ class CardPartyActivity final : public Activity {
   void drawCategories();
   void start(cardparty::web::Server::Mode mode);
   void chooseExistingWifi();
+  // Raises station mode and opens the system picker; onReady runs once
+  // connected, a cancel returns to `back`.
+  void connectWifi(Stage back, void (CardPartyActivity::*onReady)());
+  void hostExistingWifi();
+  void queueCatalog();
   void releaseNetwork();
   void handleTap(int x, int y);
   void drawBase(const char* section);
@@ -73,6 +87,12 @@ class CardPartyActivity final : public Activity {
   char deckPath_[80] = {};
   DeckEntry decks_[kMaxDecks] = {};
   uint8_t deckCount_ = 0;
+  // Public pack list from GitHub and the job loop() runs next.
+  cardparty::catalog::Catalog catalog_;
+  RemoteJob job_ = RemoteJob::None;
+  uint8_t jobIndex_ = 0;
+  bool downloadCancel_ = false;
+  const char* busy_ = nullptr;
   bool deckPlayable_ = true;
   uint16_t enabled_ = 0, savedEnabled_ = 0;
   cardparty::web::Server server_;

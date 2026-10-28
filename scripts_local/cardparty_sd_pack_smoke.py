@@ -43,11 +43,12 @@ def main():
         cases.update({"released-"+phase:released for phase in ("setup","lobby","judge","reveal","finished")})
         cases["released-categories"]=tagged
         cases["released-decks"]=released
+        cases["released-remote"]=released
     hashes={}
     for case,data in cases.items():
         scenario=case.removeprefix("released-") if case in (
             "released-setup","released-lobby","released-judge","released-reveal","released-finished",
-            "released-categories","released-decks") else "collect"
+            "released-categories","released-decks","released-remote") else "collect"
         sd=out/(case+"-sd")
         target=sd/("games/cardparty/packs/qa.dat" if case in ("released-packdir","released-decks")
                    else "games/cardparty/active.dat")
@@ -69,7 +70,7 @@ def main():
         text=(out/(case+".log")).read_text(errors="replace")
         assert result.returncode==0,(case,result.returncode,text[-3000:])
         assert "Autostart into CARDS WHATEVER" in text,(case,text[-3000:])
-        if scenario not in ("setup","categories","decks"):
+        if scenario not in ("setup","categories","decks","remote"):
             assert "CARDPARTY_SIM_STATE="+scenario+" " in text,(case,text[-3000:])
         assert "No glyph for codepoint" not in text,(case,"unsupported glyph")
         if case.startswith("released"):

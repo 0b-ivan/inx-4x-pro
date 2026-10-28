@@ -162,6 +162,36 @@ cannot draw (™ becomes "(TM)").
 
 The six Cards vs Humanity CSV packs are not imported yet.
 
+## Public packs and download on the X4
+
+`[03] DECK` ends with `[+] Download from GitHub`. It connects Wi-Fi through
+the system picker (or uses the current connection), reads `catalog.txt` from
+the `cardparty-packs` release of this repository and lists its packs. Tapping
+one downloads it to `/games/cardparty/packs/<file>.part`, renames it, loads it
+as the current deck and turns Wi-Fi off again. A file the reader rejects is
+deleted and an installed copy of the same name is restored, so a broken
+download never replaces a working pack.
+
+The list format (`CardPartyCatalog.h`) is `file.dat|Title|bytes`, at most
+eight packs and 1 KB. The X4 builds every URL from the fixed release base and
+a validated file name, so the list cannot point anywhere else or name a
+path; titles must be drawable UTF-8 and sizes stay within the 192 KB budget.
+
+`public_packs.json` records each public pack: file name, title, rights
+holders, license, the owner's release decision, the importers and source
+commits it is built from, and the SHA-256 it must come out as.
+`publish_packs.py` rebuilds the packs from local clones at those commits and
+writes them with `catalog.txt` and an attribution `README.txt`:
+
+    python3 tools_local/cardparty_l10n/publish_packs.py \
+      --config tools_local/cardparty_l10n/public_packs.json \
+      --source prior99=./cah-fullformat-german --source bixelpitch=./cah-cards \
+      --out ./dist
+
+A changed importer or source fails the SHA-256 check instead of publishing
+different cards. Card text still never enters this repository; only the
+release carries it.
+
 ## Test coverage
 
 Run Python offline unit suite and host C++ SD loader tests. An isolated
@@ -190,8 +220,11 @@ sessions, power-loss recovery. No OTA or production release is warranted.
 
 ## Copyright / license
 
-Prior99, BixelPitch and Cards vs Humanity source catalogs are NOT repackaged
-in this feature. Prior99's GPL label does not establish independent rights
+No third-party card text is committed to this repository. The public
+`Deutsch.dat` (Prior99 + BixelPitch) is released by the repository owner's
+decision of 2026-10-28 under CC BY-NC-SA 2.0, the license of the Cards
+Against Humanity originals, with attribution and a change note in the
+release README (`public_packs.json`). Cards vs Humanity is not imported. Prior99's GPL label does not establish independent rights
 to derivative CAH card text, and NC/SA materials need individual review,
 proper attribution and license notices. The importer ships no third-party
 card contents. The draft dark-humor deck needs separate human/legal approval.

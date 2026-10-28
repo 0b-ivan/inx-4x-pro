@@ -5,7 +5,7 @@ set -eu
 cd "$(dirname "$0")"
 build=$(mktemp -d "${TMPDIR:-/tmp}/cardparty-host-tests.XXXXXX")
 trap 'rm -rf "$build"' EXIT HUP INT TERM
-for name in cardparty sessions protocol full_match disconnect_progress sd_pack text_wrap; do
+for name in cardparty sessions protocol full_match disconnect_progress sd_pack catalog text_wrap; do
   c++ -std=c++17 -funsigned-char -Wall -Wextra -Werror -pedantic -O2 \
     -I../../src/apps_local/cardparty "test_$name.cpp" \
     -o "$build/test_$name"
@@ -34,4 +34,4 @@ c++ -std=c++17 -funsigned-char -Wall -Wextra -Werror -pedantic -O2 \
 node test_browser_page.cjs
 node test_browser_viewport.cjs
 python3 test_x4pro_ws_capacity.py
-python3 -m unittest discover -s ../../tools_local/cardparty_l10n -p 'test_sd_pack_pipeline.py' -v
+python3 -m unittest discover -s ../../tools_local/cardparty_l10n -p 'test_*.py'
