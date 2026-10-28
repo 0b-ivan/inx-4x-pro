@@ -1210,7 +1210,7 @@ void CardPartyActivity::drawDecks() {
     drawWrapped(UI_10_FONT_ID, line, kGutter, y + 4, textWidth, 26, 1);
     // Status first, file name last: a long name is what gets cut.
     if (!entry)
-      std::snprintf(line, sizeof(line), tr(STR_CAW_ENGLISH_ALWAYS_AVAILABLE));
+      std::snprintf(line, sizeof(line), "%s", tr(STR_CAW_ENGLISH_ALWAYS_AVAILABLE));
     else if (!entry->readable)
       std::snprintf(line, sizeof(line), tr(STR_CAW_NOT_A_CAW_PACK_FORMAT), entry->file);
     else if (!entry->info.released)
@@ -1553,11 +1553,11 @@ void CardPartyActivity::drawGame() {
   renderer.fillRect(kGutter, bottom - 4, width - 2 * kGutter, 2, true);
   char action[48] = {};
   std::snprintf(action, sizeof(action), "%s", tr(STR_CAW_WAITING));
-  if (v.phase == cp::Phase::Playing) std::snprintf(action, sizeof(action), tr(STR_CAW_CLOSE_ANSWERS));
-  if (v.phase == cp::Phase::Judging) std::snprintf(action, sizeof(action), tr(STR_CAW_ABORT_ROUND));
-  if (v.phase == cp::Phase::Reveal) std::snprintf(action, sizeof(action), tr(STR_CAW_NEXT_ROUND));
-  if (blockedOn != cp::kNone) std::snprintf(action, sizeof(action), tr(STR_CAW_GO_ON_WITHOUT));
-  if (pausedBy != cp::kNone) std::snprintf(action, sizeof(action), tr(STR_CAW_CONTINUE));
+  if (v.phase == cp::Phase::Playing) std::snprintf(action, sizeof(action), "%s", tr(STR_CAW_CLOSE_ANSWERS));
+  if (v.phase == cp::Phase::Judging) std::snprintf(action, sizeof(action), "%s", tr(STR_CAW_ABORT_ROUND));
+  if (v.phase == cp::Phase::Reveal) std::snprintf(action, sizeof(action), "%s", tr(STR_CAW_NEXT_ROUND));
+  if (blockedOn != cp::kNone) std::snprintf(action, sizeof(action), "%s", tr(STR_CAW_GO_ON_WITHOUT));
+  if (pausedBy != cp::kNone) std::snprintf(action, sizeof(action), "%s", tr(STR_CAW_CONTINUE));
   renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, action, true);
   renderer.drawText(UI_10_FONT_ID, width - kGutter - renderer.getTextWidth(UI_10_FONT_ID, tr(STR_CAW_MENU)), bottom + 8,
                     tr(STR_CAW_MENU), true);
@@ -1644,7 +1644,7 @@ void CardPartyActivity::drawRules() {
     if (value)
       std::snprintf(out, size, tr(STR_CAW_FORMAT_S), static_cast<unsigned>(value));
     else
-      std::snprintf(out, size, tr(STR_CAW_OFF));
+      std::snprintf(out, size, "%s", tr(STR_CAW_OFF));
   };
   char values[6][12] = {};
   std::snprintf(values[0], sizeof(values[0]), "%u", static_cast<unsigned>(settings_.rounds));
@@ -1687,7 +1687,7 @@ void CardPartyActivity::drawMenu() {
     std::snprintf(details[0], sizeof(details[0]), tr(STR_CAW_PAUSED_BY_FORMAT),
                   table.pausedBy() == cp::kHost ? tr(STR_CAW_THE_HOST) : v.players[table.pausedBy()].name);
   } else {
-    std::snprintf(details[0], sizeof(details[0]), tr(STR_CAW_STOPS_CLOCKS_AND_MOVES_FOR_EVERYONE));
+    std::snprintf(details[0], sizeof(details[0]), "%s", tr(STR_CAW_STOPS_CLOCKS_AND_MOVES_FOR_EVERYONE));
   }
   const bool clock = table.clock() == cp::Table::Clock::Answers || table.clock() == cp::Table::Clock::Juror;
   std::snprintf(details[1], sizeof(details[1]), "%s", clock ? tr(STR_CAW_MORE_TIME_ON_THE_RUNNING_CLOCK) : tr(STR_CAW_NO_CLOCK_RUNNING));
@@ -1700,7 +1700,7 @@ void CardPartyActivity::drawMenu() {
     std::snprintf(details[3], sizeof(details[3]), tr(STR_CAW_FORMAT_OF_FORMAT_ON_FROM_THE_NEXT_CARD), on,
                   static_cast<unsigned>(sdPack_.categoryCount()));
   } else {
-    std::snprintf(details[3], sizeof(details[3]), tr(STR_CAW_THIS_DECK_HAS_NONE));
+    std::snprintf(details[3], sizeof(details[3]), "%s", tr(STR_CAW_THIS_DECK_HAS_NONE));
   }
   std::snprintf(details[4], sizeof(details[4]), tr(STR_CAW_FORMAT_BETWEEN_ROUNDS),
                 packLoaded_ ? sdPack_.title() : tr(STR_CAW_BUILT_IN_DEMO_2));
@@ -1712,8 +1712,8 @@ void CardPartyActivity::drawMenu() {
     }
   std::snprintf(details[5], sizeof(details[5]), tr(STR_CAW_FORMAT_PLAYING_FORMAT_OFFLINEFORMAT), static_cast<unsigned>(seated),
                 static_cast<unsigned>(offline), table.blockedOn() != cp::kNone ? tr(STR_CAW_WAITING_3) : "");
-  std::snprintf(details[6], sizeof(details[6]), tr(STR_CAW_FINAL_STANDINGS_FOR_EVERYONE_TAP_TWICE));
-  std::snprintf(details[7], sizeof(details[7]), tr(STR_CAW_FAME_HINT));
+  std::snprintf(details[6], sizeof(details[6]), "%s", tr(STR_CAW_FINAL_STANDINGS_FOR_EVERYONE_TAP_TWICE));
+  std::snprintf(details[7], sizeof(details[7]), "%s", tr(STR_CAW_FAME_HINT));
   for (int row = 0; row < 8; ++row) {
     const int y = kListTop + row * kListRow;
     renderer.drawText(UI_10_FONT_ID, kGutter, y + 4, titles[row], true);
@@ -1803,7 +1803,7 @@ void CardPartyActivity::drawPlayers() {
     const int y = kListTop + row * kListRow;
     renderer.drawText(UI_10_FONT_ID, kGutter, y + 4, p.name, true);
     if (kickArmed_ == i)
-      std::snprintf(line, sizeof(line), tr(STR_CAW_TAP_AGAIN_TO_REMOVE));
+      std::snprintf(line, sizeof(line), "%s", tr(STR_CAW_TAP_AGAIN_TO_REMOVE));
     else
       std::snprintf(line, sizeof(line), tr(STR_CAW_FORMAT_PT_FORMATFORMATFORMATFORMAT), static_cast<unsigned>(p.points),
                     p.connected ? tr(STR_CAW_ONLINE) : tr(STR_CAW_OFFLINE), i == v.czar ? tr(STR_CAW_JUROR_2) : "",

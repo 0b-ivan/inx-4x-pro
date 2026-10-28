@@ -205,7 +205,7 @@ async function shot(page, vp, phase, locale) {
         private: { isCzar: false, submitted: false, hand: [] } }),
         game("Reveal", { winnerName: names[0], winningText: answers.slice(0, 3).join(" / "), winningCards: answers.slice(0, 3) }));
       assert.equal(await page.isVisible("#result"), true);
-      assert.equal(await page.$eval("#winnerText strong",els=>els.length),3);
+      assert.equal(await page.$$eval("#winnerText strong",els=>els.length),3);
       await noHorizontalScroll(page, `${tag} reveal`);
       await shot(page, vp, "5-reveal", lang);
 
