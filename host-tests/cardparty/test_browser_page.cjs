@@ -282,7 +282,7 @@ nodes.joinForm.dispatch("submit",{preventDefault(){}});
 assert.equal(sockets.length,3);
 assert.equal(nodes.joinHint.textContent,"VERBINDE MIT X4");
 const third=sockets[2];third.open();
-assert.deepEqual(third.sent[0],{type:"join",name:"J\u00fcrgen"});
+assert.deepEqual(third.sent[0],{type:"join",name:"J\u00fcrgen",pid:"11112222deadbeef"});
 // A specific rejection reason from the X4 is shown verbatim.
 third.message({type:"error",message:"SESSION FULL"});
 assert.equal(nodes.joinHint.textContent,"FEHLER: SESSION FULL");
