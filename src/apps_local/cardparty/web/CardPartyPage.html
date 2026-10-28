@@ -361,7 +361,7 @@ h2{font-size:18px;font-weight:500}
 
   const screens = ["join", "lobby", "play", "waiting", "judging", "result", "final", "hold", "removed"];
   const state = {socket:null, ticket:null, revision:0, selection:[], judging:null,
-                 snapshot:null, personal:null, pendingJoin:null, removed:false,
+                 snapshot:null, personal:null, pendingJoin:null, removed:false, pid:null,
                  statusKey:null,hintKey:null,hintArgs:[]};
   // The X4 sends the time left with each state; the phone counts down alone.
   const clock = {kind:"", left:0, at:0, frozen:false};
@@ -371,6 +371,11 @@ h2{font-size:18px;font-weight:500}
     return typeof TextEncoder === "function" ? new TextEncoder().encode(value).length
       : unescape(encodeURIComponent(value)).length;
   }
+  // Stable player identity is public, separate from the private seat ticket.
+  try {
+    const pid=typeof localStorage!=="undefined" ? localStorage.getItem("caw.player.id") : null;
+    if(pid&&/^[0-9a-f]{16}$/.test(pid)&&pid!=="0000000000000000")state.pid=pid;
+  } catch (_) { /* privacy settings may disable localStorage */ }
   const saved = sessionStorage.getItem("caw.session.token");
   if (saved && /^[0-9a-f]{32}$/.test(saved)) state.ticket = saved;
   function show(name) { for(const s of screens) $(s).hidden = s !== name; }
@@ -596,7 +601,7 @@ h2{font-size:18px;font-weight:500}
       status("connected");
       if(state.ticket) socket.send(JSON.stringify({type:"resume",token:state.ticket}));
       else if(state.pendingJoin){
-        socket.send(JSON.stringify({type:"join",name:state.pendingJoin}));
+        socket.send(JSON.stringify({type:"join",name:state.pendingJoin,...(state.pid?{pid:state.pid}:{})}));
         state.pendingJoin=null;
         hint("joinSent");
       }
@@ -613,6 +618,10 @@ h2{font-size:18px;font-weight:500}
       } else if(msg.type==="welcome"){
         if(!/^[0-9a-f]{32}$/.test(msg.token||""))return;
         state.ticket=msg.token;
+        if(typeof msg.pid==="string"&&/^[0-9a-f]{16}$/.test(msg.pid)&&msg.pid!=="0000000000000000"){
+          state.pid=msg.pid;
+          try {if(typeof localStorage!=="undefined")localStorage.setItem("caw.player.id",msg.pid);} catch (_) {}
+        }
         sessionStorage.setItem("caw.session.token",msg.token);
         state.revision=Number.isSafeInteger(msg.revision)?msg.revision:0;
         state.selection=[];state.judging=null;
@@ -662,7 +671,7 @@ h2{font-size:18px;font-weight:500}
       if(!state.socket)connect();
       return;
     }
-    state.socket.send(JSON.stringify({type:"join",name}));
+    state.socket.send(JSON.stringify({type:"join",name,...(state.pid?{pid:state.pid}:{})}));
     hint("joinSent");
   });
   $("submit").addEventListener("click",()=>{
