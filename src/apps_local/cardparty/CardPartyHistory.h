@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include <utility>
 
 namespace cardparty {
 namespace history {
