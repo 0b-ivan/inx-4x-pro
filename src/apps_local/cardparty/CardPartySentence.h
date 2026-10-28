@@ -56,10 +56,16 @@ inline size_t compose(const char* prompt,const char* const* answers,uint8_t pick
       else writer.add(p,n);
       p+=n;
     } else {
-      // Copy one UTF-8 byte; the Writer rejects partial endings only if
-      // a truncation is needed. Out-of-bounds input is never guessed.
-      writer.add(p,1);
-      ++p;
+      // Advance by one complete codepoint, so long German card text
+      // never loses an initial byte or emits an orphan continuation byte.
+      const uint8_t lead=static_cast<uint8_t>(*p);
+      const size_t requested=lead<0x80u?1u:(lead&0xe0u)==0xc0u?2u:
+          (lead&0xf0u)==0xe0u?3u:(lead&0xf8u)==0xf0u?4u:1u;
+      size_t count=1;
+      while(count<requested && p[count] &&
+            (static_cast<uint8_t>(p[count])&0xc0u)==0x80u)++count;
+      writer.add(p,count);
+      p+=count;
     }
   }
   if(!found||used<pick) {
