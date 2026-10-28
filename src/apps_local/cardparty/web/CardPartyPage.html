@@ -64,6 +64,7 @@ h2{font-size:18px;font-weight:500}
   <header class="mast" aria-label="Cards Against Whatever">
     <span class="brand">C / A / W</span>
     <span class="tools"><span id="connection" role="status" aria-live="polite">OFFLINE</span>
+      <button id="fameButton" class="mini" type="button" data-t="fameButton" hidden>[ RUHMESHALLE ]</button>
       <button id="pauseButton" class="mini" type="button" hidden data-t="pauseButton">[ PAUSE ]</button></span>
   </header>
   <hr class="rule">
@@ -93,7 +94,7 @@ h2{font-size:18px;font-weight:500}
         <p class="eyebrow" data-t="currentPrompt">AKTUELLER SATZ</p>
         <h1 id="promptText"></h1><p id="answerPreview" class="secondary" aria-live="polite"></p>
       </div>
-      <div class="row"><span class="eyebrow" data-t="yourHand">DEINE KARTEN</span><span class="secondary" id="count">0/1 GEWÄHLT</span></div>
+      <div class="row"><span class="eyebrow" data-t="yourHand">DEINE KARTEN</span><button id="strikeButton" class="mini" type="button" data-t="strikeButton" disabled>[ PASST NICHT ]</button><span class="secondary" id="count">0/1 GEWÄHLT</span></div>
       <div id="choices" class="choice-list" tabindex="0" role="region" aria-label="Antwortkarten, scrollbar" data-t-aria="cardsScroll"></div>
       <div class="footer">
         <span class="secondary" id="footCount">0/1 GEWÄHLT</span>
@@ -136,6 +137,18 @@ h2{font-size:18px;font-weight:500}
       <h1 id="holdTitle">PAUSED</h1>
       <p class="secondary" id="holdText" role="status" aria-live="polite"></p>
       <button id="resumeButton" type="button" hidden data-t="resumeButton">[ FORTSETZEN ]</button>
+    </section>
+    <section id="fame" hidden>
+      <p class="eyebrow" data-t="fameTitle">RUHMESHALLE</p>
+      <h1 data-t="famePlayers">SPIELERSTATISTIK</h1>
+      <ul id="famePlayers" class="list" aria-label="Wall of Fame"></ul>
+      <p class="eyebrow" data-t="fameQuotes">LETZTE SIEGERSAETZE</p>
+      <ul id="fameQuotes" class="list" aria-label="Siegersaetze"></ul>
+      <div class="footer">
+        <button id="famePrev" type="button" class="mini" data-t="famePrevious">[ ZURUECK ]</button>
+        <button id="fameNext" type="button" class="mini" data-t="fameNext">[ WEITER ]</button>
+        <button id="fameClose" type="button" class="mini" data-t="fameClose">[ ZURUECK ]</button>
+      </div>
     </section>
     <section id="removed" hidden>
       <p class="eyebrow" data-t="removedEyebrow">/// ENTFERNT</p>
@@ -241,7 +254,18 @@ h2{font-size:18px;font-weight:500}
       "noConnection": "KEINE VERBINDUNG ZUM X4",
       "connectionError": "VERBINDUNGSFEHLER",
       "badName": "NAME UNGÜLTIG ODER ZU LANG (MAX. 23 BYTE)",
-      "connectingToX4": "VERBINDE MIT X4"
+      "connectingToX4": "VERBINDE MIT X4",
+      "fameButton": "[ RUHMESHALLE ]",
+      "fameTitle": "RUHMESHALLE",
+      "famePlayers": "SPIELERSTATISTIK",
+      "fameQuotes": "LETZTE SIEGERSAETZE",
+      "fameEmpty": "NOCH KEINE EINTRAEGE",
+      "fameClose": "[ ZURUECK ]",
+      "famePrevious": "[ ZURUECK ]",
+      "fameNext": "[ WEITER ]",
+      "fameStats": "{0} SPIELE · {1} SIEGE · {2} RUNDEN",
+      "strikeButton": "[ PASST NICHT ]",
+      "strikeCount": "NICHT PASSEND: {0}/3"
     },
     "en": {
       "offline": "OFFLINE",
@@ -329,7 +353,18 @@ h2{font-size:18px;font-weight:500}
       "noConnection": "NO CONNECTION TO X4",
       "connectionError": "CONNECTION ERROR",
       "badName": "INVALID NAME OR TOO LONG (MAX 23 BYTES)",
-      "connectingToX4": "CONNECTING TO X4"
+      "connectingToX4": "CONNECTING TO X4",
+      "fameButton": "[ WALL OF FAME ]",
+      "fameTitle": "WALL OF FAME",
+      "famePlayers": "PLAYER STATS",
+      "fameQuotes": "RECENT WINNING SENTENCES",
+      "fameEmpty": "NO ENTRIES YET",
+      "fameClose": "[ BACK ]",
+      "famePrevious": "[ PREVIOUS ]",
+      "fameNext": "[ NEXT ]",
+      "fameStats": "{0} GAMES · {1} WINS · {2} ROUNDS",
+      "strikeButton": "[ DOESN'T FIT ]",
+      "strikeCount": "DOESN'T FIT: {0}/3"
     }
   };
   let lang=(typeof navigator!=="undefined" && /^de/i.test(navigator.language||""))?"de":"en";
