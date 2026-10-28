@@ -444,8 +444,13 @@ void CardPartyActivity::loadHistory() {
     file.close();
     return ok && history_.decode(bytes.data(), bytes.size());
   };
-  if (!read(kHistory) && read(kHistoryBackup))
+  if (!read(kHistory) && read(kHistoryBackup)) {
     LOG_INF("CARDPARTY", "Recovered player history from backup");
+    // Promote the known-good backup before the next snapshot rotation. A
+    // corrupt primary must never overwrite the only recoverable version.
+    Storage.remove(kHistory);
+    Storage.rename(kHistoryBackup, kHistory);
+  }
   historySaved_ = history_.revision();
 }
 void CardPartyActivity::saveHistory() {
@@ -474,7 +479,7 @@ void CardPartyActivity::saveHistory() {
     Storage.remove(kHistoryPart);
     return;
   }
-  Storage.remove(kHistoryBackup);
+  // Retain the previous CRC-valid snapshot as a recovery candidate.
   historySaved_ = history_.revision();
 }
 void CardPartyActivity::cycleRule(uint8_t row) {
