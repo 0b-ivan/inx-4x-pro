@@ -44,14 +44,21 @@ def main():
         cases["released-categories"]=tagged
         cases["released-decks"]=released
         cases["released-remote"]=released
+        # Two packs from the folder, both chosen in deck.sel: played together.
+        cases["released-combined"]=released
     hashes={}
     for case,data in cases.items():
         scenario=case.removeprefix("released-") if case in (
             "released-setup","released-lobby","released-judge","released-reveal","released-finished",
-            "released-categories","released-decks","released-remote") else "collect"
+            "released-categories","released-decks","released-remote") else "decks" if case=="released-combined" else "collect"
         sd=out/(case+"-sd")
-        target=sd/("games/cardparty/packs/qa.dat" if case in ("released-packdir","released-decks")
+        target=sd/("games/cardparty/packs/qa.dat" if case in ("released-packdir","released-decks","released-combined")
                    else "games/cardparty/active.dat")
+        if case=="released-combined":
+            (sd/"games/cardparty/packs").mkdir(parents=True,exist_ok=True)
+            (sd/"games/cardparty/packs/qb.dat").write_bytes(tagged)
+            (sd/"games/cardparty/deck.sel").write_text(
+                "/games/cardparty/packs/qa.dat\n/games/cardparty/packs/qb.dat")
         target.parent.mkdir(parents=True,exist_ok=True)
         if data is None:
             target.unlink(missing_ok=True)
@@ -73,7 +80,10 @@ def main():
         if scenario not in ("setup","categories","decks","remote"):
             assert "CARDPARTY_SIM_STATE="+scenario+" " in text,(case,text[-3000:])
         assert "No glyph for codepoint" not in text,(case,"unsupported glyph")
-        if case.startswith("released"):
+        if case=="released-combined":
+            # The two packs hold the same texts: every duplicate is kept once.
+            assert "Loaded 2 released SD decks together (1 prompts, 100 answers, 3 categories)" in text,text[-3000:]
+        elif case.startswith("released"):
             assert "Loaded released SD deck v2 (1 prompts, 100 answers, 3 categories)" in text,text[-3000:]
         else:
             assert "Loaded released SD deck" not in text,case
@@ -91,6 +101,7 @@ def main():
     assert all(hashes[key]==hashes["missing"] for key in cases if not key.startswith("released")),"fallback differs from demo"
     assert len({hashes[key] for key in ("missing","released","released-long-word")})==3
     if args.all_states:
+        assert hashes["released-combined"]!=hashes["released-decks"],"two chosen packs look like one"
         assert len({hashes[key] for key in ("released","released-setup","released-lobby",
                                           "released-judge","released-reveal","released-finished")})==6
     print("PASS released SD selection, long-word UTF-8 rendering and five identical demo fallbacks")

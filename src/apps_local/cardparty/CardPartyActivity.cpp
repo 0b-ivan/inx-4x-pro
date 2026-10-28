@@ -267,9 +267,14 @@ bool CardPartyActivity::loadPacks(const char* const* paths, uint8_t n) {
   server_.setPackCrc(sdPack_.crc());
   for (uint8_t i = 0; i < n; ++i) std::snprintf(deckPaths_[i], sizeof(deckPaths_[i]), "%s", paths[i]);
   deckPathCount_ = n;
-  LOG_INF("CARDPARTY", "Loaded %u SD pack(s) (%u prompts, %u answers, %u categories)", static_cast<unsigned>(n),
-          static_cast<unsigned>(activeDeck_.promptsCount), static_cast<unsigned>(activeDeck_.answersCount),
-          static_cast<unsigned>(sdPack_.categoryCount()));
+  if (n == 1)
+    LOG_INF("CARDPARTY", "Loaded released SD deck v%u (%u prompts, %u answers, %u categories)",
+            static_cast<unsigned>(sdPack_.version()), static_cast<unsigned>(activeDeck_.promptsCount),
+            static_cast<unsigned>(activeDeck_.answersCount), static_cast<unsigned>(sdPack_.categoryCount()));
+  else
+    LOG_INF("CARDPARTY", "Loaded %u released SD decks together (%u prompts, %u answers, %u categories)",
+            static_cast<unsigned>(n), static_cast<unsigned>(activeDeck_.promptsCount),
+            static_cast<unsigned>(activeDeck_.answersCount), static_cast<unsigned>(sdPack_.categoryCount()));
   loadSelection();
   applyCategories();
   return true;
