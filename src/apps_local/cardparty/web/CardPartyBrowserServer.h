@@ -126,7 +126,7 @@ class Server final {
   // plays, the largest private hand, winner text, prompt and fixed wire fields.
   static constexpr size_t kMessageBytes =
       2048 + 2 * (sdpack::kMaxPromptBytes + (kPileMax * kPickMax + kHandMax + kPickMax) * sdpack::kMaxAnswerBytes +
-                  (kPlayers + 2) * 23);
+                  (kPlayers + 2) * 23 + kPickMax * sdpack::kMaxAnswerBytes);
   char message_[kMessageBytes] = {};
   SessionTicket tickets_[kPlayers] = {};
   uint32_t socket_[kPlayers] = {};
