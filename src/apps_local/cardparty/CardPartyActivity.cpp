@@ -891,7 +891,9 @@ void CardPartyActivity::handleTap(int x, int y) {
       if (x < width / 3) {
         if (famePage_) --famePage_;
       } else if (x < width * 2 / 3) {
-        if (famePage_ < 11) ++famePage_;
+        const size_t playerPages = std::max<size_t>(1,(history_.players()+7)/8);
+        const size_t quotePages = (history_.quotes()+3)/4;
+        if (static_cast<size_t>(famePage_)+1 < playerPages+quotePages) ++famePage_;
       } else {
         stage_ = fameReturn_;
       }
@@ -1330,9 +1332,12 @@ void CardPartyActivity::drawLobby() {
   renderer.fillRect(kGutter, 440, width - 2 * kGutter, 1, true);
   renderer.drawText(SMALL_FONT_ID, kGutter, 452, tr(STR_CAW_PLAYERS), true);
   int y = 482;
-  for (const auto& p : view.players) {
+  for (uint8_t seat = 0; seat < cp::kPlayers; ++seat) {
+    const auto& p = view.players[seat];
     if (!p.seated) continue;
-    renderer.drawText(UI_10_FONT_ID, kGutter, y, p.name, true);
+    char label[64] = {};
+    server_.seatLabel(seat,label,sizeof(label));
+    drawWrapped(UI_10_FONT_ID,label,kGutter,y,width-2*kGutter-(p.connected?0:100),26,1);
     if (!p.connected)
       renderer.drawText(SMALL_FONT_ID, width - kGutter - renderer.getTextWidth(SMALL_FONT_ID, tr(STR_CAW_OFFLINE)), y + 4,
                         tr(STR_CAW_OFFLINE), true);
@@ -1467,17 +1472,21 @@ void CardPartyActivity::drawGame() {
                   left, table.extended() ? " +" : "");
     renderer.drawText(UI_10_FONT_ID, width - kGutter - renderer.getTextWidth(UI_10_FONT_ID, status), 82, status, true);
   }
-  const char* czar = v.czar < cp::kPlayers ? v.players[v.czar].name : "-";
+  char czarLabel[64] = {};
+  const char* czar = v.czar < cp::kPlayers ? server_.seatLabel(v.czar,czarLabel,sizeof(czarLabel)) : "-";
   std::snprintf(status, sizeof(status), tr(STR_CAW_JUROR_FORMAT), czar);
   renderer.drawText(SMALL_FONT_ID, kGutter, 110, status, true);
   if (pausedBy != cp::kNone || blockedOn != cp::kNone) {
     // Inverted bar: who stopped the table, readable across the room.
     char banner[64] = {};
+    char who[64] = {};
     if (pausedBy != cp::kNone)
       std::snprintf(banner, sizeof(banner), tr(STR_CAW_PAUSED_BY_FORMAT),
-                    pausedBy == cp::kHost ? tr(STR_CAW_THE_HOST) : v.players[pausedBy].name);
+                    pausedBy == cp::kHost ? tr(STR_CAW_THE_HOST)
+                    : server_.seatLabel(pausedBy, who, sizeof(who)));
     else
-      std::snprintf(banner, sizeof(banner), tr(STR_CAW_WAITING_FOR_FORMAT), v.players[blockedOn].name);
+      std::snprintf(banner, sizeof(banner), tr(STR_CAW_WAITING_FOR_FORMAT),
+                    server_.seatLabel(blockedOn, who, sizeof(who)));
     renderer.fillRect(kGutter, 136, width - 2 * kGutter, 36, true);
     drawWrapped(UI_10_FONT_ID, banner, kGutter + 10, 142, width - 2 * kGutter - 20, 26, 1, true, false);
   } else {
@@ -1531,8 +1540,9 @@ void CardPartyActivity::drawGame() {
     std::snprintf(status, sizeof(status), tr(STR_CAW_FORMAT_FORMAT_ANSWERS_RECEIVED), v.submitted, v.expected);
     renderer.drawText(UI_10_FONT_ID, kGutter, 498, status, true);
   } else if (v.phase == cp::Phase::Reveal || v.phase == cp::Phase::Finished) {
-    const char* winner = v.winner == cp::kRando    ? tr(STR_CAW_RANDO_CARDRISSIAN)
-                         : v.winner < cp::kPlayers ? v.players[v.winner].name
+    char winnerLabel[64] = {};
+    const char* winner = v.winner == cp::kRando ? tr(STR_CAW_RANDO_CARDRISSIAN)
+                         : v.winner < cp::kPlayers ? server_.seatLabel(v.winner,winnerLabel,sizeof(winnerLabel))
                                                    : tr(STR_CAW_NO_WINNER);
     renderer.drawText(SMALL_FONT_ID, kGutter, 494, tr(STR_CAW_ROUND_WINNER), true);
     renderer.drawText(UI_10_FONT_ID, kGutter, 520, winner, true);
@@ -1606,8 +1616,10 @@ void CardPartyActivity::drawFinal() {
   crown(width / 2, y + 14, 26, false);
   for (int r = 0; r < shown; ++r) {
     const auto& p = v.players[order[r]];
-    const int nameWidth = std::min(renderer.getTextWidth(UI_12_FONT_ID, p.name), textWidth - 20);
-    renderer.drawText(UI_12_FONT_ID, width / 2 - nameWidth / 2, y + 58 + r * 34, p.name, false);
+    char label[64] = {};
+    server_.seatLabel(order[r],label,sizeof(label));
+    const int nameWidth = std::min(renderer.getTextWidth(UI_12_FONT_ID,label),textWidth-20);
+    renderer.drawText(UI_12_FONT_ID,width/2-nameWidth/2,y+58+r*34,label,false);
   }
   std::snprintf(line, sizeof(line), tr(STR_CAW_FORMAT_POINTS), static_cast<unsigned>(best));
   renderer.drawText(SMALL_FONT_ID, width / 2 - renderer.getTextWidth(SMALL_FONT_ID, line) / 2, y + block - 30, line,
@@ -1748,7 +1760,7 @@ void CardPartyActivity::drawFame() {
     for (size_t i = start; i < end; ++i) {
       const auto& p = history_.at(order[i]);
       const int y = 115 + static_cast<int>(i-start) * 61;
-      std::snprintf(line,sizeof(line),"%s",p.name);
+      std::snprintf(line,sizeof(line),"%s·%s",p.name,cp::web::Server::wordLabel(p.word));
       drawWrapped(UI_10_FONT_ID,line,kGutter,y,textWidth,27,1);
       std::snprintf(line,sizeof(line),tr(STR_CAW_FAME_SCORE_FORMAT),
                     static_cast<unsigned>(p.games),static_cast<unsigned>(p.wins),
@@ -1791,7 +1803,9 @@ void CardPartyActivity::drawPlayers() {
   char line[96] = {};
   if (table.blockedOn() != cp::kNone) {
     const int y = kListTop;
-    std::snprintf(line, sizeof(line), tr(STR_CAW_GO_ON_WITHOUT_FORMAT), v.players[table.blockedOn()].name);
+    char missing[64] = {};
+    std::snprintf(line,sizeof(line),tr(STR_CAW_GO_ON_WITHOUT_FORMAT),
+                  server_.seatLabel(table.blockedOn(),missing,sizeof(missing)));
     drawWrapped(UI_10_FONT_ID, line, kGutter, y + 4, textWidth, 26, 1);
     renderer.drawText(SMALL_FONT_ID, kGutter, y + 30, tr(STR_CAW_NO_CONNECTION_FOR_15_S), true);
     renderer.fillRect(kGutter, y + kListRow - 2, textWidth, 2, true);
@@ -1801,7 +1815,9 @@ void CardPartyActivity::drawPlayers() {
     const auto& p = v.players[i];
     if (!p.seated) continue;
     const int y = kListTop + row * kListRow;
-    renderer.drawText(UI_10_FONT_ID, kGutter, y + 4, p.name, true);
+    char label[64] = {};
+    server_.seatLabel(i,label,sizeof(label));
+    drawWrapped(UI_10_FONT_ID,label,kGutter,y+4,textWidth,26,1);
     if (kickArmed_ == i)
       std::snprintf(line, sizeof(line), "%s", tr(STR_CAW_TAP_AGAIN_TO_REMOVE));
     else
@@ -1836,8 +1852,8 @@ void CardPartyActivity::drawDiagnostics() {
   renderer.drawText(SMALL_FONT_ID, x, renderer.getScreenHeight() - 104, line, true);
 }
 void CardPartyActivity::drawError() {
-  drawBase("ERROR");
-  renderer.drawText(UI_10_FONT_ID, kGutter, 138, "COULD NOT START SESSION", true);
+  drawBase(tr(STR_CAW_ERROR));
+  renderer.drawText(UI_10_FONT_ID,kGutter,138,tr(STR_CAW_COULD_NOT_START_SESSION),true);
   renderer.drawText(SMALL_FONT_ID, kGutter, 198, report_, true);
   renderer.drawText(UI_10_FONT_ID, kGutter, renderer.getScreenHeight() - 76, "[ BACK TO SETUP ]", true);
 }
