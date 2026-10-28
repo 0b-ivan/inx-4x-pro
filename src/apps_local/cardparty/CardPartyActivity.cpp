@@ -798,6 +798,11 @@ void CardPartyActivity::handleTap(int x, int y) {
       stage_ = Stage::Decks;
       report_[0] = 0;
       requestUpdate();
+    } else if (y >= 588 && y < 640) {
+      fameReturn_ = Stage::Choice;
+      famePage_ = 0;
+      stage_ = Stage::Fame;
+      requestUpdate();
     } else if (inBox(3)) {
       // [04] left half when the pack has categories, [05] otherwise.
       stage_ = categories && x < width / 2 ? Stage::Categories : Stage::Rules;
@@ -853,7 +858,7 @@ void CardPartyActivity::handleTap(int x, int y) {
     return;
   }
   if (stage_ == Stage::Menu) {
-    if (listRow >= 0 && listRow < 7) {
+    if (listRow >= 0 && listRow < 8) {
       menuTap(static_cast<uint8_t>(listRow));
     } else if (bottomBar) {
       stage_ = Stage::Hosted;
@@ -870,6 +875,19 @@ void CardPartyActivity::handleTap(int x, int y) {
       stage_ = Stage::Menu;
       report_[0] = 0;
       kickArmed_ = cp::kNone;
+      requestUpdate();
+    }
+    return;
+  }
+  if (stage_ == Stage::Fame) {
+    if (bottomBar) {
+      if (x < width / 3) {
+        if (famePage_) --famePage_;
+      } else if (x < width * 2 / 3) {
+        if (famePage_ < 11) ++famePage_;
+      } else {
+        stage_ = fameReturn_;
+      }
       requestUpdate();
     }
     return;
@@ -978,6 +996,11 @@ void CardPartyActivity::menuTap(uint8_t row) {
       kickArmed_ = cp::kNone;
       stage_ = Stage::Players;
       break;
+    case 7:
+      fameReturn_ = Stage::Menu;
+      famePage_ = 0;
+      stage_ = Stage::Fame;
+      break;
     case 6: {
       const uint32_t now = millis();
       if (!running) {
@@ -1049,6 +1072,11 @@ void CardPartyActivity::loop() {
       stage_ = hosting() ? Stage::Menu : Stage::Choice;
       report_[0] = 0;
       kickArmed_ = cp::kNone;
+      requestUpdate();
+      return;
+    }
+    if (stage_ == Stage::Fame) {
+      stage_ = fameReturn_;
       requestUpdate();
       return;
     }
@@ -1154,6 +1182,8 @@ void CardPartyActivity::drawChoice() {
     std::snprintf(line, sizeof(line), "%s / %s", sdPack_.rightsHolder(), sdPack_.license());
     drawWrapped(SMALL_FONT_ID, line, kGutter, renderer.getScreenHeight() - 138, textWidth, 22, 3);
   }
+  // Setup's Fame entry is below the primary setup controls.
+  renderer.drawText(UI_10_FONT_ID, kGutter, 594, tr(STR_CAW_FAME_OPEN), true);
   renderer.drawText(SMALL_FONT_ID, kGutter, renderer.getScreenHeight() - 35, tr(STR_CAW_BACK_CANCEL), true);
 }
 void CardPartyActivity::drawDecks() {
@@ -1568,8 +1598,8 @@ void CardPartyActivity::drawMenu() {
   const int textWidth = width - 2 * kGutter;
   const cp::Table& table = server_.table();
   const cp::PublicView v = game_.publicView();
-  char details[7][64] = {};
-  const char* titles[7] = {tr(STR_CAW_PAUSE), tr(STR_CAW_TIME_2), tr(STR_CAW_RULES), tr(STR_CAW_CATEGORIES), tr(STR_CAW_DECK), tr(STR_CAW_PLAYERS_2), tr(STR_CAW_END_GAME)};
+  char details[8][64] = {};
+  const char* titles[8] = {tr(STR_CAW_PAUSE), tr(STR_CAW_TIME_2), tr(STR_CAW_RULES), tr(STR_CAW_CATEGORIES), tr(STR_CAW_DECK), tr(STR_CAW_PLAYERS_2), tr(STR_CAW_END_GAME), tr(STR_CAW_FAME_TITLE)};
   if (table.pausedBy() != cp::kNone) {
     titles[0] = tr(STR_CAW_CONTINUE_2);
     std::snprintf(details[0], sizeof(details[0]), tr(STR_CAW_PAUSED_BY_FORMAT),
@@ -1601,7 +1631,8 @@ void CardPartyActivity::drawMenu() {
   std::snprintf(details[5], sizeof(details[5]), tr(STR_CAW_FORMAT_PLAYING_FORMAT_OFFLINEFORMAT), static_cast<unsigned>(seated),
                 static_cast<unsigned>(offline), table.blockedOn() != cp::kNone ? tr(STR_CAW_WAITING_3) : "");
   std::snprintf(details[6], sizeof(details[6]), tr(STR_CAW_FINAL_STANDINGS_FOR_EVERYONE_TAP_TWICE));
-  for (int row = 0; row < 7; ++row) {
+  std::snprintf(details[7], sizeof(details[7]), tr(STR_CAW_FAME_HINT));
+  for (int row = 0; row < 8; ++row) {
     const int y = kListTop + row * kListRow;
     renderer.drawText(UI_10_FONT_ID, kGutter, y + 4, titles[row], true);
     drawWrapped(SMALL_FONT_ID, details[row], kGutter, y + 30, textWidth, 22, 1);
@@ -1611,6 +1642,61 @@ void CardPartyActivity::drawMenu() {
   renderer.fillRect(kGutter, bottom - 4, textWidth, 2, true);
   renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, tr(STR_CAW_BACK_TO_GAME), true);
   if (report_[0]) renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, report_, true);
+}
+void CardPartyActivity::drawFame() {
+  drawBase(tr(STR_CAW_FAME_TITLE));
+  const int width = renderer.getScreenWidth();
+  char line[160] = {};
+  const size_t playerPages = std::max<size_t>(1, (history_.players() + 7) / 8);
+  const size_t page = famePage_;
+  const int textWidth = width - 2 * kGutter;
+  if (page < playerPages) {
+    renderer.drawText(SMALL_FONT_ID, kGutter, 82, tr(STR_CAW_FAME_PLAYERS), true);
+    // Sort by wins, then round wins; never modify the historical records.
+    uint8_t order[cp::history::kPlayersStored] = {};
+    for (size_t i = 0; i < history_.players(); ++i) order[i] = static_cast<uint8_t>(i);
+    for (size_t i = 0; i < history_.players(); ++i)
+      for (size_t j = i + 1; j < history_.players(); ++j) {
+        const auto& a = history_.at(order[i]);
+        const auto& b = history_.at(order[j]);
+        if (b.wins > a.wins || (b.wins == a.wins && b.rounds > a.rounds))
+          std::swap(order[i], order[j]);
+      }
+    const size_t start = page * 8, end = std::min(start + 8,history_.players());
+    for (size_t i = start; i < end; ++i) {
+      const auto& p = history_.at(order[i]);
+      const int y = 115 + static_cast<int>(i-start) * 61;
+      std::snprintf(line,sizeof(line),"%s",p.name);
+      drawWrapped(UI_10_FONT_ID,line,kGutter,y,textWidth,27,1);
+      std::snprintf(line,sizeof(line),tr(STR_CAW_FAME_SCORE_FORMAT),
+                    static_cast<unsigned>(p.games),static_cast<unsigned>(p.wins),
+                    static_cast<unsigned>(p.rounds));
+      drawWrapped(SMALL_FONT_ID,line,kGutter,y+27,textWidth,22,1);
+      renderer.fillRect(kGutter,y+54,textWidth,1,true);
+    }
+    if (!history_.players())
+      drawWrapped(UI_10_FONT_ID,tr(STR_CAW_FAME_EMPTY),kGutter,120,textWidth,28,2);
+  } else {
+    const size_t quotePage=page-playerPages;
+    renderer.drawText(SMALL_FONT_ID,kGutter,82,tr(STR_CAW_FAME_SENTENCES),true);
+    const size_t first=quotePage*4;
+    const size_t last=std::min(first+4,history_.quotes());
+    for(size_t i=first;i<last;++i) {
+      const auto& q=history_.quote(i);
+      const auto* p=history_.player(q.player);
+      const int y=118+static_cast<int>(i-first)*125;
+      drawWrapped(SMALL_FONT_ID,p?p->name:"?",kGutter,y,textWidth,22,1);
+      drawWrapped(UI_10_FONT_ID,q.sentence,kGutter,y+25,textWidth,26,3);
+      renderer.fillRect(kGutter,y+114,textWidth,1,true);
+    }
+    if(!history_.quotes())
+      drawWrapped(UI_10_FONT_ID,tr(STR_CAW_FAME_EMPTY),kGutter,120,textWidth,28,2);
+  }
+  const int bottom=renderer.getScreenHeight()-72;
+  renderer.fillRect(kGutter,bottom-4,textWidth,2,true);
+  renderer.drawText(SMALL_FONT_ID,kGutter,bottom+8,tr(STR_CAW_FAME_PREV),true);
+  renderer.drawText(SMALL_FONT_ID,width/3,bottom+8,tr(STR_CAW_FAME_NEXT),true);
+  renderer.drawText(SMALL_FONT_ID,width*2/3,bottom+8,tr(STR_CAW_FAME_CLOSE),true);
 }
 void CardPartyActivity::drawPlayers() {
   drawBase(tr(STR_CAW_PLAYERS_2));
@@ -1695,6 +1781,9 @@ void CardPartyActivity::render(RenderLock&&) {
       break;
     case Stage::Players:
       drawPlayers();
+      break;
+    case Stage::Fame:
+      drawFame();
       break;
     case Stage::Hosted:
       if (game_.phase() == cp::Phase::Lobby)
