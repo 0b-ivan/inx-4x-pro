@@ -22,7 +22,7 @@ namespace cardparty {
 namespace web {
 
 constexpr size_t kMaxCommand = 192;
-enum class Kind : uint8_t { Join, Resume, Submit, Judge, Pause, Unpause, Again };
+enum class Kind : uint8_t { Join, Resume, Submit, Judge, Pause, Unpause, Again, Strike, Fame };
 struct Command {
   Kind kind = Kind::Join;
   char name[24] = {};
@@ -32,6 +32,7 @@ struct Command {
   uint8_t slots[kPickMax] = {};
   uint8_t count = 0;
   uint8_t selected = 0;
+  uint8_t slot = 0, page = 0;
 };
 
 class Reader final {
@@ -172,7 +173,8 @@ inline bool parse(const uint8_t* data, size_t length, Command& out) {
       const char* name;
       Kind kind;
     } kTicketed[] = {{"resume", Kind::Resume}, {"submit", Kind::Submit},   {"judge", Kind::Judge},
-                     {"pause", Kind::Pause},   {"unpause", Kind::Unpause}, {"again", Kind::Again}};
+                     {"pause", Kind::Pause},   {"unpause", Kind::Unpause}, {"again", Kind::Again},
+                     {"strike", Kind::Strike}, {"fame", Kind::Fame}};
     bool known = false;
     for (const auto& entry : kTicketed)
       if (std::strcmp(kind, entry.name) == 0) {
@@ -183,6 +185,16 @@ inline bool parse(const uint8_t* data, size_t length, Command& out) {
     char token[33] = {};
     if (!r.token(",\"token\":") || !r.str(token, sizeof(token), false) || !decodeSecret(token, command.secret))
       return false;
+    if (command.kind == Kind::Strike || command.kind == Kind::Fame) {
+      uint32_t number = 0;
+      if (command.kind == Kind::Strike) {
+        if (!r.token(",\"slot\":") || !r.number(number,kHandMax-1)) return false;
+        command.slot = static_cast<uint8_t>(number);
+      } else {
+        if (!r.token(",\"page\":") || !r.number(number,255)) return false;
+        command.page = static_cast<uint8_t>(number);
+      }
+    }
     if (command.kind == Kind::Submit || command.kind == Kind::Judge) {
       if (!r.token(",\"revision\":") || !r.number(command.revision, std::numeric_limits<uint32_t>::max())) return false;
       if (command.kind == Kind::Submit) {
