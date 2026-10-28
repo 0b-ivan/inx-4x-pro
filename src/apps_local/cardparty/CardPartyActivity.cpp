@@ -264,7 +264,7 @@ void CardPartyActivity::chooseDeck(int row) {
     report_[0] = 0;
     const cp::Phase phase = game_.phase();
     if (phase != cp::Phase::Lobby && phase != cp::Phase::Reveal) {
-      std::snprintf(report_, sizeof(report_), "PACKS SWITCH ONLY BETWEEN ROUNDS");
+      std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_PACKS_SWITCH_ONLY_BETWEEN_ROUNDS));
       requestUpdate();
       return;
     }
@@ -288,12 +288,12 @@ void CardPartyActivity::chooseDeck(int row) {
         if (!game_.promptsOn() || game_.answersOn() < game_.answersNeeded(seats) || !server_.hostDeckChanged()) {
           // The old pack is gone already: end the match on the new one.
           server_.hostEnd();
-          std::snprintf(report_, sizeof(report_), "PACK TOO SMALL FOR THIS TABLE");
+          std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_PACK_TOO_SMALL_FOR_THIS_TABLE));
         }
       }
     }
     if (!switched) {
-      std::snprintf(report_, sizeof(report_), "NOT LOADED: %.40s", decks_[row - 1].file);
+      std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_NOT_LOADED), decks_[row - 1].file);
       requestUpdate();
       return;
     }
@@ -313,7 +313,7 @@ void CardPartyActivity::chooseDeck(int row) {
       server_.setPackCrc(0xca000001u);
       deckPlayable_ = true;
     } else if (!loadPack(decks_[row - 1].path)) {
-      std::snprintf(report_, sizeof(report_), "NOT LOADED: %.40s", decks_[row - 1].file);
+      std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_NOT_LOADED), decks_[row - 1].file);
       requestUpdate();
       return;
     }
@@ -382,7 +382,7 @@ void CardPartyActivity::toggleCategory(uint8_t index) {
   if (!game_.promptsOn() || game_.answersOn() < game_.answersNeeded(seats)) {
     enabled_ = before;
     game_.setEnabled(before);
-    std::snprintf(report_, sizeof(report_), "TOO FEW CARDS FOR THIS TABLE");
+    std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_TOO_FEW_CARDS_FOR_THIS_TABLE));
     return;
   }
   report_[0] = 0;
@@ -488,7 +488,7 @@ void CardPartyActivity::cycleRule(uint8_t row) {
   switch (row) {
     case 0:
       if (hosting() && game_.phase() != cp::Phase::Lobby) {
-        std::snprintf(report_, sizeof(report_), "ROUNDS ARE FIXED ONCE THE GAME RUNS");
+        std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_ROUNDS_FIXED));
         return;
       }
       settings_.rounds = nextOption(settings_.rounds, kRoundOptions);
@@ -536,10 +536,10 @@ void CardPartyActivity::resetGame() {
   if (!deckPlayable_) {
     // Switched off too much: stay in setup and say why instead of failing.
     stage_ = Stage::Choice;
-    std::snprintf(report_, sizeof(report_), "TOO FEW CARDS: SWITCH ON MORE CATEGORIES");
+    std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_MORE_CATEGORIES));
   } else if (!game_.configure(activeDeck_, rules, toybox::seed())) {
     stage_ = Stage::Failed;
-    std::snprintf(report_, sizeof(report_), "DECK INVALID");
+    std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_DECK_INVALID));
   } else {
     game_.setEnabled(enabled_);
     stage_ = Stage::Choice;
@@ -626,7 +626,7 @@ void CardPartyActivity::start(cp::web::Server::Mode mode) {
   if (!server_.begin(mode)) {
     stage_ = Stage::Failed;
     std::snprintf(report_, sizeof(report_),
-                  mode == cp::web::Server::Mode::Hotspot ? "HOTSPOT COULD NOT START" : "CONNECT TO WI-FI FIRST");
+                  mode == cp::web::Server::Mode::Hotspot ? tr(STR_CAW_MSG_HOTSPOT_FAILED) : tr(STR_CAW_MSG_WIFI_FIRST));
   } else {
     stage_ = Stage::Hosted;
     fingerprint_ = visibleFingerprint(game_.publicView()) ^ tableFingerprint(server_.table(), millis());
@@ -658,7 +658,7 @@ void CardPartyActivity::connectWifi(Stage back, void (CardPartyActivity::*onRead
     LOG_ERR("CARDPARTY", "OOM: WifiSelectionActivity");
     releaseNetwork();
     stage_ = Stage::Failed;
-    std::snprintf(report_, sizeof(report_), "OUT OF MEMORY");
+    std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_OUT_OF_MEMORY));
     requestUpdate();
     return;
   }
@@ -674,7 +674,7 @@ void CardPartyActivity::connectWifi(Stage back, void (CardPartyActivity::*onRead
       releaseNetwork();
       // Hosting fails to the error screen; a download goes back to its list.
       stage_ = back == Stage::Choice ? Stage::Failed : back;
-      std::snprintf(report_, sizeof(report_), "WI-FI NOT CONNECTED");
+      std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_WIFI_NOT_CONNECTED));
       requestUpdate();
       return;
     }
@@ -689,7 +689,7 @@ void CardPartyActivity::openRemote() {
 void CardPartyActivity::queueCatalog() {
   stage_ = Stage::Remote;
   job_ = RemoteJob::Catalog;
-  busy_ = "LOADING THE PACK LIST FROM GITHUB";
+  busy_ = tr(STR_CAW_MSG_LOADING_LIST);
   requestUpdate();
 }
 void CardPartyActivity::runRemoteJob() {
@@ -719,12 +719,12 @@ void CardPartyActivity::fetchCatalog() {
   if (!fetched && !overflow) {
     const int status = HttpDownloader::lastStatus();
     if (status == 0)
-      std::snprintf(report_, sizeof(report_), "GITHUB NOT REACHABLE. CHECK THE WI-FI AND TRY AGAIN.");
+      std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_GITHUB_NOT_REACHABLE));
     else
-      std::snprintf(report_, sizeof(report_), "NO PACK LIST ON GITHUB (HTTP %d)", status);
+      std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_NO_PACK_LIST), status);
   } else if (overflow || !catalog_.parse(text, used)) {
     LOG_ERR("CARDPARTY", "Rejected pack list from GitHub (%u bytes)", static_cast<unsigned>(used));
-    std::snprintf(report_, sizeof(report_), "PACK LIST FROM GITHUB IS INVALID");
+    std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_PACK_LIST_INVALID));
   } else {
     report_[0] = 0;
   }
@@ -737,7 +737,7 @@ void CardPartyActivity::installPack(uint8_t index) {
   std::snprintf(part, sizeof(part), "%s.part", path);
   std::snprintf(backup, sizeof(backup), "%s.bak", path);
   if (!Storage.ensureDirectoryExists(kCardPartyPackDir)) {
-    std::snprintf(report_, sizeof(report_), "CANNOT CREATE THE PACKS FOLDER");
+    std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_PACKS_FOLDER));
     return;
   }
   downloadCancel_ = false;
@@ -747,7 +747,7 @@ void CardPartyActivity::installPack(uint8_t index) {
   const std::string url = packsUrl(entry.file);
   if (HttpDownloader::downloadToFile(url, part, limit, &downloadCancel_) != HttpDownloader::OK) {
     Storage.remove(part);
-    std::snprintf(report_, sizeof(report_), "DOWNLOAD FAILED: %.40s", entry.title);
+    std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_DOWNLOAD_FAILED), entry.title);
     return;
   }
   // Keep an installed copy until the new file has loaded.
@@ -756,7 +756,7 @@ void CardPartyActivity::installPack(uint8_t index) {
   if ((hadOld && !Storage.rename(path, backup)) || !Storage.rename(part, path)) {
     if (hadOld && !Storage.exists(path)) Storage.rename(backup, path);
     Storage.remove(part);
-    std::snprintf(report_, sizeof(report_), "SD CARD ERROR, NOTHING CHANGED");
+    std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_SD_ERROR));
     return;
   }
   bool loaded = false;
@@ -769,7 +769,7 @@ void CardPartyActivity::installPack(uint8_t index) {
     Storage.remove(path);
     if (hadOld) Storage.rename(backup, path);
     scanDecks();
-    std::snprintf(report_, sizeof(report_), "NOT A VALID PACK: %.40s", entry.title);
+    std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_INVALID_PACK), entry.title);
     return;
   }
   Storage.remove(backup);
@@ -777,7 +777,7 @@ void CardPartyActivity::installPack(uint8_t index) {
   releaseNetwork();
   catalog_.clear();
   scanDecks();
-  std::snprintf(report_, sizeof(report_), "INSTALLED: %.60s", entry.title);
+  std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_INSTALLED), entry.title);
 }
 void CardPartyActivity::leaveRemote() {
   releaseNetwork();
@@ -837,7 +837,7 @@ void CardPartyActivity::handleTap(int x, int y) {
     if (y >= kDeckTop && row < catalog_.count()) {
       jobIndex_ = static_cast<uint8_t>(row);
       job_ = RemoteJob::Pack;
-      busy_ = "DOWNLOADING THE PACK FROM GITHUB";
+      busy_ = tr(STR_CAW_MSG_DOWNLOADING);
       report_[0] = 0;
       requestUpdate();
     } else if (bottomBar) {
@@ -927,7 +927,7 @@ void CardPartyActivity::hostAction(bool menu) {
     } else if (server_.hostRematch()) {
       report_[0] = 0;
     } else {
-      std::snprintf(report_, sizeof(report_), "ACTION NOT AVAILABLE");
+      std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_ACTION_UNAVAILABLE));
     }
     requestUpdate();
     return;
@@ -948,7 +948,7 @@ void CardPartyActivity::hostAction(bool menu) {
     if (!abortArmed_ || static_cast<uint32_t>(now - abortArmedAt_) > 7000u) {
       abortArmed_ = true;
       abortArmedAt_ = now;
-      std::snprintf(report_, sizeof(report_), "TAP AGAIN TO ABORT ROUND");
+      std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_CONFIRM_ABORT));
       requestUpdate();
       return;
     }
@@ -965,7 +965,7 @@ void CardPartyActivity::hostAction(bool menu) {
     std::snprintf(report_, sizeof(report_),
                   phase == cp::Phase::Lobby     ? "NEED 3 CONNECTED PLAYERS"
                   : phase == cp::Phase::Playing ? "NO ANSWERS RECEIVED YET"
-                                                : "ACTION NOT AVAILABLE");
+                                                : tr(STR_CAW_MSG_ACTION_UNAVAILABLE));
   } else {
     report_[0] = 0;
   }
@@ -983,10 +983,10 @@ void CardPartyActivity::menuTap(uint8_t row) {
       if (table.pausedBy() != cp::kNone)
         server_.hostUnpause();
       else if (!running || !server_.hostPause())
-        std::snprintf(report_, sizeof(report_), "NOTHING TO PAUSE");
+        std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_NOTHING_TO_PAUSE));
       break;
     case 1:
-      if (!server_.hostAddTime()) std::snprintf(report_, sizeof(report_), "NO CLOCK RUNNING");
+      if (!server_.hostAddTime()) std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_CLOCK_STOPPED));
       break;
     case 2:
       stage_ = Stage::Rules;
@@ -995,7 +995,7 @@ void CardPartyActivity::menuTap(uint8_t row) {
       if (packLoaded_ && sdPack_.categoryCount() > 1)
         stage_ = Stage::Categories;
       else
-        std::snprintf(report_, sizeof(report_), "THIS DECK HAS NO CATEGORIES");
+        std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_NO_CATEGORIES));
       break;
     case 4:
       scanDecks();
@@ -1013,11 +1013,11 @@ void CardPartyActivity::menuTap(uint8_t row) {
     case 6: {
       const uint32_t now = millis();
       if (!running) {
-        std::snprintf(report_, sizeof(report_), "NO MATCH RUNNING");
+        std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_NO_MATCH));
       } else if (!endArmed_ || static_cast<uint32_t>(now - endArmedAt_) > 7000u) {
         endArmed_ = true;
         endArmedAt_ = now;
-        std::snprintf(report_, sizeof(report_), "TAP AGAIN TO END THE GAME FOR EVERYONE");
+        std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_CONFIRM_END));
       } else {
         endArmed_ = false;
         server_.hostEnd();
@@ -1052,13 +1052,13 @@ void CardPartyActivity::playersTap(int row) {
   if (kickArmed_ != seat || static_cast<uint32_t>(now - kickArmedAt_) > 7000u) {
     kickArmed_ = seat;
     kickArmedAt_ = now;
-    std::snprintf(report_, sizeof(report_), "TAP AGAIN TO REMOVE %.40s", v.players[seat].name);
+    std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_CONFIRM_KICK), v.players[seat].name);
   } else {
     kickArmed_ = cp::kNone;
     if (server_.hostKick(seat))
-      std::snprintf(report_, sizeof(report_), "REMOVED %.40s", v.players[seat].name);
+      std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_KICKED), v.players[seat].name);
     else
-      std::snprintf(report_, sizeof(report_), "ACTION NOT AVAILABLE");
+      std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_ACTION_UNAVAILABLE));
     if (game_.phase() == cp::Phase::Finished) stage_ = Stage::Hosted;
   }
   requestUpdate();
@@ -1106,7 +1106,7 @@ void CardPartyActivity::loop() {
       if (!backArmed_ || static_cast<uint32_t>(now - backArmedAt_) > 7000u) {
         backArmed_ = true;
         backArmedAt_ = now;
-        std::snprintf(report_, sizeof(report_), "PRESS BACK AGAIN TO END SESSION");
+        std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_BACK_AGAIN));
         requestUpdate();
         return;
       }
