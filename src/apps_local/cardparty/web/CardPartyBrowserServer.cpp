@@ -162,6 +162,13 @@ bool Server::begin(Mode mode) {
     if (type == WStype_CONNECTED) {
       liveSocket_[client] = true;
       if (client < kTrackedSlots) connectedAt_[client] = millis();
+      // Never block the event loop for a greeting to a full TCP window.
+      char hello[48] = {};
+      JsonWriter greeting(hello, sizeof(hello));
+      greeting.raw("{\"type\":\"hello\",\"lang\":");
+      greeting.quoted(language_);
+      greeting.raw("}");
+      if (greeting.ok() && ws_.writable(client)) ws_.sendTXT(client, hello, greeting.size());
     } else if (type == WStype_DISCONNECTED) {
       liveSocket_[client] = false;
       onDisconnect(client);
@@ -322,11 +329,11 @@ void Server::configureRoutes() {
   });
   routesConfigured_ = true;
 }
-void Server::sendError(uint8_t client, const char* reason) {
+void Server::sendError(uint8_t client, const char* code) {
   char response[96] = {};
   JsonWriter w(response, sizeof(response));
-  w.raw("{\"type\":\"error\",\"message\":");
-  w.quoted(reason);
+  w.raw("{\"type\":\"error\",\"code\":");
+  w.quoted(code);
   w.raw("}");
   if (w.ok() && ws_.writable(client)) ws_.sendTXT(client, response, w.size());
 }
@@ -358,6 +365,8 @@ void Server::sendState(uint8_t seat, bool welcome) {
   }
   w.raw(",\"game\":{\"phase\":");
   w.quoted(phaseName(v.phase));
+  w.raw(",\"lang\":");
+  w.quoted(language_);
   w.raw(",\"round\":");
   w.num(v.round);
   w.raw(",\"rounds\":");
@@ -507,10 +516,10 @@ void Server::onMessage(uint8_t client, const uint8_t* bytes, size_t size) {
     } else {
       ++rejected_;
       // Not secret: tells the player why, without revealing any seat data.
-      sendError(client, sessions_.seatOf(client) != kNone ? "ALREADY JOINED"
-                        : game_.phase() != Phase::Lobby   ? "GAME ALREADY RUNNING"
-                        : game_.lobbyFull()               ? "SESSION FULL"
-                                                          : "REQUEST REJECTED");
+      sendError(client, sessions_.seatOf(client) != kNone ? "already_joined"
+                        : game_.phase() != Phase::Lobby   ? "game_running"
+                        : game_.lobbyFull()               ? "session_full"
+                                                          : "rejected");
       return;
     }
   } else if (command.kind == Kind::Resume) {
