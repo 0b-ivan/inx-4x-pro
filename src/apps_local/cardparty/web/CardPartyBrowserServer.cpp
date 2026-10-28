@@ -206,6 +206,8 @@ void Server::stop() {
   for (uint8_t i = 0; i < kPlayers; ++i) {
     tickets_[i] = SessionTicket{};
     socket_[i] = kNoConnection;
+    playerIds_[i] = 0;
+    playerWords_[i] = 0;
     pending_[i] = 0;
   }
   sessions_.reset();
@@ -338,6 +340,19 @@ void Server::sendError(uint8_t client, const char* code) {
   if (w.ok() && ws_.writable(client)) ws_.sendTXT(client, response, w.size());
 }
 
+const char* Server::seatLabel(uint8_t seat, char* target, size_t capacity) const {
+  if (!target || !capacity) return "";
+  const PublicView v = game_.publicView();
+  if (seat >= kPlayers || !v.players[seat].seated) {
+    target[0] = 0;
+    return target;
+  }
+  if (playerIds_[seat])
+    std::snprintf(target,capacity,"%s·%s",v.players[seat].name,word(playerWords_[seat]));
+  else
+    std::snprintf(target,capacity,"%s",v.players[seat].name);
+  return target;
+}
 void Server::assignId(uint8_t seat, uint64_t requested) {
   if (seat >= kPlayers) return;
   bool collision = false;
@@ -412,7 +427,7 @@ void Server::sendState(uint8_t seat, bool welcome) {
   w.num(v.czar);
   w.raw(",\"czarName\":");
   if (v.czar < kPlayers)
-    w.quoted(v.players[v.czar].name);
+    { char label[64] = {}; w.quoted(seatLabel(v.czar,label,sizeof(label))); }
   else
     w.quoted("");
   w.raw(",\"promptText\":");
@@ -433,7 +448,7 @@ void Server::sendState(uint8_t seat, bool welcome) {
     w.raw(",\"connected\":");
     w.boolean(p.connected);
     w.raw(",\"name\":");
-    w.quoted(p.name);
+    { char label[64] = {}; w.quoted(seatLabel(i,label,sizeof(label))); }
     w.raw(",\"points\":");
     w.num(p.points);
     w.raw("}");
@@ -453,7 +468,7 @@ void Server::sendState(uint8_t seat, bool welcome) {
   if (v.winner == kRando)
     w.quoted("RANDO CARDRISSIAN");
   else if (v.winner < kPlayers)
-    w.quoted(v.players[v.winner].name);
+    { char label[64] = {}; w.quoted(seatLabel(v.winner,label,sizeof(label))); }
   else
     w.quoted("");
   w.raw(",\"winningText\":");
@@ -496,9 +511,9 @@ void Server::sendState(uint8_t seat, bool welcome) {
   w.raw(",\"pausedByHost\":");
   w.boolean(pausedBy == kHost);
   w.raw(",\"pausedBy\":");
-  w.quoted(pausedBy < kPlayers ? v.players[pausedBy].name : "");
+  { char label[64] = {}; w.quoted(pausedBy < kPlayers ? seatLabel(pausedBy,label,sizeof(label)) : ""); }
   w.raw(",\"blockedOn\":");
-  w.quoted(table_.blockedOn() < kPlayers ? v.players[table_.blockedOn()].name : "");
+  { char label[64] = {}; w.quoted(table_.blockedOn() < kPlayers ? seatLabel(table_.blockedOn(),label,sizeof(label)) : ""); }
   w.raw(",\"votes\":");
   w.num(table_.votes());
   w.raw(",\"endedByHost\":");
@@ -682,6 +697,8 @@ bool Server::hostKick(uint8_t seat) {
   table_.seatGone(seat);
   tickets_[seat] = SessionTicket{};
   socket_[seat] = kNoConnection;
+  playerIds_[seat] = 0;
+  playerWords_[seat] = 0;
   pending_[seat] = 0;
   if (client != kNoConnection) {
     // Tell the phone why before letting the socket go.
