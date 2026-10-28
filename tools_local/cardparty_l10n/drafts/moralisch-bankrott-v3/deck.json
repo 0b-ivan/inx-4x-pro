@@ -1,0 +1,56 @@
+{
+  "deck_id": "caw-moralisch-bankrott-v3",
+  "version": 3,
+  "source_locale": "de",
+  "title": "Moralisch Bankrott — Entwurf v3",
+  "license": "",
+  "license_url": "",
+  "source_url": "https://github.com/0b-ivan/inx-4x-pro/pull/47",
+  "rights_holder": "CAW original draft (rights not verified)",
+  "rights_status": "unverified",
+  "editorial_status": "unapproved",
+  "categories": [
+    {
+      "id": "ab-18",
+      "name": "Ab 18",
+      "adult": true,
+      "default_on": false
+    },
+    {
+      "id": "krieg",
+      "name": "Kriegsverbrechen",
+      "adult": false,
+      "default_on": true
+    },
+    {
+      "id": "crime",
+      "name": "True Crime",
+      "adult": false,
+      "default_on": true
+    },
+    {
+      "id": "rassismus",
+      "name": "Rassismus",
+      "adult": false,
+      "default_on": true
+    },
+    {
+      "id": "religion",
+      "name": "Religion",
+      "adult": false,
+      "default_on": true
+    },
+    {
+      "id": "sex",
+      "name": "Sex & Hentai",
+      "adult": false,
+      "default_on": true
+    },
+    {
+      "id": "absurd",
+      "name": "Makaber & absurd",
+      "adult": false,
+      "default_on": true
+    }
+  ]
+}
