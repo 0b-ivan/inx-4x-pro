@@ -348,14 +348,15 @@ h2{font-size:18px;font-weight:500}
         el.setAttribute("aria-label",t(el.getAttribute("data-t-aria")));
     }
     if(state.statusKey) text("connection",t(state.statusKey));
-    if(state.hintKey) text("joinHint",t(state.hintKey,...state.hintArgs));
+    if(state.hintKey) hint(state.hintKey,...state.hintArgs);
   }
   function setLanguage(code) {
     if(code!=="de"&&code!=="en")return;
     if(lang!==code){lang=code;applyLanguage();render();}
   }
   function hint(key,...args) {
-    state.hintKey=key;state.hintArgs=args;text("joinHint",t(key,...args));
+    state.hintKey=key;state.hintArgs=args;
+    text("joinHint",t(key,...(key==="error"?args.map(arg=>t(arg)):args)));
   }
 
   const screens = ["join", "lobby", "play", "waiting", "judging", "result", "final", "hold", "removed"];
@@ -627,7 +628,7 @@ h2{font-size:18px;font-weight:500}
         if(msg.game && msg.game.phase!=="Playing" && msg.game.phase!=="playing")state.selection=[];
         render();
       } else if(msg.type==="error"){
-        hint("error",typeof msg.code==="string"?t(msg.code):(typeof msg.message==="string"?msg.message:t("rejected")));
+        hint("error",typeof msg.code==="string"?msg.code:(typeof msg.message==="string"?msg.message:"rejected"));
       } else if(msg.type==="expired"){
         state.ticket=null;sessionStorage.removeItem("caw.session.token");
         state.personal=null;state.snapshot=null;render();
@@ -641,7 +642,7 @@ h2{font-size:18px;font-weight:500}
       if(state.ticket){status("disconnected");setTimeout(connect,1500);}
       else {
         state.socket=null;status("idle");
-        if(state.pendingJoin){state.pendingJoin=null;hint("error",t("noConnection"));}
+        if(state.pendingJoin){state.pendingJoin=null;hint("error","noConnection");}
       }
     });
     socket.addEventListener("error",()=>{status("connectionError");});
@@ -652,7 +653,7 @@ h2{font-size:18px;font-weight:500}
     const name=$("nick").value.trim();
     if(!name)return;
     if(utf8Length(name)>kNameBytes||/[<>]/.test(name)){
-      hint("error",t("badName"));return;
+      hint("error","badName");return;
     }
     if(!state.socket||state.socket.readyState!==WebSocket.OPEN){
       // Socket was released while idle: reconnect, then join on open.
