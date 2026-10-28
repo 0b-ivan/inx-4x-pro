@@ -373,20 +373,35 @@ void Server::assignId(uint8_t seat, uint64_t requested) {
 }
 
 void Server::sendFame(uint8_t client, uint8_t page) {
+  // Never send a larger frame than the ESP32 TCP write low-water capacity.
+  // Player entries and recent sentences have separate bounded pages.
+  constexpr size_t kPagePlayers = 10, kPageQuotes = 2;
+  constexpr size_t kSafeFrameBytes = 2800;
+  const size_t people = history_ ? history_->players() : 0;
+  const size_t quotes = history_ ? history_->quotes() : 0;
+  const size_t peoplePages = std::max<size_t>(1,(people+kPagePlayers-1)/kPagePlayers);
+  const size_t quotePages = (quotes+kPageQuotes-1)/kPageQuotes;
+  const size_t pages = peoplePages+quotePages;
+  if (page >= pages) { sendError(client); return; }
   if (!ws_.writable(client)) return;
+  const bool playerPage = page < peoplePages;
   JsonWriter w(message_,sizeof(message_));
   w.raw("{\"type\":\"fame\",\"page\":");
   w.num(page);
+  w.raw(",\"pages\":");
+  w.num(static_cast<uint32_t>(pages));
+  w.raw(",\"section\":");
+  w.quoted(playerPage?"players":"quotes");
   w.raw(",\"total\":");
-  w.num(history_ ? static_cast<uint32_t>(history_->players()) : 0);
+  w.num(static_cast<uint32_t>(people));
   w.raw(",\"players\":[");
-  if (history_) {
-    const size_t start = static_cast<size_t>(page) * 10;
-    const size_t end = std::min(start + 10,history_->players());
-    for (size_t i = start; i < end; ++i) {
-      const auto& p = history_->at(i);
-      if (i != start) w.raw(",");
-      char id[17] = {};
+  if (history_ && playerPage) {
+    const size_t first=static_cast<size_t>(page)*kPagePlayers;
+    const size_t last=std::min(first+kPagePlayers,people);
+    for(size_t i=first;i<last;++i) {
+      const auto& p=history_->at(i);
+      if(i!=first)w.raw(",");
+      char id[17]={};
       encodePlayerId(p.id,id);
       w.raw("{\"id\":");w.quoted(id);
       w.raw(",\"name\":");w.quoted(p.name);
@@ -398,22 +413,24 @@ void Server::sendFame(uint8_t client, uint8_t page) {
     }
   }
   w.raw("],\"quotes\":[");
-  if (history_ && page < 2) {
-    const size_t first = static_cast<size_t>(page) * 10;
-    const size_t last = std::min(first+10,history_->quotes());
+  if(history_ && !playerPage) {
+    const size_t first=(static_cast<size_t>(page)-peoplePages)*kPageQuotes;
+    const size_t last=std::min(first+kPageQuotes,quotes);
     for(size_t i=first;i<last;++i) {
-      const auto& q = history_->quote(i);
+      const auto& q=history_->quote(i);
       if(i!=first)w.raw(",");
-      const auto* p = history_->player(q.player);
-      w.raw("{\"name\":");
-      w.quoted(p ? p->name : "");
-      w.raw(",\"sentence\":");
-      w.quoted(q.sentence);
+      const auto* p=history_->player(q.player);
+      w.raw("{\"name\":");w.quoted(p?p->name:"");
+      w.raw(",\"sentence\":");w.quoted(q.sentence);
       w.raw("}");
     }
   }
   w.raw("]}");
-  if (w.ok() && ws_.writable(client)) ws_.sendTXT(client,message_,w.size());
+  if (!w.ok() || w.size() > kSafeFrameBytes) {
+    sendError(client);
+    return;
+  }
+  if (ws_.writable(client)) ws_.sendTXT(client,message_,w.size());
 }
 
 void Server::sendState(uint8_t seat, bool welcome) {
