@@ -437,6 +437,17 @@ void Server::sendState(uint8_t seat, bool welcome) {
     w.raw("\"");
   } else
     w.quoted("");
+  // Public only after the reveal: an ordered, bounded array lets clients
+  // render the complete winning sentence with highlighted answer spans.
+  w.raw(",\"winningCards\":[");
+  if (v.selected < v.plays) {
+    for (uint8_t i = 0; i < v.pick; ++i) {
+      if (i) w.raw(",");
+      const uint16_t id = v.pile[v.selected].cards[i];
+      w.quoted(id < deck_.answersCount ? deck_.answers[id].text : "");
+    }
+  }
+  w.raw("]");
   const uint32_t now = millis();
   const char* clock = table_.clock() == Table::Clock::Answers ? "answers"
                       : table_.clock() == Table::Clock::Juror ? "juror"
