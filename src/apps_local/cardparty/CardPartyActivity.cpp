@@ -201,11 +201,23 @@ void CardPartyActivity::loadConfiguredDeck() {
   activeDeck_ = cp::demoDeck();
   packLoaded_ = false;
   deckPlayable_ = true;
-  deckPath_[0] = 0;
-  char chosen[sizeof(deckPath_)] = {};
+  deckPathCount_ = 0;
+  // One path per line; a single line is what older builds wrote.
+  char chosen[cp::sdpack::kMaxPacks * sizeof(deckPaths_[0]) + 4] = {};
   if (Storage.exists(kCardPartyDeckChoice)) Storage.readFileToBuffer(kCardPartyDeckChoice, chosen, sizeof(chosen));
   if (std::strcmp(chosen, kDemoChoice) == 0) return;
-  if (chosen[0] && loadPack(chosen)) return;
+  const char* lines[cp::sdpack::kMaxPacks] = {};
+  uint8_t count = 0;
+  for (char* line = chosen; *line && count < cp::sdpack::kMaxPacks;) {
+    char* end = line;
+    while (*end && *end != '\n' && *end != '\r') ++end;
+    const bool last = !*end;
+    *end = 0;
+    if (*line && std::strlen(line) < sizeof(deckPaths_[0])) lines[count++] = line;
+    if (last) break;
+    line = end + 1;
+  }
+  if (count && loadPacks(lines, count)) return;
   // Nothing chosen yet, or the chosen file is gone: active.dat, then the
   // first released pack in the folder.
   bool tried = chosen[0] != 0;
@@ -222,31 +234,50 @@ void CardPartyActivity::loadConfiguredDeck() {
   }
   if (tried) LOG_ERR("CARDPARTY", "No usable SD pack, using original demo");
 }
-bool CardPartyActivity::loadPack(const char* path) {
-  HalFile file;
-  if (!Storage.exists(path) || !Storage.openFileForRead("CARDPARTY", path, file)) return false;
-  if (file.size() > cp::sdpack::kMaxPackBytes) {
-    LOG_ERR("CARDPARTY", "SD pack %s exceeds memory budget", path);
-    return false;
+bool CardPartyActivity::loadPack(const char* path) { return loadPacks(&path, 1); }
+bool CardPartyActivity::loadPacks(const char* const* paths, uint8_t n) {
+  if (!n || n > cp::sdpack::kMaxPacks) return false;
+  HalFile files[cp::sdpack::kMaxPacks];
+  std::unique_ptr<CardPartySdSource> sources[cp::sdpack::kMaxPacks];
+  cp::sdpack::ByteSource* inputs[cp::sdpack::kMaxPacks] = {};
+  for (uint8_t i = 0; i < n; ++i) {
+    if (!paths[i] || std::strlen(paths[i]) >= sizeof(deckPaths_[0]) || !Storage.exists(paths[i]) ||
+        !Storage.openFileForRead("CARDPARTY", paths[i], files[i]))
+      return false;
+    if (files[i].size() > cp::sdpack::kMaxPackBytes) {
+      LOG_ERR("CARDPARTY", "SD pack %s exceeds memory budget", paths[i]);
+      return false;
+    }
+    sources[i] = makeUniqueNoThrow<CardPartySdSource>(files[i]);
+    if (!sources[i]) {
+      LOG_ERR("CARDPARTY", "OOM: pack source");
+      return false;
+    }
+    inputs[i] = sources[i].get();
   }
-  CardPartySdSource source(file);
-  // Draft packs are rejected; a rejected file leaves the loaded pack intact.
-  const bool accepted = sdPack_.load(source);
-  file.close();
+  // Draft packs are rejected; a rejected set leaves the loaded one intact.
+  const bool accepted = sdPack_.load(inputs, n);
+  for (uint8_t i = 0; i < n; ++i) files[i].close();
   if (!accepted) {
-    LOG_ERR("CARDPARTY", "Rejected invalid/unapproved SD pack %s", path);
+    LOG_ERR("CARDPARTY", "Rejected SD pack set (%u files, first %s)", static_cast<unsigned>(n), paths[0]);
     return false;
   }
   packLoaded_ = true;
   activeDeck_ = sdPack_.deck();
   server_.setPackCrc(sdPack_.crc());
-  std::snprintf(deckPath_, sizeof(deckPath_), "%s", path);
-  LOG_INF("CARDPARTY", "Loaded released SD deck v%u (%u prompts, %u answers, %u categories)",
-          static_cast<unsigned>(sdPack_.version()), static_cast<unsigned>(activeDeck_.promptsCount),
-          static_cast<unsigned>(activeDeck_.answersCount), static_cast<unsigned>(sdPack_.categoryCount()));
+  for (uint8_t i = 0; i < n; ++i) std::snprintf(deckPaths_[i], sizeof(deckPaths_[i]), "%s", paths[i]);
+  deckPathCount_ = n;
+  LOG_INF("CARDPARTY", "Loaded %u SD pack(s) (%u prompts, %u answers, %u categories)", static_cast<unsigned>(n),
+          static_cast<unsigned>(activeDeck_.promptsCount), static_cast<unsigned>(activeDeck_.answersCount),
+          static_cast<unsigned>(sdPack_.categoryCount()));
   loadSelection();
   applyCategories();
   return true;
+}
+bool CardPartyActivity::deckSelected(const char* path) const {
+  for (uint8_t i = 0; i < deckPathCount_; ++i)
+    if (std::strcmp(deckPaths_[i], path) == 0) return true;
+  return false;
 }
 void CardPartyActivity::scanDecks() {
   deckCount_ = 0;
@@ -280,6 +311,31 @@ void CardPartyActivity::scanDecks() {
             [](const DeckEntry& a, const DeckEntry& b) { return std::strcmp(a.file, b.file) < 0; });
 }
 void CardPartyActivity::chooseDeck(int row) {
+  // Packs toggle in and out of the played set; the demo stands alone.
+  const char* chosen[cp::sdpack::kMaxPacks] = {};
+  uint8_t chosenCount = 0;
+  if (row > 0) {
+    const char* path = decks_[row - 1].path;
+    const bool on = packLoaded_ && deckSelected(path);
+    if (packLoaded_)
+      for (uint8_t i = 0; i < deckPathCount_; ++i)
+        if (!on || std::strcmp(deckPaths_[i], path) != 0) chosen[chosenCount++] = deckPaths_[i];
+    if (!on) {
+      if (chosenCount == cp::sdpack::kMaxPacks) {
+        std::snprintf(report_, sizeof(report_), "%s", tr(STR_CAW_MSG_AT_MOST_FOUR_PACKS));
+        requestUpdate();
+        return;
+      }
+      chosen[chosenCount++] = path;
+    }
+    if (chosenCount == 0) row = 0;  // the last pack switched off: demo
+  }
+  // loadPacks() overwrites deckPaths_, which `chosen` may point into.
+  char copies[cp::sdpack::kMaxPacks][sizeof(deckPaths_[0])] = {};
+  for (uint8_t i = 0; i < chosenCount; ++i) {
+    std::snprintf(copies[i], sizeof(copies[i]), "%s", chosen[i]);
+    chosen[i] = copies[i];
+  }
   if (hosting()) {
     // A running table switches packs only between rounds; hands are dealt anew.
     report_[0] = 0;
@@ -295,13 +351,13 @@ void CardPartyActivity::chooseDeck(int row) {
       if (row == 0) {
         sdPack_.clear();
         packLoaded_ = false;
-        deckPath_[0] = 0;
+        deckPathCount_ = 0;
         activeDeck_ = cp::demoDeck();
         server_.setPackCrc(0xca000001u);
         enabled_ = 0;
         switched = true;
       } else {
-        switched = loadPack(decks_[row - 1].path);
+        switched = loadPacks(chosen, chosenCount);
       }
       if (switched) {
         game_.setEnabled(enabled_);
@@ -329,11 +385,11 @@ void CardPartyActivity::chooseDeck(int row) {
     if (row == 0) {
       sdPack_.clear();
       packLoaded_ = false;
-      deckPath_[0] = 0;
+      deckPathCount_ = 0;
       activeDeck_ = cp::demoDeck();
       server_.setPackCrc(0xca000001u);
       deckPlayable_ = true;
-    } else if (!loadPack(decks_[row - 1].path)) {
+    } else if (!loadPacks(chosen, chosenCount)) {
       std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_NOT_LOADED), decks_[row - 1].file);
       requestUpdate();
       return;
@@ -344,7 +400,12 @@ void CardPartyActivity::chooseDeck(int row) {
   requestUpdate();
 }
 void CardPartyActivity::saveDeckChoice() {
-  const char* value = deckPath_[0] ? deckPath_ : kDemoChoice;
+  char value[cp::sdpack::kMaxPacks * sizeof(deckPaths_[0]) + 4] = {};
+  if (!packLoaded_ || !deckPathCount_) std::snprintf(value, sizeof(value), "%s", kDemoChoice);
+  for (uint8_t i = 0; packLoaded_ && i < deckPathCount_; ++i) {
+    const size_t used = std::strlen(value);
+    std::snprintf(value + used, sizeof(value) - used, "%s%s", i ? "\n" : "", deckPaths_[i]);
+  }
   const size_t n = std::strlen(value);
   HalFile file;
   if (!Storage.ensureDirectoryExists(kCardPartyDir) ||
@@ -749,7 +810,18 @@ void CardPartyActivity::installPack(uint8_t index) {
   bool loaded = false;
   {
     RenderLock lock(*this);
-    loaded = loadPack(path);
+    // Joins the packs already in play; alone if they cannot be combined.
+    const char* set[cp::sdpack::kMaxPacks] = {};
+    char copies[cp::sdpack::kMaxPacks][sizeof(deckPaths_[0])] = {};
+    uint8_t n = 0;
+    for (uint8_t i = 0; packLoaded_ && i < deckPathCount_ && n + 1 < cp::sdpack::kMaxPacks; ++i)
+      if (std::strcmp(deckPaths_[i], path) != 0) {
+        std::snprintf(copies[n], sizeof(copies[n]), "%s", deckPaths_[i]);
+        set[n] = copies[n];
+        ++n;
+      }
+    set[n++] = path;
+    loaded = loadPacks(set, n) || (n > 1 && loadPack(path));
     if (loaded) resetGame();
   }
   if (!loaded) {
@@ -1191,7 +1263,7 @@ void CardPartyActivity::drawDecks() {
   for (int row = 0; row <= deckCount_; ++row) {
     const int y = kDeckTop + row * kDeckRow;
     const DeckEntry* entry = row ? &decks_[row - 1] : nullptr;
-    const bool current = entry ? packLoaded_ && std::strcmp(entry->path, deckPath_) == 0 : !packLoaded_;
+    const bool current = entry ? packLoaded_ && deckSelected(entry->path) : !packLoaded_;
     const char* title = !entry                                    ? tr(STR_CAW_BUILT_IN_DEMO)
                         : entry->readable && entry->info.title[0] ? entry->info.title
                                                                   : entry->file;

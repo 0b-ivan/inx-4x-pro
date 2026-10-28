@@ -9,6 +9,7 @@
 #include "CardPartyCategories.h"
 #include "CardPartyCore.h"
 #include "CardPartyHistory.h"
+#include "CardPartyDeckSet.h"
 #include "CardPartyDemoDeck.h"
 #include "CardPartySdPack.h"
 #include "CardPartySessions.h"
@@ -42,6 +43,9 @@ class CardPartyActivity final : public Activity {
   void resetGame();
   void loadConfiguredDeck();
   bool loadPack(const char* path);
+  // Up to sdpack::kMaxPacks packs played together; atomic like loadPack().
+  bool loadPacks(const char* const* paths, uint8_t n);
+  bool deckSelected(const char* path) const;
   void scanDecks();
   void chooseDeck(int row);
   void saveDeckChoice();
@@ -97,11 +101,13 @@ class CardPartyActivity final : public Activity {
 
   cardparty::Game game_;
   cardparty::Sessions sessions_;
-  cardparty::sdpack::Pack sdPack_;
+  // The loaded pack, or several packs joined into one deck.
+  cardparty::sdpack::DeckSet sdPack_;
   cardparty::Deck activeDeck_ = cardparty::demoDeck();
   bool packLoaded_ = false;
-  // File of the loaded pack; empty while the built-in demo plays.
-  char deckPath_[80] = {};
+  // Files of the loaded packs; none while the built-in demo plays.
+  char deckPaths_[cardparty::sdpack::kMaxPacks][80] = {};
+  uint8_t deckPathCount_ = 0;
   DeckEntry decks_[kMaxDecks] = {};
   uint8_t deckCount_ = 0;
   // Public pack list from GitHub and the job loop() runs next.

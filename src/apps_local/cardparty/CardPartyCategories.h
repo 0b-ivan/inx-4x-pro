@@ -16,7 +16,9 @@ namespace categories {
 inline bool included(uint16_t cardMask, uint16_t enabled) { return (cardMask & ~enabled) == 0; }
 
 // First-run selection: the pack's defaults; adult categories are always off.
-inline uint16_t defaults(const sdpack::Pack& pack) {
+// Works for a single sdpack::Pack and for a sdpack::DeckSet.
+template <class PackLike>
+uint16_t defaults(const PackLike& pack) {
   uint16_t mask = 0;
   for (uint8_t i = 0; i < pack.categoryCount(); ++i)
     if (pack.category(i).defaultOn && !pack.category(i).adult) mask |= static_cast<uint16_t>(1u << i);
@@ -56,7 +58,8 @@ inline bool playable(const Deck& deck, uint16_t enabled, uint8_t hand) {
 }
 
 // Cards carrying category i, whatever else is switched on.
-inline uint16_t cardsIn(const sdpack::Pack& pack, uint8_t i, bool answers) {
+template <class PackLike>
+uint16_t cardsIn(const PackLike& pack, uint8_t i, bool answers) {
   const uint16_t bit = static_cast<uint16_t>(1u << i);
   const uint16_t n = answers ? pack.deck().answersCount : pack.deck().promptsCount;
   uint16_t count = 0;
