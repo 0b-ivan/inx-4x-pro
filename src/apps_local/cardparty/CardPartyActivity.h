@@ -28,7 +28,7 @@ class CardPartyActivity final : public Activity {
   bool skipLoopDelay() override { return server_.running(); }
 
  private:
-  enum class Stage : uint8_t { Choice, Decks, Remote, Categories, Rules, Menu, Players, Hosted, Failed };
+  enum class Stage : uint8_t { Choice, Decks, Remote, Categories, Rules, Menu, Players, Fame, Hosted, Failed };
   // Blocking network work, run from loop() after the screen says so.
   enum class RemoteJob : uint8_t { None, Catalog, Pack };
   // One pack file on the card, as the deck list shows it.
@@ -67,6 +67,7 @@ class CardPartyActivity final : public Activity {
   void drawMenu();
   void playersTap(int row);
   void drawPlayers();
+  void drawFame();
   void drawFinal();
   void hostAction(bool menu);
   void loadSelection();
@@ -120,6 +121,8 @@ class CardPartyActivity final : public Activity {
   uint32_t historySaved_ = 0;
   cardparty::web::Server server_;
   Stage stage_ = Stage::Choice;
+  uint8_t famePage_ = 0;
+  Stage fameReturn_ = Stage::Choice;
   // Station mode raised by the Wi-Fi picker for [02]; dev mode stays paused
   // while this Activity holds the radio.
   bool ownsSta_ = false;
