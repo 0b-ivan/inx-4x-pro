@@ -67,6 +67,7 @@ class Book final {
     std::strncpy(p->name, name, sizeof(p->name) - 1);
     p->name[sizeof(p->name) - 1] = 0;
     p->seen = seen;
+    ++revision_;
     return true;
   }
   const Player* player(uint64_t id) const {
@@ -90,18 +91,21 @@ class Book final {
     Player* p = find(id);
     if (!p) return false;
     if (p->games != UINT32_MAX) ++p->games;
+    ++revision_;
     return true;
   }
   bool gameWon(uint64_t id) {
     Player* p = find(id);
     if (!p) return false;
     if (p->wins != UINT32_MAX) ++p->wins;
+    ++revision_;
     return true;
   }
   bool roundWon(uint64_t id, const char* sentence, uint32_t seen) {
     Player* p = find(id);
     if (!p) return false;
     if (p->rounds != UINT32_MAX) ++p->rounds;
+    ++revision_;
     if (!sentence || !*sentence) return true;
     // Keep latest first, including ties. UTF-8 cannot end mid-sequence.
     for (size_t i = std::min(quoteCount_, kWinningLines - 1); i > 0; --i)
@@ -125,6 +129,7 @@ class Book final {
       for (uint8_t i = 0; i < entry.count; ++i)
         if (entry.voters[i] == id) return Vote::Duplicate;
       entry.voters[entry.count++] = id;
+      ++revision_;
       return entry.count == 3 ? Vote::Blocked : Vote::Recorded;
     }
     if (pairs_.size() == kNonFitPairs) {
@@ -132,9 +137,11 @@ class Book final {
       auto victim = std::find_if(pairs_.begin(), pairs_.end(), [](const Pair& p) { return p.count == 1; });
       if (victim == pairs_.end()) return Vote::Full;
       *victim = Pair{pack, prompt, answer, 1, {id, 0, 0}};
+      ++revision_;
       return Vote::Recorded;
     }
     pairs_.push_back(Pair{pack, prompt, answer, 1, {id, 0, 0}});
+    ++revision_;
     return Vote::Recorded;
   }
   bool blocked(uint32_t pack, uint16_t prompt, uint16_t answer) const {
@@ -142,6 +149,7 @@ class Book final {
       if (p.pack == pack && p.prompt == prompt && p.answer == answer) return p.count == 3;
     return false;
   }
+  uint32_t revision() const { return revision_; }
   size_t players() const { return count_; }
   size_t quotes() const { return quoteCount_; }
   size_t pairs() const { return pairs_.size(); }
@@ -236,6 +244,7 @@ class Book final {
   std::array<WinningLine,kWinningLines> quotes_{};
   std::vector<Pair> pairs_;
   size_t count_ = 0, quoteCount_ = 0;
+  uint32_t revision_ = 0;
 };
 }  // namespace history
 }  // namespace cardparty
