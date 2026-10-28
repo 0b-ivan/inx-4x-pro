@@ -100,6 +100,7 @@ class Server final {
   const char* password() const { return password_; }
   const char* ip() const { return ip_.c_str(); }
   const char* url() const { return url_.c_str(); }
+  const char* seatLabel(uint8_t seat, char* target, size_t capacity) const;
 
  private:
 #ifndef SIMULATOR
@@ -128,7 +129,7 @@ class Server final {
   // plays, the largest private hand, winner text, prompt and fixed wire fields.
   static constexpr size_t kMessageBytes =
       2048 + 2 * (sdpack::kMaxPromptBytes + (kPileMax * kPickMax + kHandMax + kPickMax) * sdpack::kMaxAnswerBytes +
-                  (kPlayers + 2) * 23 + kPickMax * sdpack::kMaxAnswerBytes);
+                  (kPlayers + 2) * (23 + 24) + kPickMax * sdpack::kMaxAnswerBytes);
   char message_[kMessageBytes] = {};
   SessionTicket tickets_[kPlayers] = {};
   uint32_t socket_[kPlayers] = {};
