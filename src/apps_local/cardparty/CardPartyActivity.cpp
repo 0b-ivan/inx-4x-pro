@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "CardPartySentence.h"
+#include "CardPartySnapshot.h"
 #include "CardPartyTextWrap.h"
 #ifdef SIMULATOR
 #include <cstdlib>
@@ -54,12 +55,32 @@ constexpr const char* kCardPartySelection = "/games/cardparty/categories.bin";
 // Match rules: 'C','R', format 1, rounds, answer s, extension s, Juror s,
 // auto s, Rando.
 constexpr const char* kCardPartyRules = "/games/cardparty/rules.bin";
-constexpr const char* kHistory = "/games/cardparty/history.bin";
-constexpr const char* kHistoryPart = "/games/cardparty/history.bin.part";
-constexpr const char* kHistoryBackup = "/games/cardparty/history.bin.bak";
+constexpr cp::snapshot::Files kHistoryFiles{"/games/cardparty/history.bin", "/games/cardparty/history.bin.part",
+                                            "/games/cardparty/history.bin.bak"};
 constexpr size_t kHistoryMaxBytes =
     9 + cp::history::kPlayersStored * 49 + cp::history::kWinningLines * 213 + cp::history::kNonFitPairs * 33 + 4;
 constexpr uint8_t kRulesBytes = 9;
+// cp::snapshot over HalStorage.
+struct SdStore {
+  bool exists(const char* path) { return Storage.exists(path); }
+  bool remove(const char* path) { return Storage.remove(path); }
+  bool rename(const char* from, const char* to) { return Storage.rename(from, to); }
+  bool write(const char* path, const uint8_t* bytes, size_t size) {
+    HalFile file;
+    if (!Storage.openFileForWrite("CARDPARTY", path, file)) return false;
+    const bool written = file.write(bytes, size) == size;
+    file.close();  // before the rename that follows
+    return written;
+  }
+  bool read(const char* path, std::vector<uint8_t>& bytes, size_t maxBytes) {
+    HalFile file;
+    if (!Storage.openFileForRead("CARDPARTY", path, file)) return false;
+    const size_t length = file.size();
+    if (length == 0 || length > maxBytes) return false;
+    bytes.resize(length);
+    return file.read(bytes.data(), length) == static_cast<int>(length);
+  }
+};
 // What a tap on a rule cycles through.
 constexpr uint8_t kRoundOptions[] = {3, 5, 8, 10, 12, 15, 20, 30};
 constexpr uint8_t kAnswerOptions[] = {0, 30, 45, 60, 90, 120};
@@ -432,27 +453,10 @@ void CardPartyActivity::saveRules() {
     LOG_ERR("CARDPARTY", "Could not save match rules");
 }
 void CardPartyActivity::loadHistory() {
-  const auto read = [this](const char* path) {
-    if (!Storage.exists(path)) return false;
-    HalFile file;
-    if (!Storage.openFileForRead("CARDPARTY", path, file)) return false;
-    const size_t length = file.size();
-    if (length < 13 || length > kHistoryMaxBytes) {
-      file.close();
-      return false;
-    }
-    std::vector<uint8_t> bytes(length);
-    const bool ok = file.read(bytes.data(), length) == static_cast<int>(length);
-    file.close();
-    return ok && history_.decode(bytes.data(), bytes.size());
-  };
-  if (!read(kHistory) && read(kHistoryBackup)) {
-    LOG_INF("CARDPARTY", "Recovered player history from backup");
-    // Promote the known-good backup before the next snapshot rotation. A
-    // corrupt primary must never overwrite the only recoverable version.
-    Storage.remove(kHistory);
-    Storage.rename(kHistoryBackup, kHistory);
-  }
+  SdStore store;
+  const auto loaded = cp::snapshot::load(store, kHistoryFiles, kHistoryMaxBytes,
+                                         [this](const uint8_t* b, size_t n) { return history_.decode(b, n); });
+  if (loaded == cp::snapshot::Loaded::Backup) LOG_INF("CARDPARTY", "Recovered player history from backup");
   historySaved_ = history_.revision();
 }
 void CardPartyActivity::saveHistory() {
@@ -460,28 +464,11 @@ void CardPartyActivity::saveHistory() {
   if (!Storage.ensureDirectoryExists(kCardPartyDir)) return;
   const std::vector<uint8_t> bytes = history_.encode();
   if (bytes.empty() || bytes.size() > kHistoryMaxBytes) return;
-  Storage.remove(kHistoryPart);
-  HalFile file;
-  if (!Storage.openFileForWrite("CARDPARTY", kHistoryPart, file)) return;
-  const bool written = file.write(bytes.data(), bytes.size()) == bytes.size();
-  file.close();
-  if (!written) {
-    Storage.remove(kHistoryPart);
+  SdStore store;
+  if (!cp::snapshot::save(store, kHistoryFiles, bytes.data(), bytes.size())) {
     LOG_ERR("CARDPARTY", "Could not write history snapshot");
     return;
   }
-  Storage.remove(kHistoryBackup);
-  const bool hadOld = Storage.exists(kHistory);
-  if (hadOld && !Storage.rename(kHistory, kHistoryBackup)) {
-    Storage.remove(kHistoryPart);
-    return;
-  }
-  if (!Storage.rename(kHistoryPart, kHistory)) {
-    if (hadOld) Storage.rename(kHistoryBackup, kHistory);
-    Storage.remove(kHistoryPart);
-    return;
-  }
-  // Retain the previous CRC-valid snapshot as a recovery candidate.
   historySaved_ = history_.revision();
 }
 void CardPartyActivity::cycleRule(uint8_t row) {
@@ -1861,7 +1848,7 @@ void CardPartyActivity::drawError() {
   drawBase(tr(STR_CAW_ERROR));
   renderer.drawText(UI_10_FONT_ID, kGutter, 138, tr(STR_CAW_COULD_NOT_START_SESSION), true);
   renderer.drawText(SMALL_FONT_ID, kGutter, 198, report_, true);
-  renderer.drawText(UI_10_FONT_ID, kGutter, renderer.getScreenHeight() - 76, "[ BACK TO SETUP ]", true);
+  renderer.drawText(UI_10_FONT_ID, kGutter, renderer.getScreenHeight() - 76, tr(STR_CAW_BACK_TO_SETUP), true);
 }
 void CardPartyActivity::render(RenderLock&&) {
   switch (stage_) {
