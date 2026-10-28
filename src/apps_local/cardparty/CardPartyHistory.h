@@ -48,7 +48,7 @@ inline uint32_t crc32(const uint8_t* data, size_t len) {
 class Book final {
  public:
   enum class Vote : uint8_t { Invalid, Duplicate, Recorded, Blocked, Full };
-  bool upsert(uint64_t id, const char* name, uint32_t seen) {
+  bool upsert(uint64_t id, const char* name, uint32_t seen, uint8_t assignedWord = 255) {
     if (!id || !name || !*name || std::strlen(name) > 23) return false;
     Player* p = find(id);
     if (!p) {
@@ -66,6 +66,7 @@ class Book final {
     }
     std::strncpy(p->name, name, sizeof(p->name) - 1);
     p->name[sizeof(p->name) - 1] = 0;
+    if (assignedWord < 64) p->word = assignedWord;
     p->seen = seen;
     ++revision_;
     return true;
