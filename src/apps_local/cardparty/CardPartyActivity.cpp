@@ -584,15 +584,16 @@ void CardPartyActivity::drawDecks() {
     char line[96] = {};
     std::snprintf(line, sizeof(line), "%s %s", current ? "[x]" : "[  ]", title);
     drawWrapped(UI_10_FONT_ID, line, kGutter, y + 4, textWidth, 26, 1);
+    // Status first, file name last: a long name is what gets cut.
     if (!entry)
       std::snprintf(line, sizeof(line), "ENGLISH / ALWAYS AVAILABLE");
     else if (!entry->readable)
-      std::snprintf(line, sizeof(line), "%s / NOT A CAW PACK", entry->file);
+      std::snprintf(line, sizeof(line), "NOT A CAW PACK / %s", entry->file);
     else if (!entry->info.released)
-      std::snprintf(line, sizeof(line), "%s / DRAFT, NOT PLAYABLE", entry->file);
+      std::snprintf(line, sizeof(line), "DRAFT, NOT PLAYABLE / %s", entry->file);
     else
-      std::snprintf(line, sizeof(line), "%s / %u PROMPTS / %u ANSWERS", entry->file,
-                    static_cast<unsigned>(entry->info.prompts), static_cast<unsigned>(entry->info.answers));
+      std::snprintf(line, sizeof(line), "%u PROMPTS / %u ANSWERS / %s", static_cast<unsigned>(entry->info.prompts),
+                    static_cast<unsigned>(entry->info.answers), entry->file);
     drawWrapped(SMALL_FONT_ID, line, kGutter + 34, y + 30, textWidth - 34, 22, 1);
     renderer.fillRect(kGutter, y + kDeckRow - 2, textWidth, 1, true);
   }
