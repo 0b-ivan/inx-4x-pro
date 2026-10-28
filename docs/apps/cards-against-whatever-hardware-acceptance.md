@@ -59,7 +59,7 @@ the next start. Any reboot fails the run.
 | Heap leak | `heap` in the lobby after a rematch within 8 KB of the lobby value with the same 8 phones before game 1 |
 | `maxblk` | ≥ 16 KB at all times |
 | `sendfail` | 0 in T1–T6; only during T8 (dead phone) acceptable |
-| `drop` | 0 in T1–T5 and T9–T11; +1 per dead phone in T6 (> 30 s lock), T7, T8 |
+| `drop` | 0 in T1–T5 and T9–T11; +1 per dead phone in T6 (> 15 s lock), T7, T8 |
 | `ws` | ≤ 10, returns to number of connected seats within 25 s of any reload/idle event |
 | Private data | no phone ever shows another phone's hand or the authors before Reveal |
 
@@ -97,8 +97,10 @@ increases, `ws` returns to 8.
 
 **T6 — Phone lock (held turn).** Last pending answerer locks the phone for
 ~10 s, unlocks and answers. Pass: round waits, X4 shows `n-1 / n`, answer is
-accepted. Repeat with the phone locked for > 30 s: round advances to Judging
-without that player; on unlock the phone shows the current phase.
+accepted. Repeat with the phone locked for > 15 s: every screen shows
+`WAITING FOR <name>` until the phone is back or the X4 taps
+`[ GO ON WITHOUT ]` (from this milestone on; before, the round moved on by itself
+after 30 s).
 
 **T7 — Czar drop.** Czar turns Wi-Fi off during Judging for 15 s, back on.
 Pass: Czar resumes and judges. Repeat with Czar gone > 60 s: X4
@@ -156,6 +158,40 @@ no crash, the current deck unchanged. Note `heap` before and after.
 60 min (screens may sleep). Pass: no reboot, `min` stable (no monotonic
 decline across the hour), phones resume on wake.
 
+**T16 — Pause.** Mid-round, phone A taps `[ PAUSE ]`. Pass: every phone and
+the X4 show `PAUSED BY A` and the clock stands still; phone B has no
+continue button and its answer is not accepted; A continues, the clock runs
+on from where it stood. Repeat with B pausing and the X4 continuing
+(`[ CONTINUE ]` or MENU → CONTINUE).
+
+**T17 — Missing player.** Answer timer 60 s. One phone that still has to
+answer goes to airplane mode. Pass: after 15 s every phone and the X4 show
+`WAITING FOR <name>`, the clock stands still; the phone coming back lifts it
+by itself. Again, and the X4 taps `[ GO ON WITHOUT ]`: the round goes on.
+Same with the Juror while judging: the round ends without points. A phone
+that is not needed (already answered) never blocks.
+
+**T18 — Clocks and auto mode.** Rules: answer 30 s, extension 10 s, Juror
+30 s, auto 8 s. Pass: phones count down per second, the X4 in 10 s steps;
+with answers missing the clock gets `+10 s` once, then submissions close;
+nobody answering ends the round without points; the Juror clock running out
+ends the round without points; auto mode starts the next round 8 s after the
+reveal, never after the last one. MENU → `+ TIME` adds 10 s.
+
+**T19 — Remove and end.** Remove an answerer (MENU → PLAYERS, tap twice):
+their phone shows the removed screen, the round goes on; they can join the
+next lobby. Remove the Juror while judging: round ends without points. Remove
+until two are left: the game ends with the ceremony. MENU → END GAME (tap
+twice): every phone shows `GAME ENDED BY THE HOST`, crowns for all leaders,
+`[ AGAIN! ]` votes count on the X4; `[ AGAIN ]` opens the lobby with the same
+seats, `[ END ]` returns to setup.
+
+**T20 — Changes during a match.** Switch a category off mid-round: new cards
+come without it, cards already dealt stay; a switch that leaves too few cards
+is refused. In the reveal, MENU → DECK → another pack: everyone gets a new
+hand, points stay. Rando off: from the next round there is one answer fewer.
+Note `heap` after the pack switch.
+
 ## Browser checks (any phone, during T4)
 
 Chromium layout at 320×568, 390×844 and 1280×800 is checked in CI by
@@ -189,6 +225,11 @@ artifact). What only real phones show:
 | T13 | | | | | | | |
 | T14 | | | | | | | |
 | T15 | | | | | | | |
+| T16 | | | | | | | |
+| T17 | | | | | | | |
+| T18 | | | | | | | |
+| T19 | | | | | | | |
+| T20 | | | | | | | |
 
 Attach the serial logs to the PR. A failed case blocks the merge until it is
 fixed and re-run on the new SHA.

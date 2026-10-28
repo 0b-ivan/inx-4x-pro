@@ -12,27 +12,42 @@
 #include <set>
 #include <string>
 #include <vector>
+
 #include "../../src/apps_local/cardparty/CardPartyDemoDeck.h"
 #include "../../src/apps_local/cardparty/web/CardPartyBrowserServer.h"
 #include "../../src/apps_local/cardparty/web/CardPartyProtocol.h"
 
-namespace devmode { void pause() {} void resume() {} }
+namespace devmode {
+void pause() {}
+void resume() {}
+}  // namespace devmode
 using namespace cardparty;
 using namespace cardparty::web;
 
 namespace {
 int failures = 0, checks = 0;
-#define CHECK(cond) do { ++checks; if (!(cond)) { ++failures; \
-  std::fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
+#define CHECK(cond)                                                        \
+  do {                                                                     \
+    ++checks;                                                              \
+    if (!(cond)) {                                                         \
+      ++failures;                                                          \
+      std::fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); \
+    }                                                                      \
+  } while (0)
 
 constexpr int kSlots = 10;  // platformio.ini: -DWEBSOCKETS_SERVER_CLIENT_MAX=10
 
 uint32_t rng = 1;
-uint32_t roll(uint32_t n) { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return rng % n; }
+uint32_t roll(uint32_t n) {
+  rng ^= rng << 13;
+  rng ^= rng >> 17;
+  rng ^= rng << 5;
+  return rng % n;
+}
 
 struct Player {
   std::string name, token;
-  int slot = -1;        // -1: browser currently has no socket
+  int slot = -1;  // -1: browser currently has no socket
   uint32_t revision = 0;
 };
 
@@ -95,19 +110,27 @@ struct Harness {
     const std::string m = lastTo(p.slot, from);
     if (m.find("\"private\"") != std::string::npos) p.revision = revisionIn(m);
   }
-  void refreshRevisions(size_t from) { for (auto& p : players) if (p.slot >= 0) track(p, from); }
+  void refreshRevisions(size_t from) {
+    for (auto& p : players)
+      if (p.slot >= 0) track(p, from);
+  }
 
   bool join(const std::string& name) {
     const int slot = ws->accept();
     if (slot < 0) return false;
     const size_t mark = ws->messages.size();
     std::string escaped;
-    for (char c : name) { if (c == '"' || c == '\\') escaped += '\\'; escaped += c; }
+    for (char c : name) {
+      if (c == '"' || c == '\\') escaped += '\\';
+      escaped += c;
+    }
     text(slot, "{\"type\":\"join\",\"name\":\"" + escaped + "\"}");
     const std::string prefix = "{\"type\":\"welcome\",\"token\":\"";
     for (size_t i = mark; i < ws->messages.size(); ++i)
       if (ws->recipients[i] == slot && ws->messages[i].rfind(prefix, 0) == 0) {
-        Player p; p.name = name; p.slot = slot;
+        Player p;
+        p.name = name;
+        p.slot = slot;
         p.token = ws->messages[i].substr(prefix.size(), 32);
         players.push_back(p);
         refreshRevisions(mark);
@@ -125,7 +148,10 @@ struct Harness {
   // been noticed as closed. `closeFirst` models a clean close instead.
   bool reload(Player& p, bool closeFirst) {
     const int old = p.slot;
-    if (closeFirst && old >= 0) { ws->event(WStype_DISCONNECTED, static_cast<uint8_t>(old)); p.slot = -1; }
+    if (closeFirst && old >= 0) {
+      ws->event(WStype_DISCONNECTED, static_cast<uint8_t>(old));
+      p.slot = -1;
+    }
     const std::string handBefore = old >= 0 ? handIn(lastTo(old, 0)) : std::string();
     const int slot = ws->accept();
     if (slot < 0) return false;
@@ -141,11 +167,13 @@ struct Harness {
     if (!closeFirst && old >= 0 && old != slot) CHECK(!ws->open.count(static_cast<uint8_t>(old)));
     if (!handBefore.empty()) CHECK(handIn(welcome) == handBefore);  // hand survives
     const std::string stale = p.token;
-    p.token = fresh; p.slot = slot; p.revision = revisionIn(welcome);
+    p.token = fresh;
+    p.slot = slot;
+    p.revision = revisionIn(welcome);
     // The revoked ticket cannot act through the replacement socket.
     const size_t probe = ws->messages.size();
-    text(slot, "{\"type\":\"judge\",\"token\":\"" + stale + "\",\"revision\":" +
-               std::to_string(p.revision) + ",\"selected\":0}");
+    text(slot, "{\"type\":\"judge\",\"token\":\"" + stale + "\",\"revision\":" + std::to_string(p.revision) +
+                   ",\"selected\":0}");
     CHECK(ws->messages.size() == probe + 1);
     CHECK(ws->messages.back().find("\"type\":\"error\"") != std::string::npos);
     return true;
@@ -156,21 +184,22 @@ struct Harness {
     for (int i = 0; i < v.pick; ++i) slots += (i ? "," : "") + std::to_string(i);
     const uint16_t before = v.submitted;
     const size_t mark = ws->messages.size();
-    text(p.slot, "{\"type\":\"submit\",\"token\":\"" + p.token + "\",\"revision\":" +
-                 std::to_string(p.revision) + ",\"slots\":[" + slots + "]}");
+    text(p.slot, "{\"type\":\"submit\",\"token\":\"" + p.token + "\",\"revision\":" + std::to_string(p.revision) +
+                     ",\"slots\":[" + slots + "]}");
     refreshRevisions(mark);
     return game.publicView().submitted == before + 1 || game.phase() != Phase::Playing;
   }
   bool judge(Player& p, uint8_t chosen) {
     const size_t mark = ws->messages.size();
-    text(p.slot, "{\"type\":\"judge\",\"token\":\"" + p.token + "\",\"revision\":" +
-                 std::to_string(p.revision) + ",\"selected\":" + std::to_string(chosen) + "}");
+    text(p.slot, "{\"type\":\"judge\",\"token\":\"" + p.token + "\",\"revision\":" + std::to_string(p.revision) +
+                     ",\"selected\":" + std::to_string(chosen) + "}");
     refreshRevisions(mark);
     return game.phase() == Phase::Reveal;
   }
   Player* czar() {
     const auto v = game.publicView();
-    for (auto& p : players) if (seatOf(p) == v.czar) return &p;
+    for (auto& p : players)
+      if (seatOf(p) == v.czar) return &p;
     return nullptr;
   }
   // Global invariants after every step.
@@ -199,8 +228,16 @@ void eightPlayerStorm(uint32_t seed) {
   rng = seed;
   Harness h;
   CHECK(h.begin(seed, 10));
-  const char* names[8] = {"ADA", "J\xc3\xbcrgen-Sch\xc3\xa4" "fer", "\"QUOTE\"", "N\xc3\xb6" "de",
-                          "Eve", "Mallory", "Trent", "Zo\xc3\xab"};
+  const char* names[8] = {"ADA",
+                          "J\xc3\xbcrgen-Sch\xc3\xa4"
+                          "fer",
+                          "\"QUOTE\"",
+                          "N\xc3\xb6"
+                          "de",
+                          "Eve",
+                          "Mallory",
+                          "Trent",
+                          "Zo\xc3\xab"};
   for (const char* n : names) CHECK(h.join(n));
   CHECK(h.players.size() == 8);
   h.invariants();
@@ -269,8 +306,8 @@ void eightPlayerStorm(uint32_t seed) {
     const bool rando = h.game.publicView().winner == kRando;
     CHECK(pointsAfter == pointsBefore + (rando ? 0u : 1u));
     const size_t replayAt = h.ws->messages.size();
-    h.text(czar->slot, "{\"type\":\"judge\",\"token\":\"" + czar->token + "\",\"revision\":" +
-                       std::to_string(czar->revision - 1) + ",\"selected\":0}");
+    h.text(czar->slot, "{\"type\":\"judge\",\"token\":\"" + czar->token +
+                           "\",\"revision\":" + std::to_string(czar->revision - 1) + ",\"selected\":0}");
     CHECK(h.ws->messages[replayAt].find("\"type\":\"error\"") != std::string::npos);
     uint32_t pointsReplay = 0;
     for (const auto& pl : h.game.publicView().players) pointsReplay += pl.points;
@@ -295,8 +332,7 @@ void eightPlayerStorm(uint32_t seed) {
   CHECK(h.server.hostRematch());
   CHECK(h.game.phase() == Phase::Lobby);
   for (const auto& pl : h.game.publicView().players) CHECK(pl.points == 0);
-  for (auto& p : h.players)
-    CHECK(h.lastTo(p.slot, 0).find("\"phase\":\"Lobby\"") != std::string::npos);
+  for (auto& p : h.players) CHECK(h.lastTo(p.slot, 0).find("\"phase\":\"Lobby\"") != std::string::npos);
   for (int i = 0; i < 8; ++i) CHECK(h.reload(h.players[roll(8)], roll(2) == 0));
   CHECK(h.server.hostStart());
   CHECK(h.game.publicView().round == 1);
@@ -309,9 +345,10 @@ void eightPlayerStorm(uint32_t seed) {
   const auto diag = h.server.diagnostics();
   CHECK(diag.takeovers > 0);
   h.server.stop();
-  std::printf("PASS 8 browsers seed=%u: 10 rounds, reloads in Lobby/Playing/Judging/Reveal, "
-              "rematch, max frame %zu bytes, takeovers %u, rejected %u\n",
-              seed, h.maxFrame, 0u + diag.takeovers, 0u + diag.rejected);
+  std::printf(
+      "PASS 8 browsers seed=%u: 10 rounds, reloads in Lobby/Playing/Judging/Reveal, "
+      "rematch, max frame %zu bytes, takeovers %u, rejected %u\n",
+      seed, h.maxFrame, 0u + diag.takeovers, 0u + diag.rejected);
 }
 
 // A lobby seat whose browser is gone is reclaimed only when the lobby is full.
@@ -339,15 +376,17 @@ void ghostSeatReclaim() {
   // without evicting anyone.
   h.ws->event(WStype_DISCONNECTED, static_cast<uint8_t>(h.players[0].slot));
   const size_t longAt = h.ws->messages.size();
-  h.text(slot, "{\"type\":\"join\",\"name\":\"J\xc3\xbcrgen-Sch\xc3\xa4" "fer-M\xc3\xbcller\"}");
+  h.text(slot,
+         "{\"type\":\"join\",\"name\":\"J\xc3\xbcrgen-Sch\xc3\xa4"
+         "fer-M\xc3\xbcller\"}");
   CHECK(h.lastTo(slot, longAt).find("\"type\":\"error\"") != std::string::npos);
   CHECK(h.game.publicView().players[0].seated);
   h.server.stop();
   std::puts("PASS ghost lobby seat reclaimed only when full; live seats never displaced");
 }
 
-// The last pending answerer locks the phone: the round waits for the grace
-// window, then advances without them; returning inside it keeps the turn.
+// The last pending answerer locks the phone: the round waits, blocks after
+// 15 s until the host goes on without them; returning in time keeps the turn.
 void heldTurnGrace() {
   Harness h;
   CHECK(h.begin(11, 3));
@@ -356,7 +395,8 @@ void heldTurnGrace() {
   h.refreshRevisions(0);
   Player* czar = h.czar();
   std::vector<Player*> answer;
-  for (auto& p : h.players) if (&p != czar) answer.push_back(&p);
+  for (auto& p : h.players)
+    if (&p != czar) answer.push_back(&p);
   CHECK(h.submit(*answer[0]));
   CHECK(h.submit(*answer[1]));
   // Phone lock: socket drops cleanly, browser not back yet.
@@ -364,9 +404,10 @@ void heldTurnGrace() {
   answer[2]->slot = -1;
   h.server.loop();
   CHECK(h.game.phase() == Phase::Playing);
-  clockMs += Server::kTurnGraceMs - 1;
+  clockMs += kBlockAfterMs - 1;
   h.server.loop();
   CHECK(h.game.phase() == Phase::Playing);
+  CHECK(h.server.table().blockedOn() == kNone);
   // Back within the window: resumes and answers normally.
   CHECK(h.reload(*answer[2], false));
   CHECK(h.submit(*answer[2]));
@@ -377,17 +418,23 @@ void heldTurnGrace() {
   // Next round: the pending player stays away past the window.
   czar = h.czar();
   answer.clear();
-  for (auto& p : h.players) if (&p != czar) answer.push_back(&p);
+  for (auto& p : h.players)
+    if (&p != czar) answer.push_back(&p);
   CHECK(h.submit(*answer[0]));
   CHECK(h.submit(*answer[1]));
   h.ws->event(WStype_DISCONNECTED, static_cast<uint8_t>(answer[2]->slot));
   answer[2]->slot = -1;
-  clockMs += Server::kTurnGraceMs;
   h.server.loop();
+  clockMs += kBlockAfterMs;
+  h.server.loop();
+  // Away past 15 s: the table waits for the host instead of moving on.
+  CHECK(h.game.phase() == Phase::Playing);
+  CHECK(h.server.table().blockedOn() != kNone);
+  CHECK(h.server.hostContinue());
   CHECK(h.game.phase() == Phase::Judging);
   CHECK(h.game.publicView().plays == 3);  // two answers + Rando
   h.server.stop();
-  std::puts("PASS held turn: waits through a phone lock, advances after the grace window");
+  std::puts("PASS held turn: waits through a phone lock, blocks after 15 s, host goes on without them");
 }
 
 // A browser re-proving its own seat on the same socket rotates, not expires.

@@ -114,29 +114,54 @@ static void categoriesAndFilter() {
 
   const uint16_t defaults = categories::defaults(pack);
   assert(defaults == 0b011);
-  categories::FilteredDeck filtered;
-  assert(filtered.build(pack, defaults));
+  const Deck& deck = pack.deck();
   // FSK 18 off: the Böse+FSK 18 prompt and the 10 adult answers are out.
-  assert(filtered.deck().promptsCount == 1 && filtered.deck().answersCount == 90);
-  for (uint16_t i = 0; i < filtered.deck().answersCount; ++i)
-    assert(std::strcmp(filtered.deck().answers[i].text, "Eine Antwort 90") != 0);
-  assert(filtered.build(pack, 0b111));
-  assert(filtered.deck().promptsCount == 2 && filtered.deck().answersCount == 100);
-  assert(filtered.build(pack, 0));  // only untagged cards
-  assert(filtered.deck().promptsCount == 1 && filtered.deck().answersCount == 60);
+  assert(categories::promptsIn(deck, defaults) == 1 && categories::answersIn(deck, defaults) == 90);
+  assert(categories::promptsIn(deck, 0b111) == 2 && categories::answersIn(deck, 0b111) == 100);
+  assert(categories::promptsIn(deck, 0) == 1 && categories::answersIn(deck, 0) == 60);  // untagged only
   assert(categories::cardsIn(pack, 1, true) == 30 && categories::cardsIn(pack, 2, false) == 1);
 
   // A full table at hand 5 needs 8*5 + 7*maxDraw + 3 distinct answers.
-  assert(categories::requiredAnswers(filtered.deck(), 5) == 43);
-  assert(categories::playable(filtered.deck(), 5));
-  Deck tiny = filtered.deck();
+  assert(categories::requiredAnswers(deck, defaults, 5) == 43);
+  assert(categories::playable(deck, defaults, 5));
+  Deck tiny = deck;
+  tiny.answerMasks = nullptr;
   tiny.answersCount = 42;
-  assert(!categories::playable(tiny, 5));
-  assert(filtered.build(pack, 0b011));
+  assert(!categories::playable(tiny, defaults, 5));
+
+  // The game plays the whole pack and filters when it draws: card ids are
+  // pack ids, so switching a category mid-game keeps every dealt card valid.
   Game game;
-  assert(game.configure(filtered.deck(), Rules{5, 10, true}, 7));
+  assert(game.configure(deck, Rules{5, 10, true}, 7));
+  game.setEnabled(defaults);
   assert(game.join("A") == 0 && game.join("B") == 1 && game.join("C") == 2);
   assert(game.start());
+  for (int round = 0; round < 8; ++round) {
+    assert(game.publicView().prompt == 0);  // the only prompt without FSK 18
+    for (uint8_t seat = 0; seat < 3; ++seat) {
+      HandView hand{};
+      assert(game.privateHand(seat, hand));
+      for (uint8_t i = 0; i < hand.size; ++i) assert(hand.cards[i] < 90);
+    }
+    const auto v = game.publicView();
+    const uint8_t slot[1] = {0};
+    for (uint8_t seat = 0; seat < 3; ++seat)
+      if (seat != v.czar) assert(game.submit(seat, slot, 1));
+    assert(game.judge(v.czar, 0) && game.nextRound());
+  }
+  // Untagged only from now on: new draws come from the first 60 answers.
+  game.setEnabled(0);
+  const auto before = game.publicView();
+  const uint8_t slot[1] = {0};
+  for (uint8_t seat = 0; seat < 3; ++seat)
+    if (seat != before.czar) assert(game.submit(seat, slot, 1));
+  assert(game.judge(before.czar, 0) && game.nextRound());
+  for (uint8_t seat = 0; seat < 3; ++seat) {
+    if (seat == before.czar) continue;  // played nothing, drew nothing
+    HandView hand{};
+    assert(game.privateHand(seat, hand));
+    assert(hand.cards[hand.size - 1] < 60);  // the card drawn after the switch
+  }
 
   // Saved selection: keyed to the pack CRC, bounded to its categories.
   uint8_t saved[categories::kSelectionBytes] = {};
@@ -168,7 +193,7 @@ static void categoriesAndFilter() {
   // A pack without categories is valid and plays everything.
   Buffer plain = fixture(true, nullptr, 0);
   assert(pack.load(plain) && pack.categoryCount() == 0 && categories::defaults(pack) == 0);
-  assert(filtered.build(pack, 0) && filtered.deck().answersCount == 100);
+  assert(categories::answersIn(pack.deck(), 0) == 100);
   std::puts("cardparty sd pack: categories, adult off by default, filter, min answers, saved selection OK");
 }
 

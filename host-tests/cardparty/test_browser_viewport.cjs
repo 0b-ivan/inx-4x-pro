@@ -185,8 +185,41 @@ async function shot(page, vp, phase) {
       assert.equal(await page.isVisible("#result"), true);
       await noHorizontalScroll(page, `${tag} reveal`);
       await shot(page, vp, "5-reveal");
+
+      // Paused by a player with the longest name; the timer stays in the header.
+      await page.evaluate(g => window.__deliver({ type: "state", revision: 4, game: g,
+        private: { isCzar: false, submitted: false, hand: [], pausedByMe: false } }),
+        game("Playing", { rounds: 10, clock: "answers", left: 75000, pausedBy: names[0] }));
+      assert.equal(await page.isVisible("#hold"), true);
+      await noHorizontalScroll(page, `${tag} paused`);
+      await inViewport(page, "timer", `${tag} paused`);
+      await shot(page, vp, "6-paused");
+
+      // Waiting for a missing player.
+      await page.evaluate(g => window.__deliver({ type: "state", revision: 4, game: g,
+        private: { isCzar: false, submitted: false, hand: [] } }), game("Judging", { blockedOn: names[2] }));
+      assert.equal(await page.isVisible("#hold"), true);
+      await noHorizontalScroll(page, `${tag} blocked`);
+      await shot(page, vp, "7-blocked");
+
+      // Ceremony: two leaders tied, eight long names.
+      const finalPlayers = players.map((p, i) => ({ ...p, points: i === 0 || i === 3 ? 7 : i % 5 }));
+      await page.evaluate(g => window.__deliver({ type: "state", revision: 4, game: g,
+        private: { isCzar: false, submitted: false, hand: [], voted: false } }),
+        game("Finished", { players: finalPlayers, votes: 3, endedByHost: true }));
+      assert.equal(await page.isVisible("#final"), true);
+      assert.equal(await page.$$eval("#podium .crown", els => els.length), 2);
+      await noHorizontalScroll(page, `${tag} final`);
+      await inViewport(page, "againButton", `${tag} final`);
+      await shot(page, vp, "8-final");
+
+      // Removed by the host.
+      await page.evaluate(() => window.__deliver({ type: "kicked" }));
+      assert.equal(await page.isVisible("#removed"), true);
+      await noHorizontalScroll(page, `${tag} removed`);
+      await shot(page, vp, "9-removed");
       await page.close();
-      console.log(`PASS cardparty viewport ${vp.width}x${vp.height}: join, lobby, Pick 3, judging, reveal`);
+      console.log(`PASS cardparty viewport ${vp.width}x${vp.height}: join, lobby, Pick 3, judging, reveal, pause, block, final, removed`);
     }
   } finally {
     await browser.close();

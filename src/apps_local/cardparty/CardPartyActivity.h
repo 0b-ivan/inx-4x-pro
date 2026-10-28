@@ -27,7 +27,7 @@ class CardPartyActivity final : public Activity {
   bool skipLoopDelay() override { return server_.running(); }
 
  private:
-  enum class Stage : uint8_t { Choice, Decks, Remote, Categories, Hosted, Failed };
+  enum class Stage : uint8_t { Choice, Decks, Remote, Categories, Rules, Menu, Players, Hosted, Failed };
   // Blocking network work, run from loop() after the screen says so.
   enum class RemoteJob : uint8_t { None, Catalog, Pack };
   // One pack file on the card, as the deck list shows it.
@@ -52,6 +52,20 @@ class CardPartyActivity final : public Activity {
   void leaveRemote();
   void drawRemote();
   void applyCategories();
+  void toggleCategory(uint8_t index);
+  // Server running: lobby or match. Setup screens then never reset the game.
+  bool hosting() const { return server_.running(); }
+  void loadRules();
+  void saveRules();
+  void cycleRule(uint8_t row);
+  void leaveRules();
+  void drawRules();
+  void menuTap(uint8_t row);
+  void drawMenu();
+  void playersTap(int row);
+  void drawPlayers();
+  void drawFinal();
+  void hostAction(bool menu);
   void loadSelection();
   void saveSelection();
   void leaveCategories();
@@ -70,8 +84,8 @@ class CardPartyActivity final : public Activity {
   void drawLobby();
   void drawGame();
   void drawError();
-  int drawWrapped(int fontId, const char* text, int x, int y, int maxWidth, int lineStep, int maxRows,
-                  bool draw = true);
+  int drawWrapped(int fontId, const char* text, int x, int y, int maxWidth, int lineStep, int maxRows, bool draw = true,
+                  bool black = true);
   void drawDiagnostics();
   bool matchInProgress() const;
   void leave();
@@ -80,8 +94,6 @@ class CardPartyActivity final : public Activity {
   cardparty::Sessions sessions_;
   cardparty::sdpack::Pack sdPack_;
   cardparty::Deck activeDeck_ = cardparty::demoDeck();
-  // The pack's cards that pass the host's category switches.
-  cardparty::categories::FilteredDeck filtered_;
   bool packLoaded_ = false;
   // File of the loaded pack; empty while the built-in demo plays.
   char deckPath_[80] = {};
@@ -95,6 +107,12 @@ class CardPartyActivity final : public Activity {
   const char* busy_ = nullptr;
   bool deckPlayable_ = true;
   uint16_t enabled_ = 0, savedEnabled_ = 0;
+  cardparty::Settings settings_{};
+  // Two-tap confirmations on the X4: remove a player, end the match.
+  uint8_t kickArmed_ = cardparty::kNone;
+  uint32_t kickArmedAt_ = 0;
+  bool endArmed_ = false;
+  uint32_t endArmedAt_ = 0;
   cardparty::web::Server server_;
   Stage stage_ = Stage::Choice;
   // Station mode raised by the Wi-Fi picker for [02]; dev mode stays paused

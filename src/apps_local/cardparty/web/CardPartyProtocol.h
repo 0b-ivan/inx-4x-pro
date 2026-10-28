@@ -8,6 +8,7 @@
 // {"type":"resume","token":"32 lowercase hex chars"}
 // {"type":"submit","token":"...","revision":0,"slots":[0,1,2]}
 // {"type":"judge","token":"...","revision":0,"selected":0}
+// {"type":"pause","token":"..."}    also "unpause" and "again"
 //
 // This is a deliberately narrow application protocol, not a JSON library.
 #include <cstddef>
@@ -21,7 +22,7 @@ namespace cardparty {
 namespace web {
 
 constexpr size_t kMaxCommand = 192;
-enum class Kind : uint8_t { Join, Resume, Submit, Judge };
+enum class Kind : uint8_t { Join, Resume, Submit, Judge, Pause, Unpause, Again };
 struct Command {
   Kind kind = Kind::Join;
   char name[24] = {};
@@ -137,14 +138,24 @@ inline bool parse(const uint8_t* data, size_t length, Command& out) {
     // No unsafe controls or multiline input, and prevent HTML/markup confusion.
     for (const unsigned char* p = reinterpret_cast<const unsigned char*>(command.name); *p; ++p)
       if (*p < 0x20 || *p == 0x7f || *p == '<' || *p == '>') return false;
-  } else if (std::strcmp(kind, "resume") == 0 || std::strcmp(kind, "submit") == 0 || std::strcmp(kind, "judge") == 0) {
-    command.kind = std::strcmp(kind, "resume") == 0   ? Kind::Resume
-                   : std::strcmp(kind, "submit") == 0 ? Kind::Submit
-                                                      : Kind::Judge;
+  } else {
+    // Every other command proves its seat with the ticket alone.
+    static constexpr struct {
+      const char* name;
+      Kind kind;
+    } kTicketed[] = {{"resume", Kind::Resume}, {"submit", Kind::Submit},   {"judge", Kind::Judge},
+                     {"pause", Kind::Pause},   {"unpause", Kind::Unpause}, {"again", Kind::Again}};
+    bool known = false;
+    for (const auto& entry : kTicketed)
+      if (std::strcmp(kind, entry.name) == 0) {
+        command.kind = entry.kind;
+        known = true;
+      }
+    if (!known) return false;
     char token[33] = {};
     if (!r.token(",\"token\":") || !r.str(token, sizeof(token), false) || !decodeSecret(token, command.secret))
       return false;
-    if (command.kind != Kind::Resume) {
+    if (command.kind == Kind::Submit || command.kind == Kind::Judge) {
       if (!r.token(",\"revision\":") || !r.number(command.revision, std::numeric_limits<uint32_t>::max())) return false;
       if (command.kind == Kind::Submit) {
         if (!r.token(",\"slots\":[")) return false;
@@ -162,8 +173,7 @@ inline bool parse(const uint8_t* data, size_t length, Command& out) {
         command.selected = static_cast<uint8_t>(chosen);
       }
     }
-  } else
-    return false;
+  }
   if (!r.token("}") || !r.finish()) return false;
   out = command;
   return true;

@@ -3,8 +3,6 @@
 // No Arduino dependency: host-testable. The device persists the selection.
 #include <cstddef>
 #include <cstdint>
-#include <memory>
-#include <new>
 
 #include "CardPartyCore.h"
 #include "CardPartySdPack.h"
@@ -25,49 +23,37 @@ inline uint16_t defaults(const sdpack::Pack& pack) {
   return mask;
 }
 
+// Cards of `deck` the selection plays. A deck without masks plays all.
+inline bool promptIn(const Deck& deck, uint16_t i, uint16_t enabled) {
+  return !deck.promptMasks || included(deck.promptMasks[i], enabled);
+}
+inline bool answerIn(const Deck& deck, uint16_t i, uint16_t enabled) {
+  return !deck.answerMasks || included(deck.answerMasks[i], enabled);
+}
+inline uint16_t promptsIn(const Deck& deck, uint16_t enabled) {
+  uint16_t n = 0;
+  for (uint16_t i = 0; i < deck.promptsCount; ++i)
+    if (promptIn(deck, i, enabled)) ++n;
+  return n;
+}
+inline uint16_t answersIn(const Deck& deck, uint16_t enabled) {
+  uint16_t n = 0;
+  for (uint16_t i = 0; i < deck.answersCount; ++i)
+    if (answerIn(deck, i, enabled)) ++n;
+  return n;
+}
+
 // Distinct answers a full table needs: eight hands, the largest draw for
-// everyone but the Czar, and Rando's three. Mirrors Game::start().
-inline uint16_t requiredAnswers(const Deck& deck, uint8_t hand) {
+// everyone but the Juror, and Rando's three. Mirrors Game::answersNeeded().
+inline uint16_t requiredAnswers(const Deck& deck, uint16_t enabled, uint8_t hand) {
   uint8_t maxDraw = 0;
   for (uint16_t i = 0; i < deck.promptsCount; ++i)
-    if (deck.prompts[i].draw > maxDraw) maxDraw = deck.prompts[i].draw;
+    if (promptIn(deck, i, enabled) && deck.prompts[i].draw > maxDraw) maxDraw = deck.prompts[i].draw;
   return static_cast<uint16_t>(kPlayers * hand + (kPlayers - 1) * maxDraw + 3);
 }
-inline bool playable(const Deck& deck, uint8_t hand) {
-  return deck.promptsCount > 0 && deck.answersCount >= requiredAnswers(deck, hand);
+inline bool playable(const Deck& deck, uint16_t enabled, uint8_t hand) {
+  return promptsIn(deck, enabled) > 0 && answersIn(deck, enabled) >= requiredAnswers(deck, enabled, hand);
 }
-
-// Cards of the pack that pass the selection, in pack order. Text pointers
-// stay owned by the pack, so the pack must outlive this deck.
-class FilteredDeck final {
- public:
-  bool build(const sdpack::Pack& pack, uint16_t enabled) {
-    const Deck& all = pack.deck();
-    uint16_t p = 0, a = 0;
-    for (uint16_t i = 0; i < all.promptsCount; ++i)
-      if (included(pack.promptMask(i), enabled)) ++p;
-    for (uint16_t i = 0; i < all.answersCount; ++i)
-      if (included(pack.answerMask(i), enabled)) ++a;
-    std::unique_ptr<Prompt[]> prompts(new (std::nothrow) Prompt[p ? p : 1]);
-    std::unique_ptr<Answer[]> answers(new (std::nothrow) Answer[a ? a : 1]);
-    if (!prompts || !answers) return false;
-    p = a = 0;
-    for (uint16_t i = 0; i < all.promptsCount; ++i)
-      if (included(pack.promptMask(i), enabled)) prompts[p++] = all.prompts[i];
-    for (uint16_t i = 0; i < all.answersCount; ++i)
-      if (included(pack.answerMask(i), enabled)) answers[a++] = all.answers[i];
-    prompts_ = std::move(prompts);
-    answers_ = std::move(answers);
-    deck_ = Deck{prompts_.get(), p, answers_.get(), a};
-    return true;
-  }
-  const Deck& deck() const { return deck_; }
-
- private:
-  std::unique_ptr<Prompt[]> prompts_;
-  std::unique_ptr<Answer[]> answers_;
-  Deck deck_{};
-};
 
 // Cards carrying category i, whatever else is switched on.
 inline uint16_t cardsIn(const sdpack::Pack& pack, uint8_t i, bool answers) {

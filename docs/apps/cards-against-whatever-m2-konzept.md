@@ -1,6 +1,19 @@
 # Cards Against Whatever – Konzept Milestone 2
 
-Stand 2026-10-28, Basis `120c6e3`. Konzept, noch nichts davon gebaut.
+Stand 2026-10-28, Basis `120c6e3`. **Block 1 (Spielablauf) ist gebaut**, Blöcke 2
+und 3 sind offen. Abweichungen beim Bau:
+
+- Rauswerfen beendet das Spiel, wenn weniger als drei Plätze *besetzt* sind
+  (nicht: verbunden), sonst würde ein kurz gesperrtes Handy das Spiel beenden.
+- Juror-Timer abgelaufen: Runde ohne Punkte (Antwort A). Der Automodus löst
+  keine Blockade (Antwort B). Rausgeworfene dürfen in der nächsten Lobby
+  wieder beitreten (Antwort C).
+- Die Regeln (`[05]`) gelten auch im Spiel über MENÜ → RULES; nur die
+  Rundenzahl ist ab dem Start fest.
+- Ein Pack-Wechsel, der für den Tisch zu wenig Karten bringt, beendet das
+  Spiel mit Siegerehrung, weil das alte Pack dann schon ersetzt ist.
+- Die Siegerehrung am X4 ist Variante 2 von 3 (schwarzer Sieger-Block mit
+  Krönchen, darunter Balken).
 
 Grundregel: **Der X4 ist König.** Alles, was den Spielverlauf für alle ändert
 (Regeln, Rauswerfen, Ende, Deck), entscheidet nur der X4. Handys dürfen

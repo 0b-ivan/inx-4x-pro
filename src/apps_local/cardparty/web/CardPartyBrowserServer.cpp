@@ -116,6 +116,7 @@ bool Server::begin(Mode mode) {
     tickets_[i] = SessionTicket{};
   }
   sessions_.reset();
+  table_.reset();
   for (bool& connected : liveSocket_) connected = false;
   for (uint8_t& p : pending_) p = 0;
   for (uint8_t i = 0; i < kTrackedSlots; ++i) {
@@ -214,7 +215,7 @@ void Server::loop() {
   flushPending();
   if (static_cast<uint32_t>(now - lastPing_) >= kPingMs) heartbeat(now);
   closeIdleSockets(now);
-  releaseExpiredTurns(now);
+  tickTable();
   if (static_cast<uint32_t>(now - lastDiagLog_) >= kDiagLogMs) logDiagnostics(now);
 }
 void Server::closeSocket(uint8_t client) {
@@ -262,14 +263,9 @@ void Server::closeIdleSockets(uint32_t now) {
     liveSocket_[client] = false;
   }
 }
-void Server::releaseExpiredTurns(uint32_t now) {
-  bool changed = false;
-  for (uint8_t seat = 0; seat < kPlayers; ++seat) {
-    if (!game_.held(seat)) continue;
-    if (static_cast<uint32_t>(now - heldSince_[seat]) < kTurnGraceMs) continue;
-    changed = game_.releaseTurn(seat) || changed;
-  }
-  if (changed) publishAll();
+// Clocks, auto mode and the wait for a missing player.
+void Server::tickTable() {
+  if (table_.tick(millis())) publishAll();
 }
 Server::Diagnostics Server::diagnostics() const {
   Diagnostics d{};
@@ -364,6 +360,8 @@ void Server::sendState(uint8_t seat, bool welcome) {
   w.quoted(phaseName(v.phase));
   w.raw(",\"round\":");
   w.num(v.round);
+  w.raw(",\"rounds\":");
+  w.num(game_.rules().rounds);
   w.raw(",\"pick\":");
   w.num(v.pick);
   w.raw(",\"draw\":");
@@ -430,8 +428,34 @@ void Server::sendState(uint8_t seat, bool welcome) {
     w.raw("\"");
   } else
     w.quoted("");
+  const uint32_t now = millis();
+  const char* clock = table_.clock() == Table::Clock::Answers ? "answers"
+                      : table_.clock() == Table::Clock::Juror ? "juror"
+                      : table_.clock() == Table::Clock::Next  ? "next"
+                                                              : "";
+  w.raw(",\"clock\":");
+  w.quoted(clock);
+  w.raw(",\"left\":");
+  w.num(table_.left(now));
+  w.raw(",\"extended\":");
+  w.boolean(table_.extended());
+  const uint8_t pausedBy = table_.pausedBy();
+  w.raw(",\"pausedByHost\":");
+  w.boolean(pausedBy == kHost);
+  w.raw(",\"pausedBy\":");
+  w.quoted(pausedBy < kPlayers ? v.players[pausedBy].name : "");
+  w.raw(",\"blockedOn\":");
+  w.quoted(table_.blockedOn() < kPlayers ? v.players[table_.blockedOn()].name : "");
+  w.raw(",\"votes\":");
+  w.num(table_.votes());
+  w.raw(",\"endedByHost\":");
+  w.boolean(table_.ended());
   w.raw("},\"private\":{\"isCzar\":");
   w.boolean(privateView.judge);
+  w.raw(",\"pausedByMe\":");
+  w.boolean(pausedBy == seat);
+  w.raw(",\"voted\":");
+  w.boolean(table_.voted(seat));
   w.raw(",\"submitted\":");
   w.boolean(privateView.submitted);
   w.raw(",\"hand\":[");
@@ -455,9 +479,7 @@ void Server::publishAll() {
     if (socket_[i] != kNoConnection) sendState(i, false);
 }
 void Server::onDisconnect(uint8_t client) {
-  const uint8_t seat = sessions_.seatOf(client);
   sessions_.disconnect(client);
-  if (seat != kNone && game_.held(seat)) heldSince_[seat] = millis();
   for (uint8_t i = 0; i < kPlayers; ++i)
     if (socket_[i] == client) {
       socket_[i] = kNoConnection;
@@ -512,9 +534,20 @@ void Server::onMessage(uint8_t client, const uint8_t* bytes, size_t size) {
       }
     }
   } else if (command.kind == Kind::Submit) {
-    accepted = sessions_.submit(client, command.secret, command.revision, command.slots, command.count);
+    // Paused or waiting for a missing player: nobody moves.
+    accepted =
+        !table_.frozen() && sessions_.submit(client, command.secret, command.revision, command.slots, command.count);
   } else if (command.kind == Kind::Judge) {
-    accepted = sessions_.judge(client, command.secret, command.revision, command.selected);
+    accepted = !table_.frozen() && sessions_.judge(client, command.secret, command.revision, command.selected);
+  } else {
+    const uint8_t seat = sessions_.authenticatedSeat(client, command.secret);
+    const uint32_t now = millis();
+    if (seat != kNone && command.kind == Kind::Pause)
+      accepted = table_.pause(seat, now);
+    else if (seat != kNone && command.kind == Kind::Unpause)
+      accepted = table_.unpause(seat, now);
+    else if (seat != kNone && command.kind == Kind::Again)
+      accepted = table_.vote(seat);
   }
   if (!accepted) {
     ++rejected_;
@@ -532,36 +565,105 @@ void Server::onMessage(uint8_t client, const uint8_t* bytes, size_t size) {
     }
     return;
   }
+  table_.tick(millis());
   publishAll();
 }
+// Host actions: the X4 is king, they work paused or not. The table tick arms
+// the clock of a new phase; publishAll() then sends one frame per seat.
 bool Server::hostStart() {
   if (!sessions_.hostStart()) return false;
+  table_.tick(millis());
   publishAll();
   return true;
 }
 bool Server::hostNext() {
   if (!sessions_.hostNext()) return false;
+  table_.tick(millis());
   publishAll();
   return true;
 }
 bool Server::hostClose() {
   if (!sessions_.hostClose()) return false;
+  table_.tick(millis());
   publishAll();
   return true;
 }
 bool Server::hostAbort() {
   if (!sessions_.hostAbort()) return false;
+  table_.tick(millis());
   publishAll();
   return true;
 }
 bool Server::hostRematch() {
   if (!sessions_.hostRematch()) return false;
+  table_.tick(millis());
   publishAll();
   return true;
+}
+bool Server::hostPause() {
+  if (!table_.pause(kHost, millis())) return false;
+  publishAll();
+  return true;
+}
+bool Server::hostUnpause() {
+  if (!table_.unpause(kHost, millis())) return false;
+  publishAll();
+  return true;
+}
+bool Server::hostAddTime() {
+  if (!table_.addTime(millis())) return false;
+  publishAll();
+  return true;
+}
+bool Server::hostContinue() {
+  if (!table_.continueWithout(millis())) return false;
+  publishAll();
+  return true;
+}
+bool Server::hostKick(uint8_t seat) {
+  if (seat >= kPlayers) return false;
+  const uint32_t client = socket_[seat];
+  if (!sessions_.hostKick(seat)) return false;
+  table_.seatGone(seat);
+  tickets_[seat] = SessionTicket{};
+  socket_[seat] = kNoConnection;
+  pending_[seat] = 0;
+  if (client != kNoConnection) {
+    // Tell the phone why before letting the socket go.
+    char kicked[] = "{\"type\":\"kicked\"}";
+    if (ws_.writable(static_cast<uint8_t>(client)))
+      ws_.sendTXT(static_cast<uint8_t>(client), kicked, sizeof(kicked) - 1);
+    closeSocket(static_cast<uint8_t>(client));
+  }
+  table_.tick(millis());
+  publishAll();
+  return true;
+}
+bool Server::hostEnd() {
+  if (!game_.endGame()) return false;
+  table_.endedByHost();
+  table_.tick(millis());
+  publishAll();
+  return true;
+}
+void Server::hostSettings(const Settings& settings) {
+  table_.apply(settings, millis());
+  if (running_) publishAll();
+}
+bool Server::hostDeckChanged() {
+  if (!game_.reloadDeck()) return false;
+  table_.tick(millis());
+  publishAll();
+  return true;
+}
+void Server::hostRefresh() {
+  if (running_) publishAll();
 }
 }  // namespace web
 }  // namespace cardparty
 #else
+#include <Arduino.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -623,6 +725,16 @@ bool Server::begin(Mode m) {
       running_ = judgeSimulatedRound(game_) && game_.nextRound();
     }
     running_ = running_ && game_.phase() == Phase::Finished;
+  } else if (std::strcmp(scenario, "blocked") == 0) {
+    // A needed answerer offline for 15 s.
+    running_ = game_.start();
+    const uint8_t away = static_cast<uint8_t>((game_.publicView().czar + 1) % 3);
+    running_ = running_ && game_.connected(away, false);
+    const uint32_t now = millis();  // the loop keeps ticking on this clock
+    table_.tick(now - kBlockAfterMs);
+    table_.tick(now);
+  } else {
+    running_ = game_.start();  // host screens over a running round
   }
   if (running_) {
     std::printf("CARDPARTY_SIM_STATE=%s PHASE=%u ROUND=%u\n", scenario, static_cast<unsigned>(game_.phase()),
@@ -632,7 +744,9 @@ bool Server::begin(Mode m) {
   }
   return running_;
 }
-void Server::loop() {}
+void Server::loop() {
+  if (running_) table_.tick(millis());  // clocks run in the SDL build too
+}
 void Server::stop() {
   running_ = false;
   password_[0] = 0;
@@ -645,6 +759,23 @@ bool Server::hostNext() { return sessions_.hostNext(); }
 bool Server::hostClose() { return sessions_.hostClose(); }
 bool Server::hostAbort() { return sessions_.hostAbort(); }
 bool Server::hostRematch() { return sessions_.hostRematch(); }
+bool Server::hostPause() { return table_.pause(kHost, millis()); }
+bool Server::hostUnpause() { return table_.unpause(kHost, millis()); }
+bool Server::hostAddTime() { return table_.addTime(millis()); }
+bool Server::hostContinue() { return table_.continueWithout(millis()); }
+bool Server::hostKick(uint8_t seat) {
+  if (!sessions_.hostKick(seat)) return false;
+  table_.seatGone(seat);
+  return true;
+}
+bool Server::hostEnd() {
+  if (!game_.endGame()) return false;
+  table_.endedByHost();
+  return true;
+}
+void Server::hostSettings(const Settings& settings) { table_.apply(settings, millis()); }
+bool Server::hostDeckChanged() { return game_.reloadDeck(); }
+void Server::hostRefresh() {}
 Server::Diagnostics Server::diagnostics() const { return Diagnostics{}; }
 }  // namespace web
 }  // namespace cardparty

@@ -221,7 +221,7 @@ class Pack final {
     answers_ = std::move(answers);
     promptMasks_ = std::move(promptMasks);
     answerMasks_ = std::move(answerMasks);
-    deck_ = Deck{prompts_.get(), pCount, answers_.get(), aCount};
+    deck_ = Deck{prompts_.get(), pCount, answers_.get(), aCount, promptMasks_.get(), answerMasks_.get()};
     for (uint8_t i = 0; i < kMetaFields; ++i) meta_[i] = meta[i];
     for (uint8_t i = 0; i < kMaxCategories; ++i) categories_[i] = categories[i];
     categoryCount_ = cCount;

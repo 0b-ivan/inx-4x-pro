@@ -20,11 +20,13 @@ function element() {
   };
 }
 const ids = [
-  "connection","session","round","join","joinForm","joinButton","joinHint",
+  "connection","round","timer","pauseButton","join","joinForm","joinButton","joinHint",
   "nick","lobby","roster","play","playMeta","promptText","choices","count",
   "footCount","submit","waiting","waitingCount","judging","judgeHeader",
   "judgePrompt","candidateList","judgeSelection","confirmJudge",
-  "result","winner","winnerText","scores"
+  "result","winner","winnerText","scores","nextHint",
+  "final","finalEyebrow","podium","standings","votes","againButton",
+  "hold","holdEyebrow","holdTitle","holdText","resumeButton","removed","rejoinButton"
 ];
 const nodes = Object.fromEntries(ids.map(x => [x, element()]));
 const store = new Map();
@@ -64,7 +66,8 @@ vm.runInNewContext(match[1], {
       assert.ok(nodes[id], "unknown id: "+id); return nodes[id];
     }, createElement: () => element()},
   sessionStorage, location:{hostname:"crossplay.local"},
-  WebSocket:Socket, setTimeout: fn => {timers.push(fn);return timers.length;}
+  WebSocket:Socket, setTimeout: fn => {timers.push(fn);return timers.length;},
+  setInterval: () => 0
 });
 assert.equal(sockets.length,1);
 const first=sockets[0];
@@ -156,6 +159,62 @@ assert.deepEqual(second.sent[0],{type:"resume",token:token1});
 second.message({type:"welcome",token:token2,revision:2,game:playing,
   private:{isCzar:false,submitted:false,hand:cards}});
 assert.equal(store.get("caw.session.token"),token2);
+// Clock: the phone counts down from the X4's "left" by itself.
+second.message({type:"state",revision:2,game:{...playing,rounds:10,clock:"answers",left:42000},
+  private:{isCzar:false,submitted:false,hand:cards}});
+assert.equal(nodes.round.textContent,"ROUND "+playing.round+"/10");
+assert.equal(nodes.timer.textContent,"TIME 0:42");
+assert.equal(nodes.pauseButton.hidden,false);
+// Anyone can pause; the pause carries the ticket only.
+nodes.pauseButton.dispatch("click");
+assert.deepEqual(second.sent.at(-1),{type:"pause",token:token2});
+second.message({type:"state",revision:2,game:{...playing,clock:"answers",left:30000,pausedBy:"Max"},
+  private:{isCzar:false,submitted:false,hand:cards,pausedByMe:false}});
+assert.equal(nodes.hold.hidden,false);
+assert.equal(nodes.holdTitle.textContent,"PAUSED BY Max");
+assert.equal(nodes.resumeButton.hidden,true);
+assert.equal(nodes.pauseButton.hidden,true);
+second.message({type:"state",revision:2,game:{...playing,pausedBy:"Ivan"},
+  private:{isCzar:false,submitted:false,hand:cards,pausedByMe:true}});
+assert.equal(nodes.resumeButton.hidden,false);
+nodes.resumeButton.dispatch("click");
+assert.deepEqual(second.sent.at(-1),{type:"unpause",token:token2});
+// A needed player gone for 15 s: everyone waits and sees who.
+second.message({type:"state",revision:2,game:{...playing,blockedOn:"Max"},
+  private:{isCzar:false,submitted:false,hand:cards}});
+assert.equal(nodes.hold.hidden,false);
+assert.equal(nodes.holdTitle.textContent,"WAITING FOR Max");
+second.message({type:"state",revision:2,game:{...playing,pausedByHost:true},
+  private:{isCzar:false,submitted:false,hand:cards}});
+assert.equal(nodes.holdTitle.textContent,"PAUSED BY THE HOST");
+// Auto mode countdown in the reveal.
+second.message({type:"state",revision:2,game:{...playing,phase:"Reveal",clock:"next",left:8000,
+  winnerName:"Ivan",winningText:"x",players:[]},private:{isCzar:false}});
+assert.equal(nodes.nextHint.textContent,"NEXT ROUND IN 0:08");
+// Ceremony: a crown for every leader, again votes, host end.
+second.message({type:"state",revision:2,game:{...playing,phase:"Finished",endedByHost:true,votes:1,
+  players:[{name:"Ivan",seated:true,points:3},{name:"Max",seated:true,points:3},
+           {name:"Zoe",seated:true,points:1},{name:"",seated:false,points:9}]},
+  private:{isCzar:false,voted:false}});
+assert.equal(nodes.final.hidden,false);
+assert.equal(nodes.finalEyebrow.textContent,"/// GAME ENDED BY THE HOST");
+assert.equal(nodes.podium.children.length,2);
+assert.equal(nodes.podium.children[0].children[0].className,"crown");
+assert.match(nodes.podium.children[1].children[1].textContent,/^Max/);
+assert.equal(nodes.standings.children.length,3);
+assert.match(nodes.standings.children[2].textContent,/^Zoe/);
+assert.equal(nodes.votes.textContent,"1 WANT ANOTHER GAME");
+nodes.againButton.dispatch("click");
+assert.deepEqual(second.sent.at(-1),{type:"again",token:token2});
+assert.equal(nodes.againButton.disabled,true);
+// Removed by the host: ticket gone, own screen, then back to join.
+second.message({type:"kicked"});
+assert.equal(store.get("caw.session.token"),undefined);
+assert.equal(nodes.removed.hidden,false);
+nodes.rejoinButton.dispatch("click");
+assert.equal(nodes.join.hidden,false);
+second.message({type:"welcome",token:token2,revision:0,game:playing,
+  private:{isCzar:false,submitted:false,hand:cards}});
 second.message({type:"expired"});
 assert.equal(store.get("caw.session.token"),undefined);
 assert.equal(nodes.join.hidden,false);

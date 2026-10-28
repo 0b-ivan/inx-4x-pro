@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+
 #include "CardPartyCore.h"
 
 namespace cardparty {
@@ -34,11 +35,10 @@ class Sessions final {
 
   // The transport MUST draw 16 cryptographically random bytes, never seed from
   // Game's predictable card RNG. No secret gets returned to other clients.
-  bool join(uint32_t connection, const char* name,
-            const uint8_t freshSecret[kTicketBytes], SessionTicket& ticket) {
-    if (connection == kNoConnection || !freshSecret || !validSecret(freshSecret) ||
-        connectionInUse(connection) || secretInUse(freshSecret) ||
-        !Game::validName(name)) return false;
+  bool join(uint32_t connection, const char* name, const uint8_t freshSecret[kTicketBytes], SessionTicket& ticket) {
+    if (connection == kNoConnection || !freshSecret || !validSecret(freshSecret) || connectionInUse(connection) ||
+        secretInUse(freshSecret) || !Game::validName(name))
+      return false;
     // A full lobby may reclaim a seat whose browser is gone (tab switched,
     // QR opened in a second browser). Live seats are never displaced.
     if (game_.lobbyFull()) {
@@ -65,8 +65,7 @@ class Sessions final {
   bool disconnect(uint32_t connection) {
     for (uint8_t i = 0; i < kPlayers; ++i) {
       Seat& state = seats_[i];
-      if (!state.registered || !state.connected || state.connection != connection)
-        continue;
+      if (!state.registered || !state.connected || state.connection != connection) continue;
       state.connected = false;
       state.connection = kNoConnection;
       game_.connected(i, false);
@@ -75,17 +74,16 @@ class Sessions final {
     return false;
   }
 
-  bool resume(uint32_t connection, const uint8_t oldSecret[kTicketBytes],
-              const uint8_t freshSecret[kTicketBytes], SessionTicket& ticket) {
-    if (connection == kNoConnection || !oldSecret || !freshSecret ||
-        !validSecret(oldSecret) || !validSecret(freshSecret) ||
-        secretInUse(freshSecret)) return false;
+  bool resume(uint32_t connection, const uint8_t oldSecret[kTicketBytes], const uint8_t freshSecret[kTicketBytes],
+              SessionTicket& ticket) {
+    if (connection == kNoConnection || !oldSecret || !freshSecret || !validSecret(oldSecret) ||
+        !validSecret(freshSecret) || secretInUse(freshSecret))
+      return false;
     const uint8_t bound = seatOf(connection);
 
     for (uint8_t i = 0; i < kPlayers; ++i) {
       Seat& state = seats_[i];
-      if (!state.registered || !sameSecret(state.secret, oldSecret))
-        continue;
+      if (!state.registered || !sameSecret(state.secret, oldSecret)) continue;
       // One connection never controls two seats; re-proving the own seat on
       // the same socket is harmless and simply rotates the ticket.
       if (bound != kNone && bound != i) return false;
@@ -106,28 +104,24 @@ class Sessions final {
 
   // An exact expected revision makes duplicate WebSocket deliveries idempotent
   // by rejection. Only accepted moves advance the issuing seat's revision.
-  bool submit(uint32_t connection, const uint8_t secret[kTicketBytes],
-              uint32_t expectedRevision, const uint8_t* slots, uint8_t size) {
+  bool submit(uint32_t connection, const uint8_t secret[kTicketBytes], uint32_t expectedRevision, const uint8_t* slots,
+              uint8_t size) {
     const uint8_t seat = authenticate(connection, secret);
-    if (seat == kNone || seats_[seat].revision != expectedRevision ||
-        seats_[seat].revision == UINT32_MAX) return false;
+    if (seat == kNone || seats_[seat].revision != expectedRevision || seats_[seat].revision == UINT32_MAX) return false;
     if (!game_.submit(seat, slots, size)) return false;
     ++seats_[seat].revision;
     return true;
   }
 
-  bool judge(uint32_t connection, const uint8_t secret[kTicketBytes],
-             uint32_t expectedRevision, uint8_t chosen) {
+  bool judge(uint32_t connection, const uint8_t secret[kTicketBytes], uint32_t expectedRevision, uint8_t chosen) {
     const uint8_t seat = authenticate(connection, secret);
-    if (seat == kNone || seats_[seat].revision != expectedRevision ||
-        seats_[seat].revision == UINT32_MAX) return false;
+    if (seat == kNone || seats_[seat].revision != expectedRevision || seats_[seat].revision == UINT32_MAX) return false;
     if (!game_.judge(seat, chosen)) return false;
     ++seats_[seat].revision;
     return true;
   }
 
-  bool leaveLobby(uint32_t connection, const uint8_t secret[kTicketBytes],
-                  uint32_t expectedRevision) {
+  bool leaveLobby(uint32_t connection, const uint8_t secret[kTicketBytes], uint32_t expectedRevision) {
     const uint8_t seat = authenticate(connection, secret);
     if (seat == kNone || seats_[seat].revision != expectedRevision) return false;
     if (!game_.leaveLobby(seat)) return false;
@@ -135,8 +129,7 @@ class Sessions final {
     return true;
   }
 
-  bool privateHand(uint32_t connection, const uint8_t secret[kTicketBytes],
-                   HandView& view, uint32_t& revision) const {
+  bool privateHand(uint32_t connection, const uint8_t secret[kTicketBytes], HandView& view, uint32_t& revision) const {
     const uint8_t seat = authenticate(connection, secret);
     if (seat == kNone || !game_.privateHand(seat, view)) return false;
     revision = seats_[seat].revision;
@@ -151,6 +144,12 @@ class Sessions final {
   bool hostAbort() { return game_.abortRound(); }
   // Seat bindings and tickets survive so every phone lands in the new lobby.
   bool hostRematch() { return game_.rematch(); }
+  // Removes the player and revokes their ticket; they may join a later lobby.
+  bool hostKick(uint8_t seat) {
+    if (seat >= kPlayers || !game_.kick(seat)) return false;
+    seats_[seat] = Seat{};
+    return true;
+  }
 
   // Seat proven by BOTH the live connection and its current ticket.
   uint8_t authenticatedSeat(uint32_t connection, const uint8_t secret[kTicketBytes]) const {
@@ -161,8 +160,7 @@ class Sessions final {
   uint8_t seatOf(uint32_t connection) const {
     if (connection == kNoConnection) return kNone;
     for (uint8_t i = 0; i < kPlayers; ++i)
-      if (seats_[i].registered && seats_[i].connected &&
-          seats_[i].connection == connection) return i;
+      if (seats_[i].registered && seats_[i].connected && seats_[i].connection == connection) return i;
     return kNone;
   }
 
@@ -203,8 +201,7 @@ class Sessions final {
     // match an already-bound seat; do not disclose seat on failed proof.
     for (uint8_t i = 0; i < kPlayers; ++i) {
       const Seat& s = seats_[i];
-      if (s.registered && s.connected && s.connection == connection &&
-          sameSecret(s.secret, secret)) return i;
+      if (s.registered && s.connected && s.connection == connection && sameSecret(s.secret, secret)) return i;
     }
     return kNone;
   }

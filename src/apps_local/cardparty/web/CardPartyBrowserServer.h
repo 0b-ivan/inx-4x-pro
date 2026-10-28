@@ -11,6 +11,7 @@
 #include "../CardPartyCore.h"
 #include "../CardPartySdPack.h"
 #include "../CardPartySessions.h"
+#include "../CardPartyTable.h"
 
 namespace cardparty {
 namespace web {
@@ -53,6 +54,19 @@ class Server final {
   bool hostAbort();
   bool hostClose();
   bool hostRematch();
+  bool hostPause();
+  bool hostUnpause();
+  bool hostAddTime();
+  // Answer to a block: go on without the missing player.
+  bool hostContinue();
+  bool hostKick(uint8_t seat);
+  bool hostEnd();
+  void hostSettings(const Settings& settings);
+  // The Deck behind deck_ holds a new pack: lobby, or a fresh deal between rounds.
+  bool hostDeckChanged();
+  // Category switches changed: tell the phones nothing moved but the counts.
+  void hostRefresh();
+  const Table& table() const { return table_; }
   bool running() const { return running_; }
 
   // Field telemetry for the hardware acceptance run. Contains counts only:
@@ -68,8 +82,6 @@ class Server final {
   // Unauthenticated sockets are closed after this, freeing a bounded slot.
   static constexpr uint32_t kAuthGraceMs = 20000;
   static constexpr uint32_t kDiagLogMs = 15000;
-  // A pending answerer who drops keeps the round open this long.
-  static constexpr uint32_t kTurnGraceMs = 30000;
   // Liveness: writable sockets are pinged; a socket that misses this many
   // pings in a row, or stays unwritable this long, is dropped.
   static constexpr uint32_t kPingMs = 5000;
@@ -96,7 +108,7 @@ class Server final {
   void flushPending();
   void heartbeat(uint32_t now);
   void closeIdleSockets(uint32_t now);
-  void releaseExpiredTurns(uint32_t now);
+  void tickTable();
   void logDiagnostics(uint32_t now);
   void fillSecret(uint8_t secret[kTicketBytes]);
   void releaseDevMode();
@@ -116,7 +128,6 @@ class Server final {
   static constexpr uint8_t kTrackedSlots = 16;
   uint32_t connectedAt_[kTrackedSlots] = {};
   uint32_t lastDiagLog_ = 0;
-  uint32_t heldSince_[kPlayers] = {};
   // State frames are full snapshots: a seat whose socket is not writable
   // keeps one pending frame (2 = welcome with token) and gets the latest
   // state once it drains.
@@ -130,6 +141,7 @@ class Server final {
   Game& game_;
   Sessions& sessions_;
   const Deck& deck_;
+  Table table_{game_};
   Mode mode_ = Mode::ExistingWifi;
   bool running_ = false;
   std::string ssid_, ip_, url_;

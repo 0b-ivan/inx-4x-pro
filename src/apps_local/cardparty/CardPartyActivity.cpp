@@ -48,6 +48,31 @@ std::string packsUrl(const char* file) {
 }
 // The host's category switches, one record per pack, keyed to its CRC.
 constexpr const char* kCardPartySelection = "/games/cardparty/categories.bin";
+// Match rules: 'C','R', format 1, rounds, answer s, extension s, Juror s,
+// auto s, Rando.
+constexpr const char* kCardPartyRules = "/games/cardparty/rules.bin";
+constexpr uint8_t kRulesBytes = 9;
+// What a tap on a rule cycles through.
+constexpr uint8_t kRoundOptions[] = {3, 5, 8, 10, 12, 15, 20, 30};
+constexpr uint8_t kAnswerOptions[] = {0, 30, 45, 60, 90, 120};
+constexpr uint8_t kExtensionOptions[] = {0, 10, 15, 20, 30};
+constexpr uint8_t kJurorOptions[] = {0, 30, 60, 90};
+constexpr uint8_t kAutoOptions[] = {0, 5, 8, 12};
+template <size_t N>
+uint8_t nextOption(uint8_t value, const uint8_t (&options)[N]) {
+  for (size_t i = 0; i < N; ++i)
+    if (options[i] == value) return options[(i + 1) % N];
+  return options[0];
+}
+template <size_t N>
+bool isOption(uint8_t value, const uint8_t (&options)[N]) {
+  for (uint8_t option : options)
+    if (option == value) return true;
+  return false;
+}
+// Rules, menu and players lists.
+constexpr int kListTop = 112;
+constexpr int kListRow = 56;
 constexpr uint8_t kHand = 5;
 // Category list on the X4: one row per category, below the hint line.
 constexpr int kCategoryTop = 112;
@@ -55,8 +80,11 @@ constexpr int kCategoryRow = 36;
 // Deck list: the built-in demo, then one row per pack file.
 constexpr int kDeckTop = 112;
 constexpr int kDeckRow = 56;
-// Setup boxes, top and bottom: [01] hotspot, [02] Wi-Fi, [03] deck, [04] categories.
+// Setup boxes, top and bottom: [01] hotspot, [02] Wi-Fi, [03] deck, then
+// [04] categories and [05] rules side by side.
 constexpr int kBoxTop[] = {145, 240, 335, 430};
+// In-game bottom bar: the main action on the left, [ MENU ] on the right.
+constexpr int kMenuButtonWidth = 130;
 constexpr int kBoxHeight = 85;
 bool hasDatSuffix(const char* name) {
   const size_t n = std::strlen(name);
@@ -87,7 +115,7 @@ const char* phaseLabel(cp::Phase phase) {
     case cp::Phase::Playing:
       return "COLLECTING ANSWERS";
     case cp::Phase::Judging:
-      return "CARD CZAR DECIDES";
+      return "JUROR DECIDES";
     case cp::Phase::Reveal:
       return "ROUND FINISHED";
     case cp::Phase::Finished:
@@ -116,6 +144,24 @@ uint32_t visibleFingerprint(const cp::PublicView& v) {
     for (unsigned char c : p.name) mix(c);
   }
   return h;
+}
+// Pause, block, votes and the clock in 10 s steps: e-ink redraws only then.
+uint32_t tableFingerprint(const cp::Table& t, uint32_t now) {
+  uint32_t h = 2166136261u;
+  auto mix = [&](uint32_t x) { h = (h ^ x) * 16777619u; };
+  mix(static_cast<uint8_t>(t.clock()));
+  mix(t.clock() == cp::Table::Clock::Next ? 0 : (t.left(now) + 9999) / 10000);
+  mix(t.extended() ? 1u : 0u);
+  mix(t.pausedBy());
+  mix(t.blockedOn());
+  mix(t.votes());
+  mix(t.ended() ? 1u : 0u);
+  return h;
+}
+// m:ss rounded up to the next 10 s.
+void coarseTime(uint32_t ms, char* out, size_t size) {
+  const uint32_t tens = (ms + 9999) / 10000;
+  std::snprintf(out, size, "%u:%02u", static_cast<unsigned>(tens / 6), static_cast<unsigned>(tens % 6 * 10));
 }
 }  // namespace
 
@@ -204,6 +250,48 @@ void CardPartyActivity::scanDecks() {
             [](const DeckEntry& a, const DeckEntry& b) { return std::strcmp(a.file, b.file) < 0; });
 }
 void CardPartyActivity::chooseDeck(int row) {
+  if (hosting()) {
+    // A running table switches packs only between rounds; hands are dealt anew.
+    report_[0] = 0;
+    const cp::Phase phase = game_.phase();
+    if (phase != cp::Phase::Lobby && phase != cp::Phase::Reveal) {
+      std::snprintf(report_, sizeof(report_), "PACKS SWITCH ONLY BETWEEN ROUNDS");
+      requestUpdate();
+      return;
+    }
+    bool switched = false;
+    {
+      RenderLock lock(*this);
+      if (row == 0) {
+        sdPack_.clear();
+        packLoaded_ = false;
+        deckPath_[0] = 0;
+        activeDeck_ = cp::demoDeck();
+        enabled_ = 0;
+        switched = true;
+      } else {
+        switched = loadPack(decks_[row - 1].path);
+      }
+      if (switched) {
+        game_.setEnabled(enabled_);
+        const uint8_t seats = phase == cp::Phase::Lobby ? cp::kPlayers : game_.seatedCount();
+        if (!game_.promptsOn() || game_.answersOn() < game_.answersNeeded(seats) || !server_.hostDeckChanged()) {
+          // The old pack is gone already: end the match on the new one.
+          server_.hostEnd();
+          std::snprintf(report_, sizeof(report_), "PACK TOO SMALL FOR THIS TABLE");
+        }
+      }
+    }
+    if (!switched) {
+      std::snprintf(report_, sizeof(report_), "NOT LOADED: %.40s", decks_[row - 1].file);
+      requestUpdate();
+      return;
+    }
+    saveDeckChoice();
+    stage_ = Stage::Menu;
+    requestUpdate();
+    return;
+  }
   {
     // The Game holds pointers into the pack until resetGame() reconfigures it.
     RenderLock lock(*this);
@@ -261,24 +349,116 @@ void CardPartyActivity::saveSelection() {
     LOG_ERR("CARDPARTY", "Could not save category selection");
   }
 }
+// The game always holds the whole pack; the switches filter when it draws.
 void CardPartyActivity::applyCategories() {
   if (!packLoaded_) {
     deckPlayable_ = true;
     return;
   }
-  if (sdPack_.categoryCount() == 0) {
-    activeDeck_ = sdPack_.deck();
-  } else if (filtered_.build(sdPack_, enabled_)) {
-    activeDeck_ = filtered_.deck();
-  } else {
-    LOG_ERR("CARDPARTY", "OOM: category filter, using original demo");
-    activeDeck_ = cp::demoDeck();
+  activeDeck_ = sdPack_.deck();
+  deckPlayable_ = cp::categories::playable(activeDeck_, enabled_, kHand);
+}
+void CardPartyActivity::toggleCategory(uint8_t index) {
+  const uint16_t before = enabled_;
+  enabled_ ^= static_cast<uint16_t>(1u << index);
+  if (!hosting()) {
+    applyCategories();
+    return;
   }
-  deckPlayable_ = cp::categories::playable(activeDeck_, kHand);
+  // A running table keeps its cards; refuse a switch that leaves too few.
+  game_.setEnabled(enabled_);
+  const uint8_t seats = game_.phase() == cp::Phase::Lobby ? cp::kPlayers : game_.seatedCount();
+  if (!game_.promptsOn() || game_.answersOn() < game_.answersNeeded(seats)) {
+    enabled_ = before;
+    game_.setEnabled(before);
+    std::snprintf(report_, sizeof(report_), "TOO FEW CARDS FOR THIS TABLE");
+    return;
+  }
+  report_[0] = 0;
+  server_.hostRefresh();
 }
 void CardPartyActivity::leaveCategories() {
   saveSelection();
-  resetGame();
+  if (hosting()) {
+    stage_ = Stage::Menu;
+    report_[0] = 0;
+  } else {
+    resetGame();
+  }
+  requestUpdate();
+}
+void CardPartyActivity::loadRules() {
+  settings_ = cp::Settings{};
+  uint8_t b[kRulesBytes] = {};
+  HalFile file;
+  if (!Storage.exists(kCardPartyRules) || !Storage.openFileForRead("CARDPARTY", kCardPartyRules, file)) return;
+  const bool read = file.read(b, sizeof(b)) == static_cast<int>(sizeof(b));
+  file.close();
+  if (!read || b[0] != 'C' || b[1] != 'R' || b[2] != 1) return;
+  if (!isOption(b[3], kRoundOptions) || !isOption(b[4], kAnswerOptions) || !isOption(b[5], kExtensionOptions) ||
+      !isOption(b[6], kJurorOptions) || !isOption(b[7], kAutoOptions) || b[8] > 1)
+    return;
+  settings_.rounds = b[3];
+  settings_.answerSecs = b[4];
+  settings_.extensionSecs = b[5];
+  settings_.jurorSecs = b[6];
+  settings_.autoSecs = b[7];
+  settings_.rando = b[8] != 0;
+}
+void CardPartyActivity::saveRules() {
+  const uint8_t b[kRulesBytes] = {'C',
+                                  'R',
+                                  1,
+                                  settings_.rounds,
+                                  settings_.answerSecs,
+                                  settings_.extensionSecs,
+                                  settings_.jurorSecs,
+                                  settings_.autoSecs,
+                                  static_cast<uint8_t>(settings_.rando ? 1 : 0)};
+  HalFile file;
+  if (!Storage.ensureDirectoryExists(kCardPartyDir) || !Storage.openFileForWrite("CARDPARTY", kCardPartyRules, file) ||
+      file.write(b, sizeof(b)) != sizeof(b))
+    LOG_ERR("CARDPARTY", "Could not save match rules");
+}
+void CardPartyActivity::cycleRule(uint8_t row) {
+  switch (row) {
+    case 0:
+      if (hosting() && game_.phase() != cp::Phase::Lobby) {
+        std::snprintf(report_, sizeof(report_), "ROUNDS ARE FIXED ONCE THE GAME RUNS");
+        return;
+      }
+      settings_.rounds = nextOption(settings_.rounds, kRoundOptions);
+      if (hosting()) game_.setRounds(settings_.rounds);
+      break;
+    case 1:
+      settings_.answerSecs = nextOption(settings_.answerSecs, kAnswerOptions);
+      break;
+    case 2:
+      settings_.extensionSecs = nextOption(settings_.extensionSecs, kExtensionOptions);
+      break;
+    case 3:
+      settings_.jurorSecs = nextOption(settings_.jurorSecs, kJurorOptions);
+      break;
+    case 4:
+      settings_.autoSecs = nextOption(settings_.autoSecs, kAutoOptions);
+      break;
+    case 5:
+      settings_.rando = !settings_.rando;
+      break;
+    default:
+      return;
+  }
+  report_[0] = 0;
+  server_.hostSettings(settings_);
+}
+void CardPartyActivity::leaveRules() {
+  saveRules();
+  if (hosting()) {
+    stage_ = Stage::Menu;
+    report_[0] = 0;
+  } else {
+    resetGame();  // rounds and Rando go into the next configure
+  }
   requestUpdate();
 }
 void CardPartyActivity::resetGame() {
@@ -286,7 +466,9 @@ void CardPartyActivity::resetGame() {
   abortArmedAt_ = 0;
   backArmed_ = false;
   backArmedAt_ = 0;
-  const auto rules = cp::Rules{kHand, 10, true};
+  kickArmed_ = cp::kNone;
+  endArmed_ = false;
+  const auto rules = cp::Rules{kHand, settings_.rounds, settings_.rando};
   if (!deckPlayable_) {
     // Switched off too much: stay in setup and say why instead of failing.
     stage_ = Stage::Choice;
@@ -295,6 +477,7 @@ void CardPartyActivity::resetGame() {
     stage_ = Stage::Failed;
     std::snprintf(report_, sizeof(report_), "DECK INVALID");
   } else {
+    game_.setEnabled(enabled_);
     stage_ = Stage::Choice;
     report_[0] = 0;
   }
@@ -304,6 +487,8 @@ void CardPartyActivity::resetGame() {
 void CardPartyActivity::onEnter() {
   Activity::onEnter();
   toybox::ensureFonts(renderer);
+  loadRules();
+  server_.hostSettings(settings_);
   loadConfiguredDeck();
   resetGame();
 #ifdef SIMULATOR
@@ -329,8 +514,15 @@ void CardPartyActivity::onEnter() {
       catalog_.parse(kSample, sizeof(kSample) - 1);
       stage_ = Stage::Remote;
     }
-  } else if (scenario && *scenario && std::strcmp(scenario, "setup") != 0)
+  } else if (scenario && std::strcmp(scenario, "rules") == 0) {
+    stage_ = Stage::Rules;
+  } else if (scenario && *scenario && std::strcmp(scenario, "setup") != 0) {
     start(cp::web::Server::Mode::Hotspot);
+    // Host screens over a running round.
+    if (std::strcmp(scenario, "menu") == 0) stage_ = Stage::Menu;
+    if (std::strcmp(scenario, "players") == 0) stage_ = Stage::Players;
+    if (std::strcmp(scenario, "paused") == 0) server_.hostPause();
+  }
 #endif
   requestUpdate();
 }
@@ -367,7 +559,7 @@ void CardPartyActivity::start(cp::web::Server::Mode mode) {
                   mode == cp::web::Server::Mode::Hotspot ? "HOTSPOT COULD NOT START" : "CONNECT TO WI-FI FIRST");
   } else {
     stage_ = Stage::Hosted;
-    fingerprint_ = visibleFingerprint(game_.publicView());
+    fingerprint_ = visibleFingerprint(game_.publicView()) ^ tableFingerprint(server_.table(), millis());
   }
   requestUpdate();
 }
@@ -529,8 +721,11 @@ void CardPartyActivity::leaveRemote() {
 void CardPartyActivity::handleTap(int x, int y) {
   const int height = renderer.getScreenHeight();
   const int width = renderer.getScreenWidth();
+  const bool bottomBar = y >= height - 90;
+  const int listRow = y >= kListTop ? (y - kListTop) / kListRow : -1;
   if (stage_ == Stage::Choice) {
     const auto inBox = [y](int i) { return y >= kBoxTop[i] && y < kBoxTop[i] + kBoxHeight; };
+    const bool categories = packLoaded_ && sdPack_.categoryCount() > 1;
     if (inBox(0)) {
       start(cp::web::Server::Mode::Hotspot);
     } else if (inBox(1)) {
@@ -540,8 +735,9 @@ void CardPartyActivity::handleTap(int x, int y) {
       stage_ = Stage::Decks;
       report_[0] = 0;
       requestUpdate();
-    } else if (inBox(3) && packLoaded_ && sdPack_.categoryCount() > 1) {
-      stage_ = Stage::Categories;
+    } else if (inBox(3)) {
+      // [04] left half when the pack has categories, [05] otherwise.
+      stage_ = categories && x < width / 2 ? Stage::Categories : Stage::Rules;
       report_[0] = 0;
       requestUpdate();
     }
@@ -551,10 +747,10 @@ void CardPartyActivity::handleTap(int x, int y) {
     const int row = (y - kDeckTop) / kDeckRow;
     if (y >= kDeckTop && row <= deckCount_) {
       chooseDeck(row);
-    } else if (y >= kDeckTop && row == deckCount_ + 1) {
+    } else if (y >= kDeckTop && row == deckCount_ + 1 && !hosting()) {
       openRemote();
-    } else if (y >= height - 90) {
-      stage_ = Stage::Choice;
+    } else if (bottomBar) {
+      stage_ = hosting() ? Stage::Menu : Stage::Choice;
       report_[0] = 0;
       requestUpdate();
     }
@@ -569,7 +765,7 @@ void CardPartyActivity::handleTap(int x, int y) {
       busy_ = "DOWNLOADING THE PACK FROM GITHUB";
       report_[0] = 0;
       requestUpdate();
-    } else if (y >= height - 90) {
+    } else if (bottomBar) {
       leaveRemote();
     }
     return;
@@ -577,11 +773,41 @@ void CardPartyActivity::handleTap(int x, int y) {
   if (stage_ == Stage::Categories) {
     const int row = (y - kCategoryTop) / kCategoryRow;
     if (y >= kCategoryTop && row < sdPack_.categoryCount()) {
-      enabled_ ^= static_cast<uint16_t>(1u << row);
-      applyCategories();
+      toggleCategory(static_cast<uint8_t>(row));
       requestUpdate();
-    } else if (y >= height - 90) {
+    } else if (bottomBar) {
       leaveCategories();
+    }
+    return;
+  }
+  if (stage_ == Stage::Rules) {
+    if (listRow >= 0 && listRow < 6) {
+      cycleRule(static_cast<uint8_t>(listRow));
+      requestUpdate();
+    } else if (bottomBar) {
+      leaveRules();
+    }
+    return;
+  }
+  if (stage_ == Stage::Menu) {
+    if (listRow >= 0 && listRow < 7) {
+      menuTap(static_cast<uint8_t>(listRow));
+    } else if (bottomBar) {
+      stage_ = Stage::Hosted;
+      report_[0] = 0;
+      endArmed_ = false;
+      requestUpdate();
+    }
+    return;
+  }
+  if (stage_ == Stage::Players) {
+    if (listRow >= 0) {
+      playersTap(listRow);
+    } else if (bottomBar) {
+      stage_ = Stage::Menu;
+      report_[0] = 0;
+      kickArmed_ = cp::kNone;
+      requestUpdate();
     }
     return;
   }
@@ -593,21 +819,41 @@ void CardPartyActivity::handleTap(int x, int y) {
     }
     return;
   }
-  if (stage_ != Stage::Hosted || x < 0 || x > width || y < height - 90) return;
+  if (stage_ != Stage::Hosted || x < 0 || x > width || !bottomBar) return;
+  hostAction(x >= width - kGutter - kMenuButtonWidth);
+}
+// The in-game bottom bar. The left action follows the phase; the X4 is king,
+// so it also lifts any pause and answers a block.
+void CardPartyActivity::hostAction(bool menu) {
   const cp::Phase phase = game_.phase();
+  const cp::Table& table = server_.table();
+  abortArmed_ = abortArmed_ && phase == cp::Phase::Judging;
+  backArmed_ = false;
   if (phase == cp::Phase::Finished) {
-    // Same hotspot, password and seats: phones land in the new lobby.
-    abortArmed_ = backArmed_ = false;
-    if (server_.hostRematch())
+    if (menu) {
+      // [ END ]: back to setup; the phones see the session close.
+      releaseNetwork();
+      resetGame();
+    } else if (server_.hostRematch()) {
       report_[0] = 0;
-    else
+    } else {
       std::snprintf(report_, sizeof(report_), "ACTION NOT AVAILABLE");
+    }
+    requestUpdate();
+    return;
+  }
+  if (menu) {
+    stage_ = Stage::Menu;
+    report_[0] = 0;
     requestUpdate();
     return;
   }
   bool accepted = false;
-  backArmed_ = false;
-  if (phase == cp::Phase::Judging) {
+  if (table.pausedBy() != cp::kNone) {
+    accepted = server_.hostUnpause();
+  } else if (table.blockedOn() != cp::kNone) {
+    accepted = server_.hostContinue();
+  } else if (phase == cp::Phase::Judging) {
     const uint32_t now = millis();
     if (!abortArmed_ || static_cast<uint32_t>(now - abortArmedAt_) > 7000u) {
       abortArmed_ = true;
@@ -618,22 +864,108 @@ void CardPartyActivity::handleTap(int x, int y) {
     }
     abortArmed_ = false;
     accepted = server_.hostAbort();
-  } else {
-    abortArmed_ = false;
-    if (phase == cp::Phase::Lobby)
-      accepted = server_.hostStart();
-    else if (phase == cp::Phase::Playing)
-      accepted = server_.hostClose();
-    else if (phase == cp::Phase::Reveal)
-      accepted = server_.hostNext();
+  } else if (phase == cp::Phase::Lobby) {
+    accepted = server_.hostStart();
+  } else if (phase == cp::Phase::Playing) {
+    accepted = server_.hostClose();
+  } else if (phase == cp::Phase::Reveal) {
+    accepted = server_.hostNext();
   }
   if (!accepted) {
     std::snprintf(report_, sizeof(report_),
                   phase == cp::Phase::Lobby     ? "NEED 3 CONNECTED PLAYERS"
                   : phase == cp::Phase::Playing ? "NO ANSWERS RECEIVED YET"
                                                 : "ACTION NOT AVAILABLE");
-  } else
+  } else {
     report_[0] = 0;
+  }
+  requestUpdate();
+}
+// Menu rows: 0 pause, 1 +time, 2 rules, 3 categories, 4 deck, 5 players, 6 end.
+void CardPartyActivity::menuTap(uint8_t row) {
+  const cp::Table& table = server_.table();
+  const cp::Phase phase = game_.phase();
+  const bool running = phase == cp::Phase::Playing || phase == cp::Phase::Judging || phase == cp::Phase::Reveal;
+  report_[0] = 0;
+  if (row != 6) endArmed_ = false;
+  switch (row) {
+    case 0:
+      if (table.pausedBy() != cp::kNone)
+        server_.hostUnpause();
+      else if (!running || !server_.hostPause())
+        std::snprintf(report_, sizeof(report_), "NOTHING TO PAUSE");
+      break;
+    case 1:
+      if (!server_.hostAddTime()) std::snprintf(report_, sizeof(report_), "NO CLOCK RUNNING");
+      break;
+    case 2:
+      stage_ = Stage::Rules;
+      break;
+    case 3:
+      if (packLoaded_ && sdPack_.categoryCount() > 1)
+        stage_ = Stage::Categories;
+      else
+        std::snprintf(report_, sizeof(report_), "THIS DECK HAS NO CATEGORIES");
+      break;
+    case 4:
+      scanDecks();
+      stage_ = Stage::Decks;
+      break;
+    case 5:
+      kickArmed_ = cp::kNone;
+      stage_ = Stage::Players;
+      break;
+    case 6: {
+      const uint32_t now = millis();
+      if (!running) {
+        std::snprintf(report_, sizeof(report_), "NO MATCH RUNNING");
+      } else if (!endArmed_ || static_cast<uint32_t>(now - endArmedAt_) > 7000u) {
+        endArmed_ = true;
+        endArmedAt_ = now;
+        std::snprintf(report_, sizeof(report_), "TAP AGAIN TO END THE GAME FOR EVERYONE");
+      } else {
+        endArmed_ = false;
+        server_.hostEnd();
+        stage_ = Stage::Hosted;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  requestUpdate();
+}
+// Players list: an optional "go on without" row first while blocked, then one
+// row per seat. Removing takes a second tap.
+void CardPartyActivity::playersTap(int row) {
+  const cp::Table& table = server_.table();
+  const cp::PublicView v = game_.publicView();
+  if (table.blockedOn() != cp::kNone) {
+    if (row == 0) {
+      server_.hostContinue();
+      kickArmed_ = cp::kNone;
+      requestUpdate();
+      return;
+    }
+    --row;
+  }
+  uint8_t seat = cp::kNone;
+  for (uint8_t i = 0, n = 0; i < cp::kPlayers; ++i)
+    if (v.players[i].seated && n++ == row) seat = i;
+  if (seat == cp::kNone) return;
+  const uint32_t now = millis();
+  if (kickArmed_ != seat || static_cast<uint32_t>(now - kickArmedAt_) > 7000u) {
+    kickArmed_ = seat;
+    kickArmedAt_ = now;
+    std::snprintf(report_, sizeof(report_), "TAP AGAIN TO REMOVE %.40s", v.players[seat].name);
+  } else {
+    kickArmed_ = cp::kNone;
+    if (server_.hostKick(seat))
+      std::snprintf(report_, sizeof(report_), "REMOVED %.40s", v.players[seat].name);
+    else
+      std::snprintf(report_, sizeof(report_), "ACTION NOT AVAILABLE");
+    if (game_.phase() == cp::Phase::Finished) stage_ = Stage::Hosted;
+  }
   requestUpdate();
 }
 void CardPartyActivity::loop() {
@@ -646,9 +978,21 @@ void CardPartyActivity::loop() {
       leaveCategories();
       return;
     }
-    if (stage_ == Stage::Decks) {
-      stage_ = Stage::Choice;
+    if (stage_ == Stage::Rules) {
+      leaveRules();
+      return;
+    }
+    if (stage_ == Stage::Decks || stage_ == Stage::Players) {
+      stage_ = hosting() ? Stage::Menu : Stage::Choice;
       report_[0] = 0;
+      kickArmed_ = cp::kNone;
+      requestUpdate();
+      return;
+    }
+    if (stage_ == Stage::Menu) {
+      stage_ = Stage::Hosted;
+      report_[0] = 0;
+      endArmed_ = false;
       requestUpdate();
       return;
     }
@@ -677,7 +1021,7 @@ void CardPartyActivity::loop() {
   if (server_.running()) {
     RenderLock lock(*this);
     server_.loop();
-    const uint32_t next = visibleFingerprint(game_.publicView());
+    const uint32_t next = visibleFingerprint(game_.publicView()) ^ tableFingerprint(server_.table(), millis());
     if (next != fingerprint_) {
       fingerprint_ = next;
       requestUpdate();
@@ -712,15 +1056,27 @@ void CardPartyActivity::drawChoice() {
   box(1, "[02] EXISTING WI-FI", "PICK A NETWORK / SAME AS PLAYERS");
   box(2, "[03] DECK", packLoaded_ ? sdPack_.title() : "BUILT-IN DEMO / TAP TO CHOOSE A PACK");
   // A single category has nothing to switch: off would only empty the deck.
+  char rules[64] = {};
   if (packLoaded_ && sdPack_.categoryCount() > 1) {
     int on = 0;
     for (uint8_t i = 0; i < sdPack_.categoryCount(); ++i)
       if (enabled_ & (1u << i)) ++on;
-    char summary[64] = {};
-    std::snprintf(summary, sizeof(summary), "%d OF %u ON / %u PROMPTS / %u ANSWERS", on,
-                  static_cast<unsigned>(sdPack_.categoryCount()), static_cast<unsigned>(activeDeck_.promptsCount),
-                  static_cast<unsigned>(activeDeck_.answersCount));
-    box(3, "[04] CATEGORIES", summary);
+    const int half = (textWidth - 12) / 2;
+    const auto halfBox = [&](int x, const char* title, const char* detail) {
+      renderer.drawRect(x, kBoxTop[3], half, kBoxHeight, 2, true);
+      renderer.drawText(UI_10_FONT_ID, x + 14, kBoxTop[3] + 21, title, true);
+      drawWrapped(SMALL_FONT_ID, detail, x + 14, kBoxTop[3] + 53, half - 28, 22, 1);
+    };
+    char summary[48] = {};
+    std::snprintf(summary, sizeof(summary), "%d OF %u ON", on, static_cast<unsigned>(sdPack_.categoryCount()));
+    halfBox(kGutter, "[04] CATEGORIES", summary);
+    std::snprintf(rules, sizeof(rules), "%u ROUNDS / %s", settings_.rounds,
+                  settings_.answerSecs ? "TIMER" : "NO TIMER");
+    halfBox(kGutter + half + 12, "[05] RULES", rules);
+  } else {
+    std::snprintf(rules, sizeof(rules), "%u ROUNDS / %s / AUTO %s", settings_.rounds,
+                  settings_.answerSecs ? "TIMER" : "NO TIMER", settings_.autoSecs ? "ON" : "OFF");
+    box(3, "[05] RULES", rules);
   }
   if (report_[0]) drawWrapped(SMALL_FONT_ID, report_, kGutter, 535, textWidth, 24, 2);
   if (packLoaded_) {
@@ -760,9 +1116,11 @@ void CardPartyActivity::drawDecks() {
     renderer.fillRect(kGutter, y + kDeckRow - 2, textWidth, 1, true);
   }
   const int download = kDeckTop + (deckCount_ + 1) * kDeckRow;
-  renderer.drawText(UI_10_FONT_ID, kGutter, download + 4, "[+] Download from GitHub", true);
-  renderer.drawText(SMALL_FONT_ID, kGutter + 34, download + 30, "NEEDS WI-FI / PUBLIC CAW PACKS", true);
-  renderer.fillRect(kGutter, download + kDeckRow - 2, textWidth, 1, true);
+  if (!hosting()) {  // the radio belongs to the party while it runs
+    renderer.drawText(UI_10_FONT_ID, kGutter, download + 4, "[+] Download from GitHub", true);
+    renderer.drawText(SMALL_FONT_ID, kGutter + 34, download + 30, "NEEDS WI-FI / PUBLIC CAW PACKS", true);
+    renderer.fillRect(kGutter, download + kDeckRow - 2, textWidth, 1, true);
+  }
   if (deckCount_ == 0)
     drawWrapped(SMALL_FONT_ID, "NO PACKS ON THE CARD YET. DOWNLOAD ONE, OR COPY .DAT FILES TO /games/cardparty/packs/",
                 kGutter, download + kDeckRow + 16, textWidth, 24, 3);
@@ -822,14 +1180,16 @@ void CardPartyActivity::drawCategories() {
   const int bottom = renderer.getScreenHeight() - 72;
   renderer.fillRect(kGutter, bottom - 4, width - 2 * kGutter, 2, true);
   renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, "[ DONE ]", true);
-  char status[80] = {};
-  if (deckPlayable_)
-    std::snprintf(status, sizeof(status), "%u PROMPTS / %u ANSWERS IN PLAY",
-                  static_cast<unsigned>(activeDeck_.promptsCount), static_cast<unsigned>(activeDeck_.answersCount));
+  char status[sizeof(report_)] = {};
+  const unsigned prompts = cp::categories::promptsIn(activeDeck_, enabled_);
+  const unsigned answers = cp::categories::answersIn(activeDeck_, enabled_);
+  if (report_[0])
+    std::snprintf(status, sizeof(status), "%s", report_);
+  else if (deckPlayable_ || hosting())
+    std::snprintf(status, sizeof(status), "%u PROMPTS / %u ANSWERS IN PLAY", prompts, answers);
   else
-    std::snprintf(status, sizeof(status), "TOO FEW CARDS: %u OF %u ANSWERS",
-                  static_cast<unsigned>(activeDeck_.answersCount),
-                  static_cast<unsigned>(cp::categories::requiredAnswers(activeDeck_, kHand)));
+    std::snprintf(status, sizeof(status), "TOO FEW CARDS: %u OF %u ANSWERS", answers,
+                  static_cast<unsigned>(cp::categories::requiredAnswers(activeDeck_, enabled_, kHand)));
   renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, status, true);
 }
 void CardPartyActivity::drawLobby() {
@@ -874,8 +1234,9 @@ void CardPartyActivity::drawLobby() {
   }
   const int bottom = renderer.getScreenHeight() - 72;
   renderer.fillRect(kGutter, bottom - 4, width - 2 * kGutter, 2, true);
-  renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, connected >= 3 ? "[ START GAME ]" : "[ WAITING FOR 3 PLAYERS ]",
-                    true);
+  renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, connected >= 3 ? "[ START GAME ]" : "[ WAITING FOR 3 ]", true);
+  renderer.drawText(UI_10_FONT_ID, width - kGutter - renderer.getTextWidth(UI_10_FONT_ID, "[ MENU ]"), bottom + 8,
+                    "[ MENU ]", true);
   if (report_[0]) renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, report_, true);
   drawDiagnostics();
 }
@@ -883,7 +1244,7 @@ void CardPartyActivity::drawLobby() {
 // Returns the y below the last row. With draw=false it only counts rows, so a
 // caller can pick the largest font that fits.
 int CardPartyActivity::drawWrapped(int fontId, const char* text, int x, int y, int maxWidth, int lineStep, int maxRows,
-                                   bool draw) {
+                                   bool draw, bool black) {
   struct Context {
     GfxRenderer& renderer;
     int font;
@@ -896,23 +1257,52 @@ int CardPartyActivity::drawWrapped(int fontId, const char* text, int x, int y, i
   int row = 0;
   while (row < maxRows && cp::nextTextLine(text, line, sizeof(line), maxWidth, measure, &context)) {
     if (draw && row == maxRows - 1 && *text) cp::markTextTruncated(line, sizeof(line), maxWidth, measure, &context);
-    if (draw) renderer.drawText(fontId, x, y + row * lineStep, line, true);
+    if (draw) renderer.drawText(fontId, x, y + row * lineStep, line, black);
     ++row;
   }
   return y + row * lineStep;
 }
 void CardPartyActivity::drawGame() {
   const cp::PublicView v = game_.publicView();
-  drawBase(phaseLabel(v.phase));
+  if (v.phase == cp::Phase::Finished) {
+    drawFinal();
+    return;
+  }
+  const cp::Table& table = server_.table();
+  const uint8_t pausedBy = table.pausedBy(), blockedOn = table.blockedOn();
+  drawBase(pausedBy != cp::kNone ? "PAUSED" : blockedOn != cp::kNone ? "WAITING" : phaseLabel(v.phase));
   const int width = renderer.getScreenWidth();
   char status[96] = {};
-  std::snprintf(status, sizeof(status), "ROUND %02u / 10", v.round);
+  std::snprintf(status, sizeof(status), "ROUND %02u / %02u", v.round, game_.rules().rounds);
   renderer.drawText(SMALL_FONT_ID, kGutter, 86, status, true);
+  // Clock top right, in 10 s steps: e-ink does not tick every second.
+  if (table.clock() != cp::Table::Clock::None) {
+    char left[16] = {};
+    coarseTime(table.left(millis()), left, sizeof(left));
+    std::snprintf(status, sizeof(status), "%s %s%s",
+                  table.clock() == cp::Table::Clock::Answers ? "TIME"
+                  : table.clock() == cp::Table::Clock::Juror ? "JUROR"
+                                                             : "NEXT",
+                  left, table.extended() ? " +" : "");
+    renderer.drawText(UI_10_FONT_ID, width - kGutter - renderer.getTextWidth(UI_10_FONT_ID, status), 82, status, true);
+  }
   const char* czar = v.czar < cp::kPlayers ? v.players[v.czar].name : "-";
-  std::snprintf(status, sizeof(status), "CZAR: %.22s", czar);
+  std::snprintf(status, sizeof(status), "JUROR: %.22s", czar);
   renderer.drawText(SMALL_FONT_ID, kGutter, 110, status, true);
-  renderer.fillRect(kGutter, 140, width - 2 * kGutter, 1, true);
-  renderer.drawText(SMALL_FONT_ID, kGutter, 156, "/// PROMPT", true);
+  if (pausedBy != cp::kNone || blockedOn != cp::kNone) {
+    // Inverted bar: who stopped the table, readable across the room.
+    char banner[64] = {};
+    if (pausedBy != cp::kNone)
+      std::snprintf(banner, sizeof(banner), "PAUSED BY %.30s",
+                    pausedBy == cp::kHost ? "THE HOST" : v.players[pausedBy].name);
+    else
+      std::snprintf(banner, sizeof(banner), "WAITING FOR %.30s", v.players[blockedOn].name);
+    renderer.fillRect(kGutter, 136, width - 2 * kGutter, 36, true);
+    drawWrapped(UI_10_FONT_ID, banner, kGutter + 10, 142, width - 2 * kGutter - 20, 26, 1, true, false);
+  } else {
+    renderer.fillRect(kGutter, 140, width - 2 * kGutter, 1, true);
+    renderer.drawText(SMALL_FONT_ID, kGutter, 156, "/// PROMPT", true);
+  }
   const cp::Deck& deck = activeDeck_;
   const int textWidth = width - 2 * kGutter;
   if (v.prompt < deck.promptsCount) {
@@ -980,17 +1370,214 @@ void CardPartyActivity::drawGame() {
   }
   const int bottom = renderer.getScreenHeight() - 72;
   renderer.fillRect(kGutter, bottom - 4, width - 2 * kGutter, 2, true);
-  const char* action = "[ WAITING ]";
-  if (v.phase == cp::Phase::Playing) action = "[ CLOSE SUBMISSIONS ]";
-  if (v.phase == cp::Phase::Judging) action = "[ ABORT STALLED ROUND ]";
-  if (v.phase == cp::Phase::Reveal) action = "[ NEXT ROUND ]";
-  if (v.phase == cp::Phase::Finished) action = "[ REMATCH ]";
+  char action[48] = "[ WAITING ]";
+  if (v.phase == cp::Phase::Playing) std::snprintf(action, sizeof(action), "[ CLOSE ANSWERS ]");
+  if (v.phase == cp::Phase::Judging) std::snprintf(action, sizeof(action), "[ ABORT ROUND ]");
+  if (v.phase == cp::Phase::Reveal) std::snprintf(action, sizeof(action), "[ NEXT ROUND ]");
+  if (blockedOn != cp::kNone) std::snprintf(action, sizeof(action), "[ GO ON WITHOUT ]");
+  if (pausedBy != cp::kNone) std::snprintf(action, sizeof(action), "[ CONTINUE ]");
   renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, action, true);
-  if (report_[0])
-    renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, report_, true);
-  else if (v.phase == cp::Phase::Finished)
-    renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, "BACK x2 = END SESSION", true);
+  renderer.drawText(UI_10_FONT_ID, width - kGutter - renderer.getTextWidth(UI_10_FONT_ID, "[ MENU ]"), bottom + 8,
+                    "[ MENU ]", true);
+  if (report_[0]) renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, report_, true);
   drawDiagnostics();
+}
+void CardPartyActivity::drawFinal() {
+  const cp::PublicView v = game_.publicView();
+  const cp::Table& table = server_.table();
+  drawBase(table.ended() ? "ENDED BY THE HOST" : "GAME OVER");
+  const int width = renderer.getScreenWidth();
+  const int textWidth = width - 2 * kGutter;
+  uint16_t best = 0;
+  uint8_t seated = 0;
+  for (const auto& p : v.players)
+    if (p.seated) {
+      ++seated;
+      if (p.points > best) best = p.points;
+    }
+  uint8_t order[cp::kPlayers] = {};
+  bool listed[cp::kPlayers] = {};
+  for (uint8_t rank = 0; rank < seated; ++rank) {
+    uint8_t next = cp::kNone;
+    for (uint8_t i = 0; i < cp::kPlayers; ++i)
+      if (v.players[i].seated && !listed[i] && (next == cp::kNone || v.players[i].points > v.players[next].points))
+        next = i;
+    listed[next] = true;
+    order[rank] = next;
+  }
+  const auto crown = [&](int cx, int top, int half, bool black) {
+    const int xs[] = {cx - half, cx - half, cx - half / 2, cx, cx + half / 2, cx + half, cx + half};
+    const int ys[] = {top + half * 6 / 5,   top + half * 4 / 15, top + half * 11 / 15, top,
+                      top + half * 11 / 15, top + half * 4 / 15, top + half * 6 / 5};
+    renderer.fillPolygon(xs, ys, 7, black);
+  };
+  char line[64] = {};
+  int y = 92;
+  // Inverted winner block, readable across the room: a crown over every
+  // leader (ties share it), then the standings as bars.
+  uint8_t leaders = 0;
+  for (uint8_t r = 0; r < seated; ++r)
+    if (v.players[order[r]].points == best) ++leaders;
+  const int shown = std::min<int>(leaders, 3);
+  const int block = 140 + 34 * (shown - 1);
+  renderer.fillRect(kGutter, y, textWidth, block, true);
+  crown(width / 2, y + 14, 26, false);
+  for (int r = 0; r < shown; ++r) {
+    const auto& p = v.players[order[r]];
+    const int nameWidth = std::min(renderer.getTextWidth(UI_12_FONT_ID, p.name), textWidth - 20);
+    renderer.drawText(UI_12_FONT_ID, width / 2 - nameWidth / 2, y + 58 + r * 34, p.name, false);
+  }
+  std::snprintf(line, sizeof(line), "%u POINTS", static_cast<unsigned>(best));
+  renderer.drawText(SMALL_FONT_ID, width / 2 - renderer.getTextWidth(SMALL_FONT_ID, line) / 2, y + block - 30, line,
+                    false);
+  y += block + 22;
+  const int barMax = textWidth - 150;
+  for (uint8_t r = 0; r < seated; ++r) {
+    const auto& p = v.players[order[r]];
+    renderer.drawText(SMALL_FONT_ID, kGutter, y + 4, p.name, true);
+    const int bar = best ? barMax * p.points / best : 0;
+    renderer.fillRect(kGutter + 110, y + 4, std::max(bar, 2), 18, true);
+    std::snprintf(line, sizeof(line), "%u", static_cast<unsigned>(p.points));
+    renderer.drawText(SMALL_FONT_ID, width - kGutter - renderer.getTextWidth(SMALL_FONT_ID, line), y + 4, line, true);
+    y += 32;
+  }
+  const int bottom = renderer.getScreenHeight() - 72;
+  std::snprintf(line, sizeof(line), "%u OF %u WANT ANOTHER GAME", static_cast<unsigned>(table.votes()),
+                static_cast<unsigned>(seated));
+  renderer.drawText(SMALL_FONT_ID, kGutter, bottom - 30, line, true);
+  renderer.fillRect(kGutter, bottom - 4, textWidth, 2, true);
+  renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, "[ AGAIN ]", true);
+  renderer.drawText(UI_10_FONT_ID, width - kGutter - renderer.getTextWidth(UI_10_FONT_ID, "[ END ]"), bottom + 8,
+                    "[ END ]", true);
+  if (report_[0]) renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, report_, true);
+}
+void CardPartyActivity::drawRules() {
+  drawBase("RULES");
+  const int width = renderer.getScreenWidth();
+  const int textWidth = width - 2 * kGutter;
+  const bool fixedRounds = hosting() && game_.phase() != cp::Phase::Lobby;
+  renderer.drawText(SMALL_FONT_ID, kGutter, 82,
+                    fixedRounds ? "TAP TO CHANGE  /  ROUNDS FIXED WHILE PLAYING" : "TAP TO CHANGE", true);
+  const auto secs = [](uint8_t value, char* out, size_t size) {
+    if (value)
+      std::snprintf(out, size, "%u S", static_cast<unsigned>(value));
+    else
+      std::snprintf(out, size, "OFF");
+  };
+  char values[6][12] = {};
+  std::snprintf(values[0], sizeof(values[0]), "%u", static_cast<unsigned>(settings_.rounds));
+  secs(settings_.answerSecs, values[1], sizeof(values[1]));
+  secs(settings_.extensionSecs, values[2], sizeof(values[2]));
+  secs(settings_.jurorSecs, values[3], sizeof(values[3]));
+  secs(settings_.autoSecs, values[4], sizeof(values[4]));
+  std::snprintf(values[5], sizeof(values[5]), "%s", settings_.rando ? "ON" : "OFF");
+  static constexpr const char* kLabels[6] = {"ROUNDS",      "ANSWER TIMER",    "EXTENSION",
+                                             "JUROR TIMER", "AUTO NEXT ROUND", "RANDO CARDRISSIAN"};
+  static constexpr const char* kDetails[6] = {"PER GAME",
+                                              "PER ROUND, FROM THE NEXT ROUND",
+                                              "ONCE, WHEN ANSWERS ARE MISSING",
+                                              "RUNS OUT: ROUND ENDS WITHOUT POINTS",
+                                              "AFTER THE REVEAL",
+                                              "A RANDOM ANSWER JOINS EVERY ROUND"};
+  for (int row = 0; row < 6; ++row) {
+    const int y = kListTop + row * kListRow;
+    renderer.drawText(UI_10_FONT_ID, kGutter, y + 4, kLabels[row], true);
+    renderer.drawText(UI_10_FONT_ID, width - kGutter - renderer.getTextWidth(UI_10_FONT_ID, values[row]), y + 4,
+                      values[row], true);
+    renderer.drawText(SMALL_FONT_ID, kGutter, y + 30, kDetails[row], true);
+    renderer.fillRect(kGutter, y + kListRow - 2, textWidth, 1, true);
+  }
+  const int bottom = renderer.getScreenHeight() - 72;
+  renderer.fillRect(kGutter, bottom - 4, textWidth, 2, true);
+  renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, "[ DONE ]", true);
+  if (report_[0]) renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, report_, true);
+}
+void CardPartyActivity::drawMenu() {
+  drawBase("HOST MENU");
+  const int width = renderer.getScreenWidth();
+  const int textWidth = width - 2 * kGutter;
+  const cp::Table& table = server_.table();
+  const cp::PublicView v = game_.publicView();
+  char details[7][64] = {};
+  const char* titles[7] = {"PAUSE", "+ TIME", "RULES", "CATEGORIES", "DECK", "PLAYERS", "END GAME"};
+  if (table.pausedBy() != cp::kNone) {
+    titles[0] = "CONTINUE";
+    std::snprintf(details[0], sizeof(details[0]), "PAUSED BY %.30s",
+                  table.pausedBy() == cp::kHost ? "THE HOST" : v.players[table.pausedBy()].name);
+  } else {
+    std::snprintf(details[0], sizeof(details[0]), "STOPS CLOCKS AND MOVES FOR EVERYONE");
+  }
+  const bool clock = table.clock() == cp::Table::Clock::Answers || table.clock() == cp::Table::Clock::Juror;
+  std::snprintf(details[1], sizeof(details[1]), "%s", clock ? "MORE TIME ON THE RUNNING CLOCK" : "NO CLOCK RUNNING");
+  std::snprintf(details[2], sizeof(details[2]), "%u ROUNDS / TIMER %s / AUTO %s", settings_.rounds,
+                settings_.answerSecs ? "ON" : "OFF", settings_.autoSecs ? "ON" : "OFF");
+  if (packLoaded_ && sdPack_.categoryCount() > 1) {
+    int on = 0;
+    for (uint8_t i = 0; i < sdPack_.categoryCount(); ++i)
+      if (enabled_ & (1u << i)) ++on;
+    std::snprintf(details[3], sizeof(details[3]), "%d OF %u ON, FROM THE NEXT CARD", on,
+                  static_cast<unsigned>(sdPack_.categoryCount()));
+  } else {
+    std::snprintf(details[3], sizeof(details[3]), "THIS DECK HAS NONE");
+  }
+  std::snprintf(details[4], sizeof(details[4]), "%.36s / BETWEEN ROUNDS",
+                packLoaded_ ? sdPack_.title() : "BUILT-IN DEMO");
+  uint8_t seated = 0, offline = 0;
+  for (const auto& p : v.players)
+    if (p.seated) {
+      ++seated;
+      if (!p.connected) ++offline;
+    }
+  std::snprintf(details[5], sizeof(details[5]), "%u PLAYING / %u OFFLINE%s", static_cast<unsigned>(seated),
+                static_cast<unsigned>(offline), table.blockedOn() != cp::kNone ? " / WAITING" : "");
+  std::snprintf(details[6], sizeof(details[6]), "FINAL STANDINGS FOR EVERYONE, TAP TWICE");
+  for (int row = 0; row < 7; ++row) {
+    const int y = kListTop + row * kListRow;
+    renderer.drawText(UI_10_FONT_ID, kGutter, y + 4, titles[row], true);
+    drawWrapped(SMALL_FONT_ID, details[row], kGutter, y + 30, textWidth, 22, 1);
+    renderer.fillRect(kGutter, y + kListRow - 2, textWidth, 1, true);
+  }
+  const int bottom = renderer.getScreenHeight() - 72;
+  renderer.fillRect(kGutter, bottom - 4, textWidth, 2, true);
+  renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, "[ BACK TO GAME ]", true);
+  if (report_[0]) renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, report_, true);
+}
+void CardPartyActivity::drawPlayers() {
+  drawBase("PLAYERS");
+  const int width = renderer.getScreenWidth();
+  const int textWidth = width - 2 * kGutter;
+  const cp::Table& table = server_.table();
+  const cp::PublicView v = game_.publicView();
+  renderer.drawText(SMALL_FONT_ID, kGutter, 82, "TAP TWICE TO REMOVE A PLAYER", true);
+  int row = 0;
+  char line[96] = {};
+  if (table.blockedOn() != cp::kNone) {
+    const int y = kListTop;
+    std::snprintf(line, sizeof(line), "[ GO ON WITHOUT %.24s ]", v.players[table.blockedOn()].name);
+    drawWrapped(UI_10_FONT_ID, line, kGutter, y + 4, textWidth, 26, 1);
+    renderer.drawText(SMALL_FONT_ID, kGutter, y + 30, "NO CONNECTION FOR 15 S", true);
+    renderer.fillRect(kGutter, y + kListRow - 2, textWidth, 2, true);
+    ++row;
+  }
+  for (uint8_t i = 0; i < cp::kPlayers; ++i) {
+    const auto& p = v.players[i];
+    if (!p.seated) continue;
+    const int y = kListTop + row * kListRow;
+    renderer.drawText(UI_10_FONT_ID, kGutter, y + 4, p.name, true);
+    if (kickArmed_ == i)
+      std::snprintf(line, sizeof(line), "TAP AGAIN TO REMOVE");
+    else
+      std::snprintf(line, sizeof(line), "%u PT / %s%s%s%s", static_cast<unsigned>(p.points),
+                    p.connected ? "ONLINE" : "OFFLINE", i == v.czar ? " / JUROR" : "",
+                    table.pausedBy() == i ? " / PAUSED" : "", table.voted(i) ? " / WANTS AGAIN" : "");
+    renderer.drawText(SMALL_FONT_ID, kGutter, y + 30, line, true);
+    renderer.fillRect(kGutter, y + kListRow - 2, textWidth, 1, true);
+    ++row;
+  }
+  const int bottom = renderer.getScreenHeight() - 72;
+  renderer.fillRect(kGutter, bottom - 4, textWidth, 2, true);
+  renderer.drawText(UI_10_FONT_ID, kGutter, bottom + 8, "[ DONE ]", true);
+  if (report_[0]) renderer.drawText(SMALL_FONT_ID, kGutter, bottom + 42, report_, true);
 }
 bool CardPartyActivity::matchInProgress() const {
   if (game_.phase() != cp::Phase::Lobby) return true;
@@ -1029,6 +1616,15 @@ void CardPartyActivity::render(RenderLock&&) {
       break;
     case Stage::Categories:
       drawCategories();
+      break;
+    case Stage::Rules:
+      drawRules();
+      break;
+    case Stage::Menu:
+      drawMenu();
+      break;
+    case Stage::Players:
+      drawPlayers();
       break;
     case Stage::Hosted:
       if (game_.phase() == cp::Phase::Lobby)
