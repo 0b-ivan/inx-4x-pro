@@ -1,6 +1,7 @@
 #include "CardPartyBrowserServer.h"
 
 #include "CardPartyProtocol.h"
+#include "../CardPartySentence.h"
 
 #include <cstdio>
 
@@ -276,6 +277,7 @@ void Server::closeIdleSockets(uint32_t now) {
 }
 // Clocks, auto mode and the wait for a missing player.
 void Server::tickTable() {
+  captureHistory();
   if (table_.tick(millis())) publishAll();
 }
 Server::Diagnostics Server::diagnostics() const {
@@ -544,7 +546,41 @@ void Server::sendState(uint8_t seat, bool welcome) {
     ++sendFailures_;
   }
 }
+void Server::captureHistory() {
+  if (!history_) return;
+  const PublicView v = game_.publicView();
+  if ((v.phase == Phase::Reveal || v.phase == Phase::Finished) &&
+      v.round && v.round != recordedRound_) {
+    recordedRound_ = v.round;
+    if (v.winner < kPlayers && playerIds_[v.winner] &&
+        v.selected < v.plays && v.prompt < deck_.promptsCount) {
+      const char* answers[kPickMax] = {};
+      for (uint8_t i = 0; i < v.pick; ++i) {
+        const uint16_t card = v.pile[v.selected].cards[i];
+        answers[i] = card < deck_.answersCount ? deck_.answers[card].text : "";
+      }
+      char line[history::kSentenceBytes + 1] = {};
+      sentence::compose(deck_.prompts[v.prompt].text,answers,v.pick,line,sizeof(line));
+      history_->roundWon(playerIds_[v.winner],line,++identitySequence_);
+    }
+  }
+  if (v.phase == Phase::Finished && !recordedFinal_) {
+    recordedFinal_ = true;
+    uint16_t best = 0;
+    bool found = false;
+    for (uint8_t i = 0; i < kPlayers; ++i) {
+      if (!v.players[i].seated || !playerIds_[i]) continue;
+      if (!found || v.players[i].points > best) best = v.players[i].points;
+      found = true;
+    }
+    if (found)
+      for (uint8_t i = 0; i < kPlayers; ++i)
+        if (v.players[i].seated && playerIds_[i] && v.players[i].points == best)
+          history_->gameWon(playerIds_[i]);
+  }
+}
 void Server::publishAll() {
+  captureHistory();
   for (uint8_t i = 0; i < kPlayers; ++i)
     if (socket_[i] != kNoConnection) sendState(i, false);
 }
@@ -644,11 +680,19 @@ void Server::onMessage(uint8_t client, const uint8_t* bytes, size_t size) {
 // the clock of a new phase; publishAll() then sends one frame per seat.
 bool Server::hostStart() {
   if (!sessions_.hostStart()) return false;
+  recordedRound_ = 0;
+  recordedFinal_ = false;
+  if (history_) {
+    const PublicView v = game_.publicView();
+    for (uint8_t i = 0; i < kPlayers; ++i)
+      if (v.players[i].seated && playerIds_[i]) history_->played(playerIds_[i]);
+  }
   table_.tick(millis());
   publishAll();
   return true;
 }
 bool Server::hostNext() {
+  captureHistory();
   if (!sessions_.hostNext()) return false;
   table_.tick(millis());
   publishAll();
@@ -667,7 +711,10 @@ bool Server::hostAbort() {
   return true;
 }
 bool Server::hostRematch() {
+  captureHistory();
   if (!sessions_.hostRematch()) return false;
+  recordedRound_ = 0;
+  recordedFinal_ = false;
   table_.tick(millis());
   publishAll();
   return true;
@@ -714,6 +761,7 @@ bool Server::hostKick(uint8_t seat) {
   return true;
 }
 bool Server::hostEnd() {
+  captureHistory();
   if (!game_.endGame()) return false;
   table_.endedByHost();
   table_.tick(millis());
