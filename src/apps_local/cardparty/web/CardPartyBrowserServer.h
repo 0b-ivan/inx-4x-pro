@@ -45,6 +45,12 @@ class Server final {
   Server(const Server&) = delete;
   Server& operator=(const Server&) = delete;
 
+  // The host supplies the language, leaving this transport firmware-independent.
+  void setLanguage(const char* code) {
+    const bool de = code && code[0] == 'd' && code[1] == 'e' && code[2] == '\0';
+    language_[0] = de ? 'd' : 'e';
+    language_[1] = de ? 'e' : 'n';
+  }
   bool begin(Mode mode);
   void loop();
   void stop();
@@ -103,7 +109,7 @@ class Server final {
   void onDisconnect(uint8_t client);
   void sendState(uint8_t seat, bool welcome);
   void publishAll();
-  void sendError(uint8_t client, const char* reason = "REQUEST REJECTED");
+  void sendError(uint8_t client, const char* code = "rejected");
   void closeSocket(uint8_t client);
   void flushPending();
   void heartbeat(uint32_t now);
@@ -146,6 +152,7 @@ class Server final {
   bool running_ = false;
   std::string ssid_, ip_, url_;
   char password_[17] = {};
+  char language_[3] = "en";
 };
 
 }  // namespace web
