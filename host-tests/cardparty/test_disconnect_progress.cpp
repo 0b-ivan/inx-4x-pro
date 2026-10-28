@@ -147,7 +147,10 @@ void multipleSubmittedDisconnectsStillWaitForRemainingSeats() {
   assert(v.phase==Phase::Judging);
   assert(v.expected==7 && v.submitted==7 && v.plays==8);
   assert(g.judge(0,0));
-  assert(g.nextRound() && g.phase()==Phase::Finished);
+  // One round requested, eight at the table: a full Juror cycle is played.
+  assert(g.rules().rounds==8 && g.phase()==Phase::Reveal);
+  // Six answerers are still offline: no next round until three are back.
+  assert(!g.nextRound());
 }
 void heldTurnReturnsBeforeGrace() {
   Fixture f;

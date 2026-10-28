@@ -77,6 +77,7 @@ class Game {
     if (!validDeck(deck, rules)) return false;
     deck_ = &deck;
     rules_ = rules;
+    requestedRounds_ = rules.rounds;
     rng_ = seed ? seed : 0x9e3779b9u;
     phase_ = Phase::Lobby;
     count_ = 0;
@@ -140,9 +141,21 @@ class Game {
     if (phase_ == Phase::Playing) maybeJudge();
     return true;
   }
+  // Rounds actually played for `players` at the table: the nearest multiple
+  // of the player count (ties round up, at least one full cycle), so every
+  // player is Juror equally often and nobody misses a scoring round.
+  static uint8_t fairRounds(uint8_t requested, uint8_t players) {
+    if (!requested || !players) return requested;
+    uint16_t cycles = static_cast<uint16_t>((requested + players / 2) / players);
+    if (!cycles) cycles = 1;
+    uint16_t rounds = static_cast<uint16_t>(cycles * players);
+    while (rounds > 255) rounds = static_cast<uint16_t>(rounds - players);
+    return static_cast<uint8_t>(rounds);
+  }
   bool start() {
     if (phase_ != Phase::Lobby || active() < 3 || !promptsOn()) return false;
     if (answersOn() < answersNeeded(count_)) return false;
+    rules_.rounds = fairRounds(requestedRounds_, active());
     for (auto& p : players_)
       if (p.seated)
         while (p.size < rules_.hand) {
@@ -250,6 +263,7 @@ class Game {
   bool rematch() {
     if (phase_ != Phase::Finished || !deck_) return false;
     phase_ = Phase::Lobby;
+    rules_.rounds = requestedRounds_;
     round_ = 0;
     prompt_ = kNoCard;
     czar_ = kNone;
@@ -307,9 +321,11 @@ class Game {
   // Match length; fixed once the match has started.
   bool setRounds(uint8_t rounds) {
     if (phase_ != Phase::Lobby) return false;
-    rules_.rounds = rounds;
+    rules_.rounds = requestedRounds_ = rounds;
     return true;
   }
+  // What the host chose; rules().rounds is the fair count once started.
+  uint8_t requestedRounds() const { return requestedRounds_; }
   const Rules& rules() const { return rules_; }
   uint8_t seatedCount() const { return count_; }
   // The game cannot move on without this player right now: the Juror while
@@ -640,6 +656,7 @@ class Game {
   Player players_[kPlayers] = {};
   Play pile_[kPileMax] = {};
   uint16_t enabled_ = 0xffff;
+  uint8_t requestedRounds_ = 0;
   // Drawn-this-cycle bits, one per card (deck limit 4096): 1 KiB in total.
   static constexpr uint16_t kCardWords = 4096 / 32;
   uint32_t drawnAnswers_[kCardWords] = {};

@@ -132,7 +132,7 @@ static void categoriesAndFilter() {
   // The game plays the whole pack and filters when it draws: card ids are
   // pack ids, so switching a category mid-game keeps every dealt card valid.
   Game game;
-  assert(game.configure(deck, Rules{5, 10, true}, 7));
+  assert(game.configure(deck, Rules{5, 12, true}, 7));
   game.setEnabled(defaults);
   assert(game.join("A") == 0 && game.join("B") == 1 && game.join("C") == 2);
   assert(game.start());

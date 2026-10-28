@@ -20,7 +20,11 @@ void runMatch(uint8_t count,uint32_t seed) {
   assert(game.start());
   int humansWon=0,botWon=0;
   int pick3=0,pick2=0,draw2=0;
-  for(uint8_t round=1;round<=10;++round) {
+  // Ten requested; played as the nearest multiple of the table (9 for 3, 8 for 8).
+  const uint8_t rounds=game.rules().rounds;
+  assert(rounds%count==0 && rounds==Game::fairRounds(10,count));
+  int judged[kPlayers]={};
+  for(uint8_t round=1;round<=rounds;++round) {
     const PublicView initial=game.publicView();
     assert(initial.phase==Phase::Playing);
     assert(initial.round==round);
@@ -56,6 +60,7 @@ void runMatch(uint8_t count,uint32_t seed) {
     }
     // Always choose the first *shuffled* anonymous response.
     assert(game.judge(initial.czar,0));
+    ++judged[initial.czar];
     const auto reveal=game.publicView();
     assert(reveal.phase==Phase::Reveal);
     assert(reveal.winner==reveal.pile[reveal.selected].author);
@@ -68,10 +73,11 @@ void runMatch(uint8_t count,uint32_t seed) {
     assert(game.nextRound());
   }
   assert(game.phase()==Phase::Finished);
-  assert(game.publicView().round==10);
+  assert(game.publicView().round==rounds);
   assert(!game.nextRound());
-  std::printf("PASS demo 10 rounds, %d humans, seed=%u, pick2=%d, pick3=%d, draw2=%d, bot wins=%d\n",
-      count, seed, pick2,pick3,draw2,botWon);
+  for(uint8_t i=0;i<count;++i) assert(judged[i]==rounds/count);  // everyone judged equally often
+  std::printf("PASS demo %d rounds, %d humans, seed=%u, pick2=%d, pick3=%d, draw2=%d, bot wins=%d\n",
+      rounds, count, seed, pick2,pick3,draw2,botWon);
 }
 int main() {
   // Three-player real-world baseline, maximum-eight-player capacity, plus

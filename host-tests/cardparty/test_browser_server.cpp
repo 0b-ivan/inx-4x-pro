@@ -285,7 +285,9 @@ int main() {
     send(bus, 0, "{\"type\":\"judge\",\"token\":\"" + keys[0] + "\",\"revision\":0,\"selected\":7}");
     assert(many.publicView().phase == Phase::Reveal);
     assert(eight.hostNext());
-    assert(many.publicView().phase == Phase::Finished);
+    // One round requested at a table of eight: everyone judges once.
+    assert(many.rules().rounds == 8);
+    assert(many.publicView().phase == Phase::Playing && many.publicView().round == 2);
     eight.stop();
     assert(WiFi.currentMode == WIFI_STA);
     assert(devmode::depth == 0);

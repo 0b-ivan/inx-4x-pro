@@ -85,7 +85,18 @@ void secretAndRound() {
   CHECK(g.submit(c, slots, g.publicView().pick));
   CHECK(g.judge(b, 1));
   CHECK(g.nextRound());
+  // Two rounds requested for three players: everyone judges once, so three.
+  CHECK(g.rules().rounds == 3 && g.requestedRounds() == 2);
+  CHECK(g.phase() == Phase::Playing && g.publicView().czar == c);
+  CHECK(g.submit(a, slots, g.publicView().pick));
+  CHECK(g.submit(b, slots, g.publicView().pick));
+  CHECK(g.judge(c, 0));
+  CHECK(g.nextRound());
   CHECK(g.phase() == Phase::Finished);
+  // Fair round counts: nearest multiple of the table, ties up, >= 1 cycle.
+  CHECK(Game::fairRounds(10, 3) == 9 && Game::fairRounds(10, 4) == 12 && Game::fairRounds(10, 5) == 10);
+  CHECK(Game::fairRounds(10, 6) == 12 && Game::fairRounds(10, 7) == 7 && Game::fairRounds(10, 8) == 8);
+  CHECK(Game::fairRounds(2, 8) == 8 && Game::fairRounds(0, 5) == 0 && Game::fairRounds(255, 8) == 248);
 }
 void pickAndRando() {
   Fixture f;

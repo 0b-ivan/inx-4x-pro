@@ -103,8 +103,9 @@ void jurorClockEndsWithoutPoints() {
 void autoModeAndLastRound() {
   Settings s;
   s.autoSecs = 8;
-  s.rounds = 2;
+  s.rounds = 4;  // four at the table: one full Juror cycle
   Fixture f(s);
+  CHECK(f.game.rules().rounds == 4);
   for (uint8_t k = 0; k < 3; ++k) CHECK(f.answer(f.answerer(k)));
   CHECK(f.game.judge(f.juror(), 0));
   CHECK(f.table.tick(5000));
@@ -112,10 +113,13 @@ void autoModeAndLastRound() {
   CHECK(!f.table.tick(12999));
   CHECK(f.table.tick(13000));
   CHECK(f.game.phase() == Phase::Playing && f.game.publicView().round == 2);
-  for (uint8_t k = 0; k < 3; ++k) CHECK(f.answer(f.answerer(k)));
-  CHECK(f.game.judge(f.juror(), 0));
-  f.table.tick(14000);
-  CHECK(f.table.tick(22000));
+  uint32_t now = 13000;
+  for (uint16_t round = 2; round <= 4; ++round) {
+    for (uint8_t k = 0; k < 3; ++k) CHECK(f.answer(f.answerer(k)));
+    CHECK(f.game.judge(f.juror(), 0));
+    f.table.tick(now += 1000);
+    CHECK(f.table.tick(now += 8000));
+  }
   // After the last round: standings stay up, no clock, the host decides.
   CHECK(f.game.phase() == Phase::Finished && f.table.clock() == Table::Clock::None);
   // Switching auto mode on in the reveal arms it right away.

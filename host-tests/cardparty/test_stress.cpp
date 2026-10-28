@@ -271,7 +271,7 @@ void eightPlayerStorm(uint32_t seed) {
   h.refreshRevisions(0);
 
   uint32_t judged = 0;
-  for (int round = 0; round < 10; ++round) {
+  for (int round = 0; round < h.game.rules().rounds; ++round) {
     CHECK(h.game.phase() == Phase::Playing);
     Player* czar = h.czar();
     CHECK(czar != nullptr);
@@ -319,7 +319,7 @@ void eightPlayerStorm(uint32_t seed) {
     h.refreshRevisions(0);
   }
   CHECK(h.game.phase() == Phase::Finished);
-  CHECK(judged == 10);
+  CHECK(judged == 8 && h.game.rules().rounds == 8);  // ten requested, eight at the table
   // Late joiner during a running/finished game is refused with a reason.
   const int late = h.ws->accept();
   CHECK(late >= 0);
@@ -346,7 +346,7 @@ void eightPlayerStorm(uint32_t seed) {
   CHECK(diag.takeovers > 0);
   h.server.stop();
   std::printf(
-      "PASS 8 browsers seed=%u: 10 rounds, reloads in Lobby/Playing/Judging/Reveal, "
+      "PASS 8 browsers seed=%u: 8 fair rounds (10 requested), reloads in Lobby/Playing/Judging/Reveal, "
       "rematch, max frame %zu bytes, takeovers %u, rejected %u\n",
       seed, h.maxFrame, 0u + diag.takeovers, 0u + diag.rejected);
 }
