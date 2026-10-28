@@ -57,6 +57,8 @@ struct HandView {
 
 class Game {
  public:
+  using Blocker = bool (*)(void*, uint16_t, uint16_t);
+  void setBlocker(Blocker callback, void* context) { blocker_ = callback; blockerContext_ = context; }
   static bool validDeck(const Deck& deck, const Rules& rules) {
     if (!deck.prompts || !deck.answers || !deck.promptsCount || !deck.answersCount || deck.promptsCount > 4096 ||
         deck.answersCount > 4096 || rules.hand < 3 || rules.hand > 10)
@@ -475,7 +477,8 @@ class Game {
     const uint16_t offset = static_cast<uint16_t>(random() % n);
     for (uint16_t step = 0; step < n; ++step) {
       const uint16_t candidate = static_cast<uint16_t>((offset + step) % n);
-      if (!answerOn(candidate)) continue;
+      if (!answerOn(candidate) ||
+          (blocker_ && prompt_ != kNoCard && blocker_(blockerContext_, prompt_, candidate))) continue;
       bool used = false;
       for (const auto& p : players_)
         if (p.seated)
@@ -540,6 +543,17 @@ class Game {
     prompt_ = chosen;
     pick_ = deck_->prompts[prompt_].pick;
     draw_ = deck_->prompts[prompt_].draw;
+    // Keep global hand card IDs stable; replace only forbidden prompt pairs.
+    if (blocker_)
+      for (auto& p : players_)
+        if (p.seated)
+          for (uint8_t j = 0; j < p.size; ++j)
+            if (blocker_(blockerContext_, prompt_, p.hand[j])) {
+              const uint16_t prior = p.hand[j];
+              p.hand[j] = kNoCard;
+              const uint16_t fresh = draw();
+              p.hand[j] = fresh == kNoCard ? prior : fresh;
+            }
     for (uint8_t i = 0; i < kPlayers; ++i)
       if (players_[i].seated) {
         Player& p = players_[i];
@@ -576,5 +590,7 @@ class Game {
   Player players_[kPlayers] = {};
   Play pile_[kPileMax] = {};
   uint16_t enabled_ = 0xffff;
+  Blocker blocker_ = nullptr;
+  void* blockerContext_ = nullptr;
 };
 }  // namespace cardparty
