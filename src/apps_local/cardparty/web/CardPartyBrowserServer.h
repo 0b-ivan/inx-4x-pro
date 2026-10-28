@@ -9,6 +9,7 @@
 #include <WebSocketsServer.h>
 #endif
 #include "../CardPartyCore.h"
+#include "../CardPartyHistory.h"
 #include "../CardPartySdPack.h"
 #include "../CardPartySessions.h"
 #include "../CardPartyTable.h"
@@ -51,6 +52,7 @@ class Server final {
     language_[0] = de ? 'd' : 'e';
     language_[1] = de ? 'e' : 'n';
   }
+  void setHistory(history::Book* book) { history_ = book; }
   bool begin(Mode mode);
   void loop();
   void stop();
@@ -153,6 +155,24 @@ class Server final {
   std::string ssid_, ip_, url_;
   char password_[17] = {};
   char language_[3] = "en";
+  history::Book* history_ = nullptr;  // provided by X4; transport does not own storage
+  uint64_t playerIds_[kPlayers] = {};
+  uint8_t playerWords_[kPlayers] = {};
+  static const char* word(uint8_t id) {
+    static constexpr const char* words[64] = {
+      "Toast","Keks","Komet","Fuchs","Mond","Igel","Kompass","Funke",
+      "Birne","Roboter","Kabel","Wolke","Wuerfel","Maus","Tasse","Pixel",
+      "Drache","Tinte","Pfeil","Kiwi","Kaktus","Nebel","Wal","Stern",
+      "Pilz","Dachs","Quarz","Echo","Trommel","Falter","Buch","Knopf",
+      "Feder","Kreisel","Sonne","Rabe","Blitz","Uhr","Kran","Insel",
+      "Nuss","Luchs","Radio","Bohne","Kiesel","Baum","Hut","Ninja",
+      "Karte","Moewe","Fels","Leuchtturm","Panda","Ritter","Dingo","Mohn",
+      "Zebra","Lava","Otter","Segel","Tango","Tiger","Hase","Lotus"
+    };
+    return words[id & 63u];
+  }
+  void assignId(uint8_t seat, uint64_t id);
+  uint32_t identitySequence_ = 0;
 };
 
 }  // namespace web
