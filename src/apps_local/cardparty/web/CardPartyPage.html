@@ -756,7 +756,10 @@ h2{font-size:18px;font-weight:500}
   $("strikeButton").addEventListener("click",()=>{
     if(!state.selection.length)return;
     const slot=state.selection[state.selection.length-1];
-    if(command("strike",{slot}))$("strikeButton").disabled=true;
+    if(state.socket&&state.socket.readyState===WebSocket.OPEN&&state.ticket){
+      state.socket.send(JSON.stringify({type:"strike",token:state.ticket,slot}));
+      $("strikeButton").disabled=true;
+    }
   });
   $("fameButton").addEventListener("click",()=>{
     state.fameOpen=true;state.famePage=0;state.fameData=null;requestFame();render();
