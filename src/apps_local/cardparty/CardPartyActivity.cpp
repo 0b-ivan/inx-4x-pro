@@ -1367,6 +1367,79 @@ int CardPartyActivity::drawWrapped(int fontId, const char* text, int x, int y, i
   }
   return y + row * lineStep;
 }
+void CardPartyActivity::drawRichSentence(const char* prompt, const char* const* answers,
+                                             uint8_t pick, int x, int y, int width) {
+  // Mixed normal/inverted words in one sentence. Each word respects measured
+  // width, including UTF-8 card text; answer spans get a black reverse field.
+  constexpr int kFont = UI_10_FONT_ID;
+  constexpr int kLine = 30, kRows = 4;
+  int row = 0, usedWidth = 0;
+  const int spaceWidth = std::max(8, renderer.getTextWidth(kFont, " "));
+  auto drawRun = [&](const char* p, size_t length, bool highlight) {
+    size_t pos = 0;
+    while (pos < length && row < kRows) {
+      if (p[pos] == ' ' || p[pos] == '\n' || p[pos] == '\t') {
+        if (p[pos] == '\n' || usedWidth + spaceWidth > width) {
+          ++row;
+          usedWidth = 0;
+        } else if (usedWidth) {
+          usedWidth += spaceWidth;
+        }
+        ++pos;
+        continue;
+      }
+      size_t lengthOfWord = 0;
+      while (pos + lengthOfWord < length &&
+             p[pos + lengthOfWord] != ' ' && p[pos + lengthOfWord] != '\n' &&
+             p[pos + lengthOfWord] != '\t')
+        ++lengthOfWord;
+      char word[160] = {};
+      const size_t copy = std::min(lengthOfWord, sizeof(word) - 1);
+      std::memcpy(word, p + pos, copy);
+      // Do not leave a truncated UTF-8 character at the end of the token.
+      size_t safe = copy;
+      if (safe < lengthOfWord)
+        while (safe && (static_cast<unsigned char>(p[pos + safe]) & 0xc0u) == 0x80u) --safe;
+      word[safe] = 0;
+      const int wordWidth = renderer.getTextWidth(kFont, word);
+      if (usedWidth && usedWidth + wordWidth > width) {
+        ++row;
+        usedWidth = 0;
+      }
+      if (row >= kRows) break;
+      if (highlight) {
+        renderer.fillRect(x + usedWidth, y + row * kLine - 2, std::min(wordWidth + 3, width - usedWidth), 26, true);
+        renderer.drawText(kFont, x + usedWidth + 1, y + row * kLine, word, false);
+      } else {
+        renderer.drawText(kFont, x + usedWidth, y + row * kLine, word, true);
+      }
+      usedWidth += wordWidth + (highlight ? 3 : 0);
+      pos += lengthOfWord;
+    }
+  };
+  if (!prompt) return;
+  uint8_t used = 0;
+  const char* p = prompt;
+  while (*p && row < kRows) {
+    size_t blankBytes = 0;
+    if (cp::sentence::blank(p, blankBytes)) {
+      if (answers && used < pick && answers[used])
+        drawRun(answers[used++], std::strlen(answers[used - 1]), true);
+      else
+        drawRun(p, blankBytes, false);
+      p += blankBytes;
+    } else {
+      const char* first = p;
+      do { ++p; } while (*p && !cp::sentence::blank(p, blankBytes));
+      drawRun(first, static_cast<size_t>(p - first), false);
+    }
+  }
+  while (answers && used < pick && row < kRows) {
+    drawRun(" ",1,false);
+    const char* answer = answers[used++];
+    if (answer) drawRun(answer,std::strlen(answer),true);
+  }
+}
 void CardPartyActivity::drawGame() {
   const cp::PublicView v = game_.publicView();
   if (v.phase == cp::Phase::Finished) {
@@ -1470,7 +1543,7 @@ void CardPartyActivity::drawGame() {
       }
       char sentence[768] = {};
       cp::sentence::compose(deck.prompts[v.prompt].text, cards, v.pick, sentence, sizeof(sentence));
-      drawWrapped(UI_10_FONT_ID, sentence, kGutter, 556, textWidth, 30, 4);
+      drawRichSentence(deck.prompts[v.prompt].text, cards, v.pick, kGutter, 556, textWidth);
     }
   }
   const int bottom = renderer.getScreenHeight() - 72;
