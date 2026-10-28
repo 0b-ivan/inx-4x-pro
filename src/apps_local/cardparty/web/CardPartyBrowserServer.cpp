@@ -2,6 +2,8 @@
 
 #include "CardPartyProtocol.h"
 
+#include <cstdio>
+
 #ifndef SIMULATOR
 
 #include <WiFi.h>
