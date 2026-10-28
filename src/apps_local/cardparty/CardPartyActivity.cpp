@@ -11,6 +11,7 @@
 #include <initializer_list>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "CardPartyTextWrap.h"
 #ifdef SIMULATOR
@@ -51,6 +52,11 @@ constexpr const char* kCardPartySelection = "/games/cardparty/categories.bin";
 // Match rules: 'C','R', format 1, rounds, answer s, extension s, Juror s,
 // auto s, Rando.
 constexpr const char* kCardPartyRules = "/games/cardparty/rules.bin";
+constexpr const char* kHistory = "/games/cardparty/history.bin";
+constexpr const char* kHistoryPart = "/games/cardparty/history.bin.part";
+constexpr const char* kHistoryBackup = "/games/cardparty/history.bin.bak";
+constexpr size_t kHistoryMaxBytes = 9 + cp::history::kPlayersStored * 49 +
+    cp::history::kWinningLines * 213 + cp::history::kNonFitPairs * 33 + 4;
 constexpr uint8_t kRulesBytes = 9;
 // What a tap on a rule cycles through.
 constexpr uint8_t kRoundOptions[] = {3, 5, 8, 10, 12, 15, 20, 30};
@@ -420,6 +426,54 @@ void CardPartyActivity::saveRules() {
       file.write(b, sizeof(b)) != sizeof(b))
     LOG_ERR("CARDPARTY", "Could not save match rules");
 }
+void CardPartyActivity::loadHistory() {
+  const auto read = [this](const char* path) {
+    if (!Storage.exists(path)) return false;
+    HalFile file;
+    if (!Storage.openFileForRead("CARDPARTY", path, file)) return false;
+    const size_t length = file.size();
+    if (length < 13 || length > kHistoryMaxBytes) {
+      file.close();
+      return false;
+    }
+    std::vector<uint8_t> bytes(length);
+    const bool ok = file.read(bytes.data(), length) == static_cast<int>(length);
+    file.close();
+    return ok && history_.decode(bytes.data(), bytes.size());
+  };
+  if (!read(kHistory) && read(kHistoryBackup))
+    LOG_INF("CARDPARTY", "Recovered player history from backup");
+  historySaved_ = history_.revision();
+}
+void CardPartyActivity::saveHistory() {
+  if (historySaved_ == history_.revision()) return;
+  if (!Storage.ensureDirectoryExists(kCardPartyDir)) return;
+  const std::vector<uint8_t> bytes = history_.encode();
+  if (bytes.empty() || bytes.size() > kHistoryMaxBytes) return;
+  Storage.remove(kHistoryPart);
+  HalFile file;
+  if (!Storage.openFileForWrite("CARDPARTY", kHistoryPart, file)) return;
+  const bool written = file.write(bytes.data(), bytes.size()) == bytes.size();
+  file.close();
+  if (!written) {
+    Storage.remove(kHistoryPart);
+    LOG_ERR("CARDPARTY", "Could not write history snapshot");
+    return;
+  }
+  Storage.remove(kHistoryBackup);
+  const bool hadOld = Storage.exists(kHistory);
+  if (hadOld && !Storage.rename(kHistory,kHistoryBackup)) {
+    Storage.remove(kHistoryPart);
+    return;
+  }
+  if (!Storage.rename(kHistoryPart,kHistory)) {
+    if (hadOld) Storage.rename(kHistoryBackup,kHistory);
+    Storage.remove(kHistoryPart);
+    return;
+  }
+  Storage.remove(kHistoryBackup);
+  historySaved_ = history_.revision();
+}
 void CardPartyActivity::cycleRule(uint8_t row) {
   switch (row) {
     case 0:
@@ -488,6 +542,8 @@ void CardPartyActivity::onEnter() {
   Activity::onEnter();
   toybox::ensureFonts(renderer);
   loadRules();
+  loadHistory();
+  server_.setHistory(&history_);
   server_.hostSettings(settings_);
   loadConfiguredDeck();
   resetGame();
@@ -527,6 +583,8 @@ void CardPartyActivity::onEnter() {
   requestUpdate();
 }
 void CardPartyActivity::onExit() {
+  if (game_.phase() == cp::Phase::Lobby || game_.phase() == cp::Phase::Reveal ||
+      game_.phase() == cp::Phase::Finished) saveHistory();
   releaseNetwork();
   Activity::onExit();
 }
@@ -1028,6 +1086,12 @@ void CardPartyActivity::loop() {
       requestUpdate();
     }
   }
+  // SD writes belong to the activity loop, never to a WebSocket callback.
+  // A snapshot is produced only in lobby or between rounds / after the game.
+  if (historySaved_ != history_.revision() &&
+      (game_.phase() == cp::Phase::Lobby || game_.phase() == cp::Phase::Reveal ||
+       game_.phase() == cp::Phase::Finished))
+    saveHistory();
   if (job_ != RemoteJob::None) {
     runRemoteJob();
     return;
