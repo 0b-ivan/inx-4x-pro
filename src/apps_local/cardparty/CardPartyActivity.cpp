@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "CardPartyTextWrap.h"
+#include "CardPartySentence.h"
 #ifdef SIMULATOR
 #include <cstdlib>
 #endif
@@ -1459,17 +1460,17 @@ void CardPartyActivity::drawGame() {
                                                    : tr(STR_CAW_NO_WINNER);
     renderer.drawText(SMALL_FONT_ID, kGutter, 494, tr(STR_CAW_ROUND_WINNER), true);
     renderer.drawText(UI_10_FONT_ID, kGutter, 520, winner, true);
-    if (v.selected < v.plays) {
-      // The winning card(s), in play order, joined like the phones show them.
-      char answer[600] = {};
-      size_t used = 0;
+    if (v.selected < v.plays && v.prompt < deck.promptsCount) {
+      // Same complete Pick 1/2/3 sentence as the phones; preserving the
+      // original, unmodified card language and placeholder order.
+      const char* cards[cp::kPickMax] = {};
       for (uint8_t i = 0; i < v.pick; ++i) {
         const uint16_t id = v.pile[v.selected].cards[i];
-        const char* text = id < deck.answersCount ? deck.answers[id].text : "";
-        used += std::snprintf(answer + used, sizeof(answer) - used, "%s%s", i ? " / " : "", text);
-        if (used >= sizeof(answer) - 1) break;
+        cards[i] = id < deck.answersCount ? deck.answers[id].text : "";
       }
-      drawWrapped(UI_10_FONT_ID, answer, kGutter, 556, textWidth, 30, 4);
+      char sentence[768] = {};
+      cp::sentence::compose(deck.prompts[v.prompt].text, cards, v.pick, sentence, sizeof(sentence));
+      drawWrapped(UI_10_FONT_ID, sentence, kGutter, 556, textWidth, 30, 4);
     }
   }
   const int bottom = renderer.getScreenHeight() - 72;
