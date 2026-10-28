@@ -22,6 +22,14 @@ static void accepted() {
   Command c{};
   CHECK(decode(R"({"type":"join","name":"Ivan"})", c));
   CHECK(c.kind == Kind::Join && std::strcmp(c.name, "Ivan") == 0);
+  CHECK(c.playerId == 0);
+  CHECK(decode(R"({"type":"join","name":"Ivan","pid":"11112222deadbeef"})", c));
+  CHECK(c.playerId == UINT64_C(0x11112222deadbeef));
+  char stableId[17] = {};
+  encodePlayerId(c.playerId, stableId);
+  CHECK(std::strcmp(stableId, "11112222deadbeef") == 0);
+  CHECK(decode(R"({"type":"join","name":"Ivan"})", c));
+  CHECK(c.playerId == 0);
   CHECK(decode(R"({"type":"join","name":"Müller"})", c));
   CHECK(std::strcmp(c.name, "Müller") == 0);
   CHECK(decode(R"({"type":"join","name":"A\"B"})", c));
@@ -59,6 +67,10 @@ static void rejected() {
                                  R"({"type":"join","name":"\u003cscript\u003e"})",
                                  R"({"type":"join","name":"<script>"})",
                                  R"({"type":"join","name":"X","role":"admin"})",
+                                 R"({"type":"join","name":"X","pid":"0000000000000000"})",
+                                 R"({"type":"join","name":"X","pid":"abcd"})",
+                                 R"({"type":"join","name":"X","pid":"ABCDEF0123456789"})",
+                                 R"({"type":"join","name":"X","pid":"11112222deadbeef","extra":true})",
                                  R"({"type":"join","name":"X","type":"join"})",
                                  R"({"type":"join","name":42})",
                                  R"({"type":"join","name":"X"} garbage)",
