@@ -95,6 +95,39 @@ untrusted network-delivered packages until a signed/catalog-trusted
 hash, HTTPS download, temporary file installation, on-device verification
 and atomic activation have been implemented and reviewed.
 
+## Importing Prior99 (cah-fullformat-german)
+
+`tools_local/cardparty_l10n/import_prior99.py` converts a local clone of
+[Prior99/cah-fullformat-german](https://github.com/Prior99/cah-fullformat-german)
+(LaTeX, 107 prompts, 610 answers, 11 categories) into card JSONL plus a
+manifest skeleton. It never downloads and never writes into the repository;
+card texts stay out of git.
+
+    git clone https://github.com/Prior99/cah-fullformat-german /tmp/prior99
+    python3 tools_local/cardparty_l10n/import_prior99.py --source /tmp/prior99 \
+      --cards prior99.jsonl --manifest prior99.json --report prior99-report.json \
+      --commit "$(git -C /tmp/prior99 rev-parse HEAD)"
+
+* Categories are the source's own files: Basis, Böse, Drogen, Eklig,
+  Geschichte, Kultur, FSK 16, FSK 18, Politik, Religion, Werbung. FSK 18 is
+  the adult category and starts off.
+* `\underl` becomes `____`, `\newline` a space, `\SymbReg` ®, LaTeX quotes
+  „…“. Print hyphenation is undone: "Sonnen- untergang" becomes
+  "Sonnenuntergang", "Volleyball- Montage" becomes "Volleyball-Montage".
+* Pick comes from the source; pick 3 gets draw 2 (CAH convention). A prompt
+  whose blank count is neither 0 nor its pick is reported, not guessed.
+* Duplicates (case and punctuation ignored) are merged and keep every
+  category they appeared in.
+* Every card is `reviewed: false` and the manifest is `unverified` with no
+  license: `build_sd_pack.py` builds only a draft (which the X4 refuses)
+  until a human sets the license, rights and editorial status and marks the
+  cards reviewed. The repository says GPL-3.0; the CAH originals are
+  CC BY-NC-SA 2.0. That decision is not made here.
+
+At commit 92501b2 the import yields 107 prompts (37 without a blank) and
+610 answers, no issues, no duplicates, 23.7 KB as a pack. Every character
+in it is covered by the X4 UI font.
+
 ## Test coverage
 
 Run Python offline unit suite and host C++ SD loader tests. An isolated
