@@ -8,6 +8,7 @@
 #include "CardPartyCatalog.h"
 #include "CardPartyCategories.h"
 #include "CardPartyCore.h"
+#include "CardPartyHistory.h"
 #include "CardPartyDemoDeck.h"
 #include "CardPartySdPack.h"
 #include "CardPartySessions.h"
@@ -57,6 +58,8 @@ class CardPartyActivity final : public Activity {
   bool hosting() const { return server_.running(); }
   void loadRules();
   void saveRules();
+  void loadHistory();
+  void saveHistory();
   void cycleRule(uint8_t row);
   void leaveRules();
   void drawRules();
@@ -113,6 +116,8 @@ class CardPartyActivity final : public Activity {
   uint32_t kickArmedAt_ = 0;
   bool endArmed_ = false;
   uint32_t endArmedAt_ = 0;
+  cardparty::history::Book history_;
+  uint32_t historySaved_ = 0;
   cardparty::web::Server server_;
   Stage stage_ = Stage::Choice;
   // Station mode raised by the Wi-Fi picker for [02]; dev mode stays paused
