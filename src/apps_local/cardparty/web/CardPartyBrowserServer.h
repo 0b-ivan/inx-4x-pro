@@ -112,6 +112,7 @@ class Server final {
   const char* ip() const { return ip_.c_str(); }
   const char* url() const { return url_.c_str(); }
   const char* seatLabel(uint8_t seat, char* target, size_t capacity) const;
+  static const char* wordLabel(uint8_t index) { return word(index); }
 
  private:
 #ifndef SIMULATOR
