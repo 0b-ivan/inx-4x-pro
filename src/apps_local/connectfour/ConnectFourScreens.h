@@ -17,7 +17,7 @@ enum : fui::ActionId {
   ActionDone = 4,
 };
 
-enum class MenuRow : int { Play = 0, PlayNearby, HowTo, Count };
+enum class MenuRow : int { Play = 0, PlayNearby, PlayBrowser, HowTo, Count };
 
 struct MenuModel {
   const char* nearbyName = nullptr;

@@ -22,9 +22,14 @@ constexpr uint8_t kApChannel = 1;
 constexpr uint8_t kApMaxClients = 2;
 constexpr uint16_t kDnsPort = 53;
 constexpr const char* kGamePath = "/battleship";
+uint32_t randomWord() { return esp_random(); }
 
-bool playerAuthorized(WebServer& http, const char* token) {
-  return token != nullptr && token[0] != '\0' && http.hasArg("token") && http.arg("token") == token;
+// The bootstrap session token is public to clients on the LAN. Never use it
+// alone to read or mutate the X4's stored player identities. The separate
+// 128-bit seat secret is only sent to the accepted WebSocket owner.
+bool playerAuthorized(WebServer& http, const webplay::SeatSession& seat) {
+  return http.hasArg("token") && http.hasArg("owner") &&
+         seat.authorized(http.arg("token").c_str(), http.arg("owner").c_str());
 }
 
 void sendPlayerReply(WebServer& http, const playerweb::Reply& reply) {
@@ -62,10 +67,6 @@ Server::~Server() { stop(); }
 bool Server::begin(const NetworkMode mode) {
   if (running_) return true;
 
-  owner_ = -1;
-  commandSeen_ = false;
-  rotateToken();
-  rotateResumeToken();
   opponentName_ = playerweb::displayName();
   mode_ = mode;
   clientSeen_ = false;
@@ -84,6 +85,10 @@ bool Server::begin(const NetworkMode mode) {
     return false;
   }
 
+  // ESP32 RF has started in AP/STA mode; initialize seat capabilities only
+  // after it can contribute fresh entropy to esp_random().
+  seat_.begin(&randomWord);
+
   if (!startMdns()) LOG_DBG("BSHIPWEB", "mDNS unavailable; IP fallback remains usable");
 
   configureRoutes();
@@ -95,15 +100,10 @@ bool Server::begin(const NetworkMode mode) {
       clientSeen_ = true;
       snapshot_.connected = true;
       sendSnapshot(client);
-      sendOpponentName(client);
+      // Never disclose the device's active Player identity to unclaimed peers.
     } else if (type == WStype_DISCONNECTED) {
       clientSeen_ = ws_.connectedClients() != 0;
-      if (owner_ == client) {
-        owner_ = -1;
-        commandSeen_ = false;
-        rotateToken();
-        if (disconnect_) disconnect_(context_);
-      }
+      if (seat_.disconnect(client, &randomWord) && disconnect_) disconnect_(context_);
     } else if (type == WStype_TEXT) {
       receive(client, payload, size);
     }
@@ -121,9 +121,7 @@ void Server::releaseDevMode() {
 }
 
 void Server::stop() {
-  owner_ = -1;
-  token_[0] = 0;
-  resumeToken_[0] = 0;
+  seat_.stop();
   const bool hadServer = running_ || dnsRunning_;
   running_ = false;
   clientSeen_ = false;
@@ -166,16 +164,15 @@ void Server::sendSnapshot(const uint8_t client) {
 }
 
 void Server::sendOpponentName(const uint8_t client) {
-  // player::name() currently guarantees a short generated name made from known
-  // uppercase words and spaces, so it is safe to place directly in this JSON
-  // string. The future typed-name PlayerService should own escaping/validation.
+  // Escaped, validated JSON sent only to the owner; spectators cannot use
+  // public game-state frames to enumerate the X4's active Player identity.
   const size_t n = serializePeerName(opponentName_, reply_, sizeof(reply_));
   if (n != 0) ws_.sendTXT(client, reply_, n);
 }
 
 void Server::sendResumeCapability(const uint8_t client) {
-  if (!resumeToken_[0]) return;
-  const int n = snprintf(reply_, sizeof(reply_), "{\"type\":\"resume\",\"token\":\"%s\"}", resumeToken_);
+  if (!seat_.resumeToken()[0]) return;
+  const int n = snprintf(reply_, sizeof(reply_), "{\"type\":\"resume\",\"token\":\"%s\"}", seat_.resumeToken());
   if (n > 0 && static_cast<size_t>(n) < sizeof(reply_)) ws_.sendTXT(client, reply_, static_cast<size_t>(n));
 }
 
@@ -191,59 +188,41 @@ void Server::publish(const BrowserSnapshot& snapshot) {
 }
 
 void Server::publishPlacement(const PlacementView& view) {
-  if (!running_ || owner_ < 0) return;
+  if (!running_ || !seat_.hasOwner()) return;
   const size_t n = serializePlacement(view, true, reply_, sizeof(reply_));
-  if (n) ws_.sendTXT(static_cast<uint8_t>(owner_), reply_, n);
-}
-
-void Server::rotateToken() {
-  for (int i = 0; i < 4; ++i) snprintf(token_ + i * 8, 9, "%08lx", static_cast<unsigned long>(esp_random()));
-}
-
-void Server::rotateResumeToken() {
-  for (int i = 0; i < 4; ++i) snprintf(resumeToken_ + i * 8, 9, "%08lx", static_cast<unsigned long>(esp_random()));
+  if (n) ws_.sendTXT(seat_.owner(), reply_, n);
 }
 
 void Server::receive(uint8_t client, const uint8_t* payload, size_t size) {
   Command command;
-  if (!running_ || !apply_ || !parseCommand(payload, size, command) || strcmp(command.token, token_) ||
-      (owner_ >= 0 && owner_ != client) ||
-      (owner_ < 0 && command.kind != CommandKind::Profile && command.kind != CommandKind::Resume)) {
+  if (!running_ || !apply_ || !parseCommand(payload, size, command) ||
+      !seat_.admit(client, command.token, command.kind == CommandKind::Profile,
+                   command.kind == CommandKind::Resume, command.resumeToken, millis())) {
     char error[] = "{\"type\":\"error\"}";
     ws_.sendTXT(client, error, sizeof(error) - 1);
     return;
   }
-
-  if (command.kind == CommandKind::Resume && strcmp(command.resumeToken, resumeToken_)) {
-    char error[] = "{\"type\":\"error\"}";
-    ws_.sendTXT(client, error, sizeof(error) - 1);
-    return;
-  }
-
-  const uint32_t now = millis();
-  if (commandSeen_ && static_cast<uint32_t>(now - lastCommandMs_) < 100) {
-    char error[] = "{\"type\":\"error\"}";
-    ws_.sendTXT(client, error, sizeof(error) - 1);
-    return;
-  }
-  commandSeen_ = true;
-  lastCommandMs_ = now;
 
   PlacementView view;
   const bool accepted = apply_(context_, command, view);
-  if (owner_ < 0) {
+  if (!seat_.hasOwner()) {
     if (!accepted) {
       char error[] = "{\"type\":\"error\"}";
       ws_.sendTXT(client, error, sizeof(error) - 1);
       return;
     }
-    owner_ = client;
-    if (command.kind == CommandKind::Profile) rotateResumeToken();
+    seat_.claim(client, command.kind == CommandKind::Profile, &randomWord);
   }
+
+  if (accepted && command.kind == CommandKind::Resume)
+    seat_.rebind(client, command.resumeToken);
 
   const size_t n = serializePlacement(view, accepted, reply_, sizeof(reply_));
   if (n) ws_.sendTXT(client, reply_, n);
-  if (accepted && (command.kind == CommandKind::Profile || command.kind == CommandKind::Resume)) sendResumeCapability(client);
+  if (accepted && (command.kind == CommandKind::Profile || command.kind == CommandKind::Resume)) {
+    sendOpponentName(client);
+    sendResumeCapability(client);
+  }
   if (command.kind == CommandKind::Resume) sendSnapshot(client);
 }
 
@@ -255,17 +234,17 @@ void Server::configureRoutes() {
   http_.on("/battleship/session", HTTP_GET, [this] {
     http_.sendHeader("Cache-Control", "no-store");
     http_.sendHeader("Cross-Origin-Resource-Policy", "same-origin");
-    http_.send(200, "text/plain", token_);
+    http_.send(200, "text/plain", seat_.token());
   });
   http_.on("/player/state", HTTP_GET, [this] {
-    if (!playerAuthorized(http_, token_)) {
+    if (!playerAuthorized(http_, seat_)) {
       sendPlayerReply(http_, playerweb::Reply{403, "{\"ok\":false,\"message\":\"FORBIDDEN\"}"});
       return;
     }
     sendPlayerReply(http_, playerweb::state());
   });
   http_.on("/player/action", HTTP_POST, [this] {
-    if (!playerAuthorized(http_, token_)) {
+    if (!playerAuthorized(http_, seat_)) {
       sendPlayerReply(http_, playerweb::Reply{403, "{\"ok\":false,\"message\":\"FORBIDDEN\"}"});
       return;
     }
@@ -292,7 +271,7 @@ void Server::configureRoutes() {
       opponentName_ = playerweb::displayName();
       char peerMessage[96]{};
       const size_t n = serializePeerName(opponentName_, peerMessage, sizeof(peerMessage));
-      if (n != 0) ws_.broadcastTXT(peerMessage, n);
+      if (n != 0 && seat_.hasOwner()) ws_.sendTXT(seat_.owner(), peerMessage, n);
     }
     sendPlayerReply(http_, reply);
   });
@@ -319,6 +298,8 @@ bool Server::startHotspot() {
   WiFi.mode(WIFI_AP);
   delay(50);
 
+  // Intentionally open local game AP: joining requires no WPA password.
+  // Browser seat ownership and private resume capabilities remain enforced.
   if (!WiFi.softAP(kApSsid, nullptr, kApChannel, false, kApMaxClients)) {
     LOG_ERR("BSHIPWEB", "Failed to start Battleship hotspot");
     WiFi.mode(WIFI_OFF);
@@ -328,7 +309,8 @@ bool Server::startHotspot() {
   const IPAddress address = WiFi.softAPIP();
   ssid_ = kApSsid;
   ip_ = address.toString().c_str();
-  url_ = std::string("http://") + kMdnsHost + ".local" + kGamePath;
+  // QR links use the numeric address because captive-network browsers may not resolve mDNS.
+  url_ = std::string("http://") + ip_ + kGamePath;
 
   dns_.setErrorReplyCode(DNSReplyCode::NoError);
   dns_.start(kDnsPort, "*", address);
@@ -344,7 +326,8 @@ bool Server::startExistingWifi() {
 
   ssid_ = WiFi.SSID().c_str();
   ip_ = WiFi.localIP().toString().c_str();
-  url_ = std::string("http://") + kMdnsHost + ".local" + kGamePath;
+  // QR links use the numeric address because captive-network browsers may not resolve mDNS.
+  url_ = std::string("http://") + ip_ + kGamePath;
   return true;
 }
 

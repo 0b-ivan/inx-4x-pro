@@ -42,9 +42,11 @@ struct IPAddress {
 struct FakeWifi {
   bool available = true;
   int currentMode = 0;
+  std::string apPassword;
   int maxSoftApClients = 0;
   void mode(int mode) { currentMode = mode; }
-  bool softAP(const char*, const char*, int, bool, int maxClients) {
+  bool softAP(const char*, const char* password, int, bool, int maxClients) {
+    apPassword = password ? password : "";
     maxSoftApClients = maxClients;
     return available;
   }

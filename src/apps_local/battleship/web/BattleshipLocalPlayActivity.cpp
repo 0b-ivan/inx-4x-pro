@@ -4,6 +4,9 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
+#ifndef SIMULATOR
+#include <esp_system.h>
+#endif
 
 #include <algorithm>
 #include <cstdio>
@@ -223,6 +226,13 @@ void BattleshipLocalPlayActivity::startHotspotBrowser() {
 }
 
 void BattleshipLocalPlayActivity::enterBrowserWaiting() {
+  // Seed only after STA/AP startup, when the ESP32 RF subsystem provides
+  // entropy for esp_random(). A new browser session gets a fresh secret seed.
+#ifndef SIMULATOR
+  browserPlayer_.setRandomSeed(esp_random());
+#else
+  browserPlayer_.setRandomSeed(toybox::seed());
+#endif
   bship::reset(browserGame_);
   browserGame_.turn = 1;
   browserPlayer_.reset();
@@ -686,6 +696,8 @@ void BattleshipLocalPlayActivity::drawBrowserWaiting() {
     y += kQrSize + metrics.verticalSpacing;
     renderer.drawText(SMALL_FONT_ID, left, y, "1. JOIN WI-FI", true);
     renderer.drawText(SMALL_FONT_ID, left + kQrSize + gap, y, "2. OPEN GAME", true);
+    y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
+    renderer.drawCenteredText(SMALL_FONT_ID, y, "OPEN WI-FI · NO PASSWORD", true);
   } else {
     const int left = (width - kQrSize) / 2;
     QrUtils::drawQrCode(renderer, Rect{left, y, kQrSize, kQrSize}, browser_.url());

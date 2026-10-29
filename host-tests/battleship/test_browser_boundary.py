@@ -6,6 +6,7 @@ header = (web / "BattleshipBrowserServer.h").read_text()
 page = (web / "BattleshipPage.html").read_text()
 snapshot = (web / "BrowserSnapshot.cpp").read_text()
 activity = (web / "BattleshipLocalPlayActivity.cpp").read_text()
+seat = (root / "src/apps_local/web/SeatSession.h").read_text()
 screens = (root / "src/apps_local/battleship/BattleshipScreens.cpp").read_text()
 screens_header = (root / "src/apps_local/battleship/BattleshipScreens.h").read_text()
 assert "bship::Game" not in server + header
@@ -17,8 +18,11 @@ assert "publishPlacement(const PlacementView& view)" in server
 assert "type == WStype_TEXT" in server and "type == WStype_BIN" not in server
 assert "ws_.close()" in server and "ws_.enableHeartbeat" in server
 assert "parseCommand(payload, size, command)" in server
-assert "strcmp(command.token, token_)" in server
-assert "owner_ != client" in server
+assert "seat_.admit(client, command.token" in server
+assert "match(token_, bootstrap)" in seat
+assert "authorized(const char* bootstrap, const char* seatSecret)" in seat
+assert "hasOwner() && owner_ != client" in seat
+assert "seat_.disconnect(client, &randomWord)" in server
 assert "broadcastTXT(reply_" not in server
 assert "socket.onclose" in page and "socket.onmessage" in page
 assert "selectedTarget===cell" in page and "send('fire',cell)" in page

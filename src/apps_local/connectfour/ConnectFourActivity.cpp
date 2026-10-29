@@ -13,6 +13,7 @@
 #include "../ui/ToyboxTheme.h"
 #include "ConnectFourBrain.h"
 #include "ConnectFourScreens.h"
+#include "web/ConnectFourBrowserActivity.h"
 
 namespace c4 = connectfour;
 
@@ -280,6 +281,15 @@ void ConnectFourActivity::gameLoop() {
         case c4ui::MenuRow::PlayNearby:
           enterLink(linkplay::GameId::ConnectFour);
           return;
+        case c4ui::MenuRow::PlayBrowser: {
+          auto browser = makeUniqueNoThrow<ConnectFourBrowserActivity>(renderer, mappedInput);
+          if (!browser) {
+            LOG_ERR("C4WEB", "Could not allocate browser play activity");
+            return;
+          }
+          startActivityForResult(std::move(browser), [this](const ActivityResult&) { requestUpdate(); });
+          return;
+        }
         case c4ui::MenuRow::HowTo:
           howToPage = 0;
           goTo(c4::Screen::HowTo);
