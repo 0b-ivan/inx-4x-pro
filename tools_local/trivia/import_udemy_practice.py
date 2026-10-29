@@ -1,0 +1,338 @@
+#!/usr/bin/env python3
+"""Import a locally saved Udemy practice-test JSON response into private study JSONL.
+
+No network access, browser automation, cookies or credentials. This is an
+intermediate format, NOT a CrossPlay XTRIVIA v1 pack: v1 cannot store long
+scenario questions, explanations, or multiple correct choices.
+
+Known historical Udemy quiz shape (not guaranteed by Udemy):
+  {"results": [{"prompt": {"question": "...", "answers": ["...", "..."],
+                            "explanation": "..."},
+                "correct_response": ["exact answer text"], "section": "..."}]}
+
+The tool deliberately rejects unknown answer keys rather than guessing.
+Do not commit purchased questions or raw browser responses to this repository.
+"""
+
+import argparse
+import hashlib
+from html.parser import HTMLParser
+import json
+import os
+from pathlib import Path
+import re
+import sys
+import tempfile
+from urllib.parse import urlsplit
+
+
+class ImportProblem(ValueError):
+    """Input was incomplete or could not be mapped without ambiguity."""
+
+
+class _PlainText(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() in ("p", "div", "li", "br", "h1", "h2", "h3", "pre", "ul", "ol"):
+            self.parts.append("\n")
+        if tag.lower() == "img":
+            self.parts.append(" [IMAGE] ")
+
+    def handle_endtag(self, tag):
+        if tag.lower() in ("p", "div", "li", "h1", "h2", "h3", "pre", "ul", "ol"):
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def _plain(value):
+    if not isinstance(value, str):
+        raise ImportProblem("expected a text field")
+    parser = _PlainText()
+    parser.feed(value)
+    text = "".join(parser.parts).replace("\xa0", " ")
+    lines = [re.sub(r"[ \t\r\f\v]+", " ", line).strip()
+             for line in text.split("\n")]
+    return "\n".join(line for line in lines if line)
+
+
+def _answer_text(value):
+    if isinstance(value, str):
+        return _plain(value)
+    if isinstance(value, dict):
+        for key in ("text", "answer", "value", "body"):
+            if key in value:
+                return _answer_text(value[key])
+    raise ImportProblem("unsupported answer option shape")
+
+
+def _question_rows(data):
+    if isinstance(data, list):
+        rows = []
+        for item in data:
+            rows.extend(_question_rows(item))
+        return rows
+    if isinstance(data, dict):
+        prompt = data.get("prompt")
+        if isinstance(prompt, dict) and "question" in prompt and "answers" in prompt:
+            return [data]
+        # Do not recursively visit arbitrary fields: browser responses can
+        # contain private account/session metadata unrelated to the quiz.
+        for key in ("results", "assessments", "questions", "items", "data"):
+            if key in data and isinstance(data[key], (list, dict)):
+                return _question_rows(data[key])
+    raise ImportProblem("no supported question records; expected results[].prompt")
+
+
+def _correct_positions(response, options):
+    if isinstance(response, str):
+        response = [response]
+    if not isinstance(response, list) or not response:
+        raise ImportProblem("missing or unsupported correct_response")
+    selected = set()
+    for entry in response:
+        if not isinstance(entry, str):
+            raise ImportProblem("correct_response entries must be option text or letters")
+        value = _plain(entry)
+        matches = [i for i, option in enumerate(options)
+                   if option.casefold() == value.casefold()]
+        if len(matches) == 1:
+            index = matches[0]
+        elif len(matches) == 0 and len(value) == 1 and "A" <= value.upper() <= "F":
+            index = ord(value.upper()) - ord("A")
+            if index >= len(options):
+                raise ImportProblem("answer letter outside available options")
+        else:
+            raise ImportProblem("correct answer does not uniquely match an option")
+        if index in selected:
+            raise ImportProblem("duplicate correct answer")
+        selected.add(index)
+    if len(selected) == len(options):
+        raise ImportProblem("every option marked correct; no distractor")
+    return sorted(selected)
+
+
+def convert(raw):
+    """Map only question-specific fields; never copy account/session data."""
+    prompt = raw.get("prompt")
+    if not isinstance(prompt, dict):
+        raise ImportProblem("missing prompt object")
+    question = _plain(prompt.get("question"))
+    choices = prompt.get("answers")
+    if not isinstance(choices, list) or not 2 <= len(choices) <= 6:
+        raise ImportProblem("expected two to six answer options")
+    options = [_answer_text(item) for item in choices]
+    if not question or not all(options):
+        raise ImportProblem("blank question or answer")
+    if len({option.casefold() for option in options}) != len(options):
+        raise ImportProblem("duplicate answer options")
+    correct = _correct_positions(raw.get("correct_response"), options)
+    explanation = prompt.get("explanation", "")
+    section = raw.get("section", "")
+    if explanation is None:
+        explanation = ""
+    if section is None:
+        section = ""
+    if not isinstance(explanation, str) or not isinstance(section, str):
+        raise ImportProblem("unsupported explanation/section shape")
+    section = _plain(section)
+    image_count = len(re.findall(r"<img\b", explanation, flags=re.I))
+    feedbacks = prompt.get("feedbacks")
+    if feedbacks is not None and (not isinstance(feedbacks, list) or
+                                  len(feedbacks) != len(options) or
+                                  not all(isinstance(x, str) for x in feedbacks)):
+        raise ImportProblem("feedbacks must match the available options")
+    assessment_type = raw.get("assessment_type")
+    expected = "multi-select" if len(correct) > 1 else "multiple-choice"
+    if assessment_type is not None and assessment_type != expected:
+        raise ImportProblem("assessment type disagrees with correct answer count")
+    fingerprint = hashlib.sha256(
+        (question + "\0" + "\0".join(options)).encode("utf-8")
+    ).hexdigest()[:16]
+    return {
+        "id": fingerprint,
+        "type": "multi" if len(correct) > 1 else "single",
+        "q": question,
+        "options": options,
+        "correct": correct,  # zero-based positions in options; NOT choice letters
+        "explanation": _plain(explanation),
+        # Kept only in the PRIVATE output to preserve code, images and links for
+        # future offline conversion. Never render this HTML without sanitizing.
+        "explanation_html": explanation,
+        "explanation_images": image_count,
+        "feedbacks": [_plain(x) for x in feedbacks] if feedbacks is not None else [],
+        "source_section": section,
+        "category": section if re.fullmatch(r"Domain [1-6]: [^\n]+", section)
+                    else "Uncategorized",
+        "source_quiz": raw.get("_local_quiz", ""),
+        "source_question_number": raw.get("_local_sequence", 0),
+    }
+
+
+
+def _har_rows(data, allow_incomplete=False):
+    """Extract ONLY whitelisted assessment GET responses from a local HAR.
+
+    Do not copy request headers, cookies, account IDs, quiz attempts, or any
+    other network entry into the output. Repeated responses are de-duplicated.
+    """
+    if not isinstance(data, dict) or not isinstance(data.get("log"), dict):
+        raise ImportProblem("invalid HAR structure")
+    entries = data["log"].get("entries")
+    if not isinstance(entries, list):
+        raise ImportProblem("invalid HAR entries")
+    quizzes = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        request = entry.get("request", {})
+        response = entry.get("response", {})
+        if not isinstance(request, dict) or not isinstance(response, dict):
+            continue
+        path = urlsplit(request.get("url", "")).path
+        match = re.fullmatch(r"/api-2\.0/quizzes/(\d+)/assessments/?", path)
+        if not match or request.get("method") != "GET" or response.get("status") != 200:
+            continue
+        content = response.get("content", {})
+        if not isinstance(content, dict) or content.get("encoding"):
+            raise ImportProblem("encoded or unavailable assessment response")
+        text = content.get("text")
+        if not isinstance(text, str):
+            raise ImportProblem("assessment response is missing JSON text")
+        assessment = json.loads(text)
+        if not isinstance(assessment, dict) or not isinstance(assessment.get("results"), list):
+            raise ImportProblem("malformed assessment response")
+        if assessment.get("next") and not allow_incomplete:
+            raise ImportProblem("paginated assessment response; save every page")
+        records = assessment["results"]
+        if assessment.get("next") is None and assessment.get("count") != len(records):
+            raise ImportProblem("assessment count does not match the result list")
+        quiz = match.group(1)
+        if quiz in quizzes and quizzes[quiz] != records:
+            raise ImportProblem("different copies of the same quiz; reconcile manually")
+        quizzes[quiz] = records
+    if not quizzes:
+        raise ImportProblem("no quiz assessment responses found in HAR")
+    rows = []
+    for quiz, records in sorted(quizzes.items()):
+        for i, record in enumerate(records, 1):
+            if not isinstance(record, dict):
+                raise ImportProblem("invalid assessment record")
+            rows.append({**record, "_local_quiz": quiz, "_local_sequence": i})
+    return rows
+
+
+def read_input(path, allow_incomplete=False):
+    """Accept one local JSON response, or JSONL of responses/questions."""
+    path = Path(path)
+    with path.open("r", encoding="utf-8-sig") as f:
+        if path.suffix.lower() == ".jsonl":
+            data = [json.loads(line) for line in f if line.strip()]
+        else:
+            data = json.load(f)
+    if isinstance(data, dict) and data.get("next") and not allow_incomplete:
+        raise ImportProblem(
+            "paginated response has a next page; save every page and rerun "
+            "with --allow-incomplete only when providing all pages"
+        )
+    if isinstance(data, dict) and "log" in data:
+        return _har_rows(data, allow_incomplete)
+    return _question_rows(data)
+
+
+def import_files(paths, allow_incomplete=False):
+    records = []
+    seen = set()
+    for path in paths:
+        rows = read_input(path, allow_incomplete)
+        for position, raw in enumerate(rows, 1):
+            try:
+                record = convert(raw)
+            except (ImportProblem, TypeError) as exc:
+                raise ImportProblem(f"{Path(path).name}: record {position}: {exc}") from exc
+            if record["id"] in seen:
+                raise ImportProblem(
+                    f"{Path(path).name}: record {position}: duplicate question across inputs"
+                )
+            seen.add(record["id"])
+            records.append(record)
+    if not records:
+        raise ImportProblem("no questions found")
+    return records
+
+
+def require_domains(records):
+    """build_aws_study.py files every question under exam Domain 1-6."""
+    unmatched = sorted({row["source_section"] or "(no section)"
+                        for row in records if row["category"] == "Uncategorized"})
+    if not unmatched:
+        return
+    count = sum(row["category"] == "Uncategorized" for row in records)
+    shown = ", ".join(repr(name) for name in unmatched[:5])
+    if len(unmatched) > 5:
+        shown += ", ..."
+    raise ImportProblem(
+        f"{count} question(s) have no 'Domain 1-6: ...' section ({shown}); "
+        "build_aws_study.py cannot file them. Fix the sections in the source, or "
+        "pass --allow-uncategorized for a review-only export"
+    )
+
+
+def write_private(records, destination, overwrite=False):
+    """Atomic, owner-only JSONL output outside the public git worktree."""
+    target = Path(destination).expanduser().resolve()
+    repo_root = Path(__file__).resolve().parents[2]
+    if target == repo_root or repo_root in target.parents:
+        raise ImportProblem("output must be outside the public repository")
+    if target.exists() and not overwrite:
+        raise ImportProblem("output exists; use --overwrite to replace it")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".udemy-import-", dir=str(target.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as out:
+            for record in records:
+                out.write(json.dumps(record, ensure_ascii=False) + "\n")
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(tmp, target)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--src", nargs="+", required=True,
+                        help="local Udemy assessments JSON/JSONL or Chrome HAR file(s)")
+    parser.add_argument("--out", help="private output JSONL outside repository")
+    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--allow-incomplete", action="store_true",
+                        help="allow individual paginated input files (provide all pages)")
+    parser.add_argument("--allow-uncategorized", action="store_true",
+                        help="keep questions without a Domain 1-6 section (review only; "
+                             "the study pack builder rejects them)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="validate and count, do not write questions")
+    args = parser.parse_args(argv)
+    if not args.dry_run and not args.out:
+        parser.error("--out is required unless --dry-run")
+    try:
+        records = import_files(args.src, args.allow_incomplete)
+        if not args.allow_uncategorized:
+            require_domains(records)
+        if not args.dry_run:
+            write_private(records, args.out, args.overwrite)
+    except (ImportProblem, OSError, ValueError) as exc:
+        parser.exit(1, f"Import failed: {exc}\n")
+    single = sum(row["type"] == "single" for row in records)
+    print(f"Validated {len(records)} English questions: {single} single-answer, "
+          f"{len(records) - single} multiple-answer."
+          + (" No file written." if args.dry_run else " Private JSONL written."))
+
+
+if __name__ == "__main__":
+    main()

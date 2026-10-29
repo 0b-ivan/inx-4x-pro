@@ -128,3 +128,5 @@ assert n == 150 and size > 0 and largest <= build_aws_study.MAX_RECORD
 PY
 "$BUILD_DIR/test_aws_realpack" "$BUILD_DIR/aws-synthetic.dat"
 
+# Local-only Udemy study question importer: fixtures contain no purchased content.
+python3 "$TOOLS/test_import_udemy_practice.py"
