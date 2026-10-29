@@ -203,8 +203,9 @@ void CardPartyActivity::loadConfiguredDeck() {
   deckPlayable_ = true;
   deckPathCount_ = 0;
   // One path per line; a single line is what older builds wrote.
-  char chosen[cp::sdpack::kMaxPacks * sizeof(deckPaths_[0]) + 4] = {};
-  if (Storage.exists(kCardPartyDeckChoice)) Storage.readFileToBuffer(kCardPartyDeckChoice, chosen, sizeof(chosen));
+  char* chosen = deckText_;
+  std::memset(deckText_, 0, sizeof(deckText_));
+  if (Storage.exists(kCardPartyDeckChoice)) Storage.readFileToBuffer(kCardPartyDeckChoice, chosen, sizeof(deckText_));
   if (std::strcmp(chosen, kDemoChoice) == 0) return;
   const char* lines[cp::sdpack::kMaxPacks] = {};
   uint8_t count = 0;
@@ -327,7 +328,8 @@ void CardPartyActivity::chooseDeck(int row) {
         if (!on || std::strcmp(deckPaths_[i], path) != 0) chosen[chosenCount++] = deckPaths_[i];
     if (!on) {
       if (chosenCount == cp::sdpack::kMaxPacks) {
-        std::snprintf(report_, sizeof(report_), "%s", tr(STR_CAW_MSG_AT_MOST_FOUR_PACKS));
+        std::snprintf(report_, sizeof(report_), tr(STR_CAW_MSG_AT_MOST_PACKS),
+                      static_cast<unsigned>(cp::sdpack::kMaxPacks));
         requestUpdate();
         return;
       }
@@ -336,10 +338,9 @@ void CardPartyActivity::chooseDeck(int row) {
     if (chosenCount == 0) row = 0;  // the last pack switched off: demo
   }
   // loadPacks() overwrites deckPaths_, which `chosen` may point into.
-  char copies[cp::sdpack::kMaxPacks][sizeof(deckPaths_[0])] = {};
   for (uint8_t i = 0; i < chosenCount; ++i) {
-    std::snprintf(copies[i], sizeof(copies[i]), "%s", chosen[i]);
-    chosen[i] = copies[i];
+    std::snprintf(deckCopies_[i], sizeof(deckCopies_[i]), "%s", chosen[i]);
+    chosen[i] = deckCopies_[i];
   }
   if (hosting()) {
     // A running table switches packs only between rounds; hands are dealt anew.
@@ -405,11 +406,13 @@ void CardPartyActivity::chooseDeck(int row) {
   requestUpdate();
 }
 void CardPartyActivity::saveDeckChoice() {
-  char value[cp::sdpack::kMaxPacks * sizeof(deckPaths_[0]) + 4] = {};
-  if (!packLoaded_ || !deckPathCount_) std::snprintf(value, sizeof(value), "%s", kDemoChoice);
+  char* value = deckText_;
+  const size_t size = sizeof(deckText_);
+  std::memset(deckText_, 0, size);
+  if (!packLoaded_ || !deckPathCount_) std::snprintf(value, size, "%s", kDemoChoice);
   for (uint8_t i = 0; packLoaded_ && i < deckPathCount_; ++i) {
     const size_t used = std::strlen(value);
-    std::snprintf(value + used, sizeof(value) - used, "%s%s", i ? "\n" : "", deckPaths_[i]);
+    std::snprintf(value + used, size - used, "%s%s", i ? "\n" : "", deckPaths_[i]);
   }
   const size_t n = std::strlen(value);
   HalFile file;
@@ -817,12 +820,11 @@ void CardPartyActivity::installPack(uint8_t index) {
     RenderLock lock(*this);
     // Joins the packs already in play; alone if they cannot be combined.
     const char* set[cp::sdpack::kMaxPacks] = {};
-    char copies[cp::sdpack::kMaxPacks][sizeof(deckPaths_[0])] = {};
     uint8_t n = 0;
     for (uint8_t i = 0; packLoaded_ && i < deckPathCount_ && n + 1 < cp::sdpack::kMaxPacks; ++i)
       if (std::strcmp(deckPaths_[i], path) != 0) {
-        std::snprintf(copies[n], sizeof(copies[n]), "%s", deckPaths_[i]);
-        set[n] = copies[n];
+        std::snprintf(deckCopies_[n], sizeof(deckCopies_[n]), "%s", deckPaths_[i]);
+        set[n] = deckCopies_[n];
         ++n;
       }
     set[n++] = path;
@@ -1264,7 +1266,10 @@ void CardPartyActivity::drawDecks() {
   drawBase(tr(STR_CAW_DECK));
   const int width = renderer.getScreenWidth();
   const int textWidth = width - 2 * kGutter;
-  renderer.drawText(SMALL_FONT_ID, kGutter, 82, tr(STR_CAW_TAP_TO_LOAD_SD_GAMES_CARDPARTY_PACKS), true);
+  char hint[64] = {};
+  std::snprintf(hint, sizeof(hint), tr(STR_CAW_TAP_TO_LOAD_SD_GAMES_CARDPARTY_PACKS),
+                static_cast<unsigned>(cp::sdpack::kMaxPacks));
+  renderer.drawText(SMALL_FONT_ID, kGutter, 82, hint, true);
   for (int row = 0; row <= deckCount_; ++row) {
     const int y = kDeckTop + row * kDeckRow;
     const DeckEntry* entry = row ? &decks_[row - 1] : nullptr;

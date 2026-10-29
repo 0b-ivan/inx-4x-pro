@@ -15,7 +15,14 @@ using namespace cardparty::sdpack;
 
 namespace {
 int failures = 0, checks = 0;
-#define CHECK(c) do { ++checks; if (!(c)) { ++failures; std::fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #c); } } while (0)
+#define CHECK(c)                                                       \
+  do {                                                                 \
+    ++checks;                                                          \
+    if (!(c)) {                                                        \
+      ++failures;                                                      \
+      std::fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #c); \
+    }                                                                  \
+  } while (0)
 
 struct Buffer : ByteSource {
   std::vector<uint8_t> bytes;
@@ -26,21 +33,40 @@ struct Buffer : ByteSource {
     return true;
   }
 };
-void u16(std::vector<uint8_t>& v, uint16_t x) { v.push_back(static_cast<uint8_t>(x)); v.push_back(static_cast<uint8_t>(x >> 8)); }
-void u32(std::vector<uint8_t>& v, uint32_t x) { for (int i = 0; i < 4; ++i) v.push_back(static_cast<uint8_t>(x >> (8 * i))); }
-void str(std::vector<uint8_t>& v, const std::string& s) { u16(v, static_cast<uint16_t>(s.size())); v.insert(v.end(), s.begin(), s.end()); v.push_back(0); }
+void u16(std::vector<uint8_t>& v, uint16_t x) {
+  v.push_back(static_cast<uint8_t>(x));
+  v.push_back(static_cast<uint8_t>(x >> 8));
+}
+void u32(std::vector<uint8_t>& v, uint32_t x) {
+  for (int i = 0; i < 4; ++i) v.push_back(static_cast<uint8_t>(x >> (8 * i)));
+}
+void str(std::vector<uint8_t>& v, const std::string& s) {
+  u16(v, static_cast<uint16_t>(s.size()));
+  v.insert(v.end(), s.begin(), s.end());
+  v.push_back(0);
+}
 
-struct Cat { std::string name; uint8_t flags; };
-struct Card { std::string text; uint16_t mask; uint8_t pick = 1; };
+struct Cat {
+  std::string name;
+  uint8_t flags;
+};
+struct Card {
+  std::string text;
+  uint16_t mask;
+  uint8_t pick = 1;
+};
 
 // Released format-2 pack, as build_sd_pack.py writes it.
 Buffer pack(const std::string& title, const std::string& license, const std::vector<Cat>& cats,
             const std::vector<Card>& prompts, const std::vector<Card>& answers, uint32_t version = 1) {
   std::vector<uint8_t> body;
-  for (const std::string& meta : {title, license, std::string("https://example.org/l"), title + " Autoren",
-                                  std::string("https://example.org")})
+  for (const std::string& meta :
+       {title, license, std::string("https://example.org/l"), title + " Autoren", std::string("https://example.org")})
     str(body, meta);
-  for (const Cat& c : cats) { body.push_back(c.flags); str(body, c.name); }
+  for (const Cat& c : cats) {
+    body.push_back(c.flags);
+    str(body, c.name);
+  }
   for (const Card& p : prompts) {
     u16(body, static_cast<uint16_t>(p.text.size()));
     body.push_back(p.pick);
@@ -74,15 +100,18 @@ Buffer pack(const std::string& title, const std::string& license, const std::vec
 Buffer packA() {
   std::vector<Card> prompts = {{"Was ist ____?", 0}, {"Erst ____, dann ____.", 0b10, 2}};
   std::vector<Card> answers;
-  for (int i = 0; i < 60; ++i) answers.push_back({"A-Antwort " + std::to_string(i), static_cast<uint16_t>(i >= 50 ? 0b10 : 0)});
+  for (int i = 0; i < 60; ++i)
+    answers.push_back({"A-Antwort " + std::to_string(i), static_cast<uint16_t>(i >= 50 ? 0b10 : 0)});
   answers[0].text = "Gemeinsame Karte";
-  return pack("Deutsch", "CC-BY-NC-SA-2.0", {{"Basis", kCategoryDefaultOn}, {"FSK 18", kCategoryAdult}}, prompts, answers);
+  return pack("Deutsch", "CC-BY-NC-SA-2.0", {{"Basis", kCategoryDefaultOn}, {"FSK 18", kCategoryAdult}}, prompts,
+              answers);
 }
 // B: Schwarz (on), FSK 18 (adult), Basis (off here). 1 shared prompt.
 Buffer packB() {
   std::vector<Card> prompts = {{"Was ist ____?", 0b001}, {"Opas letzte Worte: ____.", 0b001}};
   std::vector<Card> answers;
-  for (int i = 0; i < 40; ++i) answers.push_back({"B-Antwort " + std::to_string(i), static_cast<uint16_t>(i < 20 ? 0b011 : 0b001)});
+  for (int i = 0; i < 40; ++i)
+    answers.push_back({"B-Antwort " + std::to_string(i), static_cast<uint16_t>(i < 20 ? 0b011 : 0b001)});
   answers[39].text = "Gemeinsame Karte";
   return pack("Nach Mitternacht", "CC0-1.0",
               {{"Schwarz", kCategoryDefaultOn}, {"FSK 18", kCategoryAdult}, {"Basis", 0}}, prompts, answers);
@@ -171,8 +200,43 @@ void playsAMatchWithFilters() {
   }
   CHECK(g.phase() == Phase::Finished);
   bool fromA = false, fromB = false;
-  for (const auto& t : seen) { fromA = fromA || t.rfind("A-", 0) == 0; fromB = fromB || t.rfind("B-", 0) == 0; }
+  for (const auto& t : seen) {
+    fromA = fromA || t.rfind("A-", 0) == 0;
+    fromB = fromB || t.rfind("B-", 0) == 0;
+  }
   CHECK(fromA && fromB);  // cards from both packs reach the table
+}
+
+// The full set: eight distinct packs sharing one category name merge into
+// one deck, in any order; titles stay cut on whole characters.
+void eightPacks() {
+  static_assert(kMaxPacks == 8, "update this test with the pack limit");
+  std::vector<Buffer> packs;
+  for (int p = 0; p < kMaxPacks; ++p) {
+    std::vector<Card> answers;
+    for (int i = 0; i < 40; ++i) answers.push_back({"P" + std::to_string(p) + "-Antwort " + std::to_string(i), 0b1});
+    answers[0].text = "Überall gleich";
+    packs.push_back(pack("Päckchen Nummer " + std::to_string(p), "CC0-1.0", {{"Basis", kCategoryDefaultOn}},
+                         {{"Frage " + std::to_string(p) + " ____", 0b1}}, answers));
+  }
+  ByteSource* all[kMaxPacks] = {};
+  ByteSource* reversed[kMaxPacks] = {};
+  for (int p = 0; p < kMaxPacks; ++p) {
+    all[p] = &packs[p];
+    reversed[kMaxPacks - 1 - p] = &packs[p];
+  }
+  DeckSet set;
+  CHECK(set.load(all, kMaxPacks));
+  CHECK(set.packCount() == kMaxPacks);
+  CHECK(set.deck().promptsCount == kMaxPacks);
+  CHECK(set.deck().answersCount == kMaxPacks * 39 + 1);  // the shared card once
+  CHECK(set.categoryCount() == 1 && categories::defaults(set) == 0b1);
+  CHECK(std::strlen(set.title()) < 96);
+  CHECK(validText(reinterpret_cast<const uint8_t*>(set.title()), std::strlen(set.title())));
+  DeckSet backwards;
+  CHECK(backwards.load(reversed, kMaxPacks) && backwards.crc() == set.crc());
+  Game g;
+  CHECK(g.configure(set.deck(), Rules{5, 8, true}, 7));
 }
 
 void failureKeepsPreviousSet() {
@@ -196,8 +260,9 @@ void failureKeepsPreviousSet() {
   ByteSource* ac[] = {&a, &c};
   CHECK(!set.load(ac, 2));
   CHECK(set.crc() == crc);
-  ByteSource* none[] = {&a, &b, &a, &b, &a};
-  CHECK(!set.load(none, 5));  // at most four packs
+  ByteSource* none[kMaxPacks + 1] = {};
+  for (uint8_t i = 0; i <= kMaxPacks; ++i) none[i] = i % 2 ? &b : &a;
+  CHECK(!set.load(none, kMaxPacks + 1));  // at most kMaxPacks packs
   CHECK(!set.load(none, 0));
   set.clear();
   CHECK(set.packCount() == 0 && !set.ready());
@@ -208,6 +273,7 @@ int main() {
   singlePassesThrough();
   twoPacksMerge();
   playsAMatchWithFilters();
+  eightPacks();
   failureKeepsPreviousSet();
   std::printf("cardparty deck set: %d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;

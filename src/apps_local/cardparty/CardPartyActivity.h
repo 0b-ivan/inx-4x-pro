@@ -8,9 +8,9 @@
 #include "CardPartyCatalog.h"
 #include "CardPartyCategories.h"
 #include "CardPartyCore.h"
-#include "CardPartyHistory.h"
 #include "CardPartyDeckSet.h"
 #include "CardPartyDemoDeck.h"
+#include "CardPartyHistory.h"
 #include "CardPartySdPack.h"
 #include "CardPartySessions.h"
 #include "web/CardPartyBrowserServer.h"
@@ -107,6 +107,9 @@ class CardPartyActivity final : public Activity {
   bool packLoaded_ = false;
   // Files of the loaded packs; none while the built-in demo plays.
   char deckPaths_[cardparty::sdpack::kMaxPacks][80] = {};
+  // deck.sel text and path copies; members, not stack, at eight packs.
+  char deckText_[cardparty::sdpack::kMaxPacks * sizeof(deckPaths_[0]) + 4] = {};
+  char deckCopies_[cardparty::sdpack::kMaxPacks][sizeof(deckPaths_[0])] = {};
   uint8_t deckPathCount_ = 0;
   DeckEntry decks_[kMaxDecks] = {};
   uint8_t deckCount_ = 0;

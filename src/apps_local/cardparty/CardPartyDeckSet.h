@@ -19,7 +19,7 @@
 namespace cardparty {
 namespace sdpack {
 
-constexpr uint8_t kMaxPacks = 4;
+constexpr uint8_t kMaxPacks = 8;
 
 class DeckSet final {
  public:
