@@ -8,6 +8,12 @@ For what the fork _is_ and how it talks about itself -- the layer above this
 one, and the one that governs anything the public sees -- read
 [`identity.md`](identity.md).
 
+> **Future direction (not yet implemented):** The reusable
+> [CrossPlay Terminal design system](node-terminal-design-system.md) documents
+> the user-approved NODE-inspired, strict-monochrome interface for the X4 Pro
+> and local browser clients. Toybox remains the **current implementation**;
+> Terminal is a staged migration proposal, beginning with Cards Against Whatever.
+>
 ## Where it comes from
 
 Playdate. We want its personality. But we cannot want it naively, because the

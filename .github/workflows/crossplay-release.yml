@@ -116,6 +116,36 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.13
+
+            **New game: Cards Against Whatever**
+
+            A party card game for 3 to 8 players. The X4 Pro is the game
+            master; every player joins with a phone browser by scanning the
+            QR code, over the X4's own hotspot or an existing Wi-Fi. No app
+            install. Rotating Juror, Pick 1/2/3, private hands, anonymous
+            answers until the reveal, German and English UI on X4 and phones.
+
+            The X4 runs the table: rounds, answer and Juror clocks with a
+            one-time extension and +TIME, pause, waiting for a dropped
+            player, remove a player, end for everyone, rematch. Every player
+            may swap one hand card per round. Rounds are rounded to a
+            multiple of the table so everyone judges equally often.
+
+            **Card packs**
+
+            The built-in deck is a short German demo. Card packs are SD files
+            in /games/cardparty/packs/ or a download from the cardparty-packs
+            release in [03] DECK; up to eight packs play together.
+            Categories switch in [04] CATEGORIES; adult categories always
+            start off. No pack text rides inside the OTA firmware image.
+
+            **Wall of Fame**
+
+            Phones keep a player identity, shown as Name and a word. Games,
+            wins, rounds and the latest winning sentences are kept on SD with
+            a crash-safe backup.
+
             ### What is new in 1.16.12
 
             **German Trivia questions via Wi-Fi and separate SD data pack**
