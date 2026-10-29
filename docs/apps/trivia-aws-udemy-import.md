@@ -125,7 +125,10 @@ One JSON object per line with only these allowlisted fields:
 The correct list holds **zero-based indexes into options**. type is
 single or multi. category uses the original section **only** if that section
 has a clearly labeled "Domain 1" through "Domain 6" prefix. Otherwise the
-category remains "Uncategorized", pending manual review. Every question from a
+category remains "Uncategorized", pending manual review. Because
+build_aws_study.py files every question under Domain 1-6, the importer refuses
+to write such questions and names their sections; --allow-uncategorized keeps
+them for a review-only export that the pack builder will not accept. Every question from a
 recognized HAR carries its quiz number for grouping. The public PR contains no
 question text from Udemy.
 

@@ -203,6 +203,26 @@ class TestUdemyImporter(unittest.TestCase):
         with self.assertRaisesRegex(importer.ImportProblem, "disagrees"):
             importer.convert(row)
 
+    def test_cli_rejects_questions_the_pack_builder_cannot_file(self):
+        good = item("Which service runs containers?")
+        good["section"] = "Domain 3: Resilient Cloud Solutions"
+        data = {"count": 2, "next": None, "results": [item(), good]}
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "assessments.json"
+            src.write_text(json.dumps(data), encoding="utf-8")
+            out = Path(tmp) / "private.jsonl"
+            with self.assertRaises(SystemExit) as failed:
+                importer.main(["--src", str(src), "--out", str(out)])
+            self.assertEqual(failed.exception.code, 1)
+            self.assertFalse(out.exists())
+            importer.main(["--src", str(src), "--out", str(out), "--allow-uncategorized"])
+            rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual([r["category"] for r in rows],
+                             ["Uncategorized", "Domain 3: Resilient Cloud Solutions"])
+        with self.assertRaisesRegex(importer.ImportProblem, "'Sample Section'"):
+            importer.require_domains([importer.convert(item())])
+        importer.require_domains([importer.convert(good)])
+
     def test_output_into_public_repo_is_blocked(self):
         repo_root = Path(importer.__file__).resolve().parents[2]
         with self.assertRaisesRegex(importer.ImportProblem, "outside"):

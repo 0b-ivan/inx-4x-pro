@@ -265,6 +265,23 @@ def import_files(paths, allow_incomplete=False):
     return records
 
 
+def require_domains(records):
+    """build_aws_study.py files every question under exam Domain 1-6."""
+    unmatched = sorted({row["source_section"] or "(no section)"
+                        for row in records if row["category"] == "Uncategorized"})
+    if not unmatched:
+        return
+    count = sum(row["category"] == "Uncategorized" for row in records)
+    shown = ", ".join(repr(name) for name in unmatched[:5])
+    if len(unmatched) > 5:
+        shown += ", ..."
+    raise ImportProblem(
+        f"{count} question(s) have no 'Domain 1-6: ...' section ({shown}); "
+        "build_aws_study.py cannot file them. Fix the sections in the source, or "
+        "pass --allow-uncategorized for a review-only export"
+    )
+
+
 def write_private(records, destination, overwrite=False):
     """Atomic, owner-only JSONL output outside the public git worktree."""
     target = Path(destination).expanduser().resolve()
@@ -295,6 +312,9 @@ def main(argv=None):
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--allow-incomplete", action="store_true",
                         help="allow individual paginated input files (provide all pages)")
+    parser.add_argument("--allow-uncategorized", action="store_true",
+                        help="keep questions without a Domain 1-6 section (review only; "
+                             "the study pack builder rejects them)")
     parser.add_argument("--dry-run", action="store_true",
                         help="validate and count, do not write questions")
     args = parser.parse_args(argv)
@@ -302,6 +322,8 @@ def main(argv=None):
         parser.error("--out is required unless --dry-run")
     try:
         records = import_files(args.src, args.allow_incomplete)
+        if not args.allow_uncategorized:
+            require_domains(records)
         if not args.dry_run:
             write_private(records, args.out, args.overwrite)
     except (ImportProblem, OSError, ValueError) as exc:
