@@ -71,6 +71,25 @@
         }
       ],
       "sha256": "a9310d0cd106974dd11afe2746804c02d611e5f8be4ca8b44fc583e1c94494d9"
+    },
+    {
+      "file": "Moralisch-Bankrott.dat",
+      "deck_id": "moralisch-bankrott",
+      "title": "Moralisch Bankrott (18+)",
+      "version": 4,
+      "rights_holder": "0b-ivan",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "decision": "Original adult satirical cards written for the repository owner, and explicitly requested for in-game download on 2026-10-29. This is a first-party CC0 deck. The FSK 18 category starts disabled; the user must enable it.",
+      "sources": [
+        {
+          "importer": "local",
+          "name": "moralisch-bankrott",
+          "url": "https://github.com/0b-ivan/inx-4x-pro",
+          "commit": "v4"
+        }
+      ],
+      "sha256": "5821fc5e0e7917255c04a0dc20046da0fa46e40943081d24fd4517791caecd99"
     }
   ]
 }
