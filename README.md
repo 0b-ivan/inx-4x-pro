@@ -39,6 +39,7 @@ restyled to match the design language the apps use.
 | ---------------- | ---------------------------------------------------------------------------- |
 | **Chess**        | A full engine on the device, or a board between two of them.                 |
 | **Battleship**   | Lay out a fleet, then hunt someone else's.                                   |
+| **Cards Whatever** | *In development:* X4-hosted card-party game; phones join over local Wi-Fi. |
 | **Connections**  | The daily word grid, with an archive of past boards.                         |
 | **Solitaire**    | Klondike, turned sideways because that is the shape of a tableau.            |
 | **D&Diagrams**   | A nonogram whose clues are a dungeon. 64 of them.                            |

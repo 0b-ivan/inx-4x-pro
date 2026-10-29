@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>C/A/W — CrossPlay</title>
+<style>
+:root{color-scheme:dark;--ink:#fff;--paper:#000;--line:1px solid #fff;font-family:ui-monospace,Menlo,"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:#000;color:#fff}
+body{font-size:16px;line-height:1.4}
+button,input{font:inherit;border-radius:0}
+button{cursor:pointer;background:#000;color:#fff;border:1px solid #fff;min-height:48px;padding:9px 14px}
+button:disabled{cursor:not-allowed;border-style:dashed;opacity:1}
+button:focus-visible,input:focus-visible{outline:2px solid #fff;outline-offset:3px}
+button[aria-pressed="true"]{background:#fff;color:#000}
+button[aria-pressed="true"]:focus-visible{outline:2px solid #000;outline-offset:-5px}
+input{background:#000;border:1px solid #fff;color:#fff;padding:12px;width:100%;font-size:16px;min-height:48px}
+.shell{width:min(100%,720px);margin:0 auto;height:100vh;height:100dvh;padding:20px 16px max(16px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:16px}
+.mast{display:flex;justify-content:space-between;gap:12px;align-items:baseline;font-size:12px;letter-spacing:.03em;flex-wrap:wrap}
+.brand{font-weight:700;white-space:nowrap}
+.rule{border:0;border-top:1px solid #fff;width:100%;margin:0}
+.meta{display:flex;justify-content:space-between;gap:10px;font-size:13px;flex-wrap:wrap}
+main{flex:1;display:flex;flex-direction:column;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+section[hidden]{display:none!important}
+section{display:flex;flex-direction:column;gap:14px;min-height:0;flex:1}
+.eyebrow{font-size:12px;letter-spacing:.05em;margin:0}
+h1,h2,p{margin:0}
+h1{font-size:clamp(22px,6vw,30px);font-weight:500;line-height:1.25;overflow-wrap:anywhere}
+h2{font-size:18px;font-weight:500}
+.notice{border:1px solid #fff;padding:12px;white-space:pre-wrap}
+.stack{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center;min-height:44px;flex-wrap:wrap}
+.prompt{border-block:1px solid #fff;padding:14px 0;flex:0 1 auto;max-height:min(30dvh,240px);overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#fff #000;scrollbar-width:thin}
+.prompt h1{padding-block:12px}
+.choice-list{display:flex;flex-direction:column;gap:0;overflow-y:auto;flex:1 1 0;min-height:112px;overscroll-behavior:contain;scrollbar-color:#fff #000;scrollbar-width:thin;border-top:1px solid #fff}
+.choice{display:block;flex:0 0 auto;width:100%;text-align:left;padding:13px 10px;border:0;border-bottom:1px solid #fff;min-height:56px;white-space:normal;overflow-wrap:anywhere;line-height:1.4}
+.choice .ord{display:inline-block;width:5ch;white-space:nowrap;vertical-align:top}
+.choice .body{display:inline}
+.footer{flex:0 0 auto;background:#000;padding:12px 0 max(8px,env(safe-area-inset-bottom));border-top:1px solid #fff;display:flex;gap:12px;align-items:center;justify-content:space-between;z-index:1}
+.footer button{flex:0 0 auto}
+.secondary{font-size:13px}
+.secondary,.notice{overflow-wrap:anywhere}
+#judgePrompt{flex:0 0 auto;max-height:min(22dvh,180px);overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#fff #000;scrollbar-width:thin}
+#famePlayers,#fameQuotes{overflow-y:auto;scrollbar-color:#fff #000;scrollbar-width:thin;min-height:0;max-height:27dvh}
+#fame .footer{flex-wrap:wrap;gap:8px}
+#fame .footer button{flex:1 1 80px;min-width:0;overflow-wrap:anywhere}
+@media(max-width:400px){.shell{gap:10px;padding-top:12px}.mast{flex-wrap:nowrap;align-items:center}.mast .brand{font-size:11px}.mast .tools{gap:4px;flex-wrap:nowrap;justify-content:flex-end;min-width:0}.mast #connection{font-size:10px;overflow-wrap:anywhere;min-width:0}.mast .mini{font-size:10px;padding:4px 6px;white-space:nowrap}}
+.list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:0}
+.list li{border-bottom:1px solid #fff;padding:12px 0;overflow-wrap:anywhere}
+.field{display:flex;flex-direction:column;gap:8px}
+.grow{flex:1}
+[role="status"]{min-height:1.4em}
+.mini{min-height:44px;padding:6px 10px;font-size:13px}
+.mast .tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#timer{font-weight:700;font-variant-numeric:tabular-nums}
+.podium{display:flex;flex-wrap:wrap;gap:18px;justify-content:center;padding:8px 0}
+.champ{display:flex;flex-direction:column;align-items:center;gap:6px;max-width:100%}
+.champ h1{text-align:center}
+.crown{width:44px;height:28px;background:#fff;clip-path:polygon(0 100%,7% 22%,30% 58%,50% 0,70% 58%,93% 22%,100% 100%)}
+@media(min-width:650px){.shell{padding:32px 24px}.prompt{max-height:245px}}
+@media(max-height:540px){.prompt{max-height:28dvh}.shell{gap:9px;padding-top:12px}}
+section>*{flex-shrink:0}section>.choice-list{flex-shrink:1}#standings,#scores{flex:0 1 auto;min-height:88px;overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#fff #000;scrollbar-width:thin}
+@media(max-height:700px){.tagline{display:none}section{gap:10px}#judging h1{font-size:20px}#judgePrompt{max-height:15dvh}.prompt{max-height:24dvh}.prompt h1{padding-block:4px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="mast" aria-label="Cards Against Whatever">
+    <span class="brand">C / A / W</span>
+    <span class="tools"><span id="connection" role="status" aria-live="polite">OFFLINE</span>
+      <button id="fameButton" class="mini" type="button" data-t="fameButton" hidden>[ RUHMESHALLE ]</button>
+      <button id="pauseButton" class="mini" type="button" hidden data-t="pauseButton">[ PAUSE ]</button></span>
+  </header>
+  <hr class="rule">
+  <div class="meta"><span id="round">RUNDE —</span><span id="timer" aria-live="off"></span></div>
+  <main>
+    <section id="join">
+      <p class="eyebrow" data-t="joinEyebrow">/// SPIEL BEITRETEN</p>
+      <h1>CARDS AGAINST WHATEVER</h1>
+      <p class="secondary" data-t="joinDescription">Der X4 Pro ist der Spielleiter. Dein Telefon ist deine Kartenhand.</p>
+      <form id="joinForm" class="stack">
+        <label class="field" for="nick"><span data-t="playerName">SPIELERNAME</span>
+          <input id="nick" type="text" required minlength="1" maxlength="23" autocomplete="nickname" spellcheck="false" placeholder="DEIN NAME" data-t-placeholder="namePlaceholder">
+        </label>
+        <button type="submit" id="joinButton" data-t="joinButton">[ BEITRETEN ]</button>
+      </form>
+      <p class="secondary" id="joinHint" role="status" aria-live="polite">MIT DEM X4 VERBINDEN</p>
+    </section>
+    <section id="lobby" hidden>
+      <p class="eyebrow" data-t="lobbyEyebrow">/// LOBBY</p>
+      <h1 data-t="waitingPlayers">WARTE AUF SPIELER</h1>
+      <p class="secondary" data-t="hostStarts">Die Partie wird auf dem X4 gestartet.</p>
+      <ul id="roster" class="list" aria-label="Spieler" data-t-aria="playersAria"></ul>
+    </section>
+    <section id="play" hidden>
+      <p class="eyebrow" id="playMeta">/// ANTWORT WÄHLEN</p>
+      <div class="prompt" tabindex="0" role="region" aria-label="Aktuelle Frage, scrollbar" data-t-aria="promptScroll">
+        <p class="eyebrow" data-t="currentPrompt">AKTUELLER SATZ</p>
+        <h1 id="promptText"></h1><p id="answerPreview" class="secondary" aria-live="polite"></p>
+      </div>
+      <div class="row"><span class="eyebrow" data-t="yourHand">DEINE KARTEN</span><button id="swapButton" class="mini" type="button" data-t="swapButton" disabled>[ ABWERFEN ]</button><span class="secondary" id="count">0/1 GEWÄHLT</span></div>
+      <div id="choices" class="choice-list" tabindex="0" role="region" aria-label="Antwortkarten, scrollbar" data-t-aria="cardsScroll"></div>
+      <div class="footer">
+        <span class="secondary" id="footCount">0/1 GEWÄHLT</span>
+        <button id="submit" type="button" disabled data-t="submitButton">[ ABSENDEN ]</button>
+      </div>
+    </section>
+    <section id="waiting" hidden>
+      <p class="eyebrow" data-t="responseSent">/// ANTWORT GESENDET</p>
+      <h1 data-t="waitingOthers">WARTE AUF DIE ANDEREN</h1>
+      <p id="waitingCount" role="status" aria-live="polite">WARTE ...</p>
+    </section>
+    <section id="judging" hidden>
+      <p class="eyebrow" data-t="judgingEyebrow">/// JUROR</p>
+      <h1 id="judgeHeader">GEWINNER WÄHLEN</h1>
+      <p id="judgePrompt" class="secondary" tabindex="0" role="region" aria-label="Aktuelle Frage, scrollbar" data-t-aria="promptScroll"></p>
+      <div id="candidateList" class="choice-list" tabindex="0" role="region" aria-label="Anonyme Antworten, scrollbar" data-t-aria="anonymousScroll"></div>
+      <div class="footer">
+        <span class="secondary" id="judgeSelection">NICHTS GEWÄHLT</span>
+        <button id="confirmJudge" type="button" disabled data-t="confirmButton">[ BESTÄTIGEN ]</button>
+      </div>
+    </section>
+    <section id="result" hidden>
+      <p class="eyebrow" data-t="revealEyebrow">/// AUFLÖSUNG</p>
+      <h1 id="winner"></h1>
+      <div id="winnerText" class="notice"></div>
+      <p class="secondary" id="nextHint" role="status" aria-live="polite">DER X4 STARTET DIE NÄCHSTE RUNDE</p>
+      <ul id="scores" class="list" aria-label="Punkte" data-t-aria="scoresAria"></ul>
+    </section>
+    <section id="final" hidden>
+      <p class="eyebrow" id="finalEyebrow">/// SPIELENDE</p>
+      <div id="podium" class="podium" aria-label="Sieger" data-t-aria="winnerAria"></div>
+      <ul id="standings" class="list" aria-label="Endstand" data-t-aria="standingsAria"></ul>
+      <div class="footer">
+        <span class="secondary" id="votes" role="status" aria-live="polite">0 WOLLEN NOCHMAL</span>
+        <button id="againButton" type="button" data-t="againButton">[ NOCHMAL! ]</button>
+      </div>
+    </section>
+    <section id="hold" hidden>
+      <p class="eyebrow" id="holdEyebrow">/// PAUSE</p>
+      <h1 id="holdTitle">PAUSED</h1>
+      <p class="secondary" id="holdText" role="status" aria-live="polite"></p>
+      <button id="resumeButton" type="button" hidden data-t="resumeButton">[ FORTSETZEN ]</button>
+    </section>
+    <section id="fame" hidden>
+      <p class="eyebrow" data-t="fameTitle">RUHMESHALLE</p>
+      <h1 id="famePlayersHeading" data-t="famePlayers">SPIELERSTATISTIK</h1>
+      <ul id="famePlayers" class="list" aria-label="Wall of Fame"></ul>
+      <p class="eyebrow" id="fameQuotesHeading" data-t="fameQuotes">LETZTE SIEGERSAETZE</p>
+      <ul id="fameQuotes" class="list" aria-label="Siegersaetze"></ul>
+      <div class="footer">
+        <button id="famePrev" type="button" class="mini" data-t="famePrevious" data-t-aria="famePreviousAria" aria-label="Vorherige Seite">[ &lt; ]</button>
+        <button id="fameNext" type="button" class="mini" data-t="fameNext" data-t-aria="fameNextAria" aria-label="Nächste Seite">[ &gt; ]</button>
+        <button id="fameClose" type="button" class="mini" data-t="fameClose">[ SCHLIESSEN ]</button>
+      </div>
+    </section>
+    <section id="removed" hidden>
+      <p class="eyebrow" data-t="removedEyebrow">/// ENTFERNT</p>
+      <h1 data-t="removedHeading">DER X4 HAT DICH AUS DER PARTY ENTFERNT</h1>
+      <p class="secondary" data-t="removedDescription">Du kannst in der nächsten Lobby wieder beitreten.</p>
+      <button id="rejoinButton" type="button" data-t="rejoinButton">[ ZURÜCK ZUM BEITRITT ]</button>
+    </section>
+  </main>
+  <hr class="rule tagline">
+  <div class="meta tagline"><span data-t="localMultiplayer">LOKALER MEHRSPIELERMODUS</span><span data-t="noCloud">OHNE CLOUD</span></div>
+</div>
+<script>
+"use strict";
+// PRE-INTEGRATION CLIENT. Server wire protocol is provisional and must be
+// aligned with a strict bounded ESP32 parser before firmware registration.
+// Neither a browser name nor seat ID authorizes a game action.
+(() => {
+  const $ = id => document.getElementById(id);
+  const T = {
+    "de": {
+      "offline": "OFFLINE",
+      "pauseButton": "[ PAUSE ]",
+      "roundDefault": "RUNDE —",
+      "joinEyebrow": "/// SPIEL BEITRETEN",
+      "joinDescription": "Der X4 Pro ist der Spielleiter. Dein Telefon ist deine Kartenhand.",
+      "playerName": "SPIELERNAME",
+      "joinButton": "[ BEITRETEN ]",
+      "connectToX4": "MIT DEM X4 VERBINDEN",
+      "lobbyEyebrow": "/// LOBBY",
+      "waitingPlayers": "WARTE AUF SPIELER",
+      "hostStarts": "Die Partie wird auf dem X4 gestartet.",
+      "selectResponse": "/// ANTWORT WÄHLEN",
+      "currentPrompt": "AKTUELLER SATZ",
+      "yourHand": "DEINE KARTEN",
+      "initialSelection": "0/1 GEWÄHLT",
+      "submitButton": "[ ABSENDEN ]",
+      "responseSent": "/// ANTWORT GESENDET",
+      "waitingOthers": "WARTE AUF DIE ANDEREN",
+      "waiting": "WARTE ...",
+      "judgingEyebrow": "/// JUROR",
+      "chooseWinner": "GEWINNER WÄHLEN",
+      "noneSelected": "NICHTS GEWÄHLT",
+      "confirmButton": "[ BESTÄTIGEN ]",
+      "revealEyebrow": "/// AUFLÖSUNG",
+      "hostNextRound": "DER X4 STARTET DIE NÄCHSTE RUNDE",
+      "gameOverEyebrow": "/// SPIELENDE",
+      "initialVotes": "0 WOLLEN NOCHMAL",
+      "againButton": "[ NOCHMAL! ]",
+      "pauseEyebrow": "/// PAUSE",
+      "holdInitial": "PAUSED",
+      "resumeButton": "[ FORTSETZEN ]",
+      "removedEyebrow": "/// ENTFERNT",
+      "removedHeading": "DER X4 HAT DICH AUS DER PARTY ENTFERNT",
+      "removedDescription": "Du kannst in der nächsten Lobby wieder beitreten.",
+      "rejoinButton": "[ ZURÜCK ZUM BEITRITT ]",
+      "localMultiplayer": "LOKALER MEHRSPIELERMODUS",
+      "noCloud": "OHNE CLOUD",
+      "namePlaceholder": "DEIN NAME",
+      "promptScroll": "Aktuelle Frage, scrollbar",
+      "cardsScroll": "Antwortkarten, scrollbar",
+      "anonymousScroll": "Anonyme Antworten, scrollbar",
+      "playersAria": "Spieler",
+      "scoresAria": "Punkte",
+      "winnerAria": "Sieger",
+      "standingsAria": "Endstand",
+      "answersTime": "ZEIT {0}",
+      "jurorTime": "JUROR {0}",
+      "nextTime": "WEITER {0}",
+      "nextRoundIn": "NÄCHSTE RUNDE IN {0}",
+      "selectResponseFor": "/// ANTWORT WÄHLEN / JUROR {0}",
+      "selectionPosition": "Position {0} von {1}: {2}",
+      "selected": "{0}/{1} GEWÄHLT",
+      "judgePicked": "[{0}] GEWÄHLT",
+      "jurorJudging": "DER JUROR ENTSCHEIDET",
+      "round": "RUNDE {0}{1}",
+      "waitEyebrow": "/// WARTEZEIT",
+      "pauseBy": "PAUSIERT VON {0}",
+      "waitFor": "WARTE AUF {0}",
+      "blockedDescription": "{0} IST OFFLINE. DER X4 ENTSCHEIDET: WARTEN, WEITERMACHEN ODER ENTFERNEN.",
+      "pausedByMe": "NUR DU ODER DER X4 KÖNNEN FORTSETZEN.",
+      "pausedByOther": "NUR {0} ODER DER X4 KÖNNEN FORTSETZEN.",
+      "hostName": "DEM X4",
+      "connectedStatus": "  / VERBUNDEN",
+      "offlineStatus": "  / OFFLINE",
+      "received": "{0}/{1} ERHALTEN",
+      "endedByHost": "/// VOM X4 BEENDET",
+      "points": "{0} PT",
+      "rankedScore": "{0}  /  {1} PT",
+      "votes": "{0} WOLLEN NOCHMAL{1}",
+      "votedSuffix": " / DU AUCH",
+      "roundComplete": "RUNDE BEENDET",
+      "awaitNextRound": "Warte auf die nächste Runde",
+      "connecting": "VERBINDE",
+      "connected": "LOKAL / VERBUNDEN",
+      "joinSent": "BEITRITT GESENDET",
+      "error": "FEHLER: {0}",
+      "rejected": "ANFRAGE ABGELEHNT",
+      "session_full": "SITZUNG VOLL",
+      "already_joined": "BEREITS BEIGETRETEN",
+      "game_running": "SPIEL LÄUFT BEREITS",
+      "disconnected": "OFFLINE",
+      "idle": "BEREIT / BEITRETEN",
+      "noConnection": "KEINE VERBINDUNG ZUM X4",
+      "connectionError": "VERBINDUNGSFEHLER",
+      "badName": "NAME UNGÜLTIG ODER ZU LANG (MAX. 23 BYTE)",
+      "connectingToX4": "VERBINDE MIT X4",
+      "fameButton": "[ RUHMESHALLE ]",
+      "fameTitle": "RUHMESHALLE",
+      "famePlayers": "SPIELERSTATISTIK",
+      "fameQuotes": "LETZTE SIEGERSAETZE",
+      "fameEmpty": "NOCH KEINE EINTRAEGE",
+      "fameClose": "[ SCHLIESSEN ]",
+      "famePrevious": "[ < ]",
+      "famePreviousAria": "Vorherige Seite",
+      "fameNext": "[ > ]",
+      "fameNextAria": "Nächste Seite",
+      "fameStats": "{0} SPIELE · {1} SIEGE · {2} RUNDEN",
+      "swapButton": "[ ABWERFEN ]",
+      "swapDone": "[ GETAUSCHT ]"
+    },
+    "en": {
+      "offline": "OFFLINE",
+      "pauseButton": "[ PAUSE ]",
+      "roundDefault": "ROUND —",
+      "joinEyebrow": "/// JOIN GAME",
+      "joinDescription": "The X4 Pro runs the game. Your phone holds your cards.",
+      "playerName": "PLAYER NAME",
+      "joinButton": "[ JOIN ]",
+      "connectToX4": "CONNECT TO THE X4",
+      "lobbyEyebrow": "/// LOBBY",
+      "waitingPlayers": "WAITING FOR PLAYERS",
+      "hostStarts": "The match starts on the X4.",
+      "selectResponse": "/// SELECT RESPONSE",
+      "currentPrompt": "CURRENT PROMPT",
+      "yourHand": "YOUR HAND",
+      "initialSelection": "0/1 SELECTED",
+      "submitButton": "[ SUBMIT ]",
+      "responseSent": "/// RESPONSE SENT",
+      "waitingOthers": "WAITING FOR THE OTHERS",
+      "waiting": "WAITING...",
+      "judgingEyebrow": "/// JUDGE",
+      "chooseWinner": "CHOOSE THE WINNER",
+      "noneSelected": "NONE SELECTED",
+      "confirmButton": "[ CONFIRM ]",
+      "revealEyebrow": "/// REVEAL",
+      "hostNextRound": "THE X4 STARTS THE NEXT ROUND",
+      "gameOverEyebrow": "/// GAME OVER",
+      "initialVotes": "0 WANT TO PLAY AGAIN",
+      "againButton": "[ AGAIN! ]",
+      "pauseEyebrow": "/// PAUSED",
+      "holdInitial": "PAUSED",
+      "resumeButton": "[ RESUME ]",
+      "removedEyebrow": "/// REMOVED",
+      "removedHeading": "THE X4 REMOVED YOU FROM THE PARTY",
+      "removedDescription": "You can join again in the next lobby.",
+      "rejoinButton": "[ BACK TO JOIN ]",
+      "localMultiplayer": "LOCAL MULTIPLAYER",
+      "noCloud": "NO CLOUD",
+      "namePlaceholder": "YOUR NAME",
+      "promptScroll": "Current prompt, scrollable",
+      "cardsScroll": "Answer cards, scrollable",
+      "anonymousScroll": "Anonymous answers, scrollable",
+      "playersAria": "Players",
+      "scoresAria": "Scores",
+      "winnerAria": "Winner",
+      "standingsAria": "Final standings",
+      "answersTime": "TIME {0}",
+      "jurorTime": "JUDGE {0}",
+      "nextTime": "NEXT {0}",
+      "nextRoundIn": "NEXT ROUND IN {0}",
+      "selectResponseFor": "/// SELECT RESPONSE / JUDGE {0}",
+      "selectionPosition": "Position {0} of {1}: {2}",
+      "selected": "{0}/{1} SELECTED",
+      "judgePicked": "[{0}] SELECTED",
+      "jurorJudging": "THE JUDGE IS DECIDING",
+      "round": "ROUND {0}{1}",
+      "waitEyebrow": "/// WAITING",
+      "pauseBy": "PAUSED BY {0}",
+      "waitFor": "WAITING FOR {0}",
+      "blockedDescription": "{0} IS OFFLINE. THE X4 DECIDES: WAIT, CONTINUE OR REMOVE.",
+      "pausedByMe": "ONLY YOU OR THE X4 CAN RESUME.",
+      "pausedByOther": "ONLY {0} OR THE X4 CAN RESUME.",
+      "hostName": "THE X4",
+      "connectedStatus": "  / CONNECTED",
+      "offlineStatus": "  / OFFLINE",
+      "received": "{0}/{1} RECEIVED",
+      "endedByHost": "/// ENDED BY THE X4",
+      "points": "{0} PTS",
+      "rankedScore": "{0}  /  {1} PTS",
+      "votes": "{0} WANT TO PLAY AGAIN{1}",
+      "votedSuffix": " / YOU TOO",
+      "roundComplete": "ROUND COMPLETE",
+      "awaitNextRound": "Waiting for the next round",
+      "connecting": "CONNECTING",
+      "connected": "LOCAL / CONNECTED",
+      "joinSent": "JOIN REQUEST SENT",
+      "error": "ERROR: {0}",
+      "rejected": "REQUEST REJECTED",
+      "session_full": "SESSION FULL",
+      "already_joined": "ALREADY JOINED",
+      "game_running": "GAME ALREADY RUNNING",
+      "disconnected": "DISCONNECTED",
+      "idle": "IDLE / JOIN TO CONNECT",
+      "noConnection": "NO CONNECTION TO X4",
+      "connectionError": "CONNECTION ERROR",
+      "badName": "INVALID NAME OR TOO LONG (MAX 23 BYTES)",
+      "connectingToX4": "CONNECTING TO X4",
+      "fameButton": "[ WALL OF FAME ]",
+      "fameTitle": "WALL OF FAME",
+      "famePlayers": "PLAYER STATS",
+      "fameQuotes": "RECENT WINNING SENTENCES",
+      "fameEmpty": "NO ENTRIES YET",
+      "fameClose": "[ CLOSE ]",
+      "famePrevious": "[ < ]",
+      "famePreviousAria": "Previous page",
+      "fameNext": "[ > ]",
+      "fameNextAria": "Next page",
+      "fameStats": "{0} GAMES · {1} WINS · {2} ROUNDS",
+      "swapButton": "[ DISCARD ]",
+      "swapDone": "[ SWAPPED ]"
+    }
+  };
+  let lang=(typeof navigator!=="undefined" && /^de/i.test(navigator.language||""))?"de":"en";
+  function t(key,...args) {
+    const template=(T[lang]&&T[lang][key])||T.en[key]||key;
+    return template.replace(/\{(\d+)\}/g,(_,index)=>String(args[Number(index)]??""));
+  }
+  function applyLanguage() {
+    if(document.documentElement) document.documentElement.lang=lang;
+    if(typeof document.querySelectorAll==="function") {
+      for(const el of document.querySelectorAll("[data-t]"))
+        el.textContent=t(el.getAttribute("data-t"));
+      for(const el of document.querySelectorAll("[data-t-placeholder]"))
+        el.placeholder=t(el.getAttribute("data-t-placeholder"));
+      for(const el of document.querySelectorAll("[data-t-aria]"))
+        el.setAttribute("aria-label",t(el.getAttribute("data-t-aria")));
+    }
+    if(state.statusKey) text("connection",t(state.statusKey));
+    if(state.hintKey) hint(state.hintKey,...state.hintArgs);
+  }
+  function setLanguage(code) {
+    if(code!=="de"&&code!=="en")return;
+    if(lang!==code){lang=code;applyLanguage();render();}
+  }
+  function hint(key,...args) {
+    state.hintKey=key;state.hintArgs=args;
+    text("joinHint",t(key,...(key==="error"?args.map(arg=>t(arg)):args)));
+  }
+
+  const screens = ["join", "lobby", "play", "waiting", "judging", "result", "final", "hold", "removed", "fame"];
+  const state = {socket:null, ticket:null, revision:0, selection:[], judging:null,
+                 snapshot:null, personal:null, pendingJoin:null, removed:false, pid:null,
+                 statusKey:null,hintKey:null,hintArgs:[],fameOpen:false,famePage:0,fameData:null};
+  // The X4 sends the time left with each state; the phone counts down alone.
+  const clock = {kind:"", left:0, at:0, frozen:false};
+  // The X4 stores names as at most 23 UTF-8 bytes (umlauts count twice).
+  const kNameBytes = 23;
+  function utf8Length(value) {
+    return typeof TextEncoder === "function" ? new TextEncoder().encode(value).length
+      : unescape(encodeURIComponent(value)).length;
+  }
+  // Stable player identity is public, separate from the private seat ticket.
+  try {
+    const pid=typeof localStorage!=="undefined" ? localStorage.getItem("caw.player.id") : null;
+    if(pid&&/^[0-9a-f]{16}$/.test(pid)&&pid!=="0000000000000000")state.pid=pid;
+  } catch (_) { /* privacy settings may disable localStorage */ }
+  const saved = sessionStorage.getItem("caw.session.token");
+  if (saved && /^[0-9a-f]{32}$/.test(saved)) state.ticket = saved;
+  function show(name) { for(const s of screens) $(s).hidden = s !== name; }
+  function status(key) { state.statusKey=key;$("connection").textContent=t(key); }
+  function text(id, value) { $(id).textContent = value == null ? "" : String(value); }
+  function command(type, args = {}) {
+    if (!state.socket || state.socket.readyState !== WebSocket.OPEN || !state.ticket) return false;
+    state.socket.send(JSON.stringify({type,token:state.ticket,revision:state.revision,...args}));
+    return true;
+  }
+  // Pause, unpause and again carry the ticket only.
+  function ticketed(type) {
+    if (!state.socket || state.socket.readyState !== WebSocket.OPEN || !state.ticket) return false;
+    state.socket.send(JSON.stringify({type,token:state.ticket}));
+    return true;
+  }
+  function escapeText(value) { return String(value == null ? "" : value); }
+  function clockLeft() { return clock.frozen ? clock.left : Math.max(0, clock.left - (Date.now() - clock.at)); }
+  function mmss(ms) { const s = Math.ceil(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+  function tickClock() {
+    const left = mmss(clockLeft());
+    const label = clock.kind === "answers" ? t("answersTime",left)
+      : clock.kind === "juror" ? t("jurorTime",left)
+      : clock.kind === "next" ? t("nextTime",left) : "";
+    text("timer", label);
+    const game = state.snapshot || {};
+    if (game.phase === "Reveal")
+      text("nextHint", clock.kind === "next" ? t("nextRoundIn",left) : t("hostNextRound"));
+  }
+  function winnersOf(players) {
+    let best = -1;
+    for (const p of players) if (p.seated && (p.points || 0) > best) best = p.points || 0;
+    return players.filter(p => p.seated && (p.points || 0) === best);
+  }
+  function rowButton(n, label, pressed, onClick) {
+    const btn=document.createElement("button");
+    btn.type="button"; btn.className="choice"; btn.setAttribute("aria-pressed",String(pressed));
+    const mark=document.createElement("span");mark.className="ord";
+    mark.textContent="["+String(n).padStart(2,"0")+"]";
+    const body=document.createElement("span");body.className="body";
+    body.textContent=escapeText(label);
+    btn.append(mark,body);btn.addEventListener("click",onClick);
+    return btn;
+  }
+  // Compose plain text and emphasized answer parts without HTML injection.
+  function sentenceParts(prompt, answers) {
+    const source=String(prompt||"");
+    const parts=[], pieces=source.split(/(_{3,}|\[blank\]|\{blank\})/gi);
+    let used=0;
+    const blankCount=pieces.filter((_,i)=>i%2===1).length;
+    if(!blankCount) {
+      parts.push({text:source,answer:false});
+      for(const answer of answers)parts.push({text:" "+String(answer||""),answer:true});
+      return parts;
+    }
+    pieces.forEach((part,i)=>{
+      if(i%2===0)parts.push({text:part,answer:false});
+      else if(used<answers.length)parts.push({text:String(answers[used++]||""),answer:true});
+      else parts.push({text:part,answer:false});
+    });
+    while(used<answers.length)parts.push({text:" "+String(answers[used++]||""),answer:true});
+    return parts;
+  }
+  function fillSentence(element,prompt,answers) {
+    element.replaceChildren();
+    for(const part of sentenceParts(prompt,answers)) {
+      if(part.answer) {
+        const strong=document.createElement("strong");
+        strong.style.textDecoration="underline";
+        strong.textContent=part.text;
+        element.append(strong);
+      } else element.append(document.createTextNode(part.text));
+    }
+  }
+  function choices() {
+    const personal=state.personal||{}, game=state.snapshot||{};
+    const cards=Array.isArray(personal.hand)?personal.hand:[];
+    const pick=Number(game.pick)||1;
+    const list=$("choices");
+    const scrollOffset=list.scrollTop||0;
+    const focused=document.activeElement;
+    const focusedIndex=focused && focused.parentNode===list
+      ? Array.prototype.indexOf.call(list.children,focused) : -1;
+    list.replaceChildren();
+    text("promptText",game.promptText||"");
+    fillSentence($("answerPreview"),game.promptText||"",state.selection.map(i=>cards[i]&&cards[i].text||""));
+    text("playMeta",t("selectResponseFor",game.czarName||"?"));
+    for(let i=0;i<cards.length;i++){
+      const selected=state.selection.indexOf(i);
+      const label=cards[i].text||"";
+      const item=rowButton(i+1,label,selected>=0,()=>{
+        const old=state.selection.indexOf(i);
+        if(old>=0)state.selection.splice(old,1);
+        else if(state.selection.length<pick)state.selection.push(i);
+        choices();
+      });
+      if(selected>=0){
+        // The selected *play order* is distinct from the card's hand index.
+        const order=document.createElement("span");
+        order.className="position";
+        order.textContent=" <"+(selected+1)+"/"+pick+"> ";
+        item.append(order);
+        item.setAttribute("aria-label",t("selectionPosition",selected+1,pick,label));
+      }
+      list.append(item);
+    }
+    list.scrollTop=scrollOffset;
+    if(focusedIndex>=0 && list.children[focusedIndex] &&
+       typeof list.children[focusedIndex].focus==="function")
+      list.children[focusedIndex].focus({preventScroll:true});
+    const counter=t("selected",state.selection.length,pick);
+    text("count",counter);text("footCount",counter);
+    $("submit").disabled=state.selection.length!==pick;
+    // One card per round: select exactly one, throw it away, draw a new one.
+    $("swapButton").disabled=state.selection.length!==1||!(state.ticket&&game.phase==="Playing")||
+      !!personal.submitted||!!personal.isCzar||!!personal.swapped;
+    $("swapButton").textContent=t(personal.swapped?"swapDone":"swapButton");
+  }
+  function candidateRows() {
+    const game=state.snapshot||{};
+    const list=$("candidateList");
+    const scrollOffset=list.scrollTop||0;
+    list.replaceChildren();
+    const candidates=Array.isArray(game.submissions)?game.submissions:[];
+    const canJudge=!!(state.personal&&state.personal.isCzar);
+    text("judgePrompt",game.promptText||"");
+    for(let i=0;i<candidates.length;i++){
+      const answer=candidates[i];
+      const label=Array.isArray(answer.cards)?sentenceParts(game.promptText||"",answer.cards).map(p=>p.text).join(""):answer.text||"";
+      const btn=rowButton(i+1,label,state.judging===i,()=>{
+        if(!canJudge)return;
+        state.judging=i;candidateRows();
+      });
+      if(Array.isArray(answer.cards)) fillSentence(btn.children[1],game.promptText||"",answer.cards);
+      btn.disabled=!canJudge;list.append(btn);
+    }
+    list.scrollTop=scrollOffset;
+    text("judgeSelection",state.judging==null?t("noneSelected"):t("judgePicked",String(state.judging+1).padStart(2,"0")));
+    $("confirmJudge").disabled=!canJudge||state.judging==null;
+    text("judgeHeader",canJudge?t("chooseWinner"):t("jurorJudging"));
+  }
+  function requestFame() {
+    if(!state.socket||state.socket.readyState!==WebSocket.OPEN||!state.ticket)return;
+    state.socket.send(JSON.stringify({type:"fame",token:state.ticket,page:state.famePage}));
+  }
+  function renderFame() {
+    const data=state.fameData||{},players=Array.isArray(data.players)?data.players:[],
+      quotes=Array.isArray(data.quotes)?data.quotes:[];
+    const a=$("famePlayers"),b=$("fameQuotes");a.replaceChildren();b.replaceChildren();
+    const statistics=data.section!=="quotes";
+    $("famePlayersHeading").hidden=!statistics;
+    a.hidden=!statistics;
+    $("fameQuotesHeading").hidden=statistics;
+    b.hidden=statistics;
+    for(const p of players){
+      const li=document.createElement("li"),label=document.createElement("strong");
+      label.textContent=String(p.name||"")+"·"+String(p.word||"");
+      const stats=document.createElement("p");stats.className="secondary";
+      stats.textContent=t("fameStats",p.games||0,p.wins||0,p.rounds||0);
+      li.append(label,stats);a.append(li);
+    }
+    for(const q of quotes){
+      const li=document.createElement("li");
+      li.textContent=String(q.name||"")+" — "+String(q.sentence||"");b.append(li);
+    }
+    if(!players.length&&statistics){const li=document.createElement("li");li.textContent=t("fameEmpty");a.append(li);}
+    if(!quotes.length&&!statistics){const li=document.createElement("li");li.textContent=t("fameEmpty");b.append(li);}
+    $("famePrev").disabled=state.famePage===0;
+    $("fameNext").disabled=state.famePage+1>=(Number(data.pages)||1);
+  }
+  function render() {
+    const game=state.snapshot||{},personal=state.personal||{};
+    text("round",t("round",game.round||"—",game.rounds?"/"+game.rounds:""));
+    const running=game.phase==="Playing"||game.phase==="Judging"||game.phase==="Reveal";
+    const paused=!!(game.pausedBy||game.pausedByHost);
+    $("pauseButton").hidden=!state.ticket||!running||paused;
+    $("fameButton").hidden=!state.ticket;
+    tickClock();
+    if(state.removed){show("removed");return;}
+    if(!state.ticket){show("join");return;}
+    if(state.fameOpen){show("fame");renderFame();return;}
+    if(running&&(paused||game.blockedOn)){
+      show("hold");
+      const who=game.pausedByHost?t("hostName"):(game.pausedBy||"");
+      text("holdEyebrow",paused?t("pauseEyebrow"):t("waitEyebrow"));
+      text("holdTitle",paused?t("pauseBy",who):t("waitFor",game.blockedOn));
+      text("holdText",game.blockedOn
+        ?t("blockedDescription",game.blockedOn)
+        :personal.pausedByMe?t("pausedByMe"):t("pausedByOther",who));
+      $("resumeButton").hidden=!personal.pausedByMe;
+      return;
+    }
+    if(game.phase==="Lobby"||game.phase==="lobby"){
+      show("lobby");const list=$("roster");list.replaceChildren();
+      for(const player of (game.players||[])){
+        if(!player.seated)continue;
+        const li=document.createElement("li");
+        li.textContent=player.name+t(player.connected?"connectedStatus":"offlineStatus");
+        list.append(li);
+      }
+    } else if(game.phase==="Playing"||game.phase==="playing"){
+      state.judging=null;
+      if(personal.isCzar||personal.submitted){
+        show("waiting");
+        text("waitingCount",t("received",game.submitted||0,game.expected||0));
+      } else {show("play");choices();}
+    } else if(game.phase==="Judging"||game.phase==="judging"){
+      show("judging");candidateRows();
+    } else if(game.phase==="Finished"){
+      show("final");
+      text("finalEyebrow",game.endedByHost?t("endedByHost"):t("gameOverEyebrow"));
+      const players=Array.isArray(game.players)?game.players:[];
+      const podium=$("podium");podium.replaceChildren();
+      for(const champ of winnersOf(players)){
+        const box=document.createElement("div");box.className="champ";
+        const crown=document.createElement("div");crown.className="crown";
+        crown.setAttribute("aria-hidden","true");
+        const name=document.createElement("h1");name.textContent=champ.name;
+        const points=document.createElement("p");points.className="secondary";
+        points.textContent=t("points",champ.points||0);
+        box.append(crown,name,points);podium.append(box);
+      }
+      const list=$("standings");list.replaceChildren();
+      const ranked=players.filter(p=>p.seated).sort((a,b)=>(b.points||0)-(a.points||0));
+      for(const player of ranked){
+        const li=document.createElement("li");
+        li.textContent=t("rankedScore",player.name,player.points||0);
+        list.append(li);
+      }
+      text("votes",t("votes",game.votes||0,personal.voted?t("votedSuffix"):""));
+      $("againButton").disabled=!!personal.voted;
+    } else if(game.phase==="Reveal"||game.phase==="reveal"){
+      show("result");
+      text("winner",game.winnerName||t("roundComplete"));
+      if(Array.isArray(game.winningCards)&&game.winningCards.length)
+        fillSentence($("winnerText"),game.promptText||"",game.winningCards);
+      else text("winnerText",game.winningText||t("awaitNextRound"));
+      const list=$("scores");list.replaceChildren();
+      for(const player of (game.players||[])){
+        if(!player.seated)continue;
+        const li=document.createElement("li");
+        li.textContent=t("rankedScore",player.name,player.points||0);
+        list.append(li);
+      }
+    } else show("join");
+  }
+  function setClock(game) {
+    clock.kind=game.clock||"";clock.left=Number(game.left)||0;clock.at=Date.now();
+    clock.frozen=!!(game.pausedBy||game.pausedByHost||game.blockedOn);
+  }
+  function connect() {
+    const hostname=location.hostname||"192.168.4.1";
+    const url="ws://"+hostname+":81/cardparty";
+    const socket=new WebSocket(url);
+    state.socket=socket;
+    status("connecting");
+    socket.addEventListener("open",()=>{
+      status("connected");
+      if(state.ticket) socket.send(JSON.stringify({type:"resume",token:state.ticket}));
+      else if(state.pendingJoin){
+        socket.send(JSON.stringify({type:"join",name:state.pendingJoin,...(state.pid?{pid:state.pid}:{})}));
+        state.pendingJoin=null;
+        hint("joinSent");
+      }
+    });
+    socket.addEventListener("message",event=>{
+      let msg;
+      try {msg=JSON.parse(event.data);} catch {return;}
+      if(!msg||typeof msg!=="object")return;
+      if(msg.type==="fame") {
+        if(Number(msg.page)===state.famePage){state.fameData=msg;if(state.fameOpen)renderFame();}
+        return;
+      }
+      if(msg.type==="hello") {setLanguage(msg.lang);return;}
+      if(msg.game&&msg.game.lang)setLanguage(msg.game.lang);
+      if(msg.type==="kicked"){
+        state.ticket=null;sessionStorage.removeItem("caw.session.token");
+        state.personal=null;state.snapshot=null;state.removed=true;state.fameOpen=false;render();
+      } else if(msg.type==="welcome"){
+        if(!/^[0-9a-f]{32}$/.test(msg.token||""))return;
+        state.ticket=msg.token;
+        if(typeof msg.pid==="string"&&/^[0-9a-f]{16}$/.test(msg.pid)&&msg.pid!=="0000000000000000"){
+          state.pid=msg.pid;
+          try {if(typeof localStorage!=="undefined")localStorage.setItem("caw.player.id",msg.pid);} catch (_) {}
+        }
+        sessionStorage.setItem("caw.session.token",msg.token);
+        state.revision=Number.isSafeInteger(msg.revision)?msg.revision:0;
+        state.selection=[];state.judging=null;
+        if(msg.game)state.snapshot=msg.game;
+        if(msg.private)state.personal=msg.private;
+        if(msg.game)setClock(msg.game);
+        render();
+      } else if(msg.type==="state"){
+        if(msg.game)state.snapshot=msg.game;
+        if(msg.private)state.personal=msg.private;
+        if(Number.isSafeInteger(msg.revision))state.revision=msg.revision;
+        if(msg.game)setClock(msg.game);
+        if(msg.game && msg.game.phase!=="Playing" && msg.game.phase!=="playing")state.selection=[];
+        render();
+      } else if(msg.type==="error"){
+        hint("error",typeof msg.code==="string"?msg.code:(typeof msg.message==="string"?msg.message:"rejected"));
+      } else if(msg.type==="expired"){
+        state.ticket=null;sessionStorage.removeItem("caw.session.token");
+        state.personal=null;state.snapshot=null;state.fameOpen=false;render();
+      }
+    });
+    socket.addEventListener("close",()=>{
+      if(state.socket!==socket)return;
+      // Only a seated browser reconnects on its own. The X4 closes sockets
+      // that never join, so an idle join screen does not hold one of its
+      // few connection slots; JOIN reconnects on demand.
+      if(state.ticket){status("disconnected");setTimeout(connect,1500);}
+      else {
+        state.socket=null;status("idle");
+        if(state.pendingJoin){state.pendingJoin=null;hint("error","noConnection");}
+      }
+    });
+    socket.addEventListener("error",()=>{status("connectionError");});
+  }
+  applyLanguage();
+  $("joinForm").addEventListener("submit",ev=>{
+    ev.preventDefault();
+    const name=$("nick").value.trim();
+    if(!name)return;
+    if(utf8Length(name)>kNameBytes||/[<>]/.test(name)){
+      hint("error","badName");return;
+    }
+    if(!state.socket||state.socket.readyState!==WebSocket.OPEN){
+      // Socket was released while idle: reconnect, then join on open.
+      state.pendingJoin=name;
+      hint("connectingToX4");
+      if(!state.socket)connect();
+      return;
+    }
+    state.socket.send(JSON.stringify({type:"join",name,...(state.pid?{pid:state.pid}:{})}));
+    hint("joinSent");
+  });
+  $("submit").addEventListener("click",()=>{
+    const expected=(state.snapshot||{}).pick||1;
+    if(state.selection.length!==expected)return;
+    if(command("submit",{slots:[...state.selection]}))$("submit").disabled=true;
+  });
+  $("confirmJudge").addEventListener("click",()=>{
+    if(state.judging==null)return;
+    if(command("judge",{selected:state.judging}))$("confirmJudge").disabled=true;
+  });
+  $("swapButton").addEventListener("click",()=>{
+    if(state.selection.length!==1)return;
+    const slot=state.selection[0];
+    if(command("swap",{slot})){state.selection=[];choices();$("swapButton").disabled=true;}
+  });
+  $("fameButton").addEventListener("click",()=>{
+    state.fameOpen=true;state.famePage=0;state.fameData=null;requestFame();render();
+  });
+  $("fameClose").addEventListener("click",()=>{state.fameOpen=false;render();});
+  $("famePrev").addEventListener("click",()=>{if(state.famePage>0){--state.famePage;state.fameData=null;requestFame();renderFame();}});
+  $("fameNext").addEventListener("click",()=>{++state.famePage;state.fameData=null;requestFame();renderFame();});
+  $("pauseButton").addEventListener("click",()=>{ticketed("pause");});
+  $("resumeButton").addEventListener("click",()=>{ticketed("unpause");});
+  $("againButton").addEventListener("click",()=>{if(ticketed("again"))$("againButton").disabled=true;});
+  $("rejoinButton").addEventListener("click",()=>{state.removed=false;render();});
+  if(typeof setInterval==="function")setInterval(tickClock,250);
+  show("join");connect();
+})();
+</script>
+</body>
+</html>
