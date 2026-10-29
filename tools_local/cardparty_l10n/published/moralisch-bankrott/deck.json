@@ -1,0 +1,38 @@
+{
+  "deck_id": "moralisch-bankrott",
+  "version": 4,
+  "source_locale": "de",
+  "title": "Moralisch Bankrott (18+)",
+  "license": "CC0-1.0",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "source_url": "https://github.com/0b-ivan/inx-4x-pro",
+  "rights_holder": "0b-ivan",
+  "rights_status": "verified",
+  "editorial_status": "approved",
+  "categories": [
+    {
+      "id": "fsk-18",
+      "name": "FSK 18",
+      "default_on": false,
+      "adult": true
+    },
+    {
+      "id": "boese",
+      "name": "Böse",
+      "default_on": true,
+      "adult": false
+    },
+    {
+      "id": "sex",
+      "name": "Sex & Hentai",
+      "default_on": true,
+      "adult": false
+    },
+    {
+      "id": "makaber",
+      "name": "Makaber",
+      "default_on": true,
+      "adult": false
+    }
+  ]
+}
