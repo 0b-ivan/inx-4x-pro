@@ -159,6 +159,18 @@ bool PackState::setFlag(const uint32_t index, const uint8_t bit) {
   return true;
 }
 
+bool PackState::clearFlag(const uint32_t index, const uint8_t bit) {
+  if (source_ == nullptr || index >= count_ || bit == 0) return false;
+  const uint8_t prior = flags(index);
+  const uint8_t updated = static_cast<uint8_t>(prior & ~bit);
+  if (updated == prior) return true;
+  if (!source_->write(index, &updated, 1)) return false;
+  if (!source_->flush()) return false;
+  if ((prior & kSeen) && !(updated & kSeen)) --seenCount_;
+  if ((prior & kFlagged) && !(updated & kFlagged)) --flaggedCount_;
+  return true;
+}
+
 uint32_t Rng::next() {
   // xorshift32. Small, no multiply, and identical on host and device, which is
   // what lets a test assert a sequence.
