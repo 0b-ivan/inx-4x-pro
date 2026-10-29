@@ -1,0 +1,107 @@
+name: Publish Cards Against Whatever - Moralisch Bankrott
+
+on:
+  push:
+    branches:
+      - feature/cards-against-whatever
+    paths:
+      - '.github/workflows/cardparty-moralisch-bankrott-publish.yml'
+      - 'tools_local/cardparty_l10n/published/moralisch-bankrott/**'
+      - 'tools_local/cardparty_l10n/test_moralisch_bankrott_release.py'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cardparty-moralisch-bankrott-release
+  cancel-in-progress: false
+
+jobs:
+  validate-and-publish:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Full offline CAW regression suite
+        run: python3 -m unittest discover -s tools_local/cardparty_l10n -p 'test_*.py' -v
+      - name: Compile native host SD reader tests
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Werror -pedantic -O2 \
+            -Isrc/apps_local/cardparty host-tests/cardparty/test_sd_pack.cpp -o /tmp/cardparty-test-sd-pack
+          /tmp/cardparty-test-sd-pack
+      - name: Build verified format-2 pack (not a draft)
+        run: |
+          mkdir -p dist
+          python3 tools_local/cardparty_l10n/build_sd_pack.py \
+            --manifest tools_local/cardparty_l10n/published/moralisch-bankrott/deck.json \
+            --cards tools_local/cardparty_l10n/published/moralisch-bankrott/deck.jsonl \
+            --out dist/Moralisch-Bankrott.dat
+          sha256sum dist/Moralisch-Bankrott.dat
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct,zlib
+          b=Path('dist/Moralisch-Bankrott.dat').read_bytes()
+          magic,fmt,flags,black,white,blob,crc,version,categories=struct.unpack_from('<8sHHHHIIIB3x',b)
+          assert (magic,fmt,flags,black,white,version)==(b'XCAWPK2\0',2,1,42,152,4)
+          assert len(b)==32+blob and crc==zlib.crc32(b[32:])
+          assert 32<len(b)<=192*1024 and categories>=2
+          PY
+      - name: Upload candidate as build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Moralisch-Bankrott-format2-verified
+          path: |
+            dist/Moralisch-Bankrott.dat
+            dist/Moralisch-Bankrott.receipt.json
+      - name: Read the existing public release catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view cardparty-packs
+          mkdir -p dist-current
+          gh release download cardparty-packs \
+            --pattern catalog.txt --pattern README.txt --dir dist-current
+      - name: Append only this deck to the catalog and attribution
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          old=Path('dist-current/catalog.txt').read_text(encoding='utf-8').splitlines()
+          name='Moralisch-Bankrott.dat'
+          title='Moralisch Bankrott (18+)'
+          size=Path('dist/Moralisch-Bankrott.dat').stat().st_size
+          catalog=[s for s in old if s and not s.startswith(name+'|')]
+          catalog.append(f'{name}|{title}|{size}')
+          assert len(catalog)<=8 and len(set(s.split('|')[0] for s in catalog))==len(catalog)
+          assert all(len(s.split('|'))==3 for s in catalog)
+          output='\n'.join(catalog)+'\n'
+          assert len(output.encode('utf-8'))<=1024
+          Path('dist/catalog.txt').write_text(output,encoding='utf-8')
+          prior=Path('dist-current/README.txt').read_text(encoding='utf-8')
+          marker='\nMoralisch-Bankrott.dat: Moralisch Bankrott (18+)'
+          prior=prior.split(marker,1)[0]
+          note=(marker+' (42 prompts, 152 answers)\n'
+                '  Rights holder: 0b-ivan\n'
+                '  License: CC0-1.0 https://creativecommons.org/publicdomain/zero/1.0/\n'
+                '  Source: original cards in inx-4x-pro, published/moralisch-bankrott\n'
+                '  FSK 18: disabled by default; enable it in [04] CATEGORIES.\n'
+                '  Approved for in-game download by repository owner request 2026-10-29.\n')
+          Path('dist/README.txt').write_text(prior.rstrip()+'\n'+note,encoding='utf-8')
+          print(output)
+          PY
+      - name: Upload pack first, catalog last (existing packs retained)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release upload cardparty-packs dist/Moralisch-Bankrott.dat --clobber
+          gh release upload cardparty-packs dist/README.txt --clobber
+          gh release upload cardparty-packs dist/catalog.txt --clobber
+          gh release view cardparty-packs
