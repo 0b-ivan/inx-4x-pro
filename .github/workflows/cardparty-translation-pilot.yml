@@ -1,0 +1,78 @@
+# One-shot paid CAW translation pilot: edit the named trigger file explicitly.
+# Ordinary firmware changes, pull requests, and QA tests NEVER call OpenRouter.
+name: CardParty German Translation Pilot (opt-in only)
+
+on:
+  push:
+    branches:
+      - feature/cards-against-whatever
+    paths:
+      - '.github/cardparty-translation-trigger.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cardparty-german-translation-pilot
+  cancel-in-progress: false
+
+jobs:
+  pilot:
+    if: github.repository == '0b-ivan/inx-4x-pro'
+    name: Draft at most 20 original English party cards
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Verify one-shot request (never from ordinary commits)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat .github/cardparty-translation-trigger.txt)" = 'TRANSLATE-ORIGINAL-DE-PILOT-20'
+          echo "Explicitly requested: 20-card original-content German draft only."
+
+      - name: Validate source and guardrail tests before API calls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools_local/cardparty_l10n -p 'test_*.py' -v
+          python3 tools_local/cardparty_l10n/translate_cards.py validate \
+            --manifest tools_local/cardparty_l10n/examples/deck.json \
+            --source tools_local/cardparty_l10n/examples/cards-en.jsonl \
+            --drafts "$RUNNER_TEMP/cardparty-de-unreviewed.jsonl"
+
+      - name: Translate 20 original sample cards to unreviewed German drafts
+        shell: bash
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+            echo "::error::OPENROUTER_API_KEY repository secret is required."
+            exit 1
+          fi
+          python3 tools_local/cardparty_l10n/translate_cards.py translate \
+            --manifest tools_local/cardparty_l10n/examples/deck.json \
+            --source tools_local/cardparty_l10n/examples/cards-en.jsonl \
+            --drafts "$RUNNER_TEMP/cardparty-de-unreviewed.jsonl" \
+            --model 'anthropic/claude-sonnet-4.6' --limit 20
+          python3 tools_local/cardparty_l10n/translate_cards.py validate \
+            --manifest tools_local/cardparty_l10n/examples/deck.json \
+            --source tools_local/cardparty_l10n/examples/cards-en.jsonl \
+            --drafts "$RUNNER_TEMP/cardparty-de-unreviewed.jsonl"
+
+      - name: Archive drafts for HUMAN bilingual review only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardparty-original-de-unreviewed
+          path: ${{ runner.temp }}/cardparty-de-unreviewed.jsonl
+          retention-days: 2
+          if-no-files-found: ignore

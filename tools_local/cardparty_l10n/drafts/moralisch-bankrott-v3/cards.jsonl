@@ -1,0 +1,104 @@
+{"id":"prompt-001","kind":"prompt","pick":1,"draw":0,"text":"Was hat der Internationale Strafgerichtshof diesmal übersehen? ____","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"prompt-002","kind":"prompt","pick":1,"draw":0,"text":"Was stand auf dem letzten Beweisfoto? ____","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"prompt-003","kind":"prompt","pick":1,"draw":0,"text":"Was verdirbt garantiert jede Familienfeier? ____","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"prompt-004","kind":"prompt","pick":1,"draw":0,"text":"Was verschweigt die Familienchronik? ____","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"prompt-005","kind":"prompt","pick":1,"draw":0,"text":"Warum wurde das Friedensabkommen sofort aufgelöst? ____","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"prompt-006","kind":"prompt","pick":1,"draw":0,"text":"Was hat selbst den Serienmörder sprachlos gemacht? ____","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"prompt-007","kind":"prompt","pick":1,"draw":0,"text":"Was lässt sich offenbar als Betriebsausgabe absetzen? ____","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"prompt-008","kind":"prompt","pick":1,"draw":0,"text":"Worauf ist mein Opa immer noch stolz? ____","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"prompt-009","kind":"prompt","pick":1,"draw":0,"text":"Was versteht die Regierung unter Entbürokratisierung? ____","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"prompt-010","kind":"prompt","pick":1,"draw":0,"text":"Was hat der Teufel persönlich zurückgeschickt? ____","reviewed":false,"categories":["ab-18","religion"]}
+{"id":"prompt-011","kind":"prompt","pick":1,"draw":0,"text":"Was stand auf der Rechnung des Bestattungsunternehmens? ____","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"prompt-012","kind":"prompt","pick":1,"draw":0,"text":"Was hätte beim ersten Date ein Warnsignal sein sollen? ____","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"prompt-013","kind":"prompt","pick":1,"draw":0,"text":"Wofür gibt es neuerdings ein Treueprogramm? ____","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"prompt-014","kind":"prompt","pick":1,"draw":0,"text":"Was macht einen schlechten Menschen erstaunlich sympathisch? ____","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"prompt-015","kind":"prompt","pick":1,"draw":0,"text":"Was hat beim letzten Exorzismus gefehlt? ____","reviewed":false,"categories":["ab-18","religion"]}
+{"id":"prompt-016","kind":"prompt","pick":1,"draw":0,"text":"Was wurde im Untersuchungsausschuss einstimmig ignoriert? ____","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"prompt-017","kind":"prompt","pick":1,"draw":0,"text":"Welche Überraschung hatte das Standesamt vorbereitet? ____","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"prompt-018","kind":"prompt","pick":1,"draw":0,"text":"Warum ist die Hölle jetzt insolvent? ____","reviewed":false,"categories":["ab-18","religion"]}
+{"id":"prompt-019","kind":"prompt","pick":1,"draw":0,"text":"Was hat mein Therapeut in seiner Kündigung erwähnt? ____","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"prompt-020","kind":"prompt","pick":1,"draw":0,"text":"Was wurde aus Gründen der nationalen Sicherheit geschwärzt? ____","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"prompt-021","kind":"prompt","pick":2,"draw":0,"text":"Die nächste Weltkrise in zwei Akten: [1] ____ | [2] ____","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"prompt-022","kind":"prompt","pick":2,"draw":0,"text":"Mein letzter Wunsch, in zwei Teilen: [1] ____ | [2] ____","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"prompt-023","kind":"prompt","pick":2,"draw":0,"text":"Der offizielle Krisenplan: [1] ____ | [2] ____","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"prompt-024","kind":"prompt","pick":2,"draw":0,"text":"Zwei Dinge, die ich niemals erklären werde: [1] ____ | [2] ____","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-001","kind":"answer","text":"Ein Kriegsverbrechen mit Rückgaberecht","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-002","kind":"answer","text":"Die Genfer Konvention als Trinkspiel","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-003","kind":"answer","text":"Ein Massenmörder auf Probezeit","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-004","kind":"answer","text":"Beweismittel in Familienpackung","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-005","kind":"answer","text":"Ein Leichensack mit Reißverschlussgarantie","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-006","kind":"answer","text":"Das Schweigen der Mittäter","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-007","kind":"answer","text":"Exhumierung zum Sonderpreis","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-008","kind":"answer","text":"Ein Alibi aus dem 3D-Drucker","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-009","kind":"answer","text":"Eine Autopsie mit Kundenumfrage","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-010","kind":"answer","text":"Ein Staatsstreich mit Probeabo","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-011","kind":"answer","text":"Völkermord als Quartalsziel","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-012","kind":"answer","text":"Ein Diktator mit Trennungsangst","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-013","kind":"answer","text":"Ein Massengrab mit Reservierungssystem","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-014","kind":"answer","text":"Ein Scharfschütze mit Gleitsichtbrille","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-015","kind":"answer","text":"Ein Kriegsgericht mit Glücksrad","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-016","kind":"answer","text":"Die PR-Abteilung der Apokalypse","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-017","kind":"answer","text":"Friedensverhandlungen mit Würfelbecher","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-018","kind":"answer","text":"Ein Verhör mit Treuepunkten","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-019","kind":"answer","text":"Ein versehentlicher Putsch","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-020","kind":"answer","text":"Ein Schleudersitz fürs Gewissen","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-021","kind":"answer","text":"Ein Nazi mit Migrationshintergrund","reviewed":false,"categories":["ab-18","rassismus"]}
+{"id":"answer-022","kind":"answer","text":"Rassismus nach DIN-Norm","reviewed":false,"categories":["ab-18","rassismus"]}
+{"id":"answer-023","kind":"answer","text":"Ein Stammbaum voller schlechter Nachrichten","reviewed":false,"categories":["ab-18","rassismus"]}
+{"id":"answer-024","kind":"answer","text":"Ein Klan-Treffen mit Diversity-Schulung","reviewed":false,"categories":["ab-18","rassismus"]}
+{"id":"answer-025","kind":"answer","text":"Ein Rassist mit internationalem Fanclub","reviewed":false,"categories":["ab-18","rassismus"]}
+{"id":"answer-026","kind":"answer","text":"Eine rassistische KI mit Ethik-Zertifikat","reviewed":false,"categories":["ab-18","rassismus"]}
+{"id":"answer-027","kind":"answer","text":"Ein Hitlergruß mit Tennisarm","reviewed":false,"categories":["ab-18","rassismus"]}
+{"id":"answer-028","kind":"answer","text":"Ein Diktator in der Opferrolle","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-029","kind":"answer","text":"Ethnische Säuberung der Kommentarspalte","reviewed":false,"categories":["ab-18","rassismus"]}
+{"id":"answer-030","kind":"answer","text":"Kolonialismus mit Bonusmeilen","reviewed":false,"categories":["ab-18","rassismus"]}
+{"id":"answer-031","kind":"answer","text":"Ein Menschenhändler mit Kundenservice","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-032","kind":"answer","text":"Ein Waffenhändler mit Nachhaltigkeitssiegel","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-033","kind":"answer","text":"Eine zensierte Todesanzeige","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-034","kind":"answer","text":"Ein letzter Wunsch vor der Hinrichtung","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-035","kind":"answer","text":"Ein sehr gelangweilter Henker","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-036","kind":"answer","text":"Acht ungelöste Vermisstenfälle","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-037","kind":"answer","text":"Ein Serienmörder mit Bewertungsprofil","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-038","kind":"answer","text":"Verdächtig schweres Handgepäck","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-039","kind":"answer","text":"Ein Kannibale auf Intervallfasten","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-040","kind":"answer","text":"Das bleiche Foto aus der Pathologie","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-041","kind":"answer","text":"Ein Sarg aus recycelten Möbeln","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-042","kind":"answer","text":"Ein verdächtig gut gepflegter Keller","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-043","kind":"answer","text":"Ein Beichtvater mit Verschwiegenheitsklausel","reviewed":false,"categories":["ab-18","religion"]}
+{"id":"answer-044","kind":"answer","text":"Ein totgeschwiegenes Familiengeheimnis","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-045","kind":"answer","text":"Das Testament in Comic Sans","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-046","kind":"answer","text":"Die Beerdigung eines Unsterblichen","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-047","kind":"answer","text":"Ein Pakt mit dem falschen Dämon","reviewed":false,"categories":["ab-18","religion"]}
+{"id":"answer-048","kind":"answer","text":"Die drei Minuten nach dem Exorzismus","reviewed":false,"categories":["ab-18","religion"]}
+{"id":"answer-049","kind":"answer","text":"Vergebung gegen Aufpreis","reviewed":false,"categories":["ab-18","religion"]}
+{"id":"answer-050","kind":"answer","text":"Ein Papst mit Zweitaccount","reviewed":false,"categories":["ab-18","religion"]}
+{"id":"answer-051","kind":"answer","text":"Ein Tentakel mit Haftpflichtversicherung","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-052","kind":"answer","text":"Ein Oktopus mit Bindungsangst","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-053","kind":"answer","text":"Sieben Liter Gleitgel ohne Quittung","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-054","kind":"answer","text":"Ein Porno mit Datenschutzbelehrung","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-055","kind":"answer","text":"Ein Kuss mit acht Saugnäpfen","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-056","kind":"answer","text":"Ein Hentai-Kraken auf Bewährung","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-057","kind":"answer","text":"Das Safeword „Steuerprüfung“","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-058","kind":"answer","text":"Ein Körperkissen mit schlechtem WLAN","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-059","kind":"answer","text":"Ein dämonischer Vibrationsalarm","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-060","kind":"answer","text":"Ein unanständig gutes Alibi","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-061","kind":"answer","text":"Ein Buttplug mit Rückrufaktion","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-062","kind":"answer","text":"Eine Schamhaarperücke für Staatsbesuche","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-063","kind":"answer","text":"Ein katholischer Swingerclub","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-064","kind":"answer","text":"Ein Fetisch mit TÜV-Plakette","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-065","kind":"answer","text":"Eine Pilgerfahrt in den Rotlichtbezirk","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-066","kind":"answer","text":"Ein Beichtstuhl mit Sichtfenster","reviewed":false,"categories":["ab-18","religion"]}
+{"id":"answer-067","kind":"answer","text":"Ein Striptease vom Finanzamt","reviewed":false,"categories":["ab-18","sex"]}
+{"id":"answer-068","kind":"answer","text":"Organspende per Losverfahren","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-069","kind":"answer","text":"Ein Glückskeks mit Todesurteil","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-070","kind":"answer","text":"Das letzte bisschen Menschlichkeit in Frischhaltefolie","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-071","kind":"answer","text":"Ein Krisenstab mit Lachgas","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-072","kind":"answer","text":"Eine öffentliche Entschuldigung im Abo","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-073","kind":"answer","text":"Ein Skandal mit Frühstücksbuffet","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-074","kind":"answer","text":"Ein Babyfoto mit Haftbefehl","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-075","kind":"answer","text":"Zwölf anonyme Zeugenaussagen","reviewed":false,"categories":["ab-18","crime"]}
+{"id":"answer-076","kind":"answer","text":"Ein Friedensnobelpreis als Tatwaffe","reviewed":false,"categories":["ab-18","krieg"]}
+{"id":"answer-077","kind":"answer","text":"Der Tod mit Burn-out","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-078","kind":"answer","text":"Eine Versicherung gegen moralische Schäden","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-079","kind":"answer","text":"Die Schande der nächsten sieben Generationen","reviewed":false,"categories":["ab-18","absurd"]}
+{"id":"answer-080","kind":"answer","text":"Ein Verwaltungsfehler mit Massengrab","reviewed":false,"categories":["ab-18","krieg"]}

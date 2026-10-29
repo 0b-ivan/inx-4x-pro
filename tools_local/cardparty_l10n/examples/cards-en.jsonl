@@ -1,0 +1,20 @@
+{"id":"prompt-001","kind":"prompt","text":"The deployment failed because of ____.","pick":1,"draw":0}
+{"id":"prompt-002","kind":"prompt","text":"Our postmortem lists ____ as the root cause.","pick":1,"draw":0}
+{"id":"prompt-003","kind":"prompt","text":"The new onboarding process involves ____ and ____.","pick":2,"draw":0}
+{"id":"prompt-004","kind":"prompt","text":"The security audit discovered ____, ____ and ____.","pick":3,"draw":2}
+{"id":"prompt-005","kind":"prompt","text":"What finally fixed the office printer? ____.","pick":1,"draw":0}
+{"id":"prompt-006","kind":"prompt","text":"We replaced ____ with ____ and called it innovation.","pick":2,"draw":0}
+{"id":"answer-001","kind":"answer","text":"A coffee machine running Kubernetes."}
+{"id":"answer-002","kind":"answer","text":"An intern with administrative privileges."}
+{"id":"answer-003","kind":"answer","text":"A server named FINAL-FINAL."}
+{"id":"answer-004","kind":"answer","text":"An undocumented firewall rule."}
+{"id":"answer-005","kind":"answer","text":"A DNS record written on a napkin."}
+{"id":"answer-006","kind":"answer","text":"A change request approved by a houseplant."}
+{"id":"answer-007","kind":"answer","text":"Six identical cables and no labels."}
+{"id":"answer-008","kind":"answer","text":"A backup stored in a forgotten drawer."}
+{"id":"answer-009","kind":"answer","text":"An alarm that only rings on public holidays."}
+{"id":"answer-010","kind":"answer","text":"A database query missing its WHERE clause."}
+{"id":"answer-011","kind":"answer","text":"One more dashboard that nobody opens."}
+{"id":"answer-012","kind":"answer","text":"A particularly ambitious spreadsheet."}
+{"id":"answer-013","kind":"answer","text":"An automated process that requires three phone calls."}
+{"id":"answer-014","kind":"answer","text":"A certificate that expired during the demo."}

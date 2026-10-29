@@ -15,6 +15,7 @@
 #include "ShelfState.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "battleship/BattleshipActivity.h"
+#include "cardparty/CardPartyActivity.h"
 #include "checkers/CheckersActivity.h"
 #include "chess/ChessActivity.h"
 #include "connectfour/ConnectFourActivity.h"
@@ -115,6 +116,7 @@ namespace {
 constexpr shelf::Item kGames[] = {
     {"CHESS", &icon_chess_32, &ChessActivity::create},
     {"BATTLESHIP", &icon_battleship_32, &BattleshipActivity::create},
+    {"CARDS WHATEVER", &icon_trivia_32, &CardPartyActivity::create},
     {"CONNECTIONS", &icon_connections_32, &ConnectionsActivity::create},
     {"SOLITAIRE", &icon_solitaire_32, &SolitaireActivity::create},
     {"D&DIAGRAMS", &icon_dungeon_32, &DungeonActivity::create},

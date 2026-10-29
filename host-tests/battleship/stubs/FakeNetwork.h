@@ -1,8 +1,10 @@
 #pragma once
 #include <cstdint>
+#include <cctype>
 #include <cstdlib>
 #include <functional>
 #include <map>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -23,6 +25,15 @@ struct String {
   const char* c_str() const { return value.c_str(); }
   int toInt() const { return std::atoi(value.c_str()); }
   bool operator==(const char* rhs) const { return value == (rhs ? rhs : ""); }
+  bool equalsIgnoreCase(const char* rhs) const {
+    if (!rhs) return false;
+    const std::string s(rhs);
+    if (s.size()!=value.size()) return false;
+    for(size_t i=0;i<s.size();++i)
+      if(std::tolower(static_cast<unsigned char>(s[i])) !=
+         std::tolower(static_cast<unsigned char>(value[i]))) return false;
+    return true;
+  }
 };
 
 struct IPAddress {
@@ -31,14 +42,29 @@ struct IPAddress {
 struct FakeWifi {
   bool available = true;
   int currentMode = 0;
+  int maxSoftApClients = 0;
   void mode(int mode) { currentMode = mode; }
-  bool softAP(const char*, const char*, int, bool, int) { return available; }
+  bool softAP(const char*, const char*, int, bool, int maxClients) {
+    maxSoftApClients = maxClients;
+    return available;
+  }
   void softAPdisconnect(bool) {}
   IPAddress softAPIP() { return {}; }
   IPAddress localIP() { return {}; }
   std::string SSID() { return "test"; }
   int status() { return available ? WL_CONNECTED : 0; }
+  int stations = 0;
+  int softAPgetStationNum() { return stations; }
 };
+// Heap telemetry (Arduino-ESP32 EspClass subset) with controllable values.
+struct FakeEsp {
+  uint32_t freeHeap = 180000, minFreeHeap = 150000, maxAlloc = 90000, freePsram = 7000000;
+  uint32_t getFreeHeap() const { return freeHeap; }
+  uint32_t getMinFreeHeap() const { return minFreeHeap; }
+  uint32_t getMaxAllocHeap() const { return maxAlloc; }
+  uint32_t getFreePsram() const { return freePsram; }
+};
+inline FakeEsp ESP;
 inline FakeWifi WiFi;
 enum class DNSReplyCode { NoError };
 struct DNSServer {
@@ -79,17 +105,53 @@ struct WebServer {
   }
   int method() { return requestMethod; }
 };
-enum WStype_t { WStype_CONNECTED, WStype_DISCONNECTED, WStype_TEXT, WStype_BIN, WStype_FRAGMENT_TEXT_START };
+enum WStype_t { WStype_CONNECTED, WStype_DISCONNECTED, WStype_TEXT, WStype_BIN, WStype_FRAGMENT_TEXT_START, WStype_PING, WStype_PONG };
 struct WebSocketsServer {
   inline static WebSocketsServer* instance = nullptr;
   std::function<void(uint8_t, WStype_t, uint8_t*, size_t)> callback;
   std::vector<std::string> messages;
   std::vector<int> recipients;
+  std::function<bool(String,String)> headerValidator;
+  std::vector<std::string> requiredHeaders;
   int clients = 0;
+  std::vector<uint8_t> disconnected;
   bool closed = false;
+  // Optional arduinoWebSockets slot model: lowest free slot number is
+  // reused, 0 = unlimited. strictDelivery drops frames to closed slots.
+  int slotLimit = 0;
+  bool strictDelivery = false;
+  std::set<uint8_t> open;
+  // TCP back-pressure model: a stalled slot's send buffer is full. On the X4
+  // any write to it (frame, ping, close frame) blocks the loop for seconds,
+  // so the fake counts such writes instead of delivering them.
+  std::set<uint8_t> stalled;
+  int blockingWrites = 0;
+  std::vector<uint8_t> dropped, pinged;
+  // Browsers answer pings at protocol level unless the phone is gone.
+  std::set<uint8_t> silent;
+  int accept() {
+    const int limit = slotLimit ? slotLimit : 255;
+    for (int i = 0; i < limit; ++i)
+      if (!open.count(static_cast<uint8_t>(i))) {
+        event(WStype_CONNECTED, static_cast<uint8_t>(i));
+        return i;
+      }
+    return -1;  // library refuses the TCP upgrade: no free client slot
+  }
   explicit WebSocketsServer(int) { instance = this; }
   void begin() { closed = false; }
   void enableHeartbeat(int, int, int) {}
+  template <class F>
+  void onValidateHttpHeader(F fn, const char* const* mandatory, size_t count) {
+    headerValidator = fn;
+    requiredHeaders.clear();
+    for(size_t i=0;i<count;++i) requiredHeaders.emplace_back(mandatory[i]);
+  }
+  // Simulates library handshake validation: missing required Origin rejects.
+  bool wouldAcceptOrigin(const char* origin) const {
+    if (!origin) return requiredHeaders.empty();
+    return !headerValidator || headerValidator(String("Origin"), String(origin));
+  }
   template <class F>
   void onEvent(F fn) {
     callback = fn;
@@ -98,11 +160,41 @@ struct WebSocketsServer {
   void close() {
     clients = 0;
     closed = true;
+    open.clear();
+  }
+  bool writable(uint8_t client) const {
+    return !stalled.count(client) && (!strictDelivery || open.count(client));
+  }
+  // Library clientDisconnect() without a close frame: never blocks.
+  void drop(uint8_t client) {
+    if (strictDelivery && !open.count(client)) return;
+    dropped.push_back(client);
+    stalled.erase(client);
+    silent.erase(client);
+    event(WStype_DISCONNECTED, client);
+  }
+  bool sendPing(uint8_t client) {
+    if (stalled.count(client)) { ++blockingWrites; return false; }
+    if (strictDelivery && !open.count(client)) return false;
+    pinged.push_back(client);
+    if (!silent.count(client)) event(WStype_PONG, client);
+    return true;
+  }
+  void disconnect(uint8_t client) {
+    if (stalled.count(client)) ++blockingWrites;  // close frame write
+    if (strictDelivery && !open.count(client)) return;
+    disconnected.push_back(client);
+    // Simulate synchronous disconnect event: the server must have already
+    // moved authenticated seat ownership to the new socket.
+    event(WStype_DISCONNECTED, client);
   }
   int connectedClients() { return clients; }
-  void sendTXT(uint8_t client, char* data, size_t size) {
+  bool sendTXT(uint8_t client, char* data, size_t size) {
+    if (stalled.count(client)) { ++blockingWrites; return false; }
+    if (strictDelivery && !open.count(client)) return false;
     messages.emplace_back(data, size);
     recipients.push_back(client);
+    return true;
   }
   void broadcastTXT(char* data, size_t size) {
     if (clients) {
@@ -111,8 +203,8 @@ struct WebSocketsServer {
     }
   }
   void event(WStype_t type, uint8_t client = 0, std::string payload = "") {
-    if (type == WStype_CONNECTED) ++clients;
-    if (type == WStype_DISCONNECTED) --clients;
+    if (type == WStype_CONNECTED) { ++clients; open.insert(client); }
+    if (type == WStype_DISCONNECTED) { --clients; open.erase(client); stalled.erase(client); silent.erase(client); }
     callback(client, type, reinterpret_cast<uint8_t*>(payload.data()), payload.size());
   }
 };

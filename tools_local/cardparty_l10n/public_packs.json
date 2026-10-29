@@ -1,0 +1,95 @@
+{
+  "release_tag": "cardparty-packs",
+  "packs": [
+    {
+      "file": "Deutsch.dat",
+      "deck_id": "deutsch-alle-karten",
+      "title": "Deutsch - alle Karten",
+      "version": 1,
+      "rights_holder": "Prior99 und Mitwirkende, BixelPitch; nach Cards Against Humanity",
+      "license": "CC-BY-NC-SA-2.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/2.0/",
+      "decision": "Released for public, non-commercial download by the repository owner on 2026-10-28 under CC BY-NC-SA 2.0, the license of the Cards Against Humanity originals both sources derive from. Every card was approved as converted; no editorial changes.",
+      "sources": [
+        {
+          "importer": "prior99",
+          "url": "https://github.com/Prior99/cah-fullformat-german",
+          "commit": "92501b245f7002ac3d3875099d859a5579aa2161"
+        },
+        {
+          "importer": "bixelpitch",
+          "url": "https://github.com/BixelPitch/cah-cards",
+          "commit": "26b21b5b12b8d3270cf4952869e1bc3df1e6c955"
+        }
+      ],
+      "sha256": "eeccf364faa88cb22d8d5eab2cbd4f9c97dded1b5a5723a7abd691dbd3aa74a9"
+    },
+    {
+      "file": "nach-mitternacht.dat",
+      "deck_id": "nach-mitternacht",
+      "title": "Nach Mitternacht (18+)",
+      "version": 3,
+      "rights_holder": "0b-ivan",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "decision": "Original cards written for the repository owner, released by him for public download on 2026-10-28 under CC0 1.0. FSK 18 starts off on every X4. Card text lives outside git (packs.local/).",
+      "sources": [
+        {
+          "importer": "local",
+          "name": "nach-mitternacht",
+          "url": "https://github.com/0b-ivan/inx-4x-pro",
+          "commit": "v3"
+        }
+      ],
+      "sha256": "129d1f2b364edf819cac3e7cf16fa32a295cc0fb12a97489898abc7cd05ab0e9"
+    },
+    {
+      "file": "Alles.dat",
+      "deck_id": "alles-gemischt",
+      "title": "Alles (Deutsch + Nach Mitternacht)",
+      "version": 1,
+      "rights_holder": "Prior99 und Mitwirkende, BixelPitch; nach Cards Against Humanity; 0b-ivan",
+      "license": "CC-BY-NC-SA-2.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/2.0/",
+      "decision": "Deutsch - alle Karten and Nach Mitternacht merged into one pack by the repository owner on 2026-10-28, under CC BY-NC-SA 2.0 (the community cards' license; the own cards are CC0). FSK 18 starts off on every X4.",
+      "sources": [
+        {
+          "importer": "prior99",
+          "url": "https://github.com/Prior99/cah-fullformat-german",
+          "commit": "92501b245f7002ac3d3875099d859a5579aa2161"
+        },
+        {
+          "importer": "bixelpitch",
+          "url": "https://github.com/BixelPitch/cah-cards",
+          "commit": "26b21b5b12b8d3270cf4952869e1bc3df1e6c955"
+        },
+        {
+          "importer": "local",
+          "name": "nach-mitternacht",
+          "url": "https://github.com/0b-ivan/inx-4x-pro",
+          "commit": "v3"
+        }
+      ],
+      "sha256": "a9310d0cd106974dd11afe2746804c02d611e5f8be4ca8b44fc583e1c94494d9"
+    },
+    {
+      "file": "Moralisch-Bankrott.dat",
+      "deck_id": "moralisch-bankrott",
+      "title": "Moralisch Bankrott (18+)",
+      "version": 5,
+      "rights_holder": "0b-ivan",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "decision": "Original adult satirical cards written for the repository owner; approved for in-game download on 2026-10-29 with 32 additional black prompt cards requested later the same day. First-party CC0 deck. FSK 18 defaults disabled and must be enabled explicitly.",
+      "sources": [
+        {
+          "importer": "local",
+          "name": "moralisch-bankrott",
+          "url": "https://github.com/0b-ivan/inx-4x-pro",
+          "commit": "v5"
+        }
+      ],
+      "sha256": "03006641f90c0a3ad730d739327254d8673271ab3f0b767f8b109e2be11564c3"
+    }
+  ]
+}
