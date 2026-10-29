@@ -48,7 +48,7 @@ jobs:
           import struct,zlib
           b=Path('dist/Moralisch-Bankrott.dat').read_bytes()
           magic,fmt,flags,black,white,blob,crc,version,categories=struct.unpack_from('<8sHHHHIIIB3x',b)
-          assert (magic,fmt,flags,black,white,version)==(b'XCAWPK2\0',2,1,42,152,4)
+          assert (magic,fmt,flags,black,white,version)==(b'XCAWPK2\0',2,1,74,152,5)
           assert len(b)==32+blob and crc==zlib.crc32(b[32:])
           assert 32<len(b)<=192*1024 and categories>=2
           PY
@@ -87,7 +87,7 @@ jobs:
           prior=Path('dist-current/README.txt').read_text(encoding='utf-8')
           marker='\nMoralisch-Bankrott.dat: Moralisch Bankrott (18+)'
           prior=prior.split(marker,1)[0]
-          note=(marker+' (42 prompts, 152 answers)\n'
+          note=(marker+' (74 prompts, 152 answers)\n'
                 '  Rights holder: 0b-ivan\n'
                 '  License: CC0-1.0 https://creativecommons.org/publicdomain/zero/1.0/\n'
                 '  Source: original cards in inx-4x-pro, published/moralisch-bankrott\n'

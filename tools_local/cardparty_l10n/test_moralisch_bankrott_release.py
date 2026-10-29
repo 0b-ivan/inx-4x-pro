@@ -27,7 +27,7 @@ class MoralischBankrottPublishedTests(unittest.TestCase):
         blob, receipt = validate(self.manifest, self.cards)
         self.assertEqual(blob[:8], b"XCAWPK2\0")
         self.assertFalse(receipt["draft_only"])
-        self.assertEqual((receipt["prompts"], receipt["answers"]), (42, 152))
+        self.assertEqual((receipt["prompts"], receipt["answers"]), (74, 152))
         self.assertLessEqual(len(blob), 192 * 1024)
 
     def test_protection_and_attribution(self):
@@ -59,12 +59,12 @@ class MoralischBankrottPublishedTests(unittest.TestCase):
         )
         self.assertEqual(receipt["sha256"], entry["sha256"])
         self.assertEqual(len(data), receipt["bytes"])
-        self.assertEqual((receipt["prompts"], receipt["answers"]), (42, 152))
+        self.assertEqual((receipt["prompts"], receipt["answers"]), (74, 152))
 
     def test_all_approved_slot_pairings_resolve(self):
         singles = [x for x in self.prompts if x["pick"] == 1]
         doubles = [x for x in self.prompts if x["pick"] == 2]
-        self.assertEqual((len(singles), len(doubles)), (36, 6))
+        self.assertEqual((len(singles), len(doubles)), (64, 10))
         tested = 0
         for prompt in singles:
             for answer in self.answers:
@@ -76,7 +76,7 @@ class MoralischBankrottPublishedTests(unittest.TestCase):
                 combined = prompt["text"].replace("____", a["text"], 1).replace("____", b["text"], 1)
                 self.assertNotIn("____", combined)
                 tested += 1
-        self.assertEqual(tested, 143184)
+        self.assertEqual(tested, 239248)
 
 
 if __name__ == "__main__":

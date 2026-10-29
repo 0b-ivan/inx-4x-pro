@@ -192,3 +192,35 @@
 {"id":"answer-150","kind":"answer","text":"Eine vorsorgliche Entschuldigung vor dem Verbrechen","reviewed":true,"categories":["fsk-18","makaber"]}
 {"id":"answer-151","kind":"answer","text":"Ein Diktator mit einer Selbsthilfegruppe","reviewed":true,"categories":["fsk-18","makaber"]}
 {"id":"answer-152","kind":"answer","text":"Moralischer Bankrott mit Käuferschutz","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-043","kind":"prompt","pick":1,"draw":0,"text":"Warum bekam der Ermittler plötzlich eine Beförderung? ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-044","kind":"prompt","pick":1,"draw":0,"text":"Was hat der Kripo-Abschlussbericht großzügig verschwiegen? ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-045","kind":"prompt","pick":1,"draw":0,"text":"Das einzige Beweisstück, das niemand anfassen wollte: ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-046","kind":"prompt","pick":1,"draw":0,"text":"Was stand wirklich im Kleingedruckten des Waffenstillstands? ____","reviewed":true,"categories":["fsk-18","boese"]}
+{"id":"prompt-047","kind":"prompt","pick":1,"draw":0,"text":"Der neue Slogan der Rüstungsindustrie: ____","reviewed":true,"categories":["fsk-18","boese"]}
+{"id":"prompt-048","kind":"prompt","pick":1,"draw":0,"text":"Womit finanziert mein Bewährungshelfer seinen Ruhestand? ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-049","kind":"prompt","pick":1,"draw":0,"text":"Die größte Überraschung beim Vaterschaftstest: ____","reviewed":true,"categories":["fsk-18","sex"]}
+{"id":"prompt-050","kind":"prompt","pick":1,"draw":0,"text":"Was wurde als „unvermeidbarer Kollateralschaden“ verbucht? ____","reviewed":true,"categories":["fsk-18","boese"]}
+{"id":"prompt-051","kind":"prompt","pick":1,"draw":0,"text":"Was hat den Beichtvater zur Selbstanzeige bewegt? ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-052","kind":"prompt","pick":1,"draw":0,"text":"Warum wurde der Friedensgipfel vorzeitig abgebrochen? ____","reviewed":true,"categories":["fsk-18","boese"]}
+{"id":"prompt-053","kind":"prompt","pick":1,"draw":0,"text":"Der tatsächliche Inhalt des Notfallkoffers: ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-054","kind":"prompt","pick":1,"draw":0,"text":"Das Geheimmotto der nächsten Regierung: ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-055","kind":"prompt","pick":1,"draw":0,"text":"Was sollte der Gerichtsmediziner lieber nicht googeln? ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-056","kind":"prompt","pick":1,"draw":0,"text":"Wofür verlangt die Hölle jetzt eine Bearbeitungsgebühr? ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-057","kind":"prompt","pick":1,"draw":0,"text":"Was hat die Hochzeit endgültig ruiniert? ____","reviewed":true,"categories":["fsk-18","sex"]}
+{"id":"prompt-058","kind":"prompt","pick":1,"draw":0,"text":"Was gilt laut Militärhandbuch als akzeptabler Verlust? ____","reviewed":true,"categories":["fsk-18","boese"]}
+{"id":"prompt-059","kind":"prompt","pick":1,"draw":0,"text":"Was hat der Staatsanwalt einen „unglücklichen Zufall“ genannt? ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-060","kind":"prompt","pick":1,"draw":0,"text":"Das Einzige, was mein Schutzengel nicht versichern wollte: ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-061","kind":"prompt","pick":1,"draw":0,"text":"Die neue olympische Disziplin für gescheiterte Diktatoren: ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-062","kind":"prompt","pick":1,"draw":0,"text":"Was hat die forensische Psychiatrie zum Schweigen gebracht? ____","reviewed":true,"categories":["fsk-18","boese"]}
+{"id":"prompt-063","kind":"prompt","pick":1,"draw":0,"text":"Was wurde beim Staatsbesuch aus dem Protokoll gestrichen? ____","reviewed":true,"categories":["fsk-18","boese"]}
+{"id":"prompt-064","kind":"prompt","pick":1,"draw":0,"text":"Die seltsamste Ausgabe auf der Kirchensteuerabrechnung: ____","reviewed":true,"categories":["fsk-18","sex"]}
+{"id":"prompt-065","kind":"prompt","pick":1,"draw":0,"text":"Was hat den Serienmörder zur Selbstanzeige gebracht? ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-066","kind":"prompt","pick":1,"draw":0,"text":"Was funktioniert sogar nach dem Weltuntergang noch? ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-067","kind":"prompt","pick":1,"draw":0,"text":"Was hat das Bundesarchiv versehentlich freigegeben? ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-068","kind":"prompt","pick":1,"draw":0,"text":"Die wahre Bedeutung von „familienfreundlich“ in meinem Strafregister: ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-069","kind":"prompt","pick":1,"draw":0,"text":"Was hat der Bestatter als ungewöhnliches Geschäftsrisiko eingestuft? ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-070","kind":"prompt","pick":1,"draw":0,"text":"Die letzte Nachricht des verschwundenen Whistleblowers: ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-071","kind":"prompt","pick":2,"draw":0,"text":"Mein Plan zur Weltherrschaft, Phase 1: ____ | Phase 2: ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-072","kind":"prompt","pick":2,"draw":0,"text":"Die zwei wichtigsten Beweise: [1] ____ | [2] ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-073","kind":"prompt","pick":2,"draw":0,"text":"Die offiziellen Gründe für den Zwischenfall: [1] ____ | [2] ____","reviewed":true,"categories":["fsk-18","makaber"]}
+{"id":"prompt-074","kind":"prompt","pick":2,"draw":0,"text":"Das Ergebnis des Eignungstests: Stärken: ____ | Schwächen: ____","reviewed":true,"categories":["fsk-18","makaber"]}
