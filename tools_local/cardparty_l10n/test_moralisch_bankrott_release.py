@@ -4,11 +4,13 @@ Ensures the real SD compiler produces a firmware-accepted v2 release pack,
 with no duplicated texts, unsafe category defaults, or impossible slots.
 """
 import itertools
+import json
 from pathlib import Path
 import unittest
 
 from build_sd_pack import load_cards, load_json, validate
 from card_text import normalized
+import publish_packs
 
 DIR = Path(__file__).resolve().parent / "published" / "moralisch-bankrott"
 
@@ -48,6 +50,16 @@ class MoralischBankrottPublishedTests(unittest.TestCase):
             self.assertLessEqual(len(x["text"].encode("utf-8")), 384 if x["kind"] == "prompt" else 160)
             if x["kind"] == "answer":
                 self.assertFalse(x["text"].endswith((".", "!", "?")))
+
+    def test_public_config_rebuilds_identical_pinned_pack(self):
+        config = json.loads((DIR.parent.parent / "public_packs.json").read_text(encoding="utf-8"))
+        entry = next(p for p in config["packs"] if p["file"] == "Moralisch-Bankrott.dat")
+        data, receipt = publish_packs.build(
+            entry, {"moralisch-bankrott": str(DIR / "deck.json")}
+        )
+        self.assertEqual(receipt["sha256"], entry["sha256"])
+        self.assertEqual(len(data), receipt["bytes"])
+        self.assertEqual((receipt["prompts"], receipt["answers"]), (42, 152))
 
     def test_all_approved_slot_pairings_resolve(self):
         singles = [x for x in self.prompts if x["pick"] == 1]
