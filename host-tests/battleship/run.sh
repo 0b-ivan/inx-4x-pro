@@ -13,6 +13,10 @@ SRC=../../src/apps_local/battleship
   test_battleship.cpp -o "$BUILD_DIR/test_battleship"
 "$BUILD_DIR/test_battleship"
 
+# Game-agnostic browser seat/session contract (no Arduino dependencies).
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 test_web_seat.cpp -o "$BUILD_DIR/test_web_seat"
+"$BUILD_DIR/test_web_seat"
+
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 $SRC/BattleshipCore.cpp \
   test_surrender.cpp -o "$BUILD_DIR/test_surrender"
 "$BUILD_DIR/test_surrender"

@@ -4,11 +4,11 @@ const assert = require('node:assert/strict');
 const html = fs.readFileSync('../../src/apps_local/battleship/web/BattleshipPage.html', 'utf8');
 function element() {
   const node = {
-    textContent:'', value:'0', disabled:true, className:'', hidden:false, children:[], _innerHTML:'', dataset:{},
+    textContent:'', value:'0', disabled:true, className:'', hidden:false, children:[], _innerHTML:'', dataset:{}, attrs:{},
     appendChild(child) { this.children.push(child); },
     replaceChildren(...children) { this.children = children; },
     addEventListener(name, fn) { this[`on${name}`] = fn; },
-    setAttribute() {},
+    setAttribute(name,value) { this.attrs[name]=value; },
     classList: { contains() { return false; } }
   };
   Object.defineProperty(node,'innerHTML',{get(){return this._innerHTML;},set(value){this._innerHTML=value;this.children=[];}});
@@ -56,8 +56,14 @@ vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], {
       assert.equal(options.cache,'no-store');
       return {ok:true,text:async()=>token};
     }
-    if(path.startsWith('/player/state?token=')) return {ok:true,json:async()=>playerState};
-    if(path==='/player/action') return {ok:true,json:async()=>playerState};
+    if(path.startsWith('/player/state?token=')) {
+      assert.equal(new URLSearchParams(path.split('?')[1]).get('owner'), resume);
+      return {ok:true,json:async()=>playerState};
+    }
+    if(path==='/player/action') {
+      assert.equal(options.body.get('owner'),resume);
+      return {ok:true,json:async()=>playerState};
+    }
     throw new Error(`unexpected fetch ${path}`);
   },
   location:{hostname:'crossplay.local'}, WebSocket:Socket, sessionStorage,
@@ -87,7 +93,8 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   assert.match(html,/id="deviceProfileToggle"/);
   assert.match(html,/id="playerLogin"/);
   await flush();
-  assert.equal(elements.devicePlayerName.textContent,'SPIKY WINK BEARD');
+  assert.equal(elements.devicePlayerName.textContent,'');  // Mock DOM starts empty; player details remain locked before seat claim.
+  assert.match(elements.playerMessage.textContent,/SELECT YOUR BROWSER PLAYER/);
   assert.equal(elements.deviceProfileToggle.hidden,true);
   assert.equal(elements.deviceProfileDetails.hidden,true);
   const socket=sockets[0];socket.onopen();
@@ -99,6 +106,9 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   assert.equal(elements.own.children.length,100);
   assert.equal(cols[0].children.length,10);
   assert.equal(rows[0].children.length,10);
+  assert.equal(cols[0].children[0].textContent,'A');
+  assert.equal(rows[0].children[0].textContent,1);
+  assert.equal(elements.target.children[12].attrs['aria-label'],'C2');
   assert.equal(elements.profile.disabled,false);
   assert.equal(elements.placement.hidden,true);
   assert.match(elements.avatar.innerHTML,/svg/);
@@ -108,6 +118,10 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   const view={type:'placement',accepted:true,profile:true,ready:false,revision:1,slots:[0,13,0],ships:Array.from({length:5},()=>[255,1])};
   socket.onmessage({data:JSON.stringify(view)});
   socket.onmessage({data:JSON.stringify({type:'resume',token:resume})});
+  await flush();
+  assert.equal(elements.devicePlayerName.textContent,'SPIKY WINK BEARD');
+  elements.useGuestPlayer.onclick();
+  await flush();
   assert.equal(elements.profile.hidden,true);
   assert.equal(elements.placement.hidden,false);
 
@@ -195,5 +209,12 @@ const emptyState=(phase,myTurn=false,winner=-1,sunk=0,board='A'.repeat(34),incom
   events.pagehide();assert.equal(reconnect,null);
   events.pageshow({persisted:true});await flush();
   assert.equal(sockets.length,3);
+  // The X4 discards unconfirmed rematch drafts on disconnect; the browser
+  // must clear the profile, restore revision zero, and allow a fresh claim.
+  const fresh=sockets[2];fresh.onopen();
+  assert.equal(elements.profile.hidden,false);
+  assert.equal(elements.placement.hidden,true);
+  elements.save.onclick();
+  assert.deepEqual(sent[8],['profile',token,0,0,13,0]);
   console.log('Browser page: compact player login/profile, peer identity, sunk announcements/visuals, active-turn inversion, fleet damage boxes, two-tap fire, surrender, secure resume and rematch passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

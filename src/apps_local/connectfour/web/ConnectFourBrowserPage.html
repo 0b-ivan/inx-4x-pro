@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Connect Four · CrossPlay</title>
+<style>
+:root{color-scheme:light dark;--bg:#f4f1e8;--ink:#151511;--card:#fffcf4;--line:#54544d;
+  --empty:#f6f3ea;--empty-line:#77766e;
+  --x4:#fff7e7;--x4-ink:#181815;--x4-edge:#45443b;
+  --web:#1b2225;--web-ink:#fffdf6;--web-edge:#a4acb0;--web-hatch:#58666b;
+  --last-ring:#544e44;--win-ring:#171713;--win-inner:#ffffff}
+@media(prefers-color-scheme:dark){:root{--bg:#191916;--ink:#f1eee4;--card:#272722;--line:#aeaaa2;
+  --empty:#242421;--empty-line:#aaa9a1;
+  --x4:#fff5dd;--x4-ink:#1a1a18;--x4-edge:#dedbd2;
+  --web:#101719;--web-ink:#fffdf5;--web-edge:#e4e8e7;--web-hatch:#6b7779;
+  --last-ring:#fff5dd;--win-ring:#fff5dd;--win-inner:#0e0e0d}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif}
+main{max-width:520px;margin:auto;padding:18px 16px 36px}
+header{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--ink);gap:14px}
+h1{font-size:1.5rem;line-height:1.2;margin:12px 0 16px;letter-spacing:.04em}
+small{font-size:.8rem}#status{min-height:3.25em;margin:16px 0 8px;padding:12px 13px;border:2px solid var(--ink);border-left-width:7px;border-radius:4px;background:var(--card);font-size:1.08rem;font-weight:750;letter-spacing:.018em}
+#status[data-state="turn"]{background:var(--ink);color:var(--bg);border-left-width:10px}
+#status[data-state="finished"]{border-style:double;border-width:4px;font-size:1.22rem}
+#detail{min-height:1.5em;font-size:.86rem;margin:0 0 8px}
+#move-note{padding:6px 0 8px;min-height:2.1em;border-bottom:1px solid var(--line);font-size:.85rem;font-weight:650;letter-spacing:.04em}
+#hint{font-size:.75rem;letter-spacing:.07em;font-weight:700;margin:14px 0 8px}
+#columns,.board{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+#columns{margin-bottom:7px}
+button{border:2px solid var(--ink);background:var(--card);color:var(--ink);font:inherit;font-weight:700;cursor:pointer}
+button:disabled{opacity:.38;cursor:default}
+#columns button{min-height:42px;border-radius:4px;touch-action:manipulation}
+#columns button:focus-visible,#join:focus-visible,#rematch:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.board{padding:10px 6px;background:var(--card);border:2px solid var(--ink);border-radius:5px}
+/* Shape + glyph matter more than grey values: readable in either colour scheme,
+   on an e-ink screenshot, and for visitors with reduced colour perception. */
+.cell,.legend .coin{display:grid;place-items:center;border-radius:50%;font-weight:900;line-height:1}
+.cell{aspect-ratio:1;min-width:0;border:2px solid var(--empty-line);background:var(--empty);
+  font-size:clamp(.8rem,3.7vw,1.3rem)}
+.cell.x4,.legend .coin.x4{background:var(--x4);color:var(--x4-ink);
+  border:3px solid var(--x4-edge)}
+.cell.browser,.legend .coin.browser{background:repeating-linear-gradient(135deg,
+  var(--web-hatch) 0 2px,var(--web) 2px 9px);color:var(--web-ink);
+  border:3px solid var(--web-edge);text-shadow:0 1px 2px #000}
+.cell.last{outline:3px solid var(--last-ring);outline-offset:2px}
+.cell.winning{outline:4px double var(--win-ring);outline-offset:2px;
+  box-shadow:inset 0 0 0 3px var(--win-inner)}
+.cell.last.winning{outline-width:4px}
+#columns button:not(:disabled){background:var(--ink);color:var(--bg)}
+@media(prefers-reduced-motion:no-preference){#columns button:not(:disabled):active{transform:translateY(2px)}}
+.controls{display:flex;gap:10px;margin-top:14px}.controls button{min-height:44px;padding:9px 16px}
+.legend{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;margin:14px 0}
+.legend span{display:inline-flex;align-items:center;gap:9px;font-size:.85rem}
+.legend .coin{width:29px;height:29px;flex:0 0 29px;font-size:.8rem;font-style:normal}
+</style>
+</head>
+<body>
+<main>
+<header><h1>CONNECT FOUR</h1><small>CROSSPLAY · X4 PRO</small></header>
+<p id="status" role="status" aria-live="polite">Connecting to X4 Pro…</p>
+<p id="detail" aria-live="polite"></p>
+<p id="move-note" aria-live="off">WAITING FOR THE FIRST DISC</p>
+<div class="legend" aria-label="Player disc legend"><span><i class="coin x4" aria-hidden="true">X</i> X4 PRO · FIRST</span><span><i class="coin browser" aria-hidden="true">B</i> BROWSER · SECOND</span></div>
+<p id="hint">CHOOSE YOUR COLUMN</p>
+<div id="columns" aria-label="Drop a disc into a column"></div>
+<div id="board" class="board" role="img" aria-label="Empty Connect Four board"></div>
+<div class="controls"><button id="join" type="button">JOIN GAME</button><button id="rematch" type="button" hidden>PLAY AGAIN</button></div>
+</main>
+<script>
+(() => {
+  'use strict';
+  const find = id => document.getElementById(id);
+  const status = find('status'), detail = find('detail'), moveNote = find('move-note');
+  const join = find('join'), rematch = find('rematch'), board = find('board');
+  const columns = Array.from({length:7}, (_, col) => {
+    const button = document.createElement('button');
+    button.type='button'; button.textContent=String(col+1);
+    button.setAttribute('aria-label','Drop into column '+(col+1));
+    button.onclick=() => send('drop',col);
+    find('columns').appendChild(button);
+    return button;
+  });
+  const storageKey='crossplay-connectfour-resume-v1';
+  const hex32 = text => typeof text==='string' && /^[0-9a-f]{32}$/.test(text);
+  let secret='', socket=null, bootstrap='', snapshot=null, revision=0;
+  let owner=false, pending=false, generation=0, retry=0, hidden=false;
+  try { const stored=sessionStorage.getItem(storageKey); if(hex32(stored)) secret=stored; } catch {}
+  function usable() {return Boolean(socket && socket.readyState===WebSocket.OPEN && bootstrap && !pending);}
+  function winningCells(values, side) {
+    const result = new Set();
+    const directions = [[1,0],[0,1],[1,1],[1,-1]];
+    for(let col=0;col<7;++col)for(let row=0;row<6;++row){
+      if(values[col*6+row]!==side)continue;
+      for(const [dc,dr] of directions){
+        const cells=[];
+        for(let k=0;k<4;++k){
+          const c=col+dc*k,r=row+dr*k;
+          if(c<0||c>=7||r<0||r>=6||values[c*6+r]!==side)break;
+          cells.push(c*6+r);
+        }
+        if(cells.length===4)cells.forEach(cell=>result.add(cell));
+      }
+    }
+    return result;
+  }
+  function paint() {
+    const connected = usable();
+    const phase = snapshot ? snapshot.phase : 'offline';
+    const canPlay = owner && connected && phase==='playing' && snapshot.turn===2;
+    const cells=[];
+    const values = snapshot ? snapshot.board : '0'.repeat(42);
+    const winning = phase==='finished' && snapshot && snapshot.outcome!==3 ?
+      winningCells(values, snapshot.outcome===1?'1':'2') : new Set();
+    status.setAttribute('data-state', phase==='finished'?'finished':canPlay?'turn':phase==='waiting'?'waiting':'idle');
+    if(snapshot && snapshot.last[0]>=0 && snapshot.last[1]>=0) {
+      const cellIndex=snapshot.last[0]*6+snapshot.last[1];
+      moveNote.textContent='LAST DISC · '+(values[cellIndex]==='1'?'X4 PRO':'BROWSER')+
+        ' → COLUMN '+(snapshot.last[0]+1)+' · MOVE '+snapshot.r;
+    } else moveNote.textContent=phase==='waiting'?'WAITING FOR THE FIRST DISC':'NEW ROUND · NO MOVES';
+    for(let row=5;row>=0;--row) for(let col=0;col<7;++col) {
+      const value=values[col*6+row], cell=document.createElement('div');
+      cell.className='cell'+(value==='1'?' x4':value==='2'?' browser':'');
+      if(snapshot && snapshot.last[0]===col && snapshot.last[1]===row) cell.className+=' last';
+      const last=snapshot && snapshot.last[0]===col && snapshot.last[1]===row;
+      const inWinningLine=winning.has(col*6+row);
+      if(inWinningLine)cell.className+=' winning';
+      // Redundant X/B glyphs remain visible when monochrome coins look similar.
+      cell.textContent=value==='1'?'X':value==='2'?'B':'';
+      cell.setAttribute('aria-label','Column '+(col+1)+', row '+(row+1)+': '+
+        (value==='1'?'X4':value==='2'?'Browser':'empty')+
+        (last?', last move':'')+(inWinningLine?', winning four':''));
+      cells.push(cell);
+    }
+    board.replaceChildren(...cells);
+    board.setAttribute('aria-label','Connect Four board, '+(snapshot ? snapshot.phase : 'offline'));
+    columns.forEach((button,col)=>{button.disabled=!canPlay || values[col*6+5]!=='0';});
+    join.hidden=owner || phase!=='waiting';
+    join.disabled=!connected || owner;
+    rematch.hidden=!owner || phase!=='finished';
+    rematch.disabled=!connected;
+    if(!snapshot){status.textContent='Connecting to X4 Pro…';return;}
+    if(phase==='waiting'){status.textContent='Join to challenge the X4 Pro';return;}
+    if(phase==='finished'){
+      status.textContent=snapshot.outcome===1?'X4 PRO WINS':snapshot.outcome===2?'BROWSER WINS':'DRAW';
+      return;
+    }
+    status.textContent=owner ? (snapshot.turn===2?'YOUR TURN · PICK A COLUMN':'X4 PRO TURN') : 'MATCH IN PROGRESS';
+  }
+  function send(type,value) {
+    if(!usable())return;
+    if(type==='drop' && (!owner || !snapshot || snapshot.phase!=='playing' || snapshot.turn!==2))return;
+    pending=true;
+    const msg=[type,bootstrap,revision];
+    if(type==='drop')msg.push(value);
+    if(type==='resume')msg.push(secret);
+    socket.send(JSON.stringify(msg));
+    detail.textContent=type==='resume'?'Restoring saved seat…':type==='join'?'Claiming seat…':type==='drop'?'Submitting move…':'Starting rematch…';
+    paint();
+  }
+  join.onclick=()=>send('join');
+  rematch.onclick=()=>send('rematch');
+  function valid(s) {
+    return s && s.type==='c4' && ['waiting','playing','finished'].includes(s.phase) &&
+      Number.isInteger(s.r) && s.r>=0 && s.r<=4294967295 &&
+      (s.turn===1 || s.turn===2) && Number.isInteger(s.outcome) && s.outcome>=0 && s.outcome<=3 &&
+      typeof s.board==='string' && /^[012]{42}$/.test(s.board) &&
+      Array.isArray(s.last) && s.last.length===2 && s.last.every(n=>Number.isInteger(n) && n>=-1 && n<=6);
+  }
+  async function connect() {
+    const current=++generation;
+    bootstrap=''; owner=false; pending=false; snapshot=null; paint();
+    try {
+      const response=await fetch('/connectfour/session',{cache:'no-store',credentials:'same-origin'});
+      if(!response.ok)throw Error('session');
+      const fresh=(await response.text()).trim();
+      if(!hex32(fresh) || current!==generation || hidden)return;
+      bootstrap=fresh;
+      socket=new WebSocket('ws://'+location.hostname+':81/connectfour');
+      const active=socket;
+      socket.onopen=()=>{if(current!==generation)return;if(secret)send('resume');else paint();};
+      socket.onmessage=message=>{
+        if(current!==generation)return;
+        let frame;try{frame=JSON.parse(message.data);}catch{return;}
+        if(valid(frame)){snapshot=frame;revision=frame.r;pending=false;detail.textContent='';paint();}
+        else if(frame && frame.type==='resume' && hex32(frame.token)){
+          secret=frame.token;owner=true;pending=false;
+          try{sessionStorage.setItem(storageKey,secret);}catch{}
+          detail.textContent='Seat verified';paint();
+        } else if(frame && frame.type==='error'){
+          pending=false;detail.textContent='Request rejected. Refresh or check turn.';
+          if(!owner && secret){secret='';try{sessionStorage.removeItem(storageKey);}catch{}}
+          paint();
+        }
+      };
+      socket.onclose=()=>{
+        if(current!==generation)return;
+        bootstrap='';owner=false;pending=false;
+        detail.textContent='Connection lost. Reconnecting…';paint();
+        if(!hidden)retry=setTimeout(connect,1800);
+      };
+      socket.onerror=()=>active.close();
+    } catch {
+      if(current===generation && !hidden){detail.textContent='X4 unavailable. Retrying…';retry=setTimeout(connect,1800);}
+    }
+  }
+  window.addEventListener('pagehide',()=>{
+    hidden=true;++generation;clearTimeout(retry);bootstrap='';
+    if(socket){socket.onclose=null;socket.close();}
+  });
+  window.addEventListener('pageshow',event=>{if(event.persisted){hidden=false;connect();}});
+  paint();connect();
+})();
+</script>
+</body>
+</html>

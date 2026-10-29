@@ -10,11 +10,15 @@ void BrowserPlayer::reset() {
 
 bool BrowserPlayer::apply(bship::Game& game, const Command& c) {
   constexpr int side = 1;
-  if (c.revision != view_.revision || view_.revision == std::numeric_limits<uint32_t>::max()) return false;
-
+  // Resume is authenticated by both server-issued capabilities before reaching
+  // the game. A stale browser revision is normal after a lost action reply:
+  // resync the current view rather than permanently locking out the player.
   if (c.kind == CommandKind::Resume) {
     return view_.profile && view_.ready && game.side[side].placed;
   }
+
+  // Mutating commands remain strictly monotonic and reject replays.
+  if (c.revision != view_.revision || view_.revision == std::numeric_limits<uint32_t>::max()) return false;
 
   if (c.kind == CommandKind::Rematch) {
     if (!view_.profile || !view_.ready || !bship::over(game)) return false;
@@ -67,8 +71,9 @@ bool BrowserPlayer::apply(bship::Game& game, const Command& c) {
       view_.bow[c.value[0]] = ship.bow;
       view_.horizontal[c.value[0]] = ship.horizontal;
     } else if (c.kind == CommandKind::Randomize) {
-      uint32_t seed = 0x9e3779b9u ^ (view_.revision * 2654435761u);
-      bship::randomFleet(draft, seed);
+      // Randomize against persistent private RNG state, never a public action
+      // revision. The activity seeds this generator from ESP32 hardware RNG.
+      bship::randomFleet(draft, randomSeed_);
       for (int i = 0; i < 5; ++i) {
         view_.bow[i] = draft.ships[i].bow;
         view_.horizontal[i] = draft.ships[i].horizontal;

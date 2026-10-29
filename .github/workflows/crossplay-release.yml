@@ -116,6 +116,33 @@ jobs:
           body: |
             CrossPlay release for **Xteink X4 Pro**.
 
+            ### What is new in 1.16.14
+
+            **New: Connect Four in the phone browser**
+
+            Connect Four gets PLAY BROWSER: the X4 opens a short-range game
+            hotspot and shows a Wi-Fi QR code and a game QR code. The phone
+            plays in its browser against the X4 on a 7x6 board; the X4 always
+            moves first and stays the referee. X4 discs are ivory with an X,
+            browser discs dark and hatched with a B. A reloaded phone gets its
+            seat back; a second phone cannot take it over. PLAY and PLAY
+            NEARBY are unchanged.
+
+            **Battleship in the browser, hardened**
+
+            The phone's seat is bound to a private 128-bit key, so another
+            browser on the hotspot can no longer read or change the X4's
+            player accounts or names. A lost reply no longer blocks the
+            reconnect, the browser's random fleet uses the X4's hardware
+            random source, and the browser grid now uses the X4's
+            coordinates (letters for columns, numbers for rows).
+
+            **Open game hotspots**
+
+            The Battleship and Connect Four game hotspots have no Wi-Fi
+            password: the QR code joins directly. Traffic on these hotspots is
+            not encrypted; only play with people nearby you trust.
+
             ### What is new in 1.16.13
 
             **New game: Cards Against Whatever**
